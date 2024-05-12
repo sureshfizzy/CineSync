@@ -33,6 +33,10 @@ create_symlinks_in_source_dir() {
         series_name=$(echo "$series_name" | sed 's/ ([[:digit:]]\{4\})//')
         # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
+        # Remove 'S0X' from the series name
+        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/^'\(.*\)'$/\1/")
+        # Remove single quotes
+        series_name=$(echo "$series_name" | sed "s/'//g; s/[()]//g")
         # Replace '.' with spaces in series name
         series_name="${series_name//./ }"
         # Convert series name to title case
@@ -48,8 +52,8 @@ create_symlinks_in_source_dir() {
         echo "Folder '$series_name' exists. Placing files inside."
     else
         echo "Folder '$series_name' does not exist. Files will be placed in '$series_name'."
-        # Remove year and "S01" from series name for destination directory
-        destination_series_dir=$(echo "$destination_series_dir" | sed 's/ ([[:digit:]]\{4\})//; s/S01$//')
+        # Filter series name for destination directory
+        destination_series_dir=$(echo "$destination_series_dir" | sed -E 's/ ([[:digit:]]{4})//; s/ -[0-9]+( S[0-9]+)?$//')
         echo "Destination series directory: $destination_series_dir"
     fi
 
