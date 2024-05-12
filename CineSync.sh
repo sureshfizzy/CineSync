@@ -6,6 +6,9 @@ show_source_dir="/path/to/zurg/shows"
 # Destination directory
 destination_dir="/path/to/destination"
 
+# Log file for existing folder names in the destination directory
+names_log="names.log"
+
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
     echo "Destination directory '$destination_dir' does not exist."
@@ -19,18 +22,29 @@ check_symlinks_in_destination() {
     echo "Symlinks in destination directory checked and saved to check.log"
 }
 
+# Function to log existing folder names in the destination directory
+log_existing_folder_names() {
+    echo "Logging existing folder names in destination directory..."
+    find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} + > "$names_log"
+    echo "Existing folder names in destination directory logged to $names_log"
+}
+
 # Function to create symlinks for .mkv or .mp4 files in the source directory
 create_symlinks_in_source_dir() {
     local folder="$1"
+    local series_info
     local series_name
+    local series_year
 
-    # Extract series name from folder name
+    # Extract series name and year from folder name
     if [[ $folder =~ (.*)[Ss]([0-9]+) ]]; then
-        series_name=$(basename "${BASH_REMATCH[1]}")  # Extracting just the series name
+        series_info="${BASH_REMATCH[1]}"
+        series_year=$(echo "$series_info" | grep -oE '[[:digit:]]{4}' | tail -1)
+        series_name=$(basename "$series_info")  # Extracting just the series name
+        series_name=$(basename "$series_info" | tr -d '\n')  # Removing any trailing newline characters
+        series_name=$(echo "$series_name" | sed 's/ -[0-9]\+$//') 
         # Remove any trailing spaces and hyphens
         series_name=$(echo "$series_name" | sed 's/[[:space:]]*$//;s/-*$//')
-        # Remove the year in parentheses
-        series_name=$(echo "$series_name" | sed 's/ ([[:digit:]]\{4\})//')
         # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
         # Remove 'S0X' from the series name
@@ -48,13 +62,30 @@ create_symlinks_in_source_dir() {
 
     # Check if the series name exists without the year and season info
     local destination_series_dir="$destination_dir/$series_name"
-    if [ -d "$destination_series_dir" ]; then
-        echo "Folder '$series_name' exists. Placing files inside."
+    #destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//')
+    destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
+    #local found_in_log=$(grep -F "$destination_series_dir" "$names_log")
+    local found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
+    #if grep -qF "$destination_series_dir" "$names_log"; then
+    if [ -n "$found_in_log" ]; then
+        destination_series_dir="$found_in_log"
+        echo "Folder '$series_name' exists in names.log (refers to: $found_in_log). Placing files inside."
     else
-        echo "Folder '$series_name' does not exist. Files will be placed in '$series_name'."
-        # Filter series name for destination directory
-        destination_series_dir=$(echo "$destination_series_dir" | sed -E 's/ ([[:digit:]]{4})//; s/ -[0-9]+( S[0-9]+)?$//')
-        echo "Destination series directory: $destination_series_dir"
+        # Search for variations of the series name with different spacings and abbreviations
+        local series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
+        series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/')
+        found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
+
+        if [ -n "$found_in_log" ]; then
+            destination_series_dir="$found_in_log"
+            echo "Folder '$series_name' exists in names.log (refers to: $found_in_log). Placing files inside."
+        else
+            echo "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'."
+            # If the series name doesn't exist in the log, create a new folder
+            mkdir -p "$destination_series_dir"
+            echo "$destination_series_dir" >> "$names_log"
+            echo "New series folder '$series_name' created in the destination directory and added to names.log."
+        fi
     fi
 
     # Iterate through files in the folder
@@ -106,6 +137,9 @@ search_and_create_symlinks() {
 
 # Call function to check symlinks in destination directory
 check_symlinks_in_destination
+
+# Log existing folder names in the destination directory
+log_existing_folder_names
 
 # Search for folders containing TV show seasons and create symlinks
 echo "Creating symlinks for TV shows from source to destination directory..."
