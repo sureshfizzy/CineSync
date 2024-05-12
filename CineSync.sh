@@ -23,26 +23,22 @@ check_symlinks_in_destination() {
 create_symlinks_in_source_dir() {
     local folder="$1"
     local series_name
-    local season_folder
 
-    # Extract series name and season number from folder name
+    # Extract series name from folder name
     if [[ $folder =~ (.*)[Ss]([0-9]+) ]]; then
         series_name=$(basename "${BASH_REMATCH[1]}")  # Extracting just the series name
         # Remove any trailing spaces and hyphens
         series_name=$(echo "$series_name" | sed 's/[[:space:]]*$//;s/-*$//')
         # Remove the year in parentheses
-        series_name=$(echo "$series_name" | sed 's/([[:digit:]]{4})//')
+        series_name=$(echo "$series_name" | sed 's/ ([[:digit:]]\{4\})//')
         # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
         # Replace '.' with spaces in series name
         series_name="${series_name//./ }"
         # Convert series name to title case
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
-        season_number="${BASH_REMATCH[2]}"
-        # Convert season number to have leading zeros if necessary
-        season_folder="Season $(printf %02d "$season_number")"
     else
-        echo "Error: Unable to determine series name and season number for $folder."
+        echo "Error: Unable to determine series name for $folder."
         return 1
     fi
 
@@ -52,9 +48,8 @@ create_symlinks_in_source_dir() {
         echo "Folder '$series_name' exists. Placing files inside."
     else
         echo "Folder '$series_name' does not exist. Files will be placed in '$series_name'."
-        # Remove year from series name for destination directory
-        destination_series_dir="$destination_dir/$series_name"
-        destination_series_dir=$(echo "$destination_series_dir" | sed 's/ ([[:digit:]]\{4\})//')
+        # Remove year and "S01" from series name for destination directory
+        destination_series_dir=$(echo "$destination_series_dir" | sed 's/ ([[:digit:]]\{4\})//; s/S01$//')
         echo "Destination series directory: $destination_series_dir"
     fi
 
@@ -62,16 +57,45 @@ create_symlinks_in_source_dir() {
     shopt -s nullglob
     for file in "$folder"/*.mkv "$folder"/*.mp4; do
         local filename=$(basename "$file")
-        local destination_file="$destination_series_dir/$season_folder/$filename"
+        local season_folders=()
+        local series_season
 
-        # Check if a symlink with the same target exists
-        if grep -qF "$file" test.log; then
-            echo "Symlink already exists for $filename with the same target."
-        else
-            echo "No symlink exists with the same target."
-            mkdir -p "$(dirname "$destination_file")"
-            ln -s "../../$(realpath --relative-to="$(dirname "$destination_file")" "$file")" "$destination_file"
-            echo "Symlink created: $file -> $destination_file"
+        # Extract season number from filename
+        if [[ $filename =~ [Ss]([0-9]+) ]]; then
+            series_season="${BASH_REMATCH[1]}"
+            season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
+        fi
+
+        # Create symlinks for each season found
+        for season_folder in "${season_folders[@]}"; do
+            local destination_file="$destination_series_dir/$season_folder/$filename"
+
+            # Check if a symlink with the same target exists
+            if grep -qF "$file" check.log; then
+                echo "Symlink already exists for $filename with the same target."
+            else
+                echo "No symlink exists with the same target."
+                mkdir -p "$(dirname "$destination_file")"
+                ln -s "$file" "$destination_file"
+                echo "Symlink created: $file -> $destination_file"
+            fi
+        done
+    done
+}
+
+# Function to recursively search for folders containing TV show seasons and create symlinks
+search_and_create_symlinks() {
+    local directory="$1"
+    shopt -s nullglob
+    for folder in "$directory"/*; do
+        if [ -d "$folder" ]; then
+            # Check if the folder contains season folders
+            if ls "$folder" | grep -q '[Ss][0-9]\{2\}'; then
+                create_symlinks_in_source_dir "$folder"
+            else
+                # Recursively search for subfolders
+                search_and_create_symlinks "$folder"
+            fi
         fi
     done
 }
@@ -79,11 +103,6 @@ create_symlinks_in_source_dir() {
 # Call function to check symlinks in destination directory
 check_symlinks_in_destination
 
-# Find directories in the source show directory and create symlinks for files within them
+# Search for folders containing TV show seasons and create symlinks
 echo "Creating symlinks for TV shows from source to destination directory..."
-shopt -s nullglob
-for folder in "$show_source_dir"/*; do
-    if [ -d "$folder" ]; then
-        create_symlinks_in_source_dir "$folder"
-    fi
-done
+search_and_create_symlinks "$show_source_dir"
