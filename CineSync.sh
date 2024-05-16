@@ -37,7 +37,8 @@ create_symlinks_in_source_dir() {
     local series_year
 
     # Extract series name and year from folder name
-    if [[ $folder =~ (.*)[Ss]([0-9]+) ]]; then
+    if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ]]; then
+
         series_info="${BASH_REMATCH[1]}"
         series_year=$(echo "$series_info" | grep -oE '[[:digit:]]{4}' | tail -1)
         series_name=$(basename "$series_info")  # Extracting just the series name
@@ -48,8 +49,8 @@ create_symlinks_in_source_dir() {
         # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
         # Remove 'S0X' from the series name
-        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/^'\(.*\)'$/\1/")
-        # Remove single quotes
+        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/SEASON [0-9]\+//" -e "s/SEASON[.[:digit:]]*//" -e "s/\.S[[:digit:]]*//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/^'\(.*\)'$/\1/")
+
         series_name=$(echo "$series_name" | sed "s/'//g; s/[()]//g")
         # Replace '.' with spaces in series name
         series_name="${series_name//./ }"
@@ -73,9 +74,8 @@ create_symlinks_in_source_dir() {
     else
         # Search for variations of the series name with different spacings and abbreviations
         local series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
-        series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/')
+        series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*d/P[[:space:]]*d|P[[:space:]]+d/' | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/' | sed 's/[0-9]\{4\}//')
         found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
-
         if [ -n "$found_in_log" ]; then
             destination_series_dir="$found_in_log"
             echo "Folder '$series_name' exists in names.log (refers to: $found_in_log). Placing files inside."
