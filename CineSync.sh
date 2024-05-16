@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Check the operating system
+os=$(uname -s)
+
 # Source directory for TV shows
 show_source_dir="/path/to/zurg/shows"
 
@@ -25,9 +28,15 @@ check_symlinks_in_destination() {
 # Function to log existing folder names in the destination directory
 log_existing_folder_names() {
     echo "Logging existing folder names in destination directory..."
-    find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} + > "$names_log"
+    # Check if the operating system is Windows
+    if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$names_log"
+    else
+        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} + > "$names_log"
+    fi
     echo "Existing folder names in destination directory logged to $names_log"
 }
+
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
 create_symlinks_in_source_dir() {
@@ -136,7 +145,11 @@ search_and_create_symlinks() {
 }
 
 # Call function to check symlinks in destination directory
-check_symlinks_in_destination
+if [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
+    check_symlinks_in_destination
+else
+    echo "Skipping symlink check on Windows OS."
+fi
 
 # Log existing folder names in the destination directory
 log_existing_folder_names
