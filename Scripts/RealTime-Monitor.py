@@ -19,7 +19,7 @@ else:
 watch_dir = "path/to/Shows"
 
 # Path to your Bash script
-bash_script = "path/to/CineSync.sh"
+bash_script = "path/to/library.sh"
 
 # Print the watch directory
 print(f"Watching directory: {watch_dir}", flush=True)
