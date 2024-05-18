@@ -9,8 +9,11 @@ show_source_dir="/path/to/zurg/shows"
 # Destination directory
 destination_dir="/path/to/destination"
 
+# Log directory
+log_dir="logs"
+
 # Log file for existing folder names in the destination directory
-names_log="names.log"
+names_log="$log_dir/folder_names.log"
 
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
@@ -21,8 +24,8 @@ fi
 # Function to check all symlinks in the destination directory and save their target paths to a log file
 check_symlinks_in_destination() {
     echo "Checking symlinks in destination directory..."
-    find "$destination_dir" -type l -exec readlink -f {} + > check.log
-    echo "Symlinks in destination directory checked and saved to check.log"
+    find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/symlinks.log"
+    echo "Symlinks in destination directory checked and saved to $log_dir/symlinks.log"
 }
 
 # Function to log existing folder names in the destination directory
@@ -116,7 +119,7 @@ create_symlinks_in_source_dir() {
                 local destination_file="$destination_series_dir/$season_folder/$filename"
 
                 # Check if a symlink with the same target exists
-                if grep -qF "$file" check.log; then
+                if grep -qF "$file" "$log_dir/symlinks.log"; then
                     echo "Symlink already exists for $filename with the same target."
                 else
                     echo "No symlink exists with the same target."
@@ -142,7 +145,7 @@ create_symlinks_in_source_dir() {
         local destination_file="$destination_series_dir/$season_folder/$target_file"
 
         # Check if a symlink with the same target exists
-        if grep -qF "$target_file" check.log; then
+        if grep -qF "$target_file" "$log_dir/symlinks.log"; then
             echo "Symlink already exists for $target_file with the same target."
         else
             echo "No symlink exists with the same target."
@@ -176,6 +179,9 @@ if [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
 else
     echo "Skipping symlink check on Windows OS."
 fi
+
+# Create log directory if it doesn't exist
+mkdir -p "$log_dir"
 
 # Log existing folder names in the destination directory
 log_existing_folder_names
