@@ -37,10 +37,10 @@ log_existing_folder_names() {
     echo "Existing folder names in destination directory logged to $names_log"
 }
 
-
 # Function to create symlinks for .mkv or .mp4 files in the source directory
 create_symlinks_in_source_dir() {
     local folder="$1"
+    local target_file="$2"
     local series_info
     local series_name
     local series_year
@@ -97,51 +97,77 @@ create_symlinks_in_source_dir() {
         fi
     fi
 
-    # Iterate through files in the folder
-    shopt -s nullglob
-    for file in "$folder"/*.mkv "$folder"/*.mp4; do
-        local filename=$(basename "$file")
-        local season_folders=()
-        local series_season
+    # If the target file is empty, create symlinks for all files in the directory
+    if [ -z "$target_file" ]; then
+        shopt -s nullglob
+        for file in "$folder"/*; do
+            local filename=$(basename "$file")
+            local season_folders=()
+            local series_season
 
-        # Extract season number from filename
-        if [[ $filename =~ [Ss]([0-9]+) ]]; then
+            # Extract season number from filename
+            if [[ $filename =~ [Ss]([0-9]+) ]]; then
+                series_season="${BASH_REMATCH[1]}"
+                season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
+            fi
+
+            # Create symlinks for each season found
+            for season_folder in "${season_folders[@]}"; do
+                local destination_file="$destination_series_dir/$season_folder/$filename"
+
+                # Check if a symlink with the same target exists
+                if grep -qF "$file" check.log; then
+                    echo "Symlink already exists for $filename with the same target."
+                else
+                    echo "No symlink exists with the same target."
+                    mkdir -p "$(dirname "$destination_file")"
+                    ln -s "$file" "$destination_file"
+                    echo "Symlink created: $file -> $destination_file"
+                fi
+            done
+        done
+    else
+        # Extract season number and episode number from the target file name
+        local series_season
+        local episode_number
+        if [[ $target_file =~ [Ss]([0-9]+)[Ee]([0-9]+) ]]; then
             series_season="${BASH_REMATCH[1]}"
-            season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
+            episode_number="${BASH_REMATCH[2]}"
+        else
+            echo "Error: Unable to extract season and episode information from $target_file."
+            return 1
         fi
 
-        # Create symlinks for each season found
-        for season_folder in "${season_folders[@]}"; do
-            local destination_file="$destination_series_dir/$season_folder/$filename"
+        local season_folder="Season $(printf "%02d" "$series_season")"
+        local destination_file="$destination_series_dir/$season_folder/$target_file"
 
-            # Check if a symlink with the same target exists
-            if grep -qF "$file" check.log; then
-                echo "Symlink already exists for $filename with the same target."
-            else
-                echo "No symlink exists with the same target."
-                mkdir -p "$(dirname "$destination_file")"
-                ln -s "$file" "$destination_file"
-                echo "Symlink created: $file -> $destination_file"
-            fi
-        done
-    done
+        # Check if a symlink with the same target exists
+        if grep -qF "$target_file" check.log; then
+            echo "Symlink already exists for $target_file with the same target."
+        else
+            echo "No symlink exists with the same target."
+            mkdir -p "$(dirname "$destination_file")"
+            ln -s "$folder/$target_file" "$destination_file"
+            echo "Symlink created: $folder/$target_file -> $destination_file"
+        fi
+    fi
 }
 
-# Function to recursively search for folders containing TV show seasons and create symlinks
-search_and_create_symlinks() {
-    local directory="$1"
-    shopt -s nullglob
-    for folder in "$directory"/*; do
-        if [ -d "$folder" ]; then
-            # Check if the folder contains season folders
-            if ls "$folder" | grep -q '[Ss][0-9]\{2\}'; then
-                create_symlinks_in_source_dir "$folder"
-            else
-                # Recursively search for subfolders
-                search_and_create_symlinks "$folder"
-            fi
+# Function to symlink a specific file or folder
+symlink_specific_file_or_folder() {
+    local target="$1"
+    if [ -e "$target" ]; then
+        local filename=$(basename "$target")
+        local destination_file="$destination_dir/$filename"
+        if [ -L "$destination_file" ]; then
+            echo "A symlink already exists for $filename in the destination directory."
+        else
+            ln -s "$target" "$destination_file"
+            echo "Symlink created: $target -> $destination_file"
         fi
-    done
+    else
+        echo "Error: $target does not exist."
+    fi
 }
 
 # Call function to check symlinks in destination directory
@@ -154,6 +180,33 @@ fi
 # Log existing folder names in the destination directory
 log_existing_folder_names
 
-# Search for folders containing TV show seasons and create symlinks
-echo "Creating symlinks for TV shows from source to destination directory..."
-search_and_create_symlinks "$show_source_dir"
+# If no arguments provided, create symlinks for all files in the source directory
+if [ $# -eq 0 ]; then
+    echo "Creating symlinks for all files in source directory..."
+    for entry in "$show_source_dir"/*; do
+        if [ -d "$entry" ]; then
+            create_symlinks_in_source_dir "$entry"
+        elif [ -f "$entry" ]; then
+            symlink_specific_file_or_folder "$entry"
+        fi
+    done
+else
+    # If a file or folder name is provided as an argument, symlink it
+    if [ $# -eq 1 ]; then
+        target="$1"
+        if [ -d "$target" ]; then
+            echo "The provided argument is a directory. Organizing according to TV show conventions..."
+            create_symlinks_in_source_dir "$target" ""
+        elif [ -f "$target" ]; then
+            echo "The provided argument is a file. Organizing it accordingly..."
+            folder=$(dirname "$target")
+            create_symlinks_in_source_dir "$folder" "$(basename "$target")"
+        else
+            echo "Error: The provided argument is neither a file nor a directory."
+            exit 1
+        fi
+    else
+        echo "Error: Invalid number of arguments. Usage: sudo bash fish.sh [directory/file_path]"
+        exit 1
+    fi
+fi
