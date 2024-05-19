@@ -24,7 +24,15 @@ fi
 # Function to check all symlinks in the destination directory and save their target paths to a log file
 check_symlinks_in_destination() {
     echo "Checking symlinks in destination directory..."
-    find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/symlinks.log"
+    if [[ "$os" == "MINGW"* || "$os" == "MSYS"* ]]; then
+        while IFS= read -r symlink; do
+            target=$(readlink "$symlink")
+            windows_path=$(cygpath -w "$target" | sed 's/\\/\//g')
+            echo "$windows_path"
+        done < <(find "$destination_dir" -type l) > "$log_dir/symlinks.log"
+    else
+        find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/symlinks.log"
+    fi
     echo "Symlinks in destination directory checked and saved to $log_dir/symlinks.log"
 }
 
@@ -51,6 +59,8 @@ create_symlinks_in_source_dir() {
     local series_info
     local series_name
     local series_year
+    folder=$(echo "$folder" | sed 's/\\/\//g')
+    target_file=$(echo "$target_file" | sed 's/\\/\//g')
 
     # Extract series name and year from folder name
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ]]; then
@@ -173,11 +183,8 @@ symlink_specific_file_or_folder() {
 }
 
 # Call function to check symlinks in destination directory
-if [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
-    check_symlinks_in_destination
-else
-    echo "Skipping symlink check on Windows OS."
-fi
+
+check_symlinks_in_destination
 
 # Create log directory if it doesn't exist
 mkdir -p "$log_dir"
