@@ -31,11 +31,15 @@ check_symlinks_in_destination() {
 # Function to log existing folder names in the destination directory
 log_existing_folder_names() {
     echo "Logging existing folder names in destination directory..."
-    # Check if the operating system is Windows
     if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
         find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$names_log"
     else
-        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} + > "$names_log"
+        if [ -f "$names_log" ]; then
+            # Remove existing log file to regenerate with full paths
+            rm "$names_log"
+        fi
+        # Log all existing folder paths in the destination directory
+        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d > "$names_log"
     fi
     echo "Existing folder names in destination directory logged to $names_log"
 }
@@ -50,7 +54,6 @@ create_symlinks_in_source_dir() {
 
     # Extract series name and year from folder name
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ]]; then
-
         series_info="${BASH_REMATCH[1]}"
         series_year=$(echo "$series_info" | grep -oE '[[:digit:]]{4}' | tail -1)
         series_name=$(basename "$series_info")  # Extracting just the series name
@@ -74,14 +77,11 @@ create_symlinks_in_source_dir() {
 
     # Check if the series name exists without the year and season info
     local destination_series_dir="$destination_dir/$series_name"
-    #destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//')
     destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
-    #local found_in_log=$(grep -F "$destination_series_dir" "$names_log")
     local found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
-    #if grep -qF "$destination_series_dir" "$names_log"; then
-    if [ -n "$found_in_log" ]; then
+    if grep -qF "$destination_series_dir" "$names_log"; then
         destination_series_dir="$found_in_log"
-        echo "Folder '$series_name' exists in names.log (refers to: $found_in_log). Placing files inside."
+        echo "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside."
     else
         # Search for variations of the series name with different spacings and abbreviations
         local series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
@@ -89,7 +89,7 @@ create_symlinks_in_source_dir() {
         found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
         if [ -n "$found_in_log" ]; then
             destination_series_dir="$found_in_log"
-            echo "Folder '$series_name' exists in names.log (refers to: $found_in_log). Placing files inside."
+            echo "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside."
         else
             echo "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'."
             # If the series name doesn't exist in the log, create a new folder
