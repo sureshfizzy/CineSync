@@ -61,8 +61,7 @@ create_symlinks_in_source_dir() {
         # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
         # Remove 'S0X' from the series name
-        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/SEASON [0-9]\+//" -e "s/SEASON[.[:digit:]]*//" -e "s/\.S[[:digit:]]*//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/^'\(.*\)'$/\1/")
-
+        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/SEASON [0-9]\+//" -e "s/SEASON[.[:digit:]]*//" -e "s/\(\b\|[^0-9]\)S\([0-9]\)/\1 S\2/g" -e "s/S01\.[[:space:]]*-[[:space:]]*//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/\s*-*$//" -e "s/^'\(.*\)'$/\1/")
         series_name=$(echo "$series_name" | sed "s/'//g; s/[()]//g")
         # Replace '.' with spaces in series name
         series_name="${series_name//./ }"
