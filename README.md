@@ -72,7 +72,7 @@ Here's an enhanced version of the instructions:
 
 5. **Execute CineSync:** After updating the paths, execute the main script:
    ```
-   python CineSync.py
+   bash CineSync.sh
    ```
 
    This will launch the CineSync interface, allowing you to perform various library management tasks, including full library scans, real-time monitoring, and more.
@@ -89,6 +89,8 @@ By following these steps and updating the necessary paths, you'll be able to suc
 
 ![Git Bash](Screenshots/git_bash.png)
 
+   Enabling symbolic links is important for certain operations, so ensure that the checkbox for symbolic links is checked during installation.
+
 3. **Edit `.bashrc` (Windows):**
    Open Git Bash as an administrator and edit the `.bashrc` file. You can use the `nano` editor to open the file by running the following command:
    ```
@@ -102,24 +104,38 @@ By following these steps and updating the necessary paths, you'll be able to suc
 
    **Important:** Ensure that the `export MSYS=winsymlinks:nativestrict` line is added to the `.bashrc` file. This configuration is essential to ensure that symbolic links are handled correctly on Windows when using Git Bash. Without this setting, CineSync may copy files instead of creating symbolic links, leading to undesired behavior.
 
-4. **Clone the Repository:**
+4. **Enable Windows Developer Mode:**
+
+	Enabling Developer Mode grants your system additional privileges necessary for certain operations, helping to prevent permission-related errors during development.
+
+	To avoid "Operation not permitted" errors during symlink process, it's essential to enable Windows Developer Mode. Follow these steps:
+
+	- Open **Settings**.
+	- Go to **Update & Security**.
+	- Click on **For developers**.
+	- Enable the **Developer mode** option.
+	- Restart the PC
+
+	![Developer Mode](Screenshots/Developer_Mode.png)
+
+5. **Clone the Repository:**
    ```
    git clone https://github.com/sureshfizzy/CineSync.git
    ```
 
-5. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
+6. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
    - `show_source_dir`: Specify the path for the Zurg-mounted shows directory.
    - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
 
-6. **Update Paths in `RealTime-Monitor.py`:** Open the `RealTime-Monitor.py` file and update the following paths:
+7. **Update Paths in `RealTime-Monitor.py`:** Open the `RealTime-Monitor.py` file and update the following paths:
    - `watch_dir`: Set the path for the Zurg shows directory (same path which you mentioned for `show_source_dir` in `library.sh`).
    - `bash_script`: Specify the path for the `library.sh` script.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
-7. **Run the Script:**
+8. **Run the Script:**
    ```
-   python CineSync.py
+   bash CineSync.sh
    ```
 **Real-Time Monitoring Windows Limitation**
 
@@ -147,7 +163,7 @@ CineSync provides a user-friendly interface for managing your debrid library. Up
 </div>
 
 - **2) Real-Time Monitoring (Linux Only):** Enable real-time monitoring to stay updated on library changes. System services are automatically created, and the scan is triggered every 60 seconds. You can adjust the frequency inside `RealTime-Monitor.py`.
-- **3) Remove Broken Symlinks (Coming Soon):** Identify and remove broken symbolic links within your library.
+- **3) Remove Broken Symlinks :** Identify and remove broken symbolic links within your library.
 - **4) Exit:** Quit the CineSync application.
 
 **Note:** Real-Time Monitoring is currently supported only on Linux due to system service limitations on Windows. However, you can still manually trigger real-time monitoring using the provided instructions in the README.
