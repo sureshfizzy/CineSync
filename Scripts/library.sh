@@ -72,22 +72,28 @@ create_symlinks_in_source_dir() {
     fi
 
     # Extract series name and year from folder name
-    if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ]]; then
+    if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* || $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ]]; then
         series_info="${BASH_REMATCH[1]}"
-        series_year=$(echo "$series_info" | grep -oE '[[:digit:]]{4}' | tail -1)
-        series_name=$(basename "$series_info")  # Extracting just the series name
-        series_name=$(basename "$series_info" | tr -d '\n')  # Removing any trailing newline characters
-        series_name=$(echo "$series_name" | sed 's/ -[0-9]\+$//') 
-        # Remove any trailing spaces and hyphens
+        series_name="${series_info%%[Ss][0-9]*}"
+        series_name=$(echo "$series_info" | sed -E 's/([0-9]{3,4}p).*$//')
+        series_name=$(basename "$series_name")
+        series_year=$(echo "$folder" | grep -oE '[0-9]{4}')
+        series_year=$(echo "$series_info" | grep -oE '\b[0-9]{4}\b' | tail -1)
+        series_name=$(echo "$series_name" | sed -e 's/\[.*//' -e 's/ -[0-9]\+$//')
         series_name=$(echo "$series_name" | sed 's/[[:space:]]*$//;s/-*$//')
-        # Remove the 'Season X' part
         series_name=$(echo "$series_name" | sed 's/Season [0-9]\+//')
-        # Remove 'S0X' from the series name
-        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" -e "s/SEASON [0-9]\+//" -e "s/SEASON[.[:digit:]]*//" -e "s/\(\b\|[^0-9]\)S\([0-9]\)/\1 S\2/g" -e "s/S01\.[[:space:]]*-[[:space:]]*//" -e "s/S01//" -e "s/^[[:space:]]*//" -e "s/\s*-*$//" -e "s/^'\(.*\)'$/\1/")
+        series_name=$(echo "$series_name" | sed -e "s/Season [0-9]\+//" \
+                                       -e "s/SEASON [0-9]\+//" \
+                                       -e "s/SEASON[.[:digit:]]*//" \
+                                       -e "s/\(\b\|[^0-9]\)S\([0-9]\)/\1 S\2/g" \
+                                       -e "s/S01\.[[:space:]]*-[[:space:]]*//" \
+                                       -e "s/S01//" \
+                                       -e "s/English//" \
+                                       -e "s/^[[:space:]]*//" \
+                                       -e "s/^'\(.*\)'$/\1/" )
         series_name=$(echo "$series_name" | sed "s/'//g; s/[()]//g")
-        # Replace '.' with spaces in series name
         series_name="${series_name//./ }"
-        # Convert series name to title case
+        series_name=$(echo "$series_name" | sed 's/(.*)//')
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
     else
         echo "Error: Unable to determine series name for $folder."
