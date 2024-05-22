@@ -62,6 +62,15 @@ create_symlinks_in_source_dir() {
     folder=$(echo "$folder" | sed 's/\\/\//g')
     target_file=$(echo "$target_file" | sed 's/\\/\//g')
 
+    #Skip target if a RAR file is detected
+    if [[ "${target_file}" =~ \.rar$ ]]; then
+      echo "Skipping RAR file: $target_file"
+      if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
+        echo "$target_file" >> "$log_dir/skipped_rar_files.log"
+      fi
+      return 0
+    fi
+
     # Extract series name and year from folder name
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ]]; then
         series_info="${BASH_REMATCH[1]}"
@@ -168,6 +177,14 @@ create_symlinks_in_source_dir() {
 # Function to symlink a specific file or folder
 symlink_specific_file_or_folder() {
     local target="$1"
+    if [[ "${target}" =~ \.rar$ ]]; then
+      echo "Skipping RAR file: $target"
+      if ! grep -qFx "$target" "$log_dir/skipped_rar_files.log"; then
+        echo "$target" >> "$log_dir/skipped_rar_files.log"
+      fi
+      return 0
+    fi
+
     if [ -e "$target" ]; then
         local filename=$(basename "$target")
         local destination_file="$destination_dir/$filename"
