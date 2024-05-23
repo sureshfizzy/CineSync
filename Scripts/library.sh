@@ -199,6 +199,16 @@ symlink_specific_file_or_folder() {
     fi
 }
 
+cleanup() {
+    echo "Removing .r files from the destination directory..."
+    find "$destination_dir" -type f -name "*.r*" -exec rm {} +
+    echo "All .r files removed from the destination directory."
+
+    echo "Removing empty directories from the destination directory..."
+    find "$destination_dir" -mindepth 1 -type d -empty -delete
+    echo "Empty directories removed from the destination directory."
+}
+
 # Call function to check symlinks in destination directory
 
 check_symlinks_in_destination
@@ -239,3 +249,6 @@ else
         exit 1
     fi
 fi
+
+# Clean up: Remove empty folders and files with .r extension
+cleanup
