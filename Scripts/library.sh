@@ -63,7 +63,7 @@ create_symlinks_in_source_dir() {
     target_file=$(echo "$target_file" | sed 's/\\/\//g')
 
     #Skip target if a RAR file is detected
-    if [[ "${target_file}" =~ \.rar$ ]]; then
+    if [[ "${target_file}" =~ \.r[^/]*$ ]]; then
       echo "Skipping RAR file: $target_file"
       if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
         echo "$target_file" >> "$log_dir/skipped_rar_files.log"
@@ -177,7 +177,7 @@ create_symlinks_in_source_dir() {
 # Function to symlink a specific file or folder
 symlink_specific_file_or_folder() {
     local target="$1"
-    if [[ "${target}" =~ \.rar$ ]]; then
+    if [[ "${target}" =~ \.r[^/]*$ ]]; then
       echo "Skipping RAR file: $target"
       if ! grep -qFx "$target" "$log_dir/skipped_rar_files.log"; then
         echo "$target" >> "$log_dir/skipped_rar_files.log"
