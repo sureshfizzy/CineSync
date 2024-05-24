@@ -53,9 +53,10 @@ log_existing_folder_names() {
 }
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
-create_symlinks_in_source_dir() {
+organize_media_files() {
     local folder="$1"
     local target_file="$2"
+    local target="$3"
     local series_info
     local series_name
     local series_year
@@ -71,8 +72,16 @@ create_symlinks_in_source_dir() {
       return 0
     fi
 
-    # Extract series name and year from folder name
-    if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* || $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ]]; then
+    # Extract series name and year from folder name or target file
+    if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
+          $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
+          $folder =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
+          $folder =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
+          $target_file =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
+          $target_file =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
+          $target_file =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
+          $target_file =~ (.*)\.S([0-9]+)E([0-9]+)\. ]]; then
+
         series_info="${BASH_REMATCH[1]}"
         series_name="${series_info%%[Ss][0-9]*}"
         series_name=$(echo "$series_info" | sed -E 's/([0-9]{3,4}p).*$//')
@@ -230,7 +239,7 @@ if [ $# -eq 0 ]; then
     echo "Creating symlinks for all files in source directory..."
     for entry in "$show_source_dir"/*; do
         if [ -d "$entry" ]; then
-            create_symlinks_in_source_dir "$entry"
+            organize_media_files "$entry"
         elif [ -f "$entry" ]; then
             symlink_specific_file_or_folder "$entry"
         fi
@@ -241,17 +250,17 @@ else
         target="$1"
         if [ -d "$target" ]; then
             echo "The provided argument is a directory. Organizing according to TV show conventions..."
-            create_symlinks_in_source_dir "$target" ""
+            organize_media_files "$target" ""
         elif [ -f "$target" ]; then
             echo "The provided argument is a file. Organizing it accordingly..."
             folder=$(dirname "$target")
-            create_symlinks_in_source_dir "$folder" "$(basename "$target")"
+            organize_media_files "$folder" "$(basename "$target")"
         else
             echo "Error: The provided argument is neither a file nor a directory."
             exit 1
         fi
     else
-        echo "Error: Invalid number of arguments. Usage: sudo bash fish.sh [directory/file_path]"
+        echo "Error: Invalid number of arguments."
         exit 1
     fi
 fi
