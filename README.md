@@ -2,7 +2,7 @@
 
 CineSync is a Python & Bash based library management system designed to facilitate the organization of debrid libraries for Shows efficiently, without the need for Sonarr. Users downloading from DMM Manager can easily sort their library into seasons, whether it's a single file or a folder. CineSync smoothly organizes the library and creates symbolic links, giving users full control over their data locally.
 
-This project works with the support of [Zurg](https://github.com/debridmediamanager/zurg-testing). Special thanks to [yowmamasita](https://github.com/yowmamasita). This project might also work with Plex-Debrid (haven't tested that yet, any volunteers are welcome).
+This project will seamlessly integrate with any files that need to be organized (TV shows for now). This project will also work with [Zurg](https://github.com/debridmediamanager/zurg-testing). Special thanks to [yowmamasita](https://github.com/yowmamasita).
 
 # General Info
 
@@ -44,7 +44,8 @@ By leveraging real-time monitoring in CineSync, users can effortlessly manage th
 
 - Python 3.x
 - For Windows: Git Bash with symbolic links enabled
-- [Zurg](https://github.com/debridmediamanager/zurg-testing)
+- NSSM for Windows (if you want to enable real-time monitoring).
+- [Zurg](https://github.com/debridmediamanager/zurg-testing) (optional)
 
 ### For Linux:
 
@@ -64,13 +65,9 @@ Here's an enhanced version of the instructions:
    - `show_source_dir`: Specify the path for the Zurg-mounted shows directory.
    - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
 
-4. **Update Paths in `RealTime-Monitor.py`:** Open the `RealTime-Monitor.py` file and update the following paths:
-   - `watch_dir`: Set the path for the Zurg shows directory (same path which you mentioned for `show_source_dir` in `library.sh`).
-   - `bash_script`: Specify the path for the `library.sh` script.
-
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
-5. **Execute CineSync:** After updating the paths, execute the main script:
+4. **Execute CineSync:** After updating the paths, execute the main script:
    ```
    bash CineSync.sh
    ```
@@ -127,25 +124,57 @@ By following these steps and updating the necessary paths, you'll be able to suc
    - `show_source_dir`: Specify the path for the Zurg-mounted shows directory.
    - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
 
-7. **Update Paths in `RealTime-Monitor.py`:** Open the `RealTime-Monitor.py` file and update the following paths:
-   - `watch_dir`: Set the path for the Zurg shows directory (same path which you mentioned for `show_source_dir` in `library.sh`).
-   - `bash_script`: Specify the path for the `library.sh` script.
-
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
 8. **Run the Script:**
    ```
    bash CineSync.sh
    ```
-**Real-Time Monitoring Windows Limitation**
 
-Due to current limitations, Real-Time Monitoring cannot run as a system service on Windows. However, you can run the `RealTime-Monitor.py` file separately if needed by triggering it in a Bash script. 
+# Real-Time Monitoring on Windows using NSSM
 
-**Note:** Ensure to execute the `RealTime-Monitor.py` file within the Git Bash environment to ensure proper functionality.
+This guide will walk you through the process of setting up real-time monitoring for CineSync Monitor on Windows using NSSM (Non-Sucking Service Manager). Real-time monitoring ensures that CineSync Monitor runs continuously in the background as a system service.
 
-This emphasizes the Windows limitation and provides a workaround for users who may still want to utilize real-time monitoring on Windows.
+## Prerequisites
 
-Here's the revised "Usage" section with the provided details:
+- **NSSM**: Download and install NSSM from the official website: [NSSM Releases](https://nssm.cc/download)
+
+## Installation Steps
+
+### 1. Download and Install NSSM
+
+1. Download the latest version of NSSM from the official website.
+2. Extract the downloaded ZIP file to a location on your computer.
+3. Open the extracted folder and locate the `nssm.exe` executable.
+
+### 2. Mount CineSync Monitor as a System Service
+
+1. **Place NSSM Executable Inside the Scripts Folder**: Move the `nssm.exe` executable into the Scripts folder.
+
+2. **Run NSSM Install Command**: Open a Command Prompt with administrative privileges, navigate to the Scripts folder, and run the following command:
+   ```
+   nssm install CineSync-Monitor
+   ```
+
+### 3. Configure NSSM
+
+1. **Configure NSSM**: In the NSSM GUI that appears:
+   - **Application Path**: Choose the `python.exe` executable. You can find it by opening Git Bash and running `which python`.
+   - **Arguments**: Pass the folder path where `realtime-monitor.py` is located, for example: `C:\Users\YourUserName\Desktop\CineSync\Scripts\RealTime-Monitor.py`.
+   - Click "Install Service".
+
+	![NSSM](Screenshots/nssm.png)
+	
+2. **Set Source and Destination Paths**: Before running `realtime-monitor.py` as a system service, ensure that source and destination paths are correctly set inside `library.sh`.
+
+3. **Run Real-Time Monitoring**: After installation, the files will be watched in real-time, and symlinks will be created if any changes are detected.
+
+4. **Removing the System Service**: To remove the system service, simply type:
+   ```
+   nssm remove CineSync-Monitor
+   ```
+
+Additionally, you can also directly run the Python script on Git Bash if needed.
 
 ## Usage
 
