@@ -24,10 +24,13 @@ bash_script = "library.sh"
 
 # Function to execute the Bash script with the specified path
 def execute_bash_script(path):
-    if platform.system() == "Windows":
-        subprocess.run(['bash', '-c', f'source "{bash_script}" "{path}"'], shell=True)
-    elif platform.system() == "Linux":
-        subprocess.run([bash_script, path])
+    try:
+        if platform.system() == "Windows":
+            subprocess.run(['bash', '-c', f'source "{bash_script}" "{path}"'], shell=True, check=True)
+        elif platform.system() == "Linux":
+            subprocess.run([bash_script, path], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"{RED_COLOR}Error executing script: {e}{RESET_COLOR}")
 
 # Read the value of watch_dir and destination_dir from the Bash script
 def get_dirs():
@@ -62,8 +65,7 @@ else:
     exit(1)  # Exit the script if destination_dir is not set
 
 # Initial scan of the directory
-def initial_scan():
-    global current_files
+def initial_scan(watch_dir, destination_dir):
     try:
         current_files = set(os.listdir(watch_dir))
     except FileNotFoundError:
@@ -75,30 +77,27 @@ def initial_scan():
         print(RED_COLOR + "Error: Destination directory is empty." + RESET_COLOR)
         exit(1)
 
-# Periodic scan to check for changes
-def periodic_scan():
-    global current_files
-    while True:
-        print("Scanning directory for changes...", flush=True)
-        try:
-            new_files = set(os.listdir(watch_dir))
-        except FileNotFoundError:
-            print(f"Error: Watch directory '{watch_dir}' not found.")
-            print("Please set the correct source path in library.sh.")
-            exit(1)
+    return current_files
 
-        added_files = new_files - current_files
-
-        if added_files:
-            print(f"Detected added files: {added_files}", flush=True)
-            for file in added_files:
-                full_path = os.path.join(watch_dir, file)
-                execute_bash_script(full_path)
-
-        current_files = new_files
-        print("Scan complete.", flush=True)
-        time.sleep(60)  # Adjust the sleep time as needed
+# Event handler for watchdog
+class MyHandler(FileSystemEventHandler):
+    def on_created(self, event):
+        if not event.is_directory:
+            print(f"Detected added file: {event.src_path}", flush=True)
+            execute_bash_script(event.src_path)
 
 if __name__ == "__main__":
-    initial_scan()
-    periodic_scan()
+    current_files = initial_scan(watch_dir, destination_dir)
+
+    # Set up watchdog observer
+    event_handler = MyHandler()
+    observer = Observer()
+    observer.schedule(event_handler, path=watch_dir, recursive=False)
+    observer.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
