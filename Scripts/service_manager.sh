@@ -23,9 +23,13 @@ Description=Real-Time Monitor Service
 After=network.target
 
 [Service]
-Type=simple
 ExecStart=/usr/bin/python3 $monitor_script_path
+WorkingDirectory=$monitor_script_path
+StandardOutput=append:/var/log/cinesync.log
+StandardError=append:/var/log/cinesync.log
 Restart=always
+User=root
+Group=root
 
 [Install]
 WantedBy=multi-user.target
