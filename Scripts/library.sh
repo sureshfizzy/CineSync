@@ -77,10 +77,12 @@ organize_media_files() {
           $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $folder =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
           $folder =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
+          $folder =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ||
           $target_file =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $target_file =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
-          $target_file =~ (.*)\.S([0-9]+)E([0-9]+)\. ]]; then
+          $target_file =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
+          $target_file =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ]]; then
 
         series_info="${BASH_REMATCH[1]}"
         series_name="${series_info%%[Ss][0-9]*}"
