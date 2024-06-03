@@ -27,7 +27,7 @@ def execute_bash_script(path):
     if platform.system() == "Windows":
         subprocess.run(['bash', '-c', f'source "{bash_script}" "{path}"'], shell=True)
     elif platform.system() == "Linux":
-        subprocess.run([bash_script, path])
+        subprocess.run(['/bin/bash', bash_script, path])
 
 # Read the value of watch_dir and destination_dir from the Bash script
 def get_dirs():
