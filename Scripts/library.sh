@@ -86,7 +86,8 @@ organize_media_files() {
 
         series_info="${BASH_REMATCH[1]}"
         series_name="${series_info%%[Ss][0-9]*}"
-        series_name=$(echo "$series_info" | sed -E 's/([0-9]{3,4}p).*$//')
+        series_name=$(echo "$series_info" | sed -E 's/.*\/([^/]+)$/\1/')
+        series_name=$(echo "$series_name" | sed -e 's/[0-9]\+[[:space:]]*p.*//' -e 's/[[:space:]]*$//;s/-*$//')
         series_name=$(basename "$series_name")
         series_year=$(echo "$folder" | grep -oE '[0-9]{4}')
         series_year=$(echo "$series_info" | grep -oE '\b[0-9]{4}\b' | tail -1)
