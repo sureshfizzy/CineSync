@@ -3,22 +3,74 @@
 # Check the operating system
 os=$(uname -s)
 
+# Configuration
+LOG_DIR="logs"
+LOG_FILE="$LOG_DIR/script.log"
+LOG_LEVEL="INFO"  # Default log level (DEBUG, INFO, WARNING, ERROR)
+
+# Function to log messages
+log_message() {
+    local message="$1"
+    local log_level="$2"
+    local destination="$3"  # 'stdout' or 'file'
+
+    if [[ ("$log_level" == "DEBUG" && "$LOG_LEVEL" == "DEBUG") ||
+          "$log_level" == "INFO" || "$log_level" == "WARNING" || "$log_level" == "ERROR" ]]; then
+        if [[ "$destination" == "file" ]]; then
+            # Create log directory if it doesn't exist
+            mkdir -p "$LOG_DIR"
+            echo "$(date +'%Y-%m-%d %H:%M:%S') [$log_level] - $message" >> "$LOG_FILE"
+        elif [[ "$destination" == "stdout" ]]; then
+            echo "$(date +'%Y-%m-%d %H:%M:%S') [$log_level] - $message"
+        else
+            echo "Invalid log destination: $destination"
+        fi
+    elif [[ "$log_level" != "DEBUG" ]]; then
+        echo "Invalid log level: $log_level"
+    fi
+}
+
+# Function to enable logging based on user preference
+enable_logging() {
+    local log_level="$1"
+    local destination="$2"
+    if [[ "$log_level" == "DEBUG" || "$log_level" == "INFO" || "$log_level" == "WARNING" || "$log_level" == "ERROR" ]]; then
+        LOG_LEVEL="$log_level"
+        log_message "Logging enabled with log level: $LOG_LEVEL" "INFO" "$destination"
+    else
+        log_message "Invalid log level specified. Logging remains disabled." "ERROR" "stdout"
+    fi
+}
+
+# Check if logging is enabled
+if [[ "$1" == "--enable-logging" ]]; then
+    enable_logging "$2" "file"  # Enable logging to file with specified log level
+    shift 2  # Shift command-line arguments
+else
+    log_message "Logging disabled." "INFO" "stdout"
+fi
+
 # Source directory for TV shows
 show_source_dir="/path/to/zurg/shows"
+log_message "Source directory for TV shows: $show_source_dir" "DEBUG" "stdout"
 
 # Destination directory
 destination_dir="/path/to/destination"
+log_message "Destination directory: $destination_dir" "DEBUG" "stdout"
 
 # Log directory
 log_dir="logs"
+log_message "Log directory: $log_dir" "DEBUG" "stdout"
 
 # Log file for existing folder names in the destination directory
 names_log="$log_dir/folder_names.log"
+log_message "Log file for existing folder names: $names_log" "DEBUG" "stdout"
 
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
-    echo "Destination directory '$destination_dir' does not exist."
-    exit 1
+    log_message "Destination directory '$destination_dir' does not exist." "DEBUG" "stdout"
+	mkdir -p $destination_dir
+	log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
 fi
 
 # Function to check all symlinks in the destination directory and save their target paths to a log file
@@ -33,12 +85,12 @@ check_symlinks_in_destination() {
     else
         find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/symlinks.log"
     fi
-    echo "Symlinks in destination directory checked and saved to $log_dir/symlinks.log"
+    log_message "Symlinks in destination directory checked and saved to $log_dir/symlinks.log" "INFO" "stdout"
 }
 
 # Function to log existing folder names in the destination directory
 log_existing_folder_names() {
-    echo "Logging existing folder names in destination directory..."
+    log_message "Logging existing folder names in destination directory..." "INFO" "stdout"
     if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
         find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$names_log"
     else
@@ -49,7 +101,7 @@ log_existing_folder_names() {
         # Log all existing folder paths in the destination directory
         find "$destination_dir" -mindepth 1 -maxdepth 1 -type d > "$names_log"
     fi
-    echo "Existing folder names in destination directory logged to $names_log"
+    log_message "Existing folder names in destination directory logged to $names_log" "INFO" "stdout"
 }
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
@@ -65,7 +117,7 @@ organize_media_files() {
 
     #Skip target if a RAR file is detected
     if [[ "${target_file}" =~ \.r[^/]*$ ]]; then
-      echo "Skipping RAR file: $target_file"
+      log_message "Skipping RAR file: $target_file" "WARNING" "stdout"
       if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
         echo "$target_file" >> "$log_dir/skipped_rar_files.log"
       fi
@@ -108,7 +160,7 @@ organize_media_files() {
         series_name=$(echo "$series_name" | sed 's/(.*)//')
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
     else
-        echo "Error: Unable to determine series name for $folder."
+        log_message "Error: Unable to determine series name for $folder." "ERROR" "stdout"
         return 1
     fi
 
@@ -118,7 +170,7 @@ organize_media_files() {
     local found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
     if grep -qF "$destination_series_dir" "$names_log"; then
         destination_series_dir="$found_in_log"
-        echo "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside."
+        log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
     else
         # Search for variations of the series name with different spacings and abbreviations
         local series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
@@ -126,13 +178,13 @@ organize_media_files() {
         found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
         if [ -n "$found_in_log" ]; then
             destination_series_dir="$found_in_log"
-            echo "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside."
+            log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
         else
-            echo "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'."
+            log_message "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'." "INFO" "stdout"
             # If the series name doesn't exist in the log, create a new folder
             mkdir -p "$destination_series_dir"
             echo "$destination_series_dir" >> "$names_log"
-            echo "New series folder '$series_name' created in the destination directory and added to names.log."
+            log_message "New series folder '$series_name' created in the destination directory and added to names.log." "INFO" "stdout"
         fi
     fi
 
@@ -156,12 +208,12 @@ organize_media_files() {
 
                 # Check if a symlink with the same target exists
                 if grep -qF "$file" "$log_dir/symlinks.log"; then
-                    echo "Symlink already exists for $filename with the same target."
+                    log_message "Symlink already exists for $filename with the same target." "DEBUG" "stdout"
                 else
-                    echo "No symlink exists with the same target."
+                    log_message "No symlink exists with the same target." "DEBUG" "stdout"
                     mkdir -p "$(dirname "$destination_file")"
                     ln -s "$file" "$destination_file"
-                    echo "Symlink created: $file -> $destination_file"
+                    log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
                 fi
             done
         done
@@ -173,7 +225,7 @@ organize_media_files() {
             series_season="${BASH_REMATCH[1]}"
             episode_number="${BASH_REMATCH[2]}"
         else
-            echo "Error: Unable to extract season and episode information from $target_file."
+            log_message "Error: Unable to extract season and episode information from $target_file." "ERROR" "stdout"
             return 1
         fi
 
@@ -182,12 +234,12 @@ organize_media_files() {
 
         # Check if a symlink with the same target exists
         if grep -qF "$target_file" "$log_dir/symlinks.log"; then
-            echo "Symlink already exists for $target_file with the same target."
+            log_message "Symlink already exists for $target_file with the same target." "DEBUG" "stdout"
         else
-            echo "No symlink exists with the same target."
+            log_message "No symlink exists with the same target." "DEBUG" "stdout"
             mkdir -p "$(dirname "$destination_file")"
             ln -s "$folder/$target_file" "$destination_file"
-            echo "Symlink created: $folder/$target_file -> $destination_file"
+            log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
         fi
     fi
 }
@@ -196,7 +248,7 @@ organize_media_files() {
 symlink_specific_file_or_folder() {
     local target="$1"
     if [[ "${target}" =~ \.r[^/]*$ ]]; then
-      echo "Skipping RAR file: $target"
+      log_message "Skipping RAR file: $target" "WARNING" "stdout"
       if ! grep -qFx "$target" "$log_dir/skipped_rar_files.log"; then
         echo "$target" >> "$log_dir/skipped_rar_files.log"
       fi
@@ -207,24 +259,24 @@ symlink_specific_file_or_folder() {
         local filename=$(basename "$target")
         local destination_file="$destination_dir/$filename"
         if [ -L "$destination_file" ]; then
-            echo "A symlink already exists for $filename in the destination directory."
+            log_message "A symlink already exists for $filename in the destination directory." "DEBUG" "stdout"
         else
             ln -s "$target" "$destination_file"
-            echo "Symlink created: $target -> $destination_file"
+            log_message "Symlink created: $target -> $destination_file" "DEBUG" "stdout"
         fi
     else
-        echo "Error: $target does not exist."
+        log_message "Error: $target does not exist." "ERROR" "stdout"
     fi
 }
 
 cleanup() {
-    echo "Removing .r files from the destination directory..."
+    log_message "Removing .r files from the destination directory..." "DEBUG" "stdout"
     find "$destination_dir" -type f -name "*.r*" -exec rm {} +
-    echo "All .r files removed from the destination directory."
+    log_message "All .r files removed from the destination directory." "DEBUG" "stdout"
 
-    echo "Removing empty directories from the destination directory..."
+    log_message "Removing empty directories from the destination directory..." "INFO" "stdout"
     find "$destination_dir" -mindepth 1 -type d -empty -delete
-    echo "Empty directories removed from the destination directory."
+    log_message "Empty directories removed from the destination directory." "INFO" "stdout"
 }
 
 # Call function to check symlinks in destination directory
@@ -239,7 +291,7 @@ log_existing_folder_names
 
 # If no arguments provided, create symlinks for all files in the source directory
 if [ $# -eq 0 ]; then
-    echo "Creating symlinks for all files in source directory..."
+    log_message "Creating symlinks for all files in source directory..." "INFO" "stdout"
     for entry in "$show_source_dir"/*; do
         if [ -d "$entry" ]; then
             organize_media_files "$entry"
@@ -252,21 +304,23 @@ else
     if [ $# -eq 1 ]; then
         target="$1"
         if [ -d "$target" ]; then
-            echo "The provided argument is a directory. Organizing according to TV show conventions..."
+            log_message "The provided argument is a directory. Organizing according to TV show conventions..." "INFO" "stdout"
             organize_media_files "$target" ""
         elif [ -f "$target" ]; then
-            echo "The provided argument is a file. Organizing it accordingly..."
+            log_message "The provided argument is a file. Organizing it accordingly..." "INFO" "stdout"
             folder=$(dirname "$target")
             organize_media_files "$folder" "$(basename "$target")"
         else
-            echo "Error: The provided argument is neither a file nor a directory."
+            log_message "Error: The provided argument is neither a file nor a directory." "ERROR" "stdout"
             exit 1
         fi
     else
-        echo "Error: Invalid number of arguments."
+        log_message "Error: Too many arguments provided. Please provide only one file or directory name." "ERROR" "stdout"
         exit 1
     fi
 fi
 
 # Clean up: Remove empty folders and files with .r extension
 cleanup
+
+log_message "Script execution completed." "INFO" "stdout"
