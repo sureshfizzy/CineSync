@@ -124,16 +124,35 @@ organize_media_files() {
       return 0
     fi
 
+    # Check if folder contains Acceptable pattern
+    if [[ $folder =~ .*[[:space:]]FS[0-9]+.* && ! $folder =~ .*[[:space:]](Season|S[0-9]{0,2})[[:space:]] ]]; then
+        echo -e "${GREEN}${GREEN}"
+        log_message "Folder name is in improper format. Blocking.." "INFO" "stdout"
+        return 1
+    fi
+
     # Extract series name and year from folder name or target file
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $folder =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
           $folder =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
+          $folder =~ (.*)[Ss]([0-9]+)[[:space:]]?.* ||
           $folder =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ||
+          $folder =~ (.*)\.S([0-9]+)\. ||
+          $folder =~ (.*)\.Season\.([0-9]+)-([0-9]+)\. ||
+          $folder =~ (.*)\(([0-9]{4})\).* ||
+          $folder =~ (.*)\.[[:alnum:]]+\.[[:alnum:]]+\.[0-9]{3,4}p.* ||
+          $folder =~ (.*)[[:space:]]Season[[:space:]]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $target_file =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
           $target_file =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
+          $target_file =~ (.*)[Ss]([0-9]+)[[:space:]]?.* ||
+          $target_file =~ (.*)\(([0-9]{4})\).* ||
+          $target_file =~ (.*)\.S([0-9]+)\. ||
+          $taregt_file =~ (.*)\.Season\.([0-9]+)-([0-9]+)\. ||
+          $target_file =~ (.*)\.[[:alnum:]]+\.[[:alnum:]]+\.[0-9]{3,4}p.* ||
+          $target_file =~ (.*)[[:space:]]Season[[:space:]]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ]]; then
 
         series_info="${BASH_REMATCH[1]}"
@@ -158,6 +177,7 @@ organize_media_files() {
         series_name=$(echo "$series_name" | sed "s/'//g; s/[()]//g")
         series_name="${series_name//./ }"
         series_name=$(echo "$series_name" | sed 's/(.*)//')
+        series_name=$(echo "$series_name" | sed -E 's/\b[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee]\b//g')
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
     else
         log_message "Error: Unable to determine series name for $folder." "ERROR" "stdout"
@@ -197,7 +217,7 @@ organize_media_files() {
             local series_season
 
             # Extract season number from filename
-            if [[ $filename =~ [Ss]([0-9]+) ]]; then
+            if [[ $folder =~ \.S([0-9]{2})\. ]] || [[ $filename =~ [Ss]([0-9]+) ]] || [[ $folder =~ Season\.([0-9]+-[0-9]+) ]]; then
                 series_season="${BASH_REMATCH[1]}"
                 season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
             fi
