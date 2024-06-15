@@ -125,7 +125,7 @@ organize_media_files() {
     fi
 
     # Check if folder contains Acceptable pattern
-    if [[ $folder =~ .*[[:space:]]FS[0-9]+.* && ! $folder =~ .*[[:space:]](Season|S[0-9]{0,2})[[:space:]] ]]; then
+    if [[ $folder =~ .*[[:space:]]FS[0-9]+.* && ! $folder =~ .*[[:space:]](Season|S[0-9]{0,2})[[:space:]] || $folder =~ \.[0-9]{4}\.(1080|2160|720)p\. ]]; then
         echo -e "${GREEN}${GREEN}"
         log_message "Folder name is in improper format. Blocking.." "INFO" "stdout"
         return 1
