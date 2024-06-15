@@ -112,6 +112,11 @@ organize_media_files() {
     local series_info
     local series_name
     local series_year
+    is_movie=false
+    local movie_info
+    local movie_name
+    local movie_year
+
     folder=$(echo "$folder" | sed 's/\\/\//g')
     target_file=$(echo "$target_file" | sed 's/\\/\//g')
 
@@ -124,13 +129,6 @@ organize_media_files() {
       return 0
     fi
 
-    # Check if folder contains Acceptable pattern
-    if [[ $folder =~ .*[[:space:]]FS[0-9]+.* && ! $folder =~ .*[[:space:]](Season|S[0-9]{0,2})[[:space:]] || $folder =~ \.[0-9]{4}\.(1080|2160|720)p\. ]]; then
-        echo -e "${GREEN}${GREEN}"
-        log_message "Folder name is in improper format. Blocking.." "INFO" "stdout"
-        return 1
-    fi
-
     # Extract series name and year from folder name or target file
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
@@ -140,18 +138,14 @@ organize_media_files() {
           $folder =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ||
           $folder =~ (.*)\.S([0-9]+)\. ||
           $folder =~ (.*)\.Season\.([0-9]+)-([0-9]+)\. ||
-          $folder =~ (.*)\(([0-9]{4})\).* ||
-          $folder =~ (.*)\.[[:alnum:]]+\.[[:alnum:]]+\.[0-9]{3,4}p.* ||
           $folder =~ (.*)[[:space:]]Season[[:space:]]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $target_file =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
           $target_file =~ (.*)\.S([0-9]+)E([0-9]+)\. ||
           $target_file =~ (.*)[Ss]([0-9]+)[[:space:]]?.* ||
-          $target_file =~ (.*)\(([0-9]{4})\).* ||
           $target_file =~ (.*)\.S([0-9]+)\. ||
           $taregt_file =~ (.*)\.Season\.([0-9]+)-([0-9]+)\. ||
-          $target_file =~ (.*)\.[[:alnum:]]+\.[[:alnum:]]+\.[0-9]{3,4}p.* ||
           $target_file =~ (.*)[[:space:]]Season[[:space:]]([0-9]+)[[:space:]].* ||
           $target_file =~ (.*)\.S([0-9]+)-S([0-9]+)\.[[:alnum:]]+.* ]]; then
 
@@ -179,87 +173,154 @@ organize_media_files() {
         series_name=$(echo "$series_name" | sed 's/(.*)//')
         series_name=$(echo "$series_name" | sed -E 's/\b[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee]\b//g')
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
+
+    elif [[ $folder =~ (.*)[.]([0-9]{4})[.].*[0-9]{3,4}p.* ||
+            $folder =~ (.*)[.]([0-9]{4})[.].* ||
+            $folder =~ (.*)[[:space:]]\(([0-9]{4})\)[[:space:]].* ||
+            $folder =~ (.*)\[[0-9]{4}\][[:space:]].* ||
+            $folder =~ (.*)[[:space:]]([0-9]{4})[[:space:]].* ||
+            $folder =~ (.*)[0-9]{4}[.].* ||
+            $folder =~ (.*)[.]\(([0-9]{4})\)[.] ||
+            $folder =~ (.*)[.][0-9]{1,2}[.].* ||
+            $folder =~ (.*)\(([0-9]{4})\)\(1080p\)\(Hevc\) ||
+            $folder =~ (.*)\(([0-9]{4})\)\[PROPER\]\[BDRip.*\] ||
+            $folder =~ (.*)\(([0-9]{4})\)[[:space:]].* ||
+            $target_file =~ (.*)[.]([0-9]{4})[.].*[0-9]{3,4}p.* ||
+            $target_file =~ (.*)[.]([0-9]{4})[.].* ||
+            $target_file =~ (.*)[[:space:]]\(([0-9]{4})\)[[:space:]].* ||
+            $target_file =~ (.*)\[[0-9]{4}\][[:space:]].* ||
+            $target_file =~ (.*)[0-9]{4}[.].* ||
+            $target_file =~ (.*)[.]\(([0-9]{4})\)[.] ||
+            $target_file =~ (.*)[.][0-9]{1,2}[.].* ||
+            $target_file =~ (.*)\(([0-9]{4})\)\(1080p\)\(Hevc\) ||
+            $target_file =~ (.*)\(([0-9]{4})\)\[PROPER\]\[BDRip.*\] ||
+            $target_file =~ (.*)\(([0-9]{4})\)[[:space:]].* ||
+            $target_file =~ (.*)[[:space:]]([0-9]{4})[[:space:]].* ]]; then
+
+        movie_info="${BASH_REMATCH[1]}"
+        is_movie=true
+        movie_name=$(basename "$movie_info")
+        movie_name=$(echo "$movie_name" | sed -e 's/[._]/ /g')
+        movie_name=$(echo "$movie_name" | sed 's/[[:space:]]*$//;s/-*$//')
+        movie_name=$(echo "$movie_name" | sed -e 's/([^)]*)//' -e 's/\[[^]]*\]//g' -e 's/{[^}]*}//g' -e 's/[^a-zA-Z0-9 ]//g')
+        movie_name=$(echo "$movie_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')
+        movie_year="${BASH_REMATCH[2]}"
+
+        log_message "Movie detected: $movie_name ($movie_year)" "INFO" "stdout"
+
     else
         log_message "Error: Unable to determine series name for $folder." "ERROR" "stdout"
         return 1
     fi
 
-    # Check if the series name exists without the year and season info
-    local destination_series_dir="$destination_dir/$series_name"
-    destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
-    local found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
-    if grep -qF "$destination_series_dir" "$names_log"; then
-        destination_series_dir="$found_in_log"
-        log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
+    if [ "$is_movie" = true ]; then
+        movie_name="$movie_name"
+        movie_year="$movie_year"
+
+        # Replace dots with spaces in the movie name
+        movie_name=$(echo "$movie_name" | sed 's/\./ /g')
+
+        # Construct destination directory path based on cleaned movie name and year
+        local destination_movie_dir="$destination_dir/$movie_name"
+        if [ -n "$movie_year" ]; then
+            destination_movie_dir="$destination_movie_dir ($movie_year)"
+        fi
+
+        # Find the movie file (.mkv or .mp4) in the folder ($folder)
+        local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
+
+        if [ -z "$movie_file" ]; then
+            log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
+            exit 1
+        fi
+
+        # Create the destination file path
+        local destination_file="$destination_movie_dir/$(basename "$movie_file")"
+
+        # Check if a symlink with the same target exists
+        if grep -qF "$movie_file" "$log_dir/symlinks.log"; then
+            log_message "A symlink already exists for $(basename "$movie_file") with the same target." "DEBUG" "stdout"
+        else
+            # Create a symbolic link
+            mkdir -p "$destination_movie_dir"
+            echo "Dest dir: $destination_movie_dir"
+            ln -s "$movie_file" "$destination_file"
+            log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            echo "$movie_file" >> "$log_dir/symlinks.log"
+        fi
     else
-        # Search for variations of the series name with different spacings and abbreviations
-        local series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
-        series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*d/P[[:space:]]*d|P[[:space:]]+d/' | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/' | sed 's/[0-9]\{4\}//')
-        found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
-        if [ -n "$found_in_log" ]; then
+        # Handle TV series
+        series_name=$(echo "$series_name" | sed 's/\./ /g')
+        destination_series_dir="$destination_dir/$series_name"
+        destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
+        found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
+        if grep -qF "$destination_series_dir" "$names_log"; then
             destination_series_dir="$found_in_log"
             log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
         else
-            log_message "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'." "INFO" "stdout"
-            # If the series name doesn't exist in the log, create a new folder
-            mkdir -p "$destination_series_dir"
-            echo "$destination_series_dir" >> "$names_log"
-            log_message "New series folder '$series_name' created in the destination directory and added to names.log." "INFO" "stdout"
+            series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
+            series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*d/P[[:space:]]*d|P[[:space:]]+d/' | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/' | sed 's/[0-9]\{4\}//')
+            found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
+            if [ -n "$found_in_log" ]; then
+                destination_series_dir="$found_in_log"
+                log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
+            else
+                log_message "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'." "INFO" "stdout"
+                mkdir -p "$destination_series_dir"
+                echo "$destination_series_dir" >> "$names_log"
+                log_message "New series folder '$series_name' created in the destination directory and added to names.log." "INFO" "stdout"
+            fi
         fi
-    fi
 
-    # If the target file is empty, create symlinks for all files in the directory
-    if [ -z "$target_file" ]; then
-        shopt -s nullglob
-        for file in "$folder"/*; do
-            local filename=$(basename "$file")
-            local season_folders=()
-            local series_season
+        if [ -z "$target_file" ]; then
+            shopt -s nullglob
+            for file in "$folder"/*; do
+                filename=$(basename "$file")
+                season_folders=()
+                series_season=""
 
-            # Extract season number from filename
-            if [[ $folder =~ \.S([0-9]{2})\. ]] || [[ $filename =~ [Ss]([0-9]+) ]] || [[ $folder =~ Season\.([0-9]+-[0-9]+) ]]; then
+                if [[ $folder =~ \.S([0-9]{2})\. ]] || [[ $filename =~ [Ss]([0-9]+) ]] || [[ $folder =~ Season\.([0-9]+-[0-9]+) ]]; then
+                    series_season="${BASH_REMATCH[1]}"
+                    season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
+                fi
+
+                for season_folder in "${season_folders[@]}"; do
+                    destination_file="$destination_series_dir/$season_folder/$filename"
+
+                    if grep -qF "$file" "$log_dir/symlinks.log"; then
+                        log_message "Symlink already exists for $filename with the same target." "DEBUG" "stdout"
+                    else
+                        log_message "No symlink exists with the same target." "DEBUG" "stdout"
+                        mkdir -p "$(dirname "$destination_file")"
+                        ln -s "$file" "$destination_file"
+                        log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
+                        echo "$file" >> "$log_dir/symlinks.log"
+                    fi
+                done
+            done
+        else
+            series_season=""
+            episode_number=""
+            if [[ $target_file =~ [Ss]([0-9]+)[Ee]([0-9]+) ]]; then
                 series_season="${BASH_REMATCH[1]}"
-                season_folders+=("Season $(echo "$series_season" | awk '{printf "%02d", $1}')")
+                episode_number="${BASH_REMATCH[2]}"
+            else
+                log_message "Error: Unable to extract season and episode information from $target_file." "ERROR" "stdout"
+                exit 1
             fi
 
-            # Create symlinks for each season found
-            for season_folder in "${season_folders[@]}"; do
-                local destination_file="$destination_series_dir/$season_folder/$filename"
+            season_folder="Season $(printf "%02d" "$series_season")"
+            destination_file="$destination_series_dir/$season_folder/$target_file"
 
-                # Check if a symlink with the same target exists
-                if grep -qF "$file" "$log_dir/symlinks.log"; then
-                    log_message "Symlink already exists for $filename with the same target." "DEBUG" "stdout"
-                else
-                    log_message "No symlink exists with the same target." "DEBUG" "stdout"
-                    mkdir -p "$(dirname "$destination_file")"
-                    ln -s "$file" "$destination_file"
-                    log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
-                fi
-            done
-        done
-    else
-        # Extract season number and episode number from the target file name
-        local series_season
-        local episode_number
-        if [[ $target_file =~ [Ss]([0-9]+)[Ee]([0-9]+) ]]; then
-            series_season="${BASH_REMATCH[1]}"
-            episode_number="${BASH_REMATCH[2]}"
-        else
-            log_message "Error: Unable to extract season and episode information from $target_file." "ERROR" "stdout"
-            return 1
-        fi
-
-        local season_folder="Season $(printf "%02d" "$series_season")"
-        local destination_file="$destination_series_dir/$season_folder/$target_file"
-
-        # Check if a symlink with the same target exists
-        if grep -qF "$target_file" "$log_dir/symlinks.log"; then
-            log_message "Symlink already exists for $target_file with the same target." "DEBUG" "stdout"
-        else
-            log_message "No symlink exists with the same target." "DEBUG" "stdout"
-            mkdir -p "$(dirname "$destination_file")"
-            ln -s "$folder/$target_file" "$destination_file"
-            log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+            if grep -qF "$target_file" "$log_dir/symlinks.log"; then
+                log_message "Symlink already exists for $target_file with the same target." "DEBUG" "stdout"
+            else
+                log_message "No symlink exists with the same target." "DEBUG" "stdout"
+                mkdir -p "$(dirname "$destination_file")"
+                ln -s "$folder/$target_file" "$destination_file"
+                log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+                echo "$folder/$target_file" >> "$log_dir/symlinks.log"
+            fi
         fi
     fi
 }
