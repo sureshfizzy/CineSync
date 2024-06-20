@@ -13,13 +13,23 @@ log_message() {
     local message="$1"
     local log_level="$2"
     local destination="$3"  # 'stdout' or 'file'
+    local is_movie="$4"     # Flag to indicate if the message is related to movies
 
     if [[ ("$log_level" == "DEBUG" && "$LOG_LEVEL" == "DEBUG") ||
           "$log_level" == "INFO" || "$log_level" == "WARNING" || "$log_level" == "ERROR" ]]; then
         if [[ "$destination" == "file" ]]; then
             # Create log directory if it doesn't exist
             mkdir -p "$LOG_DIR"
-            echo "$(date +'%Y-%m-%d %H:%M:%S') [$log_level] - $message" >> "$LOG_FILE"
+
+            # Determine log file based on the message content and is_movie flag
+            local log_file=""
+            if [[ "$is_movie" == "true" ]]; then
+                log_file="$LOG_DIR/movies.log"
+            else
+                log_file="$LOG_DIR/series.log"
+            fi
+
+            echo "$(date +'%Y-%m-%d %H:%M:%S') [$log_level] - $message" >> "$log_file"
         elif [[ "$destination" == "stdout" ]]; then
             echo "$(date +'%Y-%m-%d %H:%M:%S') [$log_level] - $message"
         else
@@ -63,8 +73,8 @@ log_dir="logs"
 log_message "Log directory: $log_dir" "DEBUG" "stdout"
 
 # Log file for existing folder names in the destination directory
-names_log="$log_dir/folder_names.log"
-log_message "Log file for existing folder names: $names_log" "DEBUG" "stdout"
+movies_log="$log_dir/movies_folder_names.log"
+series_log="$log_dir/series_folder_names.log"
 
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
@@ -73,35 +83,61 @@ if [ ! -d "$destination_dir" ]; then
 	log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
 fi
 
-# Function to check all symlinks in the destination directory and save their target paths to a log file
+# Function to check all symlinks in the destination directory and save their target paths to appropriate log files
 check_symlinks_in_destination() {
     echo "Checking symlinks in destination directory..."
     if [[ "$os" == "MINGW"* || "$os" == "MSYS"* ]]; then
+        # Handling for series.log
         while IFS= read -r symlink; do
             target=$(readlink "$symlink")
             windows_path=$(cygpath -w "$target" | sed 's/\\/\//g')
             echo "$windows_path"
-        done < <(find "$destination_dir" -type l) > "$log_dir/symlinks.log"
+        done < <(find "$destination_dir" -type l) > "$log_dir/series.log"
+
+        # Handling for movies.log
+        while IFS= read -r symlink; do
+            target=$(readlink "$symlink")
+            windows_path=$(cygpath -w "$target" | sed 's/\\/\//g')
+            echo "$windows_path"
+        done < <(find "$destination_dir" -type l) > "$log_dir/movies.log"
     else
-        find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/symlinks.log"
+        find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/series.log"
+        find "$destination_dir" -type l -exec readlink -f {} + > "$log_dir/movies.log"
     fi
-    log_message "Symlinks in destination directory checked and saved to $log_dir/symlinks.log" "INFO" "stdout"
+    echo "Symlinks in destination directory checked and saved to $log_dir/series.log and $log_dir/movies.log"
 }
 
 # Function to log existing folder names in the destination directory
 log_existing_folder_names() {
+    local is_movie=false
     log_message "Logging existing folder names in destination directory..." "INFO" "stdout"
+
     if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
-        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$names_log"
+        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$series_log"
     else
-        if [ -f "$names_log" ]; then
+        if [ -f "$series_log" ]; then
             # Remove existing log file to regenerate with full paths
-            rm "$names_log"
+            rm "$series_log"
         fi
         # Log all existing folder paths in the destination directory
-        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d > "$names_log"
+        find "$destination_dir" -mindepth 1 -maxdepth 1 -type d > "$series_log"
     fi
-    log_message "Existing folder names in destination directory logged to $names_log" "INFO" "stdout"
+
+    if "$is_movie" == true; then
+        if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+            find "$destination_dir" -mindepth 1 -maxdepth 1 -type d -exec realpath {} + > "$movies_log"
+        else
+            if [ -f "$movies_log" ]; then
+                # Remove existing log file to regenerate with full paths
+                rm "$movies_log"
+            fi
+            # Log all existing folder paths in the destination directory
+            find "$destination_dir" -mindepth 1 -maxdepth 1 -type d > "$movies_log"
+        fi
+        log_message "Existing movie folder names in destination directory logged to $movies_log" "INFO" "stdout"
+    else
+        log_message "Existing folder names in destination directory logged to $movies_log" "INFO" "stdout"
+    fi
 }
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
@@ -129,7 +165,7 @@ organize_media_files() {
       return 0
     fi
 
-    # Extract series name and year from folder name or target file
+    # Determine if it's a movie or TV series
     if [[ $folder =~ (.*)[Ss]([0-9]+).*[0-9]{3,4}p.* ||
           $folder =~ (.*)[Ss]([0-9]+)[[:space:]].* ||
           $folder =~ (.*)\[([0-9]+)x([0-9]+)\].* ||
@@ -173,6 +209,7 @@ organize_media_files() {
         series_name=$(echo "$series_name" | sed 's/(.*)//')
         series_name=$(echo "$series_name" | sed -E 's/\b[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee]\b//g')
         series_name="$(echo "$series_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')"
+        log_message "Series detected: $series_name ($series_year)" "INFO" "stdout"
 
     elif [[ $folder =~ (.*)[.]([0-9]{4})[.].*[0-9]{3,4}p.* ||
             $folder =~ (.*)[.]([0-9]{4})[.].* ||
@@ -199,79 +236,80 @@ organize_media_files() {
 
         movie_info="${BASH_REMATCH[1]}"
         is_movie=true
+
+        # Extract year from different patterns
+        if [[ $folder =~ ([0-9]{4}) ]]; then
+            movie_year="${BASH_REMATCH[1]}"
+        elif [[ $folder =~ \[([0-9]{4})\] ]]; then
+            movie_year="${BASH_REMATCH[1]}"
+        elif [[ $folder =~ ([0-9]{4}) ]]; then
+            movie_year="${BASH_REMATCH[1]}"
+        fi
+
         movie_name=$(basename "$movie_info")
         movie_name=$(echo "$movie_name" | sed -e 's/[._]/ /g')
         movie_name=$(echo "$movie_name" | sed 's/[[:space:]]*$//;s/-*$//')
         movie_name=$(echo "$movie_name" | sed -e 's/([^)]*)//' -e 's/\[[^]]*\]//g' -e 's/{[^}]*}//g' -e 's/[^a-zA-Z0-9 ]//g')
         movie_name=$(echo "$movie_name" | awk '{for(i=1;i<=NF;i++)sub(/./,toupper(substr($i,1,1)),$i)}1')
-        movie_year="${BASH_REMATCH[2]}"
-
         log_message "Movie detected: $movie_name ($movie_year)" "INFO" "stdout"
-
     else
-        log_message "Error: Unable to determine series name for $folder." "ERROR" "stdout"
-        return 1
+        log_message "Unable to determine series or movie: $folder" "WARNING" "stdout"
+        return
     fi
 
+    # Handling movies
     if [ "$is_movie" = true ]; then
-        movie_name="$movie_name"
-        movie_year="$movie_year"
-
-        # Replace dots with spaces in the movie name
         movie_name=$(echo "$movie_name" | sed 's/\./ /g')
 
-        # Construct destination directory path based on cleaned movie name and year
         local destination_movie_dir="$destination_dir/$movie_name"
         if [ -n "$movie_year" ]; then
             destination_movie_dir="$destination_movie_dir ($movie_year)"
         fi
 
-        # Find the movie file (.mkv or .mp4) in the folder ($folder)
         local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
 
         if [ -z "$movie_file" ]; then
             log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
-            exit 1
+            return 1
         fi
 
-        # Create the destination file path
         local destination_file="$destination_movie_dir/$(basename "$movie_file")"
 
-        # Check if a symlink with the same target exists
-        if grep -qF "$movie_file" "$log_dir/symlinks.log"; then
+        if grep -qF "$movie_file" "$log_dir/movies.log"; then
             log_message "A symlink already exists for $(basename "$movie_file") with the same target." "DEBUG" "stdout"
         else
-            # Create a symbolic link
             mkdir -p "$destination_movie_dir"
-            echo "Dest dir: $destination_movie_dir"
+            echo "$destination_movie_dir" >> "$movies_log"
             ln -s "$movie_file" "$destination_file"
             log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
-            echo "$movie_file" >> "$log_dir/symlinks.log"
+            echo "$movie_file" >> "$log_dir/movies.log"
         fi
+
+    # Handling TV series
     else
-        # Handle TV series
         series_name=$(echo "$series_name" | sed 's/\./ /g')
         destination_series_dir="$destination_dir/$series_name"
         destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
-        found_in_log=$(grep "$series_name" "$names_log" | head -n 1)
-        if grep -qF "$destination_series_dir" "$names_log"; then
+        found_in_log=$(grep "$series_name" "$series_log" | head -n 1)
+        if grep -qF "$destination_series_dir" "$series_log"; then
             destination_series_dir="$found_in_log"
-            log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
+            log_message "Folder '$series_name' exists in $series_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
         else
             series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
             series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*d/P[[:space:]]*d|P[[:space:]]+d/' | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/' | sed 's/[0-9]\{4\}//')
-            found_in_log=$(grep -iE "$series_name_pattern" "$names_log" | head -n 1)
+            found_in_log=$(grep -iE "$series_name_pattern" "$series_log" | head -n 1)
             if [ -n "$found_in_log" ]; then
                 destination_series_dir="$found_in_log"
                 log_message "Folder '$series_name' exists in $names_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
             else
                 log_message "Folder '$series_name' does not exist in names.log. Files will be placed in '$series_name'." "INFO" "stdout"
                 mkdir -p "$destination_series_dir"
-                echo "$destination_series_dir" >> "$names_log"
-                log_message "New series folder '$series_name' created in the destination directory and added to names.log." "INFO" "stdout"
+                echo "$destination_series_dir" >> "$series_log"
+                log_message "New series folder '$series_name' created in the destination directory." "INFO" "stdout"
             fi
         fi
 
+        # Handle episodes
         if [ -z "$target_file" ]; then
             shopt -s nullglob
             for file in "$folder"/*; do
@@ -287,14 +325,14 @@ organize_media_files() {
                 for season_folder in "${season_folders[@]}"; do
                     destination_file="$destination_series_dir/$season_folder/$filename"
 
-                    if grep -qF "$file" "$log_dir/symlinks.log"; then
+                    if grep -qF "$file" "$log_dir/series.log"; then
                         log_message "Symlink already exists for $filename with the same target." "DEBUG" "stdout"
                     else
                         log_message "No symlink exists with the same target." "DEBUG" "stdout"
                         mkdir -p "$(dirname "$destination_file")"
                         ln -s "$file" "$destination_file"
                         log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
-                        echo "$file" >> "$log_dir/symlinks.log"
+                        echo "$file" >> "$log_dir/series.log"
                     fi
                 done
             done
@@ -312,14 +350,14 @@ organize_media_files() {
             season_folder="Season $(printf "%02d" "$series_season")"
             destination_file="$destination_series_dir/$season_folder/$target_file"
 
-            if grep -qF "$target_file" "$log_dir/symlinks.log"; then
+            if grep -qF "$target_file" "$log_dir/series.log"; then
                 log_message "Symlink already exists for $target_file with the same target." "DEBUG" "stdout"
             else
                 log_message "No symlink exists with the same target." "DEBUG" "stdout"
                 mkdir -p "$(dirname "$destination_file")"
                 ln -s "$folder/$target_file" "$destination_file"
                 log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
-                echo "$folder/$target_file" >> "$log_dir/symlinks.log"
+                echo "$folder/$target_file" >> "$log_dir/series.log"
             fi
         fi
     fi
