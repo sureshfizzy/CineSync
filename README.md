@@ -62,7 +62,7 @@ Here's an enhanced version of the instructions:
    ```
 
 3. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
-   - `show_source_dir`: Specify the path for the Zurg-mounted shows directory.
+   - `source_dir`: Specify the path for the Zurg-mounted shows directory.
    - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
@@ -121,7 +121,7 @@ By following these steps and updating the necessary paths, you'll be able to suc
    ```
 
 6. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
-   - `show_source_dir`: Specify the path for the Zurg-mounted shows directory.
+   - `source_dir`: Specify the path for the Zurg-mounted shows directory.
    - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.

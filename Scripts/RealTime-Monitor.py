@@ -36,7 +36,7 @@ def get_dirs():
     try:
         with open(bash_script, 'r') as f:
             for line in f:
-                if line.startswith('show_source_dir='):
+                if line.startswith('source_dir='):
                     watch_dir = line.split('=')[1].strip().strip('"')
                 elif line.startswith('destination_dir='):
                     destination_dir = line.split('=')[1].strip().strip('"')

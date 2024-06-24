@@ -3,6 +3,15 @@
 # Check the operating system
 os=$(uname -s)
 
+# Load environment variables from .env file
+if [ -f "../.env" ]; then
+    # Load environment variables, ignoring comments and empty lines
+    export $(grep -v '^#' "../.env" | grep -v '^$' | xargs)
+else
+    echo "Error: .env file not found in the parent directory."
+    exit 1
+fi
+
 # Configuration
 LOG_DIR="logs"
 LOG_FILE="$LOG_DIR/script.log"
@@ -61,11 +70,11 @@ else
 fi
 
 # Source directory for TV shows
-show_source_dir="/path/to/zurg/shows"
-log_message "Source directory for TV shows: $show_source_dir" "DEBUG" "stdout"
+source_dir="$SOURCE_DIR"
+log_message "Source directory for TV shows: $source_dir" "DEBUG" "stdout"
 
 # Destination directory
-destination_dir="/path/to/destination"
+destination_dir="$DESTINATION_DIR"
 log_message "Destination directory: $destination_dir" "DEBUG" "stdout"
 
 # Log directory
@@ -411,7 +420,7 @@ log_existing_folder_names
 # If no arguments provided, create symlinks for all files in the source directory
 if [ $# -eq 0 ]; then
     log_message "Creating symlinks for all files in source directory..." "INFO" "stdout"
-    for entry in "$show_source_dir"/*; do
+    for entry in "$source_dir"/*; do
         if [ -d "$entry" ]; then
             organize_media_files "$entry"
         elif [ -f "$entry" ]; then
