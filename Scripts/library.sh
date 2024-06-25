@@ -15,7 +15,6 @@ fi
 # Configuration
 LOG_DIR="logs"
 LOG_FILE="$LOG_DIR/script.log"
-LOG_LEVEL="INFO"  # Default log level (DEBUG, INFO, WARNING, ERROR)
 
 # Function to log messages
 log_message() {
