@@ -449,21 +449,23 @@ log_existing_folder_names
 
 # If no arguments provided, create symlinks for all files in the source directory
 if [ $# -eq 0 ]; then
-    log_message "Creating symlinks for all files in source directory..." "INFO" "stdout"
-    for entry in "$source_dir"/*; do
-        if [ -d "$entry" ]; then
-            organize_media_files "$entry"
-        elif [ -f "$entry" ]; then
-            symlink_specific_file_or_folder "$entry"
-        fi
+    for src_dir in "${SOURCE_DIRS[@]}"; do
+        log_message "Creating symlinks for all files in source directory: $src_dir" "INFO" "stdout"
+        for entry in "$src_dir"/*; do
+            if [ -d "$entry" ]; then
+                organize_media_files "$entry"
+            elif [ -f "$entry" ]; then
+                symlink_specific_file_or_folder "$entry"
+            fi
+        done
     done
 else
-    # If a file or folder name is provided as an argument, symlink it
+    # If file or folder names are provided as arguments, symlink them
     if [ $# -eq 1 ]; then
         target="$1"
         if [ -d "$target" ]; then
             log_message "The provided argument is a directory. Organizing according to TV show conventions..." "INFO" "stdout"
-            organize_media_files "$target" ""
+            organize_media_files "$target"
         elif [ -f "$target" ]; then
             log_message "The provided argument is a file. Organizing it accordingly..." "INFO" "stdout"
             folder=$(dirname "$target")
@@ -473,8 +475,20 @@ else
             exit 1
         fi
     else
-        log_message "Error: Too many arguments provided. Please provide only one file or directory name." "ERROR" "stdout"
-        exit 1
+        # Handle the case where multiple arguments are provided
+        for target in "$@"; do
+            if [ -d "$target" ]; then
+                log_message "The provided argument is a directory. Organizing according to TV show conventions..." "INFO" "stdout"
+                organize_media_files "$target"
+            elif [ -f "$target" ]; then
+                log_message "The provided argument is a file. Organizing it accordingly..." "INFO" "stdout"
+                folder=$(dirname "$target")
+                organize_media_files "$folder" "$(basename "$target")"
+            else
+                log_message "Error: The provided argument is neither a file nor a directory." "ERROR" "stdout"
+                exit 1
+            fi
+        done
     fi
 fi
 
