@@ -73,6 +73,21 @@ fi
 source_dir="$SOURCE_DIR"
 log_message "Source directory for TV shows: $source_dir" "DEBUG" "stdout"
 
+# Ensure the source directory is not empty
+if [ -z "$source_dir" ]; then
+    log_message "Error: SOURCE_DIR is not set or empty." "ERROR" "stdout"
+    exit 1
+fi
+
+# Split source directories into an array
+if [[ "$source_dir" == *","* ]]; then
+    IFS=',' read -ra SOURCE_DIRS <<< "$source_dir"
+else
+    SOURCE_DIRS=("$source_dir")
+fi
+
+log_message "Parsed source directories: ${SOURCE_DIRS[*]}" "DEBUG" "stdout"
+
 # Destination directory
 destination_dir="$DESTINATION_DIR"
 log_message "Destination directory: $destination_dir" "DEBUG" "stdout"
@@ -164,6 +179,13 @@ organize_media_files() {
 
     folder=$(echo "$folder" | sed 's/\\/\//g')
     target_file=$(echo "$target_file" | sed 's/\\/\//g')
+
+    # Extract the base folder name from the source path if override structure is false
+    if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
+        base_folder_name=$(basename "$(dirname "$folder")")
+    else
+        base_folder_name=""
+    fi
 
     #Skip target if a RAR file is detected
     if [[ "${target_file}" =~ \.r[^/]*$ ]]; then
@@ -270,7 +292,11 @@ organize_media_files() {
     if [ "$is_movie" = true ]; then
         movie_name=$(echo "$movie_name" | sed 's/\./ /g')
 
-        local destination_movie_dir="$destination_dir/$movie_name"
+        local destination_movie_dir="$destination_dir"
+        if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
+            destination_movie_dir="$destination_movie_dir/$base_folder_name"
+        fi
+        destination_movie_dir="$destination_movie_dir/$movie_name"
         if [ -n "$movie_year" ]; then
             destination_movie_dir="$destination_movie_dir ($movie_year)"
         fi
@@ -297,7 +323,11 @@ organize_media_files() {
     # Handling TV series
     else
         series_name=$(echo "$series_name" | sed 's/\./ /g')
-        destination_series_dir="$destination_dir/$series_name"
+        destination_series_dir="$destination_dir"
+        if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
+            destination_series_dir="$destination_series_dir/$base_folder_name"
+        fi
+        destination_series_dir="$destination_series_dir/$series_name"
         destination_series_dir=$(echo "$destination_series_dir" | sed 's/ -[0-9]\+$//' | tr -d '\n')
         found_in_log=$(grep "$series_name" "$series_log" | head -n 1)
         if grep -qF "$destination_series_dir" "$series_log"; then
