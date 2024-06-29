@@ -347,7 +347,6 @@ organize_media_files() {
             log_message "Folder '$series_name' exists in $series_log (refers to: $found_in_log). Placing files inside." "INFO" "stdout"
         else
             series_name_pattern=$(echo "$series_name" | sed 's/ / */g')
-            series_name_pattern=$(echo "$series_name_pattern" | sed 's/P[[:space:]]*d/P[[:space:]]*d|P[[:space:]]+d/' | sed 's/P[[:space:]]*D/P[[:space:]]*D|P[[:space:]]+D/' | sed 's/[0-9]\{4\}//')
             found_in_log=$(grep -iE "$series_name_pattern" "$series_log" | head -n 1)
             if [ -n "$found_in_log" ]; then
                 destination_series_dir="$found_in_log"
