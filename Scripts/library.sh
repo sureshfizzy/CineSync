@@ -3,10 +3,14 @@
 # Check the operating system
 os=$(uname -s)
 
-# Load environment variables from .env file
-if [ -f "../.env" ]; then
+# Get the parent directory of the script's location
+parent_dir="$(dirname "$(dirname "$0")")"
+
+# Check if .env file exists in the parent directory
+env_file="$parent_dir/.env"
+if [ -f "$env_file" ]; then
     # Load environment variables, ignoring comments and empty lines
-    export $(grep -v '^#' "../.env" | grep -v '^$' | xargs)
+    export $(grep -v '^#' "$env_file" | grep -v '^$' | xargs)
 else
     echo "Error: .env file not found in the parent directory."
     exit 1
