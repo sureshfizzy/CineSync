@@ -108,11 +108,11 @@ def process_file(filepath, bearer_token):
                 new_filename = f"{show_full_name} - S{str(season).zfill(2)}E{str(episode).zfill(2)} - {episode_name}{os.path.splitext(filename)[1]}"
                 new_filepath = os.path.join(root, new_filename)
                 if os.path.exists(new_filepath):
-                    log_message(f"File already exists: {new_filename}", "DEBUG", "stdout")
+                    log_message(f"File already exists: {new_filename}", "INFO", "stdout")
                 else:
                     ensure_dir_exists(os.path.dirname(new_filepath))
                     os.rename(filepath, new_filepath)
-                    log_message(f"- Renamed '{filename}' to '{new_filename}'", "DEBUG", "stdout")
+                    log_message(f"- Renamed '{filename}' to '{new_filename}'", "INFO", "stdout")
             else:
                 log_message(f"Episode details not found for {filename}", "ERROR", "stdout")
         else:
@@ -130,11 +130,11 @@ def process_file(filepath, bearer_token):
             new_filename += os.path.splitext(filename)[1]
             new_filepath = os.path.join(root, new_filename)
             if os.path.exists(new_filepath):
-                log_message(f"File already exists: {new_filename}", "DEBUG", "stdout")
+                log_message(f"File already exists: {new_filename}", "INFO", "stdout")
             else:
                 ensure_dir_exists(os.path.dirname(new_filepath))
                 os.rename(filepath, new_filepath)
-                log_message(f"- Renamed '{filename}' to '{new_filename}'", "DEBUG", "stdout")
+                log_message(f"- Renamed '{filename}' to '{new_filename}'", "INFO", "stdout")
         else:
             log_message(f"No TMDB match found for {filename}", "ERROR", "stdout")
     else:

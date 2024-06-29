@@ -4,6 +4,7 @@
 SCRIPTS_FOLDER="Scripts"
 BROKEN_LINK_FOLDER="BrokenLinkVault"
 MONITOR_SCRIPT="$SCRIPTS_FOLDER/service_manager.sh"
+ENV_FILE=".env"
 
 # Function to check if a directory is valid
 is_valid_directory() {
@@ -57,6 +58,21 @@ print_color() {
     esac
 }
 
+# Function to edit the .env file
+edit_env_file() {
+    if [[ -e "$ENV_FILE" ]]; then
+        nano "$ENV_FILE"
+        echo -e "\n.env file editing completed."
+    else
+        echo "The .env file does not exist. Creating a new one."
+        touch "$ENV_FILE"
+        nano "$ENV_FILE"
+        echo -e "\n.env file created and edited."
+    fi
+    read -p "Press Enter to return to the main menu..."
+}
+
+# Function for Real-Time Monitoring
 real_time_monitoring() {
     # Check if the operating system is Linux
     if [[ $(uname) == "Linux" && $EUID -ne 0 ]]; then
@@ -221,6 +237,22 @@ execute_vault_scan() {
     fi
 }
 
+# Function to run renamer Script
+run_rename_script() {
+    script_path="$SCRIPTS_FOLDER/tmdb_renamer.py"
+    if [[ -e "$script_path" ]]; then
+        if [[ $(uname -s) == "Linux" ]]; then
+            python3 "$script_path"
+        else
+            python  "$script_path"
+        fi
+        read -p "Scan completed. Press Enter to return to the main menu..."
+    else
+        print_color "Error: The tmdb_renamer.py script does not exist." "red"
+        read -p "Press Enter to return to the main menu..."
+    fi
+}
+
 # Main function
 main() {
     # Maximize console window
@@ -231,23 +263,31 @@ main() {
         print_banner
         greet_user
         echo -e "\nMain Menu:"
-        echo "1) Full Library Scan"
-        echo "2) Real-Time Monitoring"
-        echo "3) Remove Broken Symlinks"
-        echo "4) Exit"
+        echo "1) Edit .env File"
+        echo "2) Full Library Scan"
+        echo "3) Real-Time Monitoring"
+        echo "4) Remove Broken Symlinks"
+        echo "5) TMDB Renamer"
+        echo "6) Exit"
         read -p "Select an option: " choice
 
         case $choice in
             1)
-                execute_full_library_scan
+                edit_env_file
                 ;;
             2)
-                real_time_monitoring
+                execute_full_library_scan
                 ;;
             3)
-                configure_broken_symlinks
+                real_time_monitoring
                 ;;
             4)
+                configure_broken_symlinks
+                ;;
+            5)
+                run_rename_script
+                ;;
+            6)
                 print_color "Exiting..." "green"
                 break
                 ;;
