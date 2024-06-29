@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Script Metadata
+SCRIPT_VERSION="1.0"
+SCRIPT_DATE="2024-06-29"
+
 # Define variables
 SCRIPTS_FOLDER="Scripts"
 BROKEN_LINK_FOLDER="BrokenLinkVault"
@@ -24,6 +28,8 @@ print_banner() {
                                                  .88
                                              d8888P
 EOF
+    # Display script version and date
+    echo -e "\nVersion $SCRIPT_VERSION - Last updated on $SCRIPT_DATE\n"
 }
 
 # Function to greet the user
