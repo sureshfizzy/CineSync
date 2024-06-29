@@ -15,6 +15,7 @@ CineSync works by creating symbolic links from the source directory to the desti
 - **Real-Time Monitoring for Files:** Monitor the watch directory for any new files and automatically create symbolic links for them, ensuring your library stays updated in real-time.
 - **Support for Single Symlinks Creation:** CineSync now supports creating symbolic links for single files or folders, providing flexibility in managing your library.
 - **Ability to Skip Already Present Symlinks:** CineSync includes the ability to skip the creation of symbolic links for files or folders that are already present, even if the folder name is different. This feature ensures efficient management of your library by preventing duplicate symlinks.
+- **Rename Files:** Properly rename your files based on TMDB data .
 - **Cross-Platform Support:** Works on both Linux and Windows operating systems.
 
 ## Real-Time Monitoring
@@ -47,6 +48,19 @@ By leveraging real-time monitoring in CineSync, users can effortlessly manage th
 - NSSM for Windows (if you want to enable real-time monitoring).
 - [Zurg](https://github.com/debridmediamanager/zurg-testing) (optional)
 
+## Configuration Variables
+
+Make sure to edit the .env value before running the script. Below are the configurable variables used in the script, along with their descriptions and default values:
+
+| Variable              | Description                                                                                                                   | Default Value             |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------------------|---------------------------|
+| `SOURCE_DIR`          | The directory paths where the source files are located. Multiple directories can be specified, separated by commas.            | `/path/to/files`          |
+| `DESTINATION_DIR`     | The path to the destination directory where the symlinks or files will be placed.                                             | `/path/to/destination`    |
+| `LOG_LEVEL`           | Defines the level of logging. Available options: `DEBUG`, `INFO`, `WARNING`.                                                 | `INFO`                    |
+| `OVERRIDE_STRUCTURE`  | Determines whether to maintain the same directory structure in the destination as in the source (`false`). Setting this to `true` will flatten the structure, not using the same structure as the source directory. | `false`                   |
+| `RENAME_ENABLED`      | Enable or disable file renaming functionality from TMDB.                                                                      | `false`                   |
+| `BEARER_TOKEN`        | Your API read access token for TMDB.                                                                                          | `your-api-read-access-token` |
+
 ### For Linux:
 
 Here's an enhanced version of the instructions:
@@ -61,9 +75,9 @@ Here's an enhanced version of the instructions:
    pip install -r requirements.txt
    ```
 
-3. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
-   - `source_dir`: Specify the path for the Zurg-mounted shows directory.
-   - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
+3. **Update Paths in `.env`:** Open the `.env` file located inside the `CineSync` folder. Update the following paths:
+   - `SOURCE_DIR`: Specify the path for the Source directory.
+   - `DESTINATION_DIR`: Set the ultimate destination directory where you want to save the symbolic links.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
@@ -120,9 +134,9 @@ By following these steps and updating the necessary paths, you'll be able to suc
    git clone https://github.com/sureshfizzy/CineSync.git
    ```
 
-6. **Update Paths in `library.sh`:** Open the `library.sh` file located inside the `Scripts` folder. Update the following paths:
-   - `source_dir`: Specify the path for the Zurg-mounted shows directory.
-   - `destination_dir`: Set the ultimate destination directory where you want to save the symbolic links.
+6. **Update Paths in `.env`:** Open the `.env` file located inside the `CineSync` folder. Update the following paths:
+   - `SOURCE_DIR`: Specify the path for the Source directory.
+   - `DESTINATION_DIR`: Set the ultimate destination directory where you want to save the symbolic links.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
@@ -182,7 +196,9 @@ CineSync provides a user-friendly interface for managing your debrid library. Up
 
 ![Main Menu](Screenshots/main_menu.png)
 
-- **1) Full Library Scan:** Perform a comprehensive scan of your entire library.
+- **1) Edit .env file:** Update Basic Configurations in this file.
+
+- **2) Full Library Scan:** Perform a comprehensive scan of your entire library.
 
 <div style="display: flex; justify-content: space-between;">
   <img src="Screenshots/Full_Library_Scan.png" alt="Full_Scan" width="400"/>
@@ -191,9 +207,13 @@ CineSync provides a user-friendly interface for managing your debrid library. Up
   <img src="Screenshots/Full_Scan_OP3.png" alt="Full_ScanOP3" width="400"/>
 </div>
 
-- **2) Real-Time Monitoring (Linux Only):** Enable real-time monitoring to stay updated on library changes. System services are automatically created, and the scan is triggered every 60 seconds. You can adjust the frequency inside `RealTime-Monitor.py`.
-- **3) Remove Broken Symlinks :** Identify and remove broken symbolic links within your library.
-- **4) Exit:** Quit the CineSync application.
+- **3) Real-Time Monitoring (Linux Only):** Enable real-time monitoring to stay updated on library changes. System services are automatically created, and the scan is triggered every 60 seconds. You can adjust the frequency inside `RealTime-Monitor.py`.
+- **4) Remove Broken Symlinks :** Identify and remove broken symbolic links within your library.
+- **5) TMDB Renamer:** Ability to perform renaming for all the files present in destination directory.
+
+![TMDB](Screenshots/rename_files.png)
+
+- **6) Exit:** Quit the CineSync application.
 
 **Note:** Real-Time Monitoring is currently supported only on Linux due to system service limitations on Windows. However, you can still manually trigger real-time monitoring using the provided instructions in the README.
 
@@ -220,6 +240,26 @@ CineSync also supports the creation of single file or folder symlinks. Follow th
 </div>
 
 By following these steps, you can easily create a symlink for a single file or folder using CineSync.
+
+## Integrating TMDB API for renaming files
+
+CineSync can be enhanced by integrating the TMDB (The Movie Database) API to fetch additional metadata for your media library. Follow the steps below to set up and use the TMDB API with CineSync.
+
+### Prerequisites
+
+- A TMDB account. If you don't have one, you can create it here (https://www.themoviedb.org/).
+- A TMDB API key. You can obtain this from the TMDB API section.
+
+### Setting Up TMDB API
+
+Get Your API Key:
+
+- Log in to your TMDB account.
+- Navigate to the API section of your account settings.
+- Generate a new API key or use an existing one, you need to use API READ ACCESS TOKEN key.
+- Update key in .env file
+
+![TMDB](Screenshots/TMDB.png)
 
 ## Contributors
 
