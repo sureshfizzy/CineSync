@@ -4,7 +4,7 @@
 os=$(uname -s)
 
 # Get the parent directory of the script's location
-parent_dir="$(dirname "$(dirname "$0")")"
+parent_dir="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Check if .env file exists in the parent directory
 env_file="$parent_dir/.env"
@@ -15,6 +15,10 @@ else
     echo "Error: .env file not found in the parent directory."
     exit 1
 fi
+
+# Get the path to Scripts folder
+Scripts="$parent_dir/Scripts"
+echo "Scripts is: $Scripts"
 
 # Determine the Python command based on the OS
 if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
@@ -323,7 +327,7 @@ organize_media_files() {
         if grep -qF "$movie_file" "$log_dir/movies.log"; then
             log_message "A symlink already exists for $(basename "$movie_file") with the same target." "DEBUG" "stdout"
             if [ "$RENAME_ENABLED" == "true" ]; then
-                $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
             fi
         else
             mkdir -p "$destination_movie_dir"
@@ -331,7 +335,7 @@ organize_media_files() {
             ln -s "$movie_file" "$destination_file"
             log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
             if [ "$RENAME_ENABLED" == "true" ]; then
-                $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
             fi
             echo "$movie_file" >> "$log_dir/movies.log"
         fi
@@ -382,14 +386,14 @@ organize_media_files() {
                     if grep -qF "$file" "$log_dir/series.log"; then
                         log_message "Symlink already exists for $filename with the same target." "DEBUG" "stdout"
                         if [ "$RENAME_ENABLED" == "true" ]; then
-                            $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                            $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                         fi
                     else
                         log_message "No symlink exists with the same target." "DEBUG" "stdout"
                         mkdir -p "$(dirname "$destination_file")"
                         ln -s "$file" "$destination_file"
                         if [ "$RENAME_ENABLED" == "true" ]; then
-                            $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                            $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                         fi
                         log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
                         echo "$file" >> "$log_dir/series.log"
@@ -413,14 +417,14 @@ organize_media_files() {
             if grep -qF "$target_file" "$log_dir/series.log"; then
                 log_message "Symlink already exists for $target_file with the same target." "DEBUG" "stdout"
                 if [ "$RENAME_ENABLED" == "true" ]; then
-                    $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                    $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                 fi
             else
                 log_message "No symlink exists with the same target." "DEBUG" "stdout"
                 mkdir -p "$(dirname "$destination_file")"
                 ln -s "$folder/$target_file" "$destination_file"
                 if [ "$RENAME_ENABLED" == "true" ]; then
-                    $PYTHON_CMD tmdb_renamer.py "$destination_file"
+                    $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                 fi
                 log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
                 echo "$folder/$target_file" >> "$log_dir/series.log"
