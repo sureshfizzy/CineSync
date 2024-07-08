@@ -332,8 +332,13 @@ organize_media_files() {
         else
             mkdir -p "$destination_movie_dir"
             echo "$destination_movie_dir" >> "$movies_log"
-            ln -s "$movie_file" "$destination_file"
-            log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                ln -sr "$movie_file" "$destination_file"
+                log_message "Relative symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            else
+                ln -s "$movie_file" "$destination_file"
+                log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            fi
             if [ "$RENAME_ENABLED" == "true" ]; then
                 $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
             fi
@@ -391,11 +396,16 @@ organize_media_files() {
                     else
                         log_message "No symlink exists with the same target." "DEBUG" "stdout"
                         mkdir -p "$(dirname "$destination_file")"
-                        ln -s "$file" "$destination_file"
+                        if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                            ln -sr "$file" "$destination_file"
+                            log_message "Relative Symlink created: $file -> $destination_file" "DEBUG" "stdout"
+                        else
+                            ln -s "$file" "$destination_file"
+                            log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
+                        fi
                         if [ "$RENAME_ENABLED" == "true" ]; then
                             $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                         fi
-                        log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
                         echo "$file" >> "$log_dir/series.log"
                     fi
                 done
@@ -422,11 +432,16 @@ organize_media_files() {
             else
                 log_message "No symlink exists with the same target." "DEBUG" "stdout"
                 mkdir -p "$(dirname "$destination_file")"
-                ln -s "$folder/$target_file" "$destination_file"
+                if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                    ln -sr "$folder/$target_file" "$destination_file"
+                    log_message "Relative Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+                else
+                    ln -s "$folder/$target_file" "$destination_file"
+                    log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+                fi
                 if [ "$RENAME_ENABLED" == "true" ]; then
                     $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                 fi
-                log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
                 echo "$folder/$target_file" >> "$log_dir/series.log"
             fi
         fi
@@ -450,8 +465,13 @@ symlink_specific_file_or_folder() {
         if [ -L "$destination_file" ]; then
             log_message "A symlink already exists for $filename in the destination directory." "DEBUG" "stdout"
         else
-            ln -s "$target" "$destination_file"
-            log_message "Symlink created: $target -> $destination_file" "DEBUG" "stdout"
+            if [ "$RELATIVE_SYMLINK" == "true" ]; then
+               ln -sr "$target" "$destination_file"
+               log_message "Relative symlink created: $target -> $destination_file" "DEBUG" "stdout"
+            else
+               ln -s "$target" "$destination_file"
+               log_message "Symlink created: $target -> $destination_file" "DEBUG" "stdout"
+            fi
         fi
     else
         log_message "Error: $target does not exist." "ERROR" "stdout"
