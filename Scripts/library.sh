@@ -117,8 +117,8 @@ series_log="$log_dir/series_folder_names.log"
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
     log_message "Destination directory '$destination_dir' does not exist." "DEBUG" "stdout"
-	mkdir -p $destination_dir
-	log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
+        mkdir -p $destination_dir
+        log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
 fi
 
 # Function to check all symlinks in the destination directory and save their target paths to appropriate log files
@@ -203,10 +203,10 @@ organize_media_files() {
     fi
 
     #Skip target if a RAR or ZIP file is detected
-    if [[ "${target_file}" =~ \.r[^/]*$ || 
-		  "${target_file}" =~ \.z[^/]*$ ||
-		  "${folder}" =~ \.z[^/]*$ ||
-		  "${folder}" =~ \.r[^/]*$ ]]; then
+    if [[ "${target_file}" =~ \.r[^/]*$ ||
+                  "${target_file}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.r[^/]*$ ]]; then
       log_message "Skipping RAR file: $target_file" "WARNING" "stdout"
       if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
         echo "$target_file" >> "$log_dir/skipped_rar_files.log"
@@ -318,17 +318,17 @@ organize_media_files() {
         if [ -n "$movie_year" ]; then
             destination_movie_dir="$destination_movie_dir ($movie_year)"
         fi
-		
-		if [ -d "$1" ]; then
+
+        if [ -f "$1" ]; then
+			local movie_file="$1"
+		else
 			local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
 			if [ -z "$movie_file" ]; then
 				log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
 				return 1
 			fi
-		else
-			local movie_file="$1"
 		fi
-		
+
         local destination_file="$destination_movie_dir/$(basename "$movie_file")"
 
         if grep -qF "$movie_file" "$log_dir/movies.log"; then
@@ -354,13 +354,15 @@ organize_media_files() {
 
     # Handling TV series
     else
-        
-		if [ -f "$1" ]; then
-			target_file = "$(basename "$folder")"
-			folder = "$(dirname "$1")"
-		fi
-		
-		series_name=$(echo "$series_name" | sed 's/\./ /g')
+
+        if [ -f "$1" ]; then
+                target_file="$(basename "$folder")"
+                log_message "Target file: $target_file" "DEBUG" "stdout"
+                folder="$(dirname "$1")"
+                log_message "Folder: $folder" "DEBUG" "stdout"
+        fi
+
+        series_name=$(echo "$series_name" | sed 's/\./ /g')
         destination_series_dir="$destination_dir"
         if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
             destination_series_dir="$destination_series_dir/$base_folder_name"
