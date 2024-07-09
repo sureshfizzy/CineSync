@@ -128,7 +128,7 @@ execute_full_library_scan() {
     script_path="$SCRIPTS_FOLDER/library.sh"
     if [[ -e "$script_path" ]]; then
         if [[ $(uname -s) == "Linux" ]]; then
-           sudo bash "$script_path"
+            sudo bash "$script_path"
         else
             bash "$script_path"
         fi
