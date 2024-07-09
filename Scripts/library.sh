@@ -357,7 +357,7 @@ organize_media_files() {
         
 		if [ -f "$1" ]; then
 			target_file = "$(basename "$folder")"
-			folder = "$(dirname "$target_file")"
+			folder = "$(dirname "$1")"
 		fi
 		
 		series_name=$(echo "$series_name" | sed 's/\./ /g')
