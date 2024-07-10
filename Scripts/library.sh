@@ -117,8 +117,8 @@ series_log="$log_dir/series_folder_names.log"
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
     log_message "Destination directory '$destination_dir' does not exist." "DEBUG" "stdout"
-	mkdir -p $destination_dir
-	log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
+        mkdir -p $destination_dir
+        log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
 fi
 
 # Function to check all symlinks in the destination directory and save their target paths to appropriate log files
@@ -180,6 +180,7 @@ log_existing_folder_names() {
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
 organize_media_files() {
+
     local folder="$1"
     local target_file="$2"
     local target="$3"
@@ -201,8 +202,11 @@ organize_media_files() {
         base_folder_name=""
     fi
 
-    #Skip target if a RAR file is detected
-    if [[ "${target_file}" =~ \.r[^/]*$ ]]; then
+    #Skip target if a RAR or ZIP file is detected
+    if [[ "${target_file}" =~ \.r[^/]*$ ||
+                  "${target_file}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.r[^/]*$ ]]; then
       log_message "Skipping RAR file: $target_file" "WARNING" "stdout"
       if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
         echo "$target_file" >> "$log_dir/skipped_rar_files.log"
@@ -315,12 +319,15 @@ organize_media_files() {
             destination_movie_dir="$destination_movie_dir ($movie_year)"
         fi
 
-        local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
-
-        if [ -z "$movie_file" ]; then
-            log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
-            return 1
-        fi
+        if [ -f "$1" ]; then
+			local movie_file="$1"
+		else
+			local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
+			if [ -z "$movie_file" ]; then
+				log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
+				return 1
+			fi
+		fi
 
         local destination_file="$destination_movie_dir/$(basename "$movie_file")"
 
@@ -347,6 +354,14 @@ organize_media_files() {
 
     # Handling TV series
     else
+
+        if [ -f "$1" ]; then
+                target_file="$(basename "$folder")"
+                log_message "Target file: $target_file" "DEBUG" "stdout"
+                folder="$(dirname "$1")"
+                log_message "Folder: $folder" "DEBUG" "stdout"
+        fi
+
         series_name=$(echo "$series_name" | sed 's/\./ /g')
         destination_series_dir="$destination_dir"
         if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
@@ -448,36 +463,6 @@ organize_media_files() {
     fi
 }
 
-# Function to symlink a specific file or folder
-symlink_specific_file_or_folder() {
-    local target="$1"
-    if [[ "${target}" =~ \.r[^/]*$ ]]; then
-      log_message "Skipping RAR file: $target" "WARNING" "stdout"
-      if ! grep -qFx "$target" "$log_dir/skipped_rar_files.log"; then
-        echo "$target" >> "$log_dir/skipped_rar_files.log"
-      fi
-      return 0
-    fi
-
-    if [ -e "$target" ]; then
-        local filename=$(basename "$target")
-        local destination_file="$destination_dir/$filename"
-        if [ -L "$destination_file" ]; then
-            log_message "A symlink already exists for $filename in the destination directory." "DEBUG" "stdout"
-        else
-            if [ "$RELATIVE_SYMLINK" == "true" ]; then
-               ln -sr "$target" "$destination_file"
-               log_message "Relative symlink created: $target -> $destination_file" "DEBUG" "stdout"
-            else
-               ln -s "$target" "$destination_file"
-               log_message "Symlink created: $target -> $destination_file" "DEBUG" "stdout"
-            fi
-        fi
-    else
-        log_message "Error: $target does not exist." "ERROR" "stdout"
-    fi
-}
-
 cleanup() {
     log_message "Removing .r files from the destination directory..." "DEBUG" "stdout"
     find "$destination_dir" -type f -name "*.r*" -exec rm {} +
@@ -503,11 +488,7 @@ if [ $# -eq 0 ]; then
     for src_dir in "${SOURCE_DIRS[@]}"; do
         log_message "Creating symlinks for all files in source directory: $src_dir" "INFO" "stdout"
         for entry in "$src_dir"/*; do
-            if [ -d "$entry" ]; then
                 organize_media_files "$entry"
-            elif [ -f "$entry" ]; then
-                symlink_specific_file_or_folder "$entry"
-            fi
         done
     done
 else
