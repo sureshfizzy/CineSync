@@ -117,8 +117,8 @@ series_log="$log_dir/series_folder_names.log"
 # Check if the target directory exists
 if [ ! -d "$destination_dir" ]; then
     log_message "Destination directory '$destination_dir' does not exist." "DEBUG" "stdout"
-	mkdir -p $destination_dir
-	log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
+        mkdir -p $destination_dir
+        log_message "Destination directory '$destination_dir' created." "DEBUG" "stdout"
 fi
 
 # Function to check all symlinks in the destination directory and save their target paths to appropriate log files
@@ -180,6 +180,7 @@ log_existing_folder_names() {
 
 # Function to create symlinks for .mkv or .mp4 files in the source directory
 organize_media_files() {
+
     local folder="$1"
     local target_file="$2"
     local target="$3"
@@ -201,8 +202,11 @@ organize_media_files() {
         base_folder_name=""
     fi
 
-    #Skip target if a RAR file is detected
-    if [[ "${target_file}" =~ \.r[^/]*$ ]]; then
+    #Skip target if a RAR or ZIP file is detected
+    if [[ "${target_file}" =~ \.r[^/]*$ ||
+                  "${target_file}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.z[^/]*$ ||
+                  "${folder}" =~ \.r[^/]*$ ]]; then
       log_message "Skipping RAR file: $target_file" "WARNING" "stdout"
       if ! grep -qFx "$target_file" "$log_dir/skipped_rar_files.log"; then
         echo "$target_file" >> "$log_dir/skipped_rar_files.log"
@@ -315,12 +319,15 @@ organize_media_files() {
             destination_movie_dir="$destination_movie_dir ($movie_year)"
         fi
 
-        local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
-
-        if [ -z "$movie_file" ]; then
-            log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
-            return 1
-        fi
+        if [ -f "$1" ]; then
+			local movie_file="$1"
+		else
+			local movie_file=$(find "$folder" -maxdepth 1 \( -iname "*.mkv" -o -iname "*.mp4" \) -print -quit)
+			if [ -z "$movie_file" ]; then
+				log_message "Error: No movie file (*.mkv or *.mp4) found in $folder." "ERROR" "stdout"
+				return 1
+			fi
+		fi
 
         local destination_file="$destination_movie_dir/$(basename "$movie_file")"
 
@@ -332,8 +339,13 @@ organize_media_files() {
         else
             mkdir -p "$destination_movie_dir"
             echo "$destination_movie_dir" >> "$movies_log"
-            ln -s "$movie_file" "$destination_file"
-            log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                ln -sr "$movie_file" "$destination_file"
+                log_message "Relative symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            else
+                ln -s "$movie_file" "$destination_file"
+                log_message "Symlink created: $movie_file -> $destination_file" "DEBUG" "stdout"
+            fi
             if [ "$RENAME_ENABLED" == "true" ]; then
                 $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
             fi
@@ -342,6 +354,14 @@ organize_media_files() {
 
     # Handling TV series
     else
+
+        if [ -f "$1" ]; then
+                target_file="$(basename "$folder")"
+                log_message "Target file: $target_file" "DEBUG" "stdout"
+                folder="$(dirname "$1")"
+                log_message "Folder: $folder" "DEBUG" "stdout"
+        fi
+
         series_name=$(echo "$series_name" | sed 's/\./ /g')
         destination_series_dir="$destination_dir"
         if [ "$OVERRIDE_STRUCTURE" != "true" ]; then
@@ -391,11 +411,16 @@ organize_media_files() {
                     else
                         log_message "No symlink exists with the same target." "DEBUG" "stdout"
                         mkdir -p "$(dirname "$destination_file")"
-                        ln -s "$file" "$destination_file"
+                        if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                            ln -sr "$file" "$destination_file"
+                            log_message "Relative Symlink created: $file -> $destination_file" "DEBUG" "stdout"
+                        else
+                            ln -s "$file" "$destination_file"
+                            log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
+                        fi
                         if [ "$RENAME_ENABLED" == "true" ]; then
                             $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                         fi
-                        log_message "Symlink created: $file -> $destination_file" "DEBUG" "stdout"
                         echo "$file" >> "$log_dir/series.log"
                     fi
                 done
@@ -422,39 +447,19 @@ organize_media_files() {
             else
                 log_message "No symlink exists with the same target." "DEBUG" "stdout"
                 mkdir -p "$(dirname "$destination_file")"
-                ln -s "$folder/$target_file" "$destination_file"
+                if [ "$RELATIVE_SYMLINK" == "true" ]; then
+                    ln -sr "$folder/$target_file" "$destination_file"
+                    log_message "Relative Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+                else
+                    ln -s "$folder/$target_file" "$destination_file"
+                    log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
+                fi
                 if [ "$RENAME_ENABLED" == "true" ]; then
                     $PYTHON_CMD "$Scripts"/tmdb_renamer.py "$destination_file"
                 fi
-                log_message "Symlink created: $folder/$target_file -> $destination_file" "DEBUG" "stdout"
                 echo "$folder/$target_file" >> "$log_dir/series.log"
             fi
         fi
-    fi
-}
-
-# Function to symlink a specific file or folder
-symlink_specific_file_or_folder() {
-    local target="$1"
-    if [[ "${target}" =~ \.r[^/]*$ ]]; then
-      log_message "Skipping RAR file: $target" "WARNING" "stdout"
-      if ! grep -qFx "$target" "$log_dir/skipped_rar_files.log"; then
-        echo "$target" >> "$log_dir/skipped_rar_files.log"
-      fi
-      return 0
-    fi
-
-    if [ -e "$target" ]; then
-        local filename=$(basename "$target")
-        local destination_file="$destination_dir/$filename"
-        if [ -L "$destination_file" ]; then
-            log_message "A symlink already exists for $filename in the destination directory." "DEBUG" "stdout"
-        else
-            ln -s "$target" "$destination_file"
-            log_message "Symlink created: $target -> $destination_file" "DEBUG" "stdout"
-        fi
-    else
-        log_message "Error: $target does not exist." "ERROR" "stdout"
     fi
 }
 
@@ -483,11 +488,7 @@ if [ $# -eq 0 ]; then
     for src_dir in "${SOURCE_DIRS[@]}"; do
         log_message "Creating symlinks for all files in source directory: $src_dir" "INFO" "stdout"
         for entry in "$src_dir"/*; do
-            if [ -d "$entry" ]; then
                 organize_media_files "$entry"
-            elif [ -f "$entry" ]; then
-                symlink_specific_file_or_folder "$entry"
-            fi
         done
     done
 else
