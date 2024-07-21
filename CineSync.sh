@@ -86,7 +86,7 @@ real_time_monitoring() {
         read -p "Press Enter to return to the main menu..."
         return 1
     fi
-    
+
     # Main menu for real-time monitoring
     while true; do
         clear_screen
@@ -125,18 +125,53 @@ real_time_monitoring() {
 
 # Function to execute full library scan
 execute_full_library_scan() {
-    script_path="$SCRIPTS_FOLDER/library.sh"
-    if [[ -e "$script_path" ]]; then
-        if [[ $(uname -s) == "Linux" ]]; then
-            sudo bash "$script_path"
-        else
-            bash "$script_path"
-        fi
-        read -p "Scan completed. Press Enter to return to the main menu..."
-    else
-        print_color "Error: The library.sh script does not exist." "red"
-        read -p "Press Enter to return to the main menu..."
-    fi
+    while true; do
+        clear_screen
+        print_banner
+        echo -e "\nFull Library Scan Options:"
+        echo "1) Auto Scan"
+        echo "2) Manual Scan (Use only when TMDB ID is enabled)"
+        echo "3) Back to Main Menu"
+        read -p "Select an option: " choice
+
+        script_path="$SCRIPTS_FOLDER/library.py"
+
+        case $choice in
+            1)
+                if [[ -e "$script_path" ]]; then
+                    if [[ $(uname -s) == "Linux" ]]; then
+                        sudo python3 "$script_path" --auto-select
+                    else
+                        python3 "$script_path" --auto-select
+                    fi
+                    read -p "Auto scan completed. Press Enter to return to the main menu..."
+                else
+                    print_color "Error: The library.py script does not exist." "red"
+                    read -p "Press Enter to return to the main menu..."
+                fi
+                ;;
+            2)
+                if [[ -e "$script_path" ]]; then
+                    if [[ $(uname -s) == "Linux" ]]; then
+                        sudo python3 "$script_path"
+                    else
+                        python3 "$script_path"
+                    fi
+                    read -p "Manual scan completed. Press Enter to return to the main menu..."
+                else
+                    print_color "Error: The library.py script does not exist." "red"
+                    read -p "Press Enter to return to the main menu..."
+                fi
+                ;;
+            3)
+                break
+                ;;
+            *)
+                print_color "Invalid option. Please select again." "red"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
 }
 
 # Function to configure broken symlinks
