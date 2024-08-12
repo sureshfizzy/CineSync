@@ -66,6 +66,9 @@ def is_tmdb_folder_id_enabled():
 def is_rename_enabled():
     return os.getenv('RENAME_ENABLED', 'false').lower() in ['true', '1', 'yes']
 
+def is_movie_collection_enabled():
+    return os.getenv('MOVIE_COLLECTION_ENABLED', 'false').lower() in ['true', '1', 'yes']
+
 @lru_cache(maxsize=None)
 def search_tv_show(query, year=None, auto_select=False):
     cache_key = (query, year)
@@ -306,6 +309,26 @@ def build_dest_index(dest_dir):
             dest_index.add(os.path.join(root, name))
     return dest_index
 
+def get_movie_collection(movie_id):
+    api_key = get_api_key()
+    if not api_key:
+        return None
+
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+    params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        movie_data = response.json()
+        collection = movie_data.get('belongs_to_collection')
+        if collection:
+            return collection['name'], collection['id']
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error fetching movie collection data: {e}", level="ERROR")
+    
+    return None
+
 def process_file(args):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
 
@@ -420,7 +443,20 @@ def process_file(args):
 
         log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
 
-        if api_key:
+        collection_info = None
+        if api_key and is_movie_collection_enabled():
+            proper_movie_name = search_movie(movie_name, year, auto_select=auto_select)
+            if "TMDb API error" not in proper_movie_name:
+                tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_movie_name)
+                if tmdb_id_match:
+                    movie_id = tmdb_id_match.group(1)
+                    collection_info = get_movie_collection(movie_id=movie_id)
+                else:
+                    collection_info = get_movie_collection(movie_title=movie_name, year=year)
+            else:
+                log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
+                proper_movie_name = f"{movie_name} ({year})"
+        elif api_key:
             proper_movie_name = search_movie(movie_name, year, auto_select=auto_select)
             if "TMDb API error" in proper_movie_name:
                 log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
@@ -430,12 +466,22 @@ def process_file(args):
 
         log_message(f"Found movie: {proper_movie_name}", level="INFO")
 
-        if tmdb_folder_id_enabled:
+        if collection_info and is_movie_collection_enabled():
+            collection_name, collection_id = collection_info
+            log_message(f"Movie belongs to collection: {collection_name}", level="INFO")
+            resolution_folder = 'Movie Collections'
+            collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
             movie_folder = proper_movie_name
         else:
-            movie_folder = re.sub(r' \{tmdb-\d+\}$', '', proper_movie_name)
+            collection_folder = None
+            if tmdb_folder_id_enabled:
+                log_message(f"TMDB_FOLDER_ID enabled: {is_tmdb_folder_id_enabled()}", level="DEBUG")
+                movie_folder = proper_movie_name
+            else:
+                log_message(f"TMDB_FOLDER_ID not enabled: {is_tmdb_folder_id_enabled()}", level="DEBUG")
+                movie_folder = re.sub(r' \{tmdb-\d+\}$', '', proper_movie_name)
 
-        movie_folder = movie_folder.replace('/', '')
+            movie_folder = movie_folder.replace('/', '')
 
         # Add year to movie_folder if not present
         if year and f"({year})" not in movie_folder:
@@ -447,23 +493,40 @@ def process_file(args):
             log_message(f"Found existing variation for {movie_folder}: {existing_variation}", level="INFO")
             movie_folder = existing_variation
 
-        # Determine resolution-specific folder
-        resolution = extract_resolution(file)
-        if resolution == '1080p':
-            resolution_folder = 'Movies1080p'
-        elif resolution == '2160p':
-            resolution_folder = 'Movies2160p'
-        elif resolution == '720p':
-            resolution_folder = 'Movies720p'
-        else:
-            resolution_folder = 'OtherMovies'
+        # Determine resolution-specific folder if not already set (for collections)
+        if 'resolution_folder' not in locals():
+            resolution = extract_resolution(file)
+            if resolution == '1080p':
+                resolution_folder = 'Movies1080p'
+            elif resolution == '2160p':
+                resolution_folder = 'Movies2160p'
+            elif resolution == '720p':
+                resolution_folder = 'Movies720p'
+            else:
+                resolution_folder = 'OtherMovies'
 
-        dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
+        # Check for existing variations
+        if collection_info:
+            existing_variation = check_existing_variations(collection_folder, None, dest_dir)
+        else:
+            existing_variation = check_existing_variations(movie_folder, year, dest_dir)
+
+        if existing_variation:
+            log_message(f"Found existing variation for {collection_folder if collection_info else movie_folder}: {existing_variation}", level="INFO")
+            if collection_info:
+                collection_folder = existing_variation
+            else:
+                movie_folder = existing_variation
+
+        if collection_info:
+            dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
+        else:
+            dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
 
         os.makedirs(dest_path, exist_ok=True)
 
         if rename_enabled:
-            new_name = f"{movie_folder}{os.path.splitext(file)[1]}"
+            new_name = f"{os.path.basename(proper_movie_name)}{os.path.splitext(file)[1]}"
         else:
             new_name = file
 
@@ -490,7 +553,6 @@ def process_file(args):
 
     log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
     log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
-
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     os.makedirs(dest_dir, exist_ok=True)
