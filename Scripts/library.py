@@ -301,27 +301,19 @@ def check_existing_variations(name, year, dest_dir):
 
 def build_dest_index(dest_dir):
     dest_index = set()
-    for root, dirs, _ in os.walk(dest_dir):
-        for d in dirs:
-            dest_index.add(d)
+    for root, dirs, files in os.walk(dest_dir):
+        for name in dirs + files:
+            dest_index.add(os.path.join(root, name))
     return dest_index
 
 def process_file(args):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
 
     # Check if symlink already exists
-    symlink_exists = False
-    for dirpath, _, filenames in os.walk(dest_dir):
-        for filename in filenames:
-            full_dest_file = os.path.join(dirpath, filename)
-            if os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file:
-                symlink_exists = True
-                log_message(f"Symlink already exists for {os.path.basename(filename)}", level="INFO")
-                break
-        if symlink_exists:
-            break
+    symlink_exists = any(os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file for full_dest_file in dest_index)
 
     if symlink_exists:
+        log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
         return
 
     api_key = get_api_key()
@@ -499,6 +491,7 @@ def process_file(args):
     log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
     log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
+
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     os.makedirs(dest_dir, exist_ok=True)
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
@@ -507,15 +500,24 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     if single_path:
         src_dirs = [single_path]
 
-    for src_dir in src_dirs:
-        actual_dir = os.path.basename(os.path.normpath(src_dir))
-        log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+    # Build destination index once
+    dest_index = build_dest_index(dest_dir)
 
-        for root, _, files in os.walk(src_dir):
-            for file in files:
-                src_file = os.path.join(root, file)
-                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select)
-                process_file(args)
+    tasks = []
+    with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
+        for src_dir in src_dirs:
+            actual_dir = os.path.basename(os.path.normpath(src_dir))
+            log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+
+            for root, _, files in os.walk(src_dir):
+                for file in files:
+                    src_file = os.path.join(root, file)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                    tasks.append(executor.submit(process_file, args))
+
+        # Wait for all tasks to complete
+        for task in tasks:
+            task.result()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
