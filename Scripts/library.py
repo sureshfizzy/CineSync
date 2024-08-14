@@ -254,22 +254,35 @@ def extract_folder_year(folder_name):
     return None
 
 def extract_movie_name_and_year(filename):
+    if re.match(r'^\d{1,2}\.\s+', filename):
+        filename = re.sub(r'^\d{1,2}\.\s*', '', filename)
+
     patterns = [
+        r'(.+?)\s*\[(\d{4})\]',
         r'(.+?)\s*\((\d{4})\)',
         r'(.+?)\s*(\d{4})'
     ]
+
+    # Attempt to match each pattern
     for pattern in patterns:
         match = re.search(pattern, filename)
         if match:
             name = match.group(1).replace('.', ' ').replace('-', ' ').strip()
+            name = re.sub(r'[\[\]]', '', name).strip()
             year = match.group(2)
             return name, year
     return None, None
 
+def extract_resolution_from_filename(filename):
+    match = re.search(r'(\d{3,4}p|720p|1080p|4k|2160p)', filename, re.IGNORECASE)
+    if match:
+        resolution = match.group(1).lower()
+        return resolution
+    return None
+
 def normalize_name(name):
-    # Replace all non-alphanumeric characters (except spaces) with nothing
-    name = re.sub(r'[^a-zA-Z0-9]', '', name)
-    # Replace multiple spaces with a single space and remove leading/trailing spaces
+    name = re.sub(r'\(\d{4}\)', '', name).strip()
+    name = re.sub(r'[^a-zA-Z0-9\s]', '', name)
     name = re.sub(r'\s+', ' ', name).strip()
     return name.lower()
 
@@ -395,7 +408,7 @@ def process_file(args):
 
         # Determine resolution-specific folder for shows
         if 'resolution_folder' not in locals():
-            resolution = extract_resolution(file)
+            resolution = extract_resolution_from_filename(file)
 
             # Handle remux files
             if 'remux' in file.lower():
@@ -512,7 +525,7 @@ def process_file(args):
 
         # Determine resolution-specific folder if not already set (for collections)
         if 'resolution_folder' not in locals():
-            resolution = extract_resolution(file)
+            resolution = extract_resolution_from_filename(file)
 
             # Check for remux files first
             if 'remux' in file.lower():
