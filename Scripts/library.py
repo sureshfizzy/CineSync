@@ -399,16 +399,32 @@ def process_file(args):
             log_message(f"Found existing variation for {show_folder}: {existing_variation}", level="INFO")
             show_folder = existing_variation
 
-        # Determine resolution-specific folder
-        resolution = extract_resolution(file)
-        if resolution == '1080p':
-            resolution_folder = 'Shows1080p'
-        elif resolution == '2160p':
-            resolution_folder = 'Shows2160p'
-        elif resolution == '720p':
-            resolution_folder = 'Shows720p'
-        else:
-            resolution_folder = 'OtherShows'
+        # Determine resolution-specific folder for shows
+        if 'resolution_folder' not in locals():
+            resolution = extract_resolution(file)
+
+            # Handle remux files
+            if 'remux' in file.lower():
+                if '2160' in file:
+                    resolution_folder = 'UltraHDRemuxShows'
+                elif '1080' in file:
+                    resolution_folder = '1080pRemuxLibrary'
+                else:
+                    resolution_folder = 'RemuxShows'
+            # Handle standard resolutions
+            else:
+                if resolution == '2160p':
+                    resolution_folder = 'UltraHD'
+                elif resolution == '1080p':
+                    resolution_folder = 'FullHD'
+                elif resolution == '720p':
+                    resolution_folder = 'SDClassics'
+                elif resolution == '480p':
+                    resolution_folder = 'Retro480p'
+                elif resolution == 'DVD':
+                    resolution_folder = 'RetroDVD'
+                else:
+                    resolution_folder = 'Shows'
 
         dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder, season_folder)
 
@@ -503,20 +519,35 @@ def process_file(args):
         # Determine resolution-specific folder if not already set (for collections)
         if 'resolution_folder' not in locals():
             resolution = extract_resolution(file)
-            if resolution == '1080p':
-                resolution_folder = 'Movies1080p'
-            elif resolution == '2160p':
-                resolution_folder = 'Movies2160p'
-            elif resolution == '720p':
-                resolution_folder = 'Movies720p'
-            else:
-                resolution_folder = 'OtherMovies'
 
-        # Check for existing variations
-        if collection_info:
-            existing_variation = check_existing_variations(collection_folder, None, dest_dir)
-        else:
-            existing_variation = check_existing_variations(movie_folder, year, dest_dir)
+            # Check for remux files first
+            if 'remux' in file.lower():
+                if resolution == '2160p':
+                    resolution_folder = '4KRemux'
+                elif resolution == '1080p':
+                    resolution_folder = '1080pRemux'
+                else:
+                    resolution_folder = 'MoviesRemux'
+            else:
+                # Handle non-remux files
+                if resolution == '2160p':
+                    resolution_folder = 'UltraHD'
+                elif resolution == '1080p':
+                    resolution_folder = 'FullHD'
+                elif resolution == '720p':
+                    resolution_folder = 'SDMovies'
+                elif resolution == '480p':
+                    resolution_folder = 'Retro480p'
+                elif resolution == 'DVD':
+                    resolution_folder = 'DVDClassics'
+                else:
+                    resolution_folder = 'Movies'
+
+                # Check for existing variations
+                if collection_info:
+                    existing_variation = check_existing_variations(collection_folder, None, dest_dir)
+                else:
+                    existing_variation = check_existing_variations(movie_folder, year, dest_dir)
 
         if existing_variation:
             log_message(f"Found existing variation for {collection_folder if collection_info else movie_folder}: {existing_variation}", level="INFO")
