@@ -355,14 +355,8 @@ def process_file(args):
         else:
             show_name = episode_match.group(1).replace('.', ' ').strip()
 
-        season_number, episode_number = None, None
-        if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
-            season_number = re.search(r'S(\d{2})', episode_identifier, re.IGNORECASE).group(1)
-            episode_number = re.search(r'E(\d{2})', episode_identifier, re.IGNORECASE).group(1)
-        elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
-            season_number, episode_number = episode_identifier.split('x')
-
-        season_folder = f"Season {int(season_number)}" if season_number else "Unknown Season"
+        season_number = re.search(r'S(\d{2})E\d{2}', episode_identifier, re.IGNORECASE).group(1)
+        season_folder = f"Season {int(season_number)}"
 
         show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name)
         show_folder = show_folder.rstrip()
