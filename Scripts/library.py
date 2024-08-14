@@ -341,19 +341,28 @@ def process_file(args):
 
     api_key = get_api_key()
 
-    episode_match = re.search(r'(.*?)(S\d{2}E\d{2})', file, re.IGNORECASE)
+    # Check for episode format (e.g., S01E01, S01e01, 1x02)
+    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+)', file, re.IGNORECASE)
     if episode_match:
         # Handle TV shows
         episode_identifier = episode_match.group(2)
         parent_folder_name = os.path.basename(root)
 
-        if re.match(r'S\d{2}E\d{2}', file, re.IGNORECASE):
+        if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
             show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', parent_folder_name).replace('-', ' ').replace('.', ' ').strip()
+        elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
+            show_name = episode_match.group(1).replace('.', ' ').strip()
         else:
             show_name = episode_match.group(1).replace('.', ' ').strip()
 
-        season_number = re.search(r'S(\d{2})E\d{2}', episode_identifier, re.IGNORECASE).group(1)
-        season_folder = f"Season {int(season_number)}"
+        season_number, episode_number = None, None
+        if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
+            season_number = re.search(r'S(\d{2})', episode_identifier, re.IGNORECASE).group(1)
+            episode_number = re.search(r'E(\d{2})', episode_identifier, re.IGNORECASE).group(1)
+        elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
+            season_number, episode_number = episode_identifier.split('x')
+
+        season_folder = f"Season {int(season_number)}" if season_number else "Unknown Season"
 
         show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name)
         show_folder = show_folder.rstrip()
@@ -410,15 +419,13 @@ def process_file(args):
             tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
             if tmdb_id_match:
                 show_id = tmdb_id_match.group(1)
-                episode_number_match = re.search(r'E(\d{2})', episode_identifier, re.IGNORECASE)
-                if episode_number_match:
-                    episode_number = int(episode_number_match.group(1))
-                    episode_name = get_episode_name(show_id, int(season_number), episode_number)
+                if episode_number:
+                    episode_name = get_episode_name(show_id, int(season_number), int(episode_number))
                     if episode_name:
-                        new_name = f"{show_name} - {episode_identifier} - {episode_name}{os.path.splitext(file)[1]}"
+                        new_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}{os.path.splitext(file)[1]}"
                         log_message(f"Renaming {file} to {new_name} based on episode name {episode_name}", level="INFO")
                     else:
-                        new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
+                        new_name = f"{show_name} - S{season_number}E{episode_number}{os.path.splitext(file)[1]}"
                         log_message(f"Episode name not found for {file}, renaming to {new_name}", level="WARNING")
                 else:
                     new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
