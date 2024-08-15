@@ -274,9 +274,14 @@ def extract_movie_name_and_year(filename):
     return None, None
 
 def extract_resolution_from_filename(filename):
-    match = re.search(r'(\d{3,4}p|720p|1080p|4k|2160p)', filename, re.IGNORECASE)
-    if match:
-        resolution = match.group(1).lower()
+    # Extract resolution and additional terms from filename
+    resolution_match = re.search(r'(\d{3,4}p|720p|1080p|4k|2160p)', filename, re.IGNORECASE)
+    remux_match = re.search(r'(Remux)', filename, re.IGNORECASE)
+
+    if resolution_match:
+        resolution = resolution_match.group(1).lower()
+        if remux_match:
+            resolution += 'Remux'
         return resolution
     return None
 
@@ -412,7 +417,7 @@ def process_file(args):
 
             # Handle remux files
             if 'remux' in file.lower():
-                if '2160' in file:
+                if '2160' in file or '4k':
                     resolution_folder = 'UltraHDRemuxShows'
                 elif '1080' in file:
                     resolution_folder = '1080pRemuxLibrary'
@@ -420,7 +425,7 @@ def process_file(args):
                     resolution_folder = 'RemuxShows'
             # Handle standard resolutions
             else:
-                if resolution == '2160p':
+                if resolution in ['2160p', '4k']:
                     resolution_folder = 'UltraHD'
                 elif resolution == '1080p':
                     resolution_folder = 'FullHD'
@@ -529,7 +534,7 @@ def process_file(args):
 
             # Check for remux files first
             if 'remux' in file.lower():
-                if resolution == '2160p':
+                if resolution in ['2160p', '4k']:
                     resolution_folder = '4KRemux'
                 elif resolution == '1080p':
                     resolution_folder = '1080pRemux'
@@ -537,7 +542,7 @@ def process_file(args):
                     resolution_folder = 'MoviesRemux'
             else:
                 # Handle non-remux files
-                if resolution == '2160p':
+                if resolution in ['2160p', '4k']:
                     resolution_folder = 'UltraHD'
                 elif resolution == '1080p':
                     resolution_folder = 'FullHD'
