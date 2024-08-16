@@ -5,6 +5,7 @@ import shutil
 import requests
 import json
 import sys
+from requests.exceptions import RequestException
 from functools import lru_cache
 from datetime import datetime
 from dotenv import load_dotenv
@@ -144,9 +145,13 @@ def search_movie(query, year=None, auto_select=False):
 
     url = "https://api.themoviedb.org/3/search/movie"
 
+    normalized_query = re.sub(r'[^\w\s]', '', query)
+
     params = {
         'api_key': api_key,
-        'query': query
+        'query': normalized_query,
+        'page': 1,
+        'include_adult': False
     }
     if year:
         params['year'] = year
@@ -191,7 +196,7 @@ def search_movie(query, year=None, auto_select=False):
             _api_cache[cache_key] = f"{query}"
             return f"{query}"
 
-    except requests.exceptions.RequestException as e:
+    except RequestException as e:
         log_message(f"Error fetching data: {e}", level="ERROR")
         return f"{query}"
 
@@ -344,8 +349,19 @@ def get_movie_collection(movie_id):
             return collection['name'], collection['id']
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching movie collection data: {e}", level="ERROR")
-    
     return None
+
+def standardize_title(title):
+    replacements = {
+        '0': 'o', '1': 'i', '4': 'a', '5': 's', '7': 't', '9': 'g',
+        '@': 'a', '#': 'h', '$': 's', '%': 'p', '&': 'and', '*': 'x',
+        '3': 'e'
+    }
+
+    for key, value in replacements.items():
+        title = title.replace(key, value)
+    title = re.sub(r'\s+', ' ', title).strip()
+    return title
 
 def process_file(args):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
@@ -476,6 +492,7 @@ def process_file(args):
             log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
             return
 
+        movie_name = standardize_title(movie_name)
         log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
 
         collection_info = None
