@@ -357,10 +357,26 @@ def standardize_title(title):
         '3': 'e'
     }
 
-    for key, value in replacements.items():
-        title = title.replace(key, value)
-    title = re.sub(r'\s+', ' ', title).strip()
-    return title
+    def replacement_func(match):
+        char = match.group(0)
+        standardized_char = replacements.get(char, char)
+        return standardized_char
+
+    # Count words with non-standard characters
+    words = re.findall(r'\b\w+\b', title)
+    affected_count = sum(
+        1 for word in words if re.search(r'[014579@#$%&*3]', word)
+    )
+
+    # Standardize title if more than 4 words are affected
+    if affected_count > 4:
+        standardized_title = re.sub(r'[0-9@#$%&*3]', replacement_func, title)
+    else:
+        standardized_title = title
+
+    # Clean up extra spaces
+    standardized_title = re.sub(r'\s+', ' ', standardized_title).strip()
+    return standardized_title
 
 def process_file(args):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
