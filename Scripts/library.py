@@ -279,8 +279,7 @@ def extract_movie_name_and_year(filename):
     return None, None
 
 def extract_resolution_from_filename(filename):
-    # Extract resolution and additional terms from filename
-    resolution_match = re.search(r'(\d{3,4}p|720p|1080p|4k|2160p)', filename, re.IGNORECASE)
+    resolution_match = re.search(r'(\d{3,4}p|480|720|1080|2160)', filename, re.IGNORECASE)
     remux_match = re.search(r'(Remux)', filename, re.IGNORECASE)
 
     if resolution_match:
@@ -375,21 +374,39 @@ def process_file(args):
 
     api_key = get_api_key()
 
-    # Check for episode format (e.g., S01E01, S01e01, 1x02)
-    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+)', file, re.IGNORECASE)
+    # Check for episode format (e.g., S01E01, S01e01, 1x02 ...)
+    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.\d+)', file, re.IGNORECASE)
     if episode_match:
         # Handle TV shows
         episode_identifier = episode_match.group(2)
         parent_folder_name = os.path.basename(root)
 
+        # Extract show name and season number
         if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
             show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', parent_folder_name).replace('-', ' ').replace('.', ' ').strip()
         elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
             show_name = episode_match.group(1).replace('.', ' ').strip()
+        elif re.match(r'S\d{2}[0-9]+', episode_identifier):
+            show_name = episode_match.group(1).replace('.', ' ').strip()
+            episode_identifier = f"S{episode_identifier[1:3]}E{episode_identifier[3:]}"  # Add missing 'E'
+        elif re.match(r'[0-9]+e[0-9]+', episode_identifier):
+            show_name = episode_match.group(1).replace('.', ' ').strip()
+            episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"  # Add missing 'S'
+        elif re.match(r'ep\.\d+', episode_identifier, re.IGNORECASE):
+            # Handle descriptive episode labels
+            show_name = episode_match.group(1).replace('.', ' ').strip()
+            episode_number = re.search(r'ep\.(\d+)', episode_identifier, re.IGNORECASE).group(1)
+            season_number = re.search(r'S(\d{2})', parent_folder_name, re.IGNORECASE)
+            season_number = season_number.group(1) if season_number else "01"
+            episode_identifier = f"S{season_number}E{episode_number}"
         else:
             show_name = episode_match.group(1).replace('.', ' ').strip()
 
-        season_number = re.search(r'S(\d{2})E\d{2}', episode_identifier, re.IGNORECASE).group(1)
+        season_number = re.search(r'S(\d{2})E\d{2}', episode_identifier, re.IGNORECASE)
+        if season_number:
+            season_number = season_number.group(1)
+        else:
+            season_number = "01"  # Default if no season number found
         season_folder = f"Season {int(season_number)}"
 
         show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name)
