@@ -135,17 +135,19 @@ def search_tv_show(query, year=None, auto_select=False):
 
 @lru_cache(maxsize=None)
 def search_movie(query, year=None, auto_select=False):
+    api_key = get_api_key()
+    if not api_key:
+        print("API key is missing.")
+        return query
+
     cache_key = (query, year)
     if cache_key in _api_cache:
         return _api_cache[cache_key]
 
-    api_key = get_api_key()
-    if not api_key:
-        return query
-
     url = "https://api.themoviedb.org/3/search/movie"
 
-    normalized_query = re.sub(r'[^\w\s]', '', query)
+    title, year_from_query = clean_query(query)
+    normalized_query = normalize_query(title)
 
     params = {
         'api_key': api_key,
@@ -161,24 +163,33 @@ def search_movie(query, year=None, auto_select=False):
         response.raise_for_status()
         results = response.json().get('results', [])
 
+        if not results and year_from_query:
+            # If no results, retry without the year
+            params.pop('year', None)
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            results = response.json().get('results', [])
+
         if results:
-            chosen_movie = results[0] if auto_select else None
-
-            if not auto_select and len(results) == 1:
+            if auto_select:
                 chosen_movie = results[0]
+            else:
+                if len(results) == 1:
+                    chosen_movie = results[0]
+                else:
+                    log_message(f"Multiple movies found for query '{query}':", level="INFO")
+                    for idx, movie in enumerate(results[:3]):
+                        movie_name = movie.get('title')
+                        movie_id = movie.get('id')
+                        release_date = movie.get('release_date')
+                        movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+                        log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
 
-            if not chosen_movie:
-                log_message(f"Multiple movies found for query '{query}':", level="INFO")
-                for idx, movie in enumerate(results[:3]):
-                    movie_name = movie.get('title')
-                    movie_id = movie.get('id')
-                    release_date = movie.get('release_date')
-                    movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-                    log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
-
-                choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
-                if choice.isdigit() and 1 <= int(choice) <= 3:
-                    chosen_movie = results[int(choice) - 1]
+                    choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
+                    if choice.isdigit() and 1 <= int(choice) <= 3:
+                        chosen_movie = results[int(choice) - 1]
+                    else:
+                        chosen_movie = None
 
             if chosen_movie:
                 movie_name = chosen_movie.get('title')
@@ -187,6 +198,7 @@ def search_movie(query, year=None, auto_select=False):
                 tmdb_id = chosen_movie.get('id')
                 proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
                 _api_cache[cache_key] = proper_name
+                proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
                 return proper_name
             else:
                 log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
@@ -250,12 +262,20 @@ def extract_resolution_from_folder(folder_name):
     return None
 
 def extract_folder_year(folder_name):
+    resolutions = {'1080', '480', '720', '2160'}
+
     match = re.search(r'\((\d{4})\)', folder_name)
     if match:
-        return int(match.group(1))
+        year = match.group(1)
+        if year not in resolutions:
+            return int(year)
+
     match = re.search(r'\.(\d{4})\.', folder_name)
     if match:
-        return int(match.group(1))
+        year = match.group(1)
+        if year not in resolutions:
+            return int(year)
+
     return None
 
 def extract_movie_name_and_year(filename):
@@ -279,7 +299,7 @@ def extract_movie_name_and_year(filename):
     return None, None
 
 def extract_resolution_from_filename(filename):
-    resolution_match = re.search(r'(\d{3,4}p|480|720|1080|2160)', filename, re.IGNORECASE)
+    resolution_match = re.search(r'(4K|2160p|1080p|720p|1080|2160|480p)', filename, re.IGNORECASE)
     remux_match = re.search(r'(Remux)', filename, re.IGNORECASE)
 
     if resolution_match:
@@ -289,30 +309,53 @@ def extract_resolution_from_filename(filename):
         return resolution
     return None
 
-def normalize_name(name):
-    name = re.sub(r'\(\d{4}\)', '', name).strip()
-    name = re.sub(r'[^a-zA-Z0-9\s]', '', name)
-    name = re.sub(r'\s+', ' ', name).strip()
-    return name.lower()
+def clean_query(query):
+    # Define keywords to remove including quality and encoding terms
+    remove_keywords = [
+        'Unrated', 'Remastered', 'IMAX', 'Extended', 'BDRemux', 'ITA', 'ENG', 'x265', 'H265', 'HDR10',
+        'WebDl', 'Rip', '4K', 'HDR', 'DV', '2160p', 'BDRip', 'AC3', '5.1', 'Sub', 'NAHOM', 'mkv', 'Complete'
+    ]
+
+    for keyword in remove_keywords:
+        query = re.sub(r'\b' + re.escape(keyword) + r'\b', '', query, flags=re.IGNORECASE)
+
+    query = re.sub(r'\bS\d{2}\b.*', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\(\s*\)', '', query)
+    query = re.sub(r'\s+', ' ', query).strip()
+
+    # Extract year if present
+    match_year = re.search(r'\b(\d{4})\b', query)
+    if match_year:
+        year = match_year.group(1)
+        title = query[:match_year.start()].strip()
+        return title, year
+
+    return query, None
+
+def normalize_query(query):
+    normalized_query = re.sub(r'[._-]', ' ', query)
+    normalized_query = re.sub(r'[^\w\s\(\)-]', '', normalized_query)
+    normalized_query = re.sub(r'\s+', ' ', normalized_query).strip()
+    return normalized_query
 
 def check_existing_variations(name, year, dest_dir):
-    normalized_name = normalize_name(name)
+    normalized_query = normalize_query(name)
     log_message(f"Checking existing variations for: {name} ({year})", level="DEBUG")
     exact_match = None
     partial_matches = []
 
     for root, dirs, _ in os.walk(dest_dir):
         for d in dirs:
-            normalized_d = normalize_name(d)
+            normalized_d = normalize_query(d)
             d_year = extract_year(d)
 
             # Prioritize exact matches
-            if normalized_name == normalized_d and (d_year == year or not year or not d_year):
+            if normalized_query == normalized_d and (d_year == year or not year or not d_year):
                 log_message(f"Found exact matching variation: {d}", level="DEBUG")
                 return d
 
             # Collect partial matches with stricter criteria
-            if (normalized_name in normalized_d or normalized_d in normalized_name) and abs(len(normalized_name) - len(normalized_d)) < 5:
+            if (normalized_query in normalized_d or normalized_d in normalized_query) and abs(len(normalized_query) - len(normalized_d)) < 5:
                 partial_matches.append((d, d_year))
 
     if partial_matches:
@@ -378,14 +421,19 @@ def standardize_title(title):
     standardized_title = re.sub(r'\s+', ' ', standardized_title).strip()
     return standardized_title
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
-    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.\d+)', file, re.IGNORECASE)
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match):
     episode_identifier = episode_match.group(2)
     parent_folder_name = os.path.basename(root)
 
-    # Extract show name and season number
+    clean_folder_name, _ = clean_query(parent_folder_name)
+
+    # Attempt to extract show name and season number
+    show_name = ""
+    season_number = "01"
+
+    # Handle various episode patterns and extract show name
     if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
-        show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', parent_folder_name).replace('-', ' ').replace('.', ' ').strip()
+        show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', clean_folder_name).replace('-', ' ').replace('.', ' ').strip()
     elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
         show_name = episode_match.group(1).replace('.', ' ').strip()
         season_number = re.search(r'([0-9]+)x', episode_identifier).group(1)
@@ -396,9 +444,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     elif re.match(r'[0-9]+e[0-9]+', episode_identifier):
         show_name = episode_match.group(1).replace('.', ' ').strip()
         episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
-    elif re.match(r'ep\.\d+', episode_identifier, re.IGNORECASE):
+    elif re.match(r'Ep\.?\s*\d+', episode_identifier, re.IGNORECASE):
         show_name = episode_match.group(1).replace('.', ' ').strip()
-        episode_number = re.search(r'ep\.(\d+)', episode_identifier, re.IGNORECASE).group(1)
+        episode_number = re.search(r'Ep\.?\s*(\d+)', episode_identifier, re.IGNORECASE).group(1)
         season_number = re.search(r'S(\d{2})', parent_folder_name, re.IGNORECASE)
         season_number = season_number.group(1) if season_number else "01"
         episode_identifier = f"S{season_number}E{episode_number}"
@@ -418,16 +466,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     season_folder = f"Season {int(season_number)}"
 
-    show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name)
-    show_folder = show_folder.rstrip()
+    # Handle invalid show names by using parent folder name
+    if not show_name or show_name.lower() in ["invalid name", "unknown"]:
+        show_name = clean_folder_name
+        show_name = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name).replace('.', ' ').strip()
 
-    if show_folder.isdigit() and len(show_folder) <= 4:
-        year = None
-    else:
-        year = extract_folder_year(parent_folder_name) or extract_year(show_folder)
-        if year:
-            show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
-            show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
+    # Handle special cases for show names
+    show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name).rstrip()
+
+    # Handle year extraction and appending if necessary
+    year = extract_folder_year(parent_folder_name) or extract_year(show_folder)
+    if year:
+        show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
+        show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
 
     api_key = get_api_key()
     if api_key:
@@ -501,13 +552,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
         else:
             new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
-
-        # Ensure no double dashes in the filename
-        new_name = re.sub(r' - - ', ' - ', new_name)
+        new_name = re.sub(r'-{2,}', '-', new_name).strip('-')
+        dest_file = os.path.join(dest_path, new_name)
     else:
-        new_name = file
+        dest_file = os.path.join(dest_path, file)
 
-    dest_file = os.path.join(dest_path, new_name)
     return dest_file
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
@@ -630,24 +679,25 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 def process_file(args):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
 
-    # Check if symlink already exists
+    # Check if a symlink already exists
     symlink_exists = any(os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file for full_dest_file in dest_index)
 
     if symlink_exists:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
         return
 
-    # Check for episode format (e.g., S01E01, S01e01, 1x02 ...)
-    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.\d+)', file, re.IGNORECASE)
+    # Enhanced Regex Patterns to Identify Shows
+    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.?\s*\d+|Ep\.?\s*\d+|EP\.?\s*\d+)', file, re.IGNORECASE)
 
     if episode_match:
-        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
     else:
         dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
 
     # Ensure the destination directory exists
     os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
+    # Handle existing symlinks or files
     if os.path.islink(dest_file):
         if os.readlink(dest_file) == src_file:
             log_message(f"Symlink already exists for {os.path.basename(dest_file)}", level="INFO")
@@ -659,8 +709,9 @@ def process_file(args):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
         return
 
+    # Create symlink or copy directory
     if os.path.isdir(src_file):
-        shutil.copytree(src_file, dest_file, symlinks=True)
+        shutil.copytree(src_file, dest_file, symlinks=True, dirs_exist_ok=True)
     else:
         os.symlink(src_file, dest_file)
 
