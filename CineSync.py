@@ -4,6 +4,9 @@ import subprocess
 import random
 import getpass
 import logging
+import subprocess
+import sys
+import pkg_resources
 
 # Script Metadata
 SCRIPT_VERSION = "1.0"
@@ -21,10 +24,6 @@ RENAMER_SCRIPT = os.path.join(SCRIPTS_FOLDER, "utils/tmdb_renamer.py")
 # Setup logging
 logging.basicConfig(filename='script.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Function to clear the screen
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
 # Function to print text with color
 def print_color(text, color):
     colors = {
@@ -35,6 +34,63 @@ def print_color(text, color):
         "end": "\033[0m",
     }
     print(f"{colors.get(color, '')}{text}{colors.get('end', '')}")
+
+# Function to check and install required Python packages
+def check_python_and_dependencies(required_version="3.6"):
+    try:
+        version_output = subprocess.run([sys.executable, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        version_str = version_output.stdout.decode().strip().split()[1]
+        major, minor, micro = map(int, version_str.split('.'))
+        current_version = f"{major}.{minor}"
+        print(f"Current Python version: {current_version}")
+
+        if (major, minor) < tuple(map(int, required_version.split('.'))):
+            print_color(f"Python {required_version} or higher is required. Current version is {current_version}.", "red")
+            input("Press Enter to exit the script...")
+            sys.exit(1)
+    except FileNotFoundError:
+        print_color("Python is not installed. Please install Python 3.6 or higher.", "red")
+        input("Press Enter to exit the script...")
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print_color(f"Error checking Python version: {e}", "red")
+        input("Press Enter to exit the script...")
+        sys.exit(1)
+
+    # Check and install dependencies
+    required_packages = []
+    if not os.path.exists('requirements.txt'):
+        print_color("Error: requirements.txt file not found.", "red")
+        input("Press Enter to exit the script...")
+        sys.exit(1)
+
+    with open('requirements.txt', 'r') as file:
+        for line in file:
+            package = line.strip()
+            if package:
+                required_packages.append(package)
+
+    installed_packages = [pkg.key for pkg in pkg_resources.working_set]
+
+    missing_packages = [pkg for pkg in required_packages if pkg.lower() not in installed_packages]
+
+    if missing_packages:
+        print_color("Missing packages detected. Installing...", "yellow")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing_packages])
+            print_color("All missing packages installed successfully.", "green")
+        except subprocess.CalledProcessError as e:
+            print_color(f"Error installing packages: {e}", "red")
+            input("Press Enter to exit the script...")
+            sys.exit(1)
+    else:
+        print_color("All required packages are already installed.", "green")
+
+check_python_and_dependencies()
+
+# Function to clear the screen
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 # Function to print the banner
 def print_banner():
