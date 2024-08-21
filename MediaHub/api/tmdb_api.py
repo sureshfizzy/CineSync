@@ -4,6 +4,7 @@ from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
 from config.config import get_api_key
+from utils.file_utils import clean_query, normalize_query, standardize_title
 
 _api_cache = {}
 

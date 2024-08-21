@@ -1,9 +1,9 @@
 import os
 import re
-from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations
+from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, normalize_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
-from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled
+from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
     parent_folder_name = os.path.basename(root)

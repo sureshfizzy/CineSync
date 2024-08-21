@@ -1,5 +1,6 @@
 import re
 import os
+from utils.logging_utils import log_message
 
 def extract_year(query):
     match = re.search(r'\((\d{4})\)$', query.strip())
