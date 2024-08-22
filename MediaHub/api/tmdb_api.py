@@ -1,3 +1,4 @@
+import re
 import requests
 from bs4 import BeautifulSoup
 from functools import lru_cache
