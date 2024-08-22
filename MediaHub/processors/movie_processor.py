@@ -1,11 +1,19 @@
 import os
 import re
+import requests
 from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, normalize_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
-from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key
+from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode
+
+# Global variables to track API key state
+global api_key
+global api_warning_logged
+global offline_mode
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
+    global offline_mode
+
     parent_folder_name = os.path.basename(root)
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
 
@@ -29,14 +37,16 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             else:
                 collection_info = get_movie_collection(movie_title=movie_name, year=year)
         else:
-            log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
+            if not offline_mode:
+                log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
         result = search_movie(movie_name, year, auto_select=auto_select)
         if isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]}) {{tmdb-{result['id']}}}"
         else:
-            log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
+            if not offline_mode:
+                log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
             proper_movie_name = f"{movie_name} ({year})"
     else:
         proper_movie_name = f"{movie_name} ({year})"

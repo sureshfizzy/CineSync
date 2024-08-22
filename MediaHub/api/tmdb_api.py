@@ -9,15 +9,35 @@ from utils.file_utils import clean_query, normalize_query, standardize_title
 
 _api_cache = {}
 
+# Global variables for API key status and warnings
+api_key = get_api_key()
+api_warning_logged = False
+
+def check_api_key():
+    global api_key, api_warning_logged
+    if not api_key:
+        return False
+    url = "https://api.themoviedb.org/3/configuration"
+    params = {'api_key': api_key}
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        if not api_warning_logged:
+            log_message(f"API key validation failed: {e}", level="ERROR")
+            api_warning_logged = True
+        return False
+
 @lru_cache(maxsize=None)
 def search_tv_show(query, year=None, auto_select=False):
+    global api_key
+    if not check_api_key():
+        return query
+
     cache_key = (query, year)
     if cache_key in _api_cache:
         return _api_cache[cache_key]
-
-    api_key = get_api_key()
-    if not api_key:
-        return query
 
     url = "https://api.themoviedb.org/3/search/tv"
 
@@ -84,9 +104,8 @@ def perform_search(params, url):
 
 @lru_cache(maxsize=None)
 def search_movie(query, year=None, auto_select=False):
-    api_key = get_api_key()
-    if not api_key:
-        print("API key is missing.")
+    global api_key
+    if not check_api_key():
         return query
 
     cache_key = (query, year)

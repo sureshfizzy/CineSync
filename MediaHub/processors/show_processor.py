@@ -3,7 +3,12 @@ import re
 from utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year
 from api.tmdb_api import search_tv_show, get_episode_name
 from utils.logging_utils import log_message
-from config.config import is_skip_extras_folder_enabled, get_api_key
+from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode
+
+# Global variables to track API key state
+global api_key
+global api_warning_logged
+global offline_mode
 
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match):
     parent_folder_name = os.path.basename(root)
@@ -79,8 +84,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
         show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
 
+    # Check if API is available and not in offline mode
     api_key = get_api_key()
-    if api_key:
+    if api_key and not offline_mode:
         proper_show_name = search_tv_show(show_folder, year, auto_select=auto_select)
         if "TMDb API error" in proper_show_name:
             log_message(f"Could not find TV show in TMDb or TMDb API error: {show_folder} ({year})", level="ERROR")
