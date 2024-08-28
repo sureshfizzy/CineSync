@@ -5,7 +5,7 @@ from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
 from config.config import get_api_key
-from utils.file_utils import clean_query, normalize_query, standardize_title
+from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names
 
 _api_cache = {}
 
@@ -107,7 +107,6 @@ def search_movie(query, year=None, auto_select=False):
     global api_key
     if not check_api_key():
         return query
-
     cache_key = (query, year)
     if cache_key in _api_cache:
         return _api_cache[cache_key]
@@ -200,17 +199,6 @@ def search_movie(query, year=None, auto_select=False):
     else:
         log_message(f"No results for '{query}'.")
         return None
-
-def remove_genre_names(query):
-    genre_names = [
-        'Action', 'Comedy', 'Drama', 'Thriller', 'Horror', 'Romance', 'Adventure', 'Sci-Fi',
-        'Fantasy', 'Mystery', 'Crime', 'Documentary', 'Animation', 'Family', 'Music', 'War',
-        'Western', 'History', 'Biography'
-    ]
-    for genre in genre_names:
-        query = re.sub(r'\b' + re.escape(genre) + r'\b', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\s+', ' ', query).strip()
-    return query
 
 def perform_fallback_search(query):
     cleaned_query = remove_genre_names(query)

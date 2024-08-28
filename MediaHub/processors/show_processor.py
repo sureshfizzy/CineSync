@@ -11,6 +11,7 @@ global api_warning_logged
 global offline_mode
 
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match):
+    global offline_mode
     parent_folder_name = os.path.basename(root)
     clean_folder_name, _ = clean_query(parent_folder_name)
 

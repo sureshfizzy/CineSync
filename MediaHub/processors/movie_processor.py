@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, normalize_query
+from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, remove_genre_names, clean_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
 from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode
@@ -16,13 +16,13 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     parent_folder_name = os.path.basename(root)
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
-
     if not movie_name:
         log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
         return
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
+    movie_name  = clean_query(movie_name)
 
     collection_info = None
     api_key = get_api_key()
@@ -69,10 +69,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             movie_folder = re.sub(r' \{tmdb-\d+\}$', '', proper_movie_name)
 
         movie_folder = movie_folder.replace('/', '')
-
-    # Add year to movie_folder if not present
-    if year and f"({year})" not in movie_folder:
-        movie_folder = f"{movie_folder} ({year})"
 
     # Check for existing variations
     existing_variation = check_existing_variations(movie_folder, year, dest_dir)

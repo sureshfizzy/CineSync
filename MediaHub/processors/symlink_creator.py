@@ -1,5 +1,6 @@
 import os
 import re
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from threading import Event
@@ -58,7 +59,8 @@ def process_file(args):
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
     except Exception as e:
-        log_message(f"Task failed with exception: {e}", level="ERROR")
+        error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
+        log_message(error_message, level="ERROR")
         error_event.set()
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):

@@ -1,5 +1,6 @@
 import re
 import os
+import inspect
 from utils.logging_utils import log_message
 
 def extract_year(query):
@@ -82,6 +83,12 @@ def extract_resolution_from_filename(filename):
     return None
 
 def clean_query(query):
+    if not isinstance(query, str):
+        log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
+        return ""  # Return an empty string or handle as needed
+
+    log_message(f"Original query: '{query}'", "DEBUG", "stdout")
+
     # Define keywords to remove including quality and encoding terms
     remove_keywords = [
         'Unrated', 'Remastered', 'IMAX', 'Extended', 'BDRemux', 'ITA', 'ENG', 'x265', 'H265', 'HDR10',
@@ -95,7 +102,12 @@ def clean_query(query):
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
 
-    # Extract year if present
+    # Identify the calling file
+    caller = inspect.stack()[1].filename
+    if 'movie_processor.py' in caller:
+        return query
+
+    # Extract year if present for shows or other cases
     match_year = re.search(r'\b(\d{4})\b', query)
     if match_year:
         year = match_year.group(1)
@@ -105,9 +117,14 @@ def clean_query(query):
     return query, None
 
 def normalize_query(query):
+    if not isinstance(query, str):
+        log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
+        return ""
+
     normalized_query = re.sub(r'[._-]', ' ', query)
     normalized_query = re.sub(r'[^\w\s\(\)-]', '', normalized_query)
     normalized_query = re.sub(r'\s+', ' ', normalized_query).strip()
+
     return normalized_query
 
 def check_existing_variations(name, year, dest_dir):
@@ -173,3 +190,14 @@ def standardize_title(title):
     # Clean up extra spaces
     standardized_title = re.sub(r'\s+', ' ', standardized_title).strip()
     return standardized_title
+
+def remove_genre_names(query):
+    genre_names = [
+        'Action', 'Comedy', 'Drama', 'Thriller', 'Horror', 'Romance', 'Adventure', 'Sci-Fi',
+        'Fantasy', 'Mystery', 'Crime', 'Documentary', 'Animation', 'Family', 'Music', 'War',
+        'Western', 'History', 'Biography'
+    ]
+    for genre in genre_names:
+        query = re.sub(r'\b' + re.escape(genre) + r'\b', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\s+', ' ', query).strip()
+    return query
