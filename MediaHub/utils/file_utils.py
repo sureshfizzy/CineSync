@@ -153,11 +153,11 @@ def build_dest_index(dest_dir):
             dest_index.add(os.path.join(root, name))
     return dest_index
 
-def standardize_title(title):
+def standardize_title(title, check_word_count=True):
     replacements = {
         '0': 'o', '1': 'i', '4': 'a', '5': 's', '7': 't', '9': 'g',
         '@': 'a', '#': 'h', '$': 's', '%': 'p', '&': 'and', '*': 'x',
-        '3': 'e'
+        '3': 'e', '8': 'b'
     }
 
     def replacement_func(match):
@@ -165,17 +165,21 @@ def standardize_title(title):
         standardized_char = replacements.get(char, char)
         return standardized_char
 
-    # Count words with non-standard characters
-    words = re.findall(r'\b\w+\b', title)
-    affected_count = sum(
-        1 for word in words if re.search(r'[014579@#$%&*3]', word)
-    )
+    if check_word_count:
+        # Count words with non-standard characters
+        words = re.findall(r'\b\w+\b', title)
+        affected_count = sum(
+            1 for word in words if re.search(r'[014579@#$%&*3]', word)
+        )
 
-    # Standardize title if more than 4 words are affected
-    if affected_count > 4:
-        standardized_title = re.sub(r'[0-9@#$%&*3]', replacement_func, title)
+        # Standardize title if more than 4 words are affected
+        if affected_count > 4:
+            standardized_title = re.sub(r'[0-9@#$%&*3]', replacement_func, title)
+        else:
+            standardized_title = title
     else:
-        standardized_title = title
+        # Always standardize title
+        standardized_title = re.sub(r'[0-9@#$%&*3]', replacement_func, title)
 
     # Clean up extra spaces
     standardized_title = re.sub(r'\s+', ' ', standardized_title).strip()

@@ -120,6 +120,7 @@ def search_movie(query, year=None, auto_select=False):
     global api_key
     if not check_api_key():
         return query
+
     cache_key = (query, year)
     if cache_key in _api_cache:
         return _api_cache[cache_key]
@@ -178,6 +179,11 @@ def search_movie(query, year=None, auto_select=False):
                         return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
         except requests.RequestException as e:
             log_message(f"Error fetching data: {e}", level="ERROR")
+
+    if not results:
+        standardized_query = standardize_title(normalized_query, check_word_count=False)
+        encoded_standardized_query = urllib.parse.quote_plus(standardized_query)
+        results = perform_fallback_search(standardized_query)
 
     if results:
         if auto_select:
