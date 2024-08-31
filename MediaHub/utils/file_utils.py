@@ -72,7 +72,7 @@ def extract_movie_name_and_year(filename):
     return None, None
 
 def extract_resolution_from_filename(filename):
-    resolution_match = re.search(r'(4K|2160p|1080p|720p|1080|2160|480p)', filename, re.IGNORECASE)
+    resolution_match = re.search(r'(2160p|1080p|720p|480p|2160|1080|720|480)', filename, re.IGNORECASE)
     remux_match = re.search(r'(Remux)', filename, re.IGNORECASE)
 
     if resolution_match:

@@ -92,7 +92,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             resolution_folder = {
                 '2160p': 'UltraHD',
-                '4k': 'UltraHD',
                 '1080p': 'FullHD',
                 '720p': 'SDMovies',
                 '480p': 'Retro480p',
