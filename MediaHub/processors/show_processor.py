@@ -101,10 +101,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     show_folder = show_folder.replace('/', '')
 
-    # Add year to show_folder if not present
-    if year and f"({year})" not in show_folder:
-        show_folder = f"{show_folder} ({year})"
-
     # Determine resolution-specific folder for shows
     resolution = extract_resolution_from_filename(file)
     if 'remux' in file.lower():

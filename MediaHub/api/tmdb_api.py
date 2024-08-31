@@ -41,56 +41,69 @@ def search_tv_show(query, year=None, auto_select=False):
 
     url = "https://api.themoviedb.org/3/search/tv"
 
-    params = {
-        'api_key': api_key,
-        'query': query
-    }
-    if year:
-        params['first_air_date_year'] = year
+    def fetch_results(query):
+        params = {'api_key': api_key, 'query': query}
+        full_url = f"{url}?{urllib.parse.urlencode(params)}"
+        log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
+        return perform_search(params, url)
 
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        results = response.json().get('results', [])
+    def search_fallback(query):
+        query = re.sub(r'\s*\(.*$', '', query).strip()
+        log_message(f"Fallback search query: '{query}'", "DEBUG", "stdout")
+        return fetch_results(query)
 
-        if results:
-            chosen_show = results[0] if auto_select else None
+    results = fetch_results(query)
 
-            if not auto_select and len(results) == 1:
-                chosen_show = results[0]
+    if not results and year:
+        results = search_fallback(query)
 
-            if not chosen_show:
-                log_message(f"Multiple shows found for query '{query}':", level="INFO")
-                for idx, show in enumerate(results[:3]):
-                    show_name = show.get('name')
-                    show_id = show.get('id')
-                    first_air_date = show.get('first_air_date')
-                    show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-                    log_message(f"{idx + 1}: {show_name} ({show_year}) [tmdb-{show_id}]", level="INFO")
+    if not results and year:
+        fallback_url = f"https://api.themoviedb.org/3/search/tv?api_key={api_key}&query={year}"
+        log_message(f"Fallback search URL: {fallback_url}", "DEBUG", "stdout")
+        try:
+            response = requests.get(fallback_url)
+            response.raise_for_status()
+            results = response.json().get('results', [])
+        except requests.exceptions.RequestException as e:
+            log_message(f"Error during fallback search: {e}", level="ERROR")
 
-                choice = input("Choose a show (1-3) or press Enter to skip: ").strip()
-                if choice.isdigit() and 1 <= int(choice) <= 3:
-                    chosen_show = results[int(choice) - 1]
+    if not results:
+        log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
+        _api_cache[cache_key] = f"{query}"
+        return f"{query}"
 
-            if chosen_show:
-                show_name = chosen_show.get('name')
-                first_air_date = chosen_show.get('first_air_date')
-                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-                tmdb_id = chosen_show.get('id')
-                proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
-                _api_cache[cache_key] = proper_name
-                return proper_name
-            else:
-                log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
-                _api_cache[cache_key] = f"{query}"
-                return f"{query}"
+    if auto_select:
+        chosen_show = results[0]
+    else:
+        if len(results) == 1:
+            chosen_show = results[0]
         else:
-            _api_cache[cache_key] = f"{query}"
-            return f"{query}"
+            log_message(f"Multiple shows found for query '{query}':", level="INFO")
+            for idx, show in enumerate(results[:3]):
+                show_name = show.get('name')
+                show_id = show.get('id')
+                first_air_date = show.get('first_air_date')
+                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+                log_message(f"{idx + 1}: {show_name} ({show_year}) [tmdb-{show_id}]", level="INFO")
 
-    except requests.exceptions.RequestException as e:
-       log_message(f"Error fetching data: {e}", level="ERROR")
-       return f"{query}"
+            choice = input("Choose a show (1-3) or press Enter to skip: ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= 3:
+                chosen_show = results[int(choice) - 1]
+            else:
+                chosen_show = None
+
+    if chosen_show:
+        show_name = chosen_show.get('name')
+        first_air_date = chosen_show.get('first_air_date')
+        show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+        tmdb_id = chosen_show.get('id')
+        proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
+        _api_cache[cache_key] = proper_name
+        return proper_name
+    else:
+        log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
+        _api_cache[cache_key] = f"{query}"
+        return f"{query}"
 
 def perform_search(params, url):
     try:

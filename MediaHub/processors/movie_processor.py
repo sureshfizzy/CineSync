@@ -22,7 +22,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
-    movie_name  = clean_query(movie_name)
+    movie_name, none  = clean_query(movie_name)
 
     collection_info = None
     api_key = get_api_key()

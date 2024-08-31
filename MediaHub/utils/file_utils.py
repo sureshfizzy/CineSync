@@ -85,11 +85,10 @@ def extract_resolution_from_filename(filename):
 def clean_query(query):
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
-        return ""  # Return an empty string or handle as needed
+        return "", None
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
-    # Define keywords to remove including quality and encoding terms
     remove_keywords = [
         'Unrated', 'Remastered', 'IMAX', 'Extended', 'BDRemux', 'ITA', 'ENG', 'x265', 'H265', 'HDR10',
         'WebDl', 'Rip', '4K', 'HDR', 'DV', '2160p', 'BDRip', 'AC3', '5.1', 'Sub', 'NAHOM', 'mkv', 'Complete'
@@ -99,21 +98,12 @@ def clean_query(query):
         query = re.sub(r'\b' + re.escape(keyword) + r'\b', '', query, flags=re.IGNORECASE)
 
     query = re.sub(r'\bS\d{2}\b.*', '', query, flags=re.IGNORECASE)
+
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
+    query = re.sub(r'\bSeason \d+\b', '', query, flags=re.IGNORECASE)
 
-    # Identify the calling file
-    caller = inspect.stack()[1].filename
-    if 'movie_processor.py' in caller:
-        return query
-
-    # Extract year if present for shows or other cases
-    match_year = re.search(r'\b(\d{4})\b', query)
-    if match_year:
-        year = match_year.group(1)
-        title = query[:match_year.start()].strip()
-        return title, year
-
+    log_message(f"No year found. Final cleaned query: '{query}'", "DEBUG", "stdout")
     return query, None
 
 def normalize_query(query):
