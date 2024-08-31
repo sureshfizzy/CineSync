@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from dotenv import load_dotenv
 
 def setup_logging(log_folder):
     if not os.path.exists(log_folder):
@@ -21,6 +22,19 @@ def read_directories(config_file):
         sys.exit(1)
     return directories
 
+def get_fallback_directory(env_file):
+    if os.path.isfile(env_file):
+        load_dotenv(env_file)
+        destination_dir = os.getenv('DESTINATION_DIR')
+        if destination_dir:
+            return [destination_dir]
+        else:
+            logging.error(f"Destination_dir not found in {env_file}")
+            sys.exit(1)
+    else:
+        logging.error(f".env file not found: {env_file}")
+        sys.exit(1)
+
 def find_broken_symlinks(directory):
     broken_symlinks = []
     for root, dirs, files in os.walk(directory):
@@ -36,6 +50,7 @@ def main():
     broken_links_folder = os.path.join(script_dir, '..', '..', 'BrokenLinkVault')
     logs_folder = os.path.join(broken_links_folder, 'logs')
     config_file = os.path.join(broken_links_folder, 'broken_links_config.txt')
+    env_file = os.path.join(script_dir, '..', '..', '.env')
 
     # Create directories
     if not os.path.exists(broken_links_folder):
@@ -46,8 +61,10 @@ def main():
     # Set up logging
     setup_logging(logs_folder)
 
-    # Read directories from the configuration file
+    # Read directories from the configuration file or fallback to .env
     directories = read_directories(config_file)
+    if not directories:
+        directories = get_fallback_directory(env_file)
 
     for directory in directories:
         if os.path.isdir(directory):

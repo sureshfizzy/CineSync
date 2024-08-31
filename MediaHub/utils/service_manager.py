@@ -18,7 +18,15 @@ def execute_command(*cmd):
         logger(f"Command '{' '.join(cmd)}' failed with error: {e.returncode}")
         sys.exit(e.returncode)
 
+def check_root_privileges():
+    if os.geteuid() != 0:
+        print("\033[91mError: This script must be run with root privileges.\033[0m")
+        input("Press Enter to exit...")
+        sys.exit(1)
+
 def create_monitor_service(monitor_script_path):
+    check_root_privileges()
+    user = os.getlogin()
     service_content = f"""[Unit]
 Description=Real-Time Monitor Service
 After=network.target
@@ -27,6 +35,8 @@ After=network.target
 Type=simple
 ExecStart=/usr/bin/python3 {monitor_script_path}
 Restart=always
+User={user}
+Group={user}
 
 [Install]
 WantedBy=multi-user.target
