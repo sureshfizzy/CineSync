@@ -89,16 +89,18 @@ def clean_query(query):
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
+    query = query.replace('.', ' ')
+
     remove_keywords = [
         'Unrated', 'Remastered', 'IMAX', 'Extended', 'BDRemux', 'ITA', 'ENG', 'x265', 'H265', 'HDR10',
         'WebDl', 'Rip', '4K', 'HDR', 'DV', '2160p', 'BDRip', 'AC3', '5.1', 'Sub', 'NAHOM', 'mkv', 'Complete'
     ]
 
+    # Remove specified keywords
     for keyword in remove_keywords:
         query = re.sub(r'\b' + re.escape(keyword) + r'\b', '', query, flags=re.IGNORECASE)
 
-    query = re.sub(r'\bS\d{2}\b.*', '', query, flags=re.IGNORECASE)
-
+    query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
     query = re.sub(r'\bSeason \d+\b', '', query, flags=re.IGNORECASE)
