@@ -103,7 +103,7 @@ def clean_query(query):
     query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
-    query = re.sub(r'\bSeason \d+\b', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}\b.*', '', query, flags=re.IGNORECASE)
 
     log_message(f"No year found. Final cleaned query: '{query}'", "DEBUG", "stdout")
     return query, None
@@ -197,3 +197,13 @@ def remove_genre_names(query):
         query = re.sub(r'\b' + re.escape(genre) + r'\b', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\s+', ' ', query).strip()
     return query
+
+
+def extract_title(filename):
+    pattern = r'^([a-zA-Z0-9\.]+?)(?=\.[Ss]\d{2}[Ee]\d{2}|\.S\d{2}|\.E\d{2}|\.mkv|\.MP4|\.avi|\.[a-zA-Z0-9]*$)'
+    match = re.match(pattern, filename)
+    if match:
+        title = match.group(1).replace('.', ' ').strip()
+        return title
+    else:
+        return "", None

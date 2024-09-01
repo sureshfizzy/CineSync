@@ -17,7 +17,7 @@ def determine_is_show(directory):
     Determine if a directory contains TV shows or mini-series based on episode patterns or keywords.
     If at least 2 or 3 files match common episode patterns or mini-series keywords, return True.
     """
-    episode_patterns = re.compile(r'(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.?\s*\d+|Ep\.?\s*\d+|EP\.?\s*\d+|MINI[- ]SERIES|MINISERIES)', re.IGNORECASE)
+    episode_patterns = re.compile(r'(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.?\s*\d+|Ep\.?\s*\d+|EP\.?\s*\d+|MINI[- ]SERIES|MINISERIES)', re.IGNORECASE)
     match_count = 0
     threshold = 2  # Minimum number of matches to determine as a TV show
 
@@ -45,7 +45,7 @@ def process_file(args):
         return
 
     # Enhanced Regex Patterns to Identify Shows or Mini-Series
-    episode_match = re.search(r'(.*?)(S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.?\s*\d+|Ep\.?\s*\d+|EP\.?\s*\d+|MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
+    episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|ep\.?\s*\d+|Ep\.?\s*\d+|EP\.?\s*\d+|MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
     mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
     is_extras = re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE)
 

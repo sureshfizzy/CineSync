@@ -5,7 +5,7 @@ from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
 from config.config import get_api_key
-from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names
+from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title
 
 _api_cache = {}
 
@@ -45,7 +45,12 @@ def search_tv_show(query, year=None, auto_select=False):
         params = {'api_key': api_key, 'query': query}
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
-        return perform_search(params, url)
+        response = perform_search(params, url)
+        return response
+
+    def search_with_extracted_title(query):
+        title = extract_title(query)
+        return fetch_results(title)
 
     def search_fallback(query):
         query = re.sub(r'\s*\(.*$', '', query).strip()
@@ -53,6 +58,12 @@ def search_tv_show(query, year=None, auto_select=False):
         return fetch_results(query)
 
     results = fetch_results(query)
+
+    if not results:
+        results = search_with_extracted_title(query)
+
+    if not results:
+        results = perform_fallback_tv_search(query)
 
     if not results and year:
         results = search_fallback(query)
@@ -104,6 +115,38 @@ def search_tv_show(query, year=None, auto_select=False):
         log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
         _api_cache[cache_key] = f"{query}"
         return f"{query}"
+
+def perform_fallback_tv_search(query):
+    cleaned_query = remove_genre_names(query)
+    search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
+
+    try:
+        response = requests.get(search_url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        tv_show_link = soup.find('a', class_='result')
+
+        if tv_show_link:
+            tv_show_id = re.search(r'/tv/(\d+)', tv_show_link['href'])
+            if tv_show_id:
+                tmdb_id = tv_show_id.group(1)
+
+                # Fetch TV show details using the TV show ID
+                details_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+                params = {'api_key': api_key}
+                details_response = requests.get(details_url, params=params)
+                details_response.raise_for_status()
+                tv_show_details = details_response.json()
+
+                if tv_show_details:
+                    show_name = tv_show_details.get('name')
+                    first_air_date = tv_show_details.get('first_air_date')
+                    show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+                    return [{'id': tmdb_id, 'name': show_name, 'first_air_date': first_air_date}]
+    except requests.RequestException as e:
+        log_message(f"Error during web-based fallback search: {e}", level="ERROR")
+
+    return []
 
 def perform_search(params, url):
     try:
