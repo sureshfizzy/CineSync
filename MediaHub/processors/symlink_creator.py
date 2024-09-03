@@ -50,7 +50,8 @@ def process_file(args):
     is_extras = re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE)
 
     # Fallback logic to determine if the folder is a TV show directory
-    is_show_directory = any(keyword in root.lower() for keyword in ['season', 's01', 's02', 's03', 's04', 's05'])
+    season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
+    is_show_directory = bool(season_pattern.search(root))
 
     if not is_show_directory and not episode_match and not mini_series_match:
         is_show_directory = determine_is_show(root)
