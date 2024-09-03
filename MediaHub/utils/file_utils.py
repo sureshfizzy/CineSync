@@ -1,5 +1,6 @@
 import re
 import os
+import json
 import inspect
 from utils.logging_utils import log_message
 
@@ -82,23 +83,25 @@ def extract_resolution_from_filename(filename):
         return resolution
     return None
 
-def clean_query(query):
+def load_keywords(file_name):
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    return data.get("keywords", [])
+
+def clean_query(query, keywords_file='keywords.json'):
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
         return "", None
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
+    remove_keywords = load_keywords(keywords_file)
+
     query = query.replace('.', ' ')
 
-    remove_keywords = [
-        'Unrated', 'Remastered', 'IMAX', 'Extended', 'BDRemux', 'ITA', 'ENG', 'x265', 'H265', 'HDR10',
-        'WebDl', 'Rip', '4K', 'HDR', 'DV', '2160p', 'BDRip', 'AC3', '5.1', 'Sub', 'NAHOM', 'mkv', 'Complete'
-    ]
-
-    # Remove specified keywords
-    for keyword in remove_keywords:
-        query = re.sub(r'\b' + re.escape(keyword) + r'\b', '', query, flags=re.IGNORECASE)
+    keywords_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_keywords)) + r')\b', re.IGNORECASE)
+    query = keywords_pattern.sub('', query)
 
     query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\(\s*\)', '', query)
