@@ -203,10 +203,11 @@ def remove_genre_names(query):
 
 
 def extract_title(filename):
-    pattern = r'^([a-zA-Z0-9\.]+?)(?=\.[Ss]\d{2}[Ee]\d{2}|\.S\d{2}|\.E\d{2}|\.mkv|\.MP4|\.avi|\.[a-zA-Z0-9]*$)'
+    pattern = r'^([^.]*?)\s*(?:[Ss]\d{2}[Ee]\d{2}|S\d{2}|E\d{2}|-\d{2,4}p|\.mkv|\.mp4|\.avi|$)'
     match = re.match(pattern, filename)
     if match:
-        title = match.group(1).replace('.', ' ').strip()
+        title = match.group(1).replace('.', ' ').replace('-', ' ').strip()
+        title = re.sub(r'\s*\d{2,4}p|\s*[Ss]\d{2}[Ee]\d{2}.*$', '', title).strip()
         return title
     else:
         return "", None
