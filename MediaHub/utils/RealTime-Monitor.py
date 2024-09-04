@@ -71,9 +71,9 @@ def find_broken_symlinks(directory):
 def execute_python_script(path):
     python_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', "main.py")
     if platform.system() == "Windows":
-        subprocess.run(['python', python_script, path], shell=True)
+        subprocess.run(['python', python_script, '--auto-select', path], shell=True)
     elif platform.system() == "Linux":
-        subprocess.run(['python3', python_script, path])
+        subprocess.run(['python3', python_script, '--auto-select', path])
 
 # Initial scan of the directories and broken symlinks
 def initial_scan():
