@@ -1,6 +1,6 @@
 import os
 import re
-from utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year
+from utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year, extract_resolution_from_folder
 from api.tmdb_api import search_tv_show, get_episode_name
 from utils.logging_utils import log_message
 from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode
@@ -103,6 +103,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Determine resolution-specific folder for shows
     resolution = extract_resolution_from_filename(file)
+    if not resolution:
+        # If resolution extraction from filename fails, use folder name as a fallback
+        resolution = extract_resolution_from_folder(parent_folder_name)
+        if resolution:
+            log_message(f"Resolution extracted from folder name: {resolution}", level="DEBUG")
+        else:
+            log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
+
     if 'remux' in file.lower():
         if '2160' in file or '4k' in file.lower():
             resolution_folder = 'UltraHDRemuxShows'
