@@ -4,6 +4,10 @@ from utils.file_utils import extract_resolution_from_filename, extract_folder_ye
 from api.tmdb_api import search_tv_show, get_episode_name
 from utils.logging_utils import log_message
 from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode
+from dotenv import load_dotenv, find_dotenv
+
+# Retrieve base_dir from environment variables
+source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 # Global variables to track API key state
 global api_key
@@ -12,7 +16,11 @@ global offline_mode
 
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match):
     global offline_mode
-    parent_folder_name = os.path.basename(root)
+    if any(root == source_dir.strip() for source_dir in source_dirs):
+        parent_folder_name = os.path.basename(src_file)
+    else:
+        parent_folder_name = os.path.basename(root)
+
     clean_folder_name, _ = clean_query(parent_folder_name)
 
     # Initialize variables

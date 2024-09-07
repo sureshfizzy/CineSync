@@ -5,6 +5,10 @@ from utils.file_utils import extract_movie_name_and_year, extract_resolution_fro
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
 from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode
+from dotenv import load_dotenv, find_dotenv
+
+# Retrieve base_dir from environment variables
+source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 # Global variables to track API key state
 global api_key
@@ -14,7 +18,10 @@ global offline_mode
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
     global offline_mode
 
-    parent_folder_name = os.path.basename(root)
+    if any(root == source_dir.strip() for source_dir in source_dirs):
+        parent_folder_name = os.path.basename(src_file)
+    else:
+        parent_folder_name = os.path.basename(root)
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
     if not movie_name:
         log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
