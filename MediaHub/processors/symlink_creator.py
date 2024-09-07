@@ -9,8 +9,10 @@ from processors.show_processor import process_show
 from utils.logging_utils import log_message
 from utils.file_utils import build_dest_index
 from config.config import is_tmdb_folder_id_enabled, is_rename_enabled, is_skip_extras_folder_enabled
+from processors.db_utils import initialize_db, archive_old_records, load_processed_files, save_processed_file
 
 error_event = Event()
+log_imported_db = False
 
 def determine_is_show(directory):
     """
@@ -29,13 +31,17 @@ def determine_is_show(directory):
                     return True
     return False
 
-def process_file(args):
+def process_file(args, processed_files_log):
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
+
     if error_event.is_set():
         return
 
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
-
     skip_extras_folder = is_skip_extras_folder_enabled()
+
+    # Skip processing if the file has already been processed
+    if src_file in processed_files_log:
+        return
 
     # Check if a symlink already exists
     symlink_exists = any(os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file for full_dest_file in dest_index)
@@ -99,12 +105,17 @@ def process_file(args):
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
+        # Mark the file as processed
+        save_processed_file(src_file)
+
     except Exception as e:
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
         log_message(error_message, level="ERROR")
         error_event.set()
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
+    global log_imported_db
+
     os.makedirs(dest_dir, exist_ok=True)
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
     rename_enabled = is_rename_enabled()
@@ -113,14 +124,31 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     if single_path:
         src_dirs = [single_path]
 
-    # Build destination index once
-    dest_index = build_dest_index(dest_dir)
+    # Initialize the database
+    initialize_db()
+
+    # Archive old records if needed
+    archive_old_records()
+
+    # Load the record of processed files
+    processed_files_log = load_processed_files()
+
+    # Log database import message
+    log_message("Database import completed.", level="INFO")
+    log_imported_db = True
+
+    if not log_imported_db:
+        log_message("Database import message was not logged. Aborting scan.", level="ERROR")
+        return
 
     tasks = []
     with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
         for src_dir in src_dirs:
             actual_dir = os.path.basename(os.path.normpath(src_dir))
             log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+
+            files_to_process = []
+            dest_index = build_dest_index(dest_dir)  # Ensure dest_index is properly initialized
 
             for root, _, files in os.walk(src_dir):
                 for file in files:
@@ -134,8 +162,12 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
                         log_message(f"Skipping extras file: {file}", level="INFO")
                         continue
 
+                    if src_file in processed_files_log:
+                        #log_message(f"Skipping already processed file: {file}", level="INFO")
+                        continue
+
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
-                    tasks.append(executor.submit(process_file, args))
+                    tasks.append(executor.submit(process_file, args, processed_files_log))
 
         # Wait for all tasks to complete
         for task in as_completed(tasks):
