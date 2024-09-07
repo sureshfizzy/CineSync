@@ -1,6 +1,7 @@
 import os
 import re
 import traceback
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from threading import Event
@@ -9,10 +10,27 @@ from processors.show_processor import process_show
 from utils.logging_utils import log_message
 from utils.file_utils import build_dest_index
 from config.config import is_tmdb_folder_id_enabled, is_rename_enabled, is_skip_extras_folder_enabled
-from processors.db_utils import initialize_db, archive_old_records, load_processed_files, save_processed_file
+from processors.db_utils import *
 
 error_event = Event()
 log_imported_db = False
+
+def delete_broken_symlinks(dest_dir):
+    """Delete broken symlinks in the destination directory and update the database."""
+    for root, _, files in os.walk(dest_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if os.path.islink(file_path):
+                target = os.readlink(file_path)
+                if not os.path.exists(target):
+                    log_message(f"Deleting broken symlink: {file_path}", level="DEBUG")
+                    os.remove(file_path)
+                    if check_file_in_db(file_path):
+                        log_message(f"Removing {file_path} from database.", level="DEBUG")
+                        with sqlite3.connect(DB_FILE) as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+                            conn.commit()
 
 def determine_is_show(directory):
     """
@@ -141,6 +159,9 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
         log_message("Database import message was not logged. Aborting scan.", level="ERROR")
         return
 
+    # Delete broken symlinks before starting the scan
+    delete_broken_symlinks(dest_dir)
+
     tasks = []
     with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
         for src_dir in src_dirs:
@@ -172,6 +193,5 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
         # Wait for all tasks to complete
         for task in as_completed(tasks):
             if error_event.is_set():
-                break
-
-            task.result()
+                log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
+                return
