@@ -139,6 +139,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     rename_enabled = is_rename_enabled()
     skip_extras_folder = is_skip_extras_folder_enabled()
 
+    # Use single_path if provided
     if single_path:
         src_dirs = [single_path]
 
@@ -165,33 +166,43 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     tasks = []
     with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
         for src_dir in src_dirs:
-            actual_dir = os.path.basename(os.path.normpath(src_dir))
-            log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+            if os.path.isfile(src_dir):
+                # Handle single file
+                src_file = src_dir
+                root = os.path.dirname(src_file)
+                file = os.path.basename(src_file)
+                actual_dir = os.path.basename(root)
+                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, build_dest_index(dest_dir))
+                tasks.append(executor.submit(process_file, args, processed_files_log))
+            else:
+                # Handle directory
+                actual_dir = os.path.basename(os.path.normpath(src_dir))
+                log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
-            files_to_process = []
-            dest_index = build_dest_index(dest_dir)  # Ensure dest_index is properly initialized
+                files_to_process = []
+                dest_index = build_dest_index(dest_dir)  # Ensure dest_index is properly initialized
 
-            for root, _, files in os.walk(src_dir):
-                for file in files:
-                    if error_event.is_set():
-                        log_message("Stopping further processing due to an earlier error.", level="WARNING")
-                        return
+                for root, _, files in os.walk(src_dir):
+                    for file in files:
+                        if error_event.is_set():
+                            log_message("Stopping further processing due to an earlier error.", level="WARNING")
+                            return
 
-                    src_file = os.path.join(root, file)
-                    # Check if the file is an extra and should be skipped
-                    if skip_extras_folder and re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE):
-                        log_message(f"Skipping extras file: {file}", level="INFO")
-                        continue
+                        src_file = os.path.join(root, file)
+                        # Check if the file is an extra and should be skipped
+                        if skip_extras_folder and re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE):
+                            log_message(f"Skipping extras file: {file}", level="INFO")
+                            continue
 
-                    if src_file in processed_files_log:
-                        #log_message(f"Skipping already processed file: {file}", level="INFO")
-                        continue
+                        if src_file in processed_files_log:
+                            #log_message(f"Skipping already processed file: {file}", level="INFO")
+                            continue
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
-                    tasks.append(executor.submit(process_file, args, processed_files_log))
+                        args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                        tasks.append(executor.submit(process_file, args, processed_files_log))
 
-        # Wait for all tasks to complete
-        for task in as_completed(tasks):
-            if error_event.is_set():
-                log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
-                return
+    # Wait for all tasks to complete
+    for task in as_completed(tasks):
+        if error_event.is_set():
+            log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
+            return
