@@ -2,15 +2,18 @@ import os
 import inotify.adapters
 import subprocess
 import sys
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.logging_utils import log_message
 from processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
 from config.config import get_directories
 from processors.symlink_creator import delete_broken_symlinks
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
+
 def setup_watches(i, dirs_to_watch, watched_paths):
+    log_message(f"Directories to watch: {dirs_to_watch}", level="INFO")
     for directory in dirs_to_watch:
         if directory not in watched_paths:
             i.add_watch(directory, mask=inotify.constants.IN_CREATE | inotify.constants.IN_DELETE | inotify.constants.IN_MODIFY | inotify.constants.IN_MOVED_TO)
@@ -19,6 +22,17 @@ def setup_watches(i, dirs_to_watch, watched_paths):
             if subdir not in watched_paths:
                 i.add_watch(subdir, mask=inotify.constants.IN_CREATE | inotify.constants.IN_DELETE | inotify.constants.IN_MODIFY | inotify.constants.IN_MOVED_TO)
                 watched_paths.add(subdir)
+
+def log_message(message, level="INFO"):
+    levels = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    logging.log(levels.get(level, logging.INFO), message)
+
 
 def monitor_directories(dirs_to_watch, dest_dir):
     i = inotify.adapters.Inotify()
