@@ -1,12 +1,21 @@
 # CineSync - Organize Your Debrid Library Easily
 
-CineSync is a Python & Bash based library management system designed to facilitate the organization of debrid libraries for Shows efficiently, without the need for Sonarr. Users downloading from DMM Manager can easily sort their library into seasons, whether it's a single file or a folder. CineSync smoothly organizes the library and creates symbolic links, giving users full control over their data locally.
-
-This project will seamlessly integrate with any files that need to be organized (TV shows for now). This project will also work with [Zurg](https://github.com/debridmediamanager/zurg-testing). Special thanks to [yowmamasita](https://github.com/yowmamasita).
+CineSync is a Python-based library management system designed to efficiently organize debrid libraries for TV shows, eliminating the need for Sonarr/Radarr. Users downloading from DMM Manager can seamlessly sort their library into seasons, whether it's a single file or a folder. CineSync streamlines the organization of your library and creates symbolic links, providing full control over your data locally. While highly optimized for debrid platforms, CineSync is also versatile and works effectively with non-debrid platforms.
 
 # General Info
 
 CineSync works by creating symbolic links from the source directory to the destination directory and organizing them according to the user's preferences. This allows users to maintain a well-structured library without physically moving or duplicating the original files.
+
+## Docker Hub Repository
+
+The CineSync Docker image is available on Docker Hub:
+
+- [CineSync Docker Image](https://hub.docker.com/r/sureshfizzy/cinesync)
+
+## Supported Architectures
+
+- `amd64` (x86_64)
+- `arm64` (aarch64)
 
 ## Features
 
@@ -17,8 +26,14 @@ CineSync works by creating symbolic links from the source directory to the desti
 - **Ability to Skip Already Present Symlinks:** CineSync includes the ability to skip the creation of symbolic links for files or folders that are already present, even if the folder name is different. This feature ensures efficient management of your library by preventing duplicate symlinks.
 - **Rename Files:** Properly rename your files based on TMDB data .
 - **Cross-Platform Support:** Works on both Linux and Windows operating systems.
+- **Movie Collection-Based Separation:** Organize movies into collections based on TMDb or IMDb data, ensuring that all movies from the same collection are grouped together.
+- **Docker Support:** Easily deploy CineSync in a Docker container for consistent and isolated environments.
+- **TMDb ID Integration:** Utilize TMDb IDs for more precise organization and naming of your media files.
+- **Automatic Separation of Extras and Resolutions:** Automatically separate extras from main episodes and sort files based on resolution (e.g., 720p, 1080p, 4K), ensuring a well-organized library.
 
 ## Real-Time Monitoring
+
+**Note:** Real-time monitoring is an optional feature. CineSync now includes the ability to monitor all files once the full scan is completed.
 
 CineSync offers a powerful real-time monitoring feature that allows users to keep track of changes in their library automatically. This feature is particularly useful for handling daily series or shows that are regularly downloaded. Here's how it works:
 
@@ -52,14 +67,18 @@ By leveraging real-time monitoring in CineSync, users can effortlessly manage th
 
 Make sure to edit the .env value before running the script. Below are the configurable variables used in the script, along with their descriptions and default values:
 
-| Variable              | Description                                                                                                                   | Default Value             |
-|-----------------------|-------------------------------------------------------------------------------------------------------------------------------|---------------------------|
-| `SOURCE_DIR`          | The directory paths where the source files are located. Multiple directories can be specified, separated by commas.            | `/path/to/files`          |
-| `DESTINATION_DIR`     | The path to the destination directory where the symlinks or files will be placed.                                             | `/path/to/destination`    |
-| `LOG_LEVEL`           | Defines the level of logging. Available options: `DEBUG`, `INFO`, `WARNING`.                                                 | `INFO`                    |
-| `OVERRIDE_STRUCTURE`  | Determines whether to maintain the same directory structure in the destination as in the source (`false`). Setting this to `true` will flatten the structure, not using the same structure as the source directory. | `false`                   |
-| `RENAME_ENABLED`      | Enable or disable file renaming functionality from TMDB.                                                                      | `false`                   |
-| `BEARER_TOKEN`        | Your API read access token for TMDB.                                                                                          | `your-api-read-access-token` |
+| Variable                        | Description                                                                                                                   | Default Value                  |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| `SOURCE_DIR`                    | The directory path where the source files are located. Multiple directories can be specified, separated by commas.            | `/path/to/files`               |
+| `DESTINATION_DIR`               | The path to the destination directory where the symlinks or files will be placed.                                             | `/path/to/destination`         |
+| `LOG_LEVEL`                     | Defines the level of logging. Available options: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.                           | `INFO`                         |
+| `RENAME_ENABLED`                | Enable or disable file renaming functionality based on TMDb data.                                                              | `false`                        |
+| `TMDB_API_KEY`                  | Your API read access token for TMDb.                                                                                          | `your-api-read-access-token`   |
+| `MOVIE_COLLECTION_ENABLED`        | Enable or disable separating movie files based on collections. When true, movies will be organized into folders according to their collections (e.g., Harry Potter series). | `false`                        |
+| `RELATIVE_SYMLINK`                | Create relative symlinks instead of absolute symlinks. When true, symlinks will use relative paths.                           | `false`                        |
+| `MAX_PROCESSES`                   | Set the maximum number of parallel processes for creating symlinks. Increase this number to speed up processing if you have a multi-core CPU. Set to 1 for single-threaded processing to minimize system load. | `1`                            |
+| `SKIP_EXTRAS_FOLDER`              | Enable or disable the creation and processing of extras folder files. When true, files meant for the 'Extras' folder will be skipped and not processed. This can be useful if you want to temporarily exclude extras files from being processed. | `true`                         |
+| `SLEEP_TIME`                      | Sleep time (in seconds) for real-time monitoring script. This determines how frequently the script will check for changes in the watch directories. Adjust this value based on your needs and system performance. | `60`                           |
 
 ### For Linux:
 
@@ -70,20 +89,16 @@ Here's an enhanced version of the instructions:
    git clone https://github.com/sureshfizzy/CineSync.git && cd CineSync
    ```
 
-2. **Install the Requirements:** Install the required dependencies for CineSync:
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. **Update Paths in `.env`:** Open the `.env` file located inside the `CineSync` folder. Update the following paths:
+2. **Update Paths in `.env`:** Open the `.env` file located inside the `CineSync` folder. Update the following paths:
    - `SOURCE_DIR`: Specify the path for the Source directory.
    - `DESTINATION_DIR`: Set the ultimate destination directory where you want to save the symbolic links.
+   - `TMDB_API_KEY`: Enter your TMDb API key to access TMDb services.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
-4. **Execute CineSync:** After updating the paths, execute the main script:
+3. **Execute CineSync:** After updating the paths, execute the main script:
    ```
-   bash CineSync.sh
+   python3 CineSync.py
    ```
 
    This will launch the CineSync interface, allowing you to perform various library management tasks, including full library scans, real-time monitoring, and more.
@@ -137,12 +152,13 @@ By following these steps and updating the necessary paths, you'll be able to suc
 6. **Update Paths in `.env`:** Open the `.env` file located inside the `CineSync` folder. Update the following paths:
    - `SOURCE_DIR`: Specify the path for the Source directory.
    - `DESTINATION_DIR`: Set the ultimate destination directory where you want to save the symbolic links.
+   - `TMDB_API_KEY`: Enter your TMDb API key to access TMDb services.
 
    Note: Ensure that the paths are correctly updated to reflect your system's configuration.
 
 8. **Run the Script:**
    ```
-   bash CineSync.sh
+   python3 CineSync.py
    ```
 
 # Real-Time Monitoring on Windows using NSSM
@@ -241,27 +257,8 @@ CineSync also supports the creation of single file or folder symlinks. Follow th
 
 By following these steps, you can easily create a symlink for a single file or folder using CineSync.
 
-## Integrating TMDB API for renaming files
-
-CineSync can be enhanced by integrating the TMDB (The Movie Database) API to fetch additional metadata for your media library. Follow the steps below to set up and use the TMDB API with CineSync.
-
-### Prerequisites
-
-- A TMDB account. If you don't have one, you can create it here (https://www.themoviedb.org/).
-- A TMDB API key. You can obtain this from the TMDB API section.
-
-### Setting Up TMDB API
-
-Get Your API Key:
-
-- Log in to your TMDB account.
-- Navigate to the API section of your account settings.
-- Generate a new API key or use an existing one, you need to use API READ ACCESS TOKEN key.
-- Update key in .env file
-
-![TMDB](Screenshots/TMDB.png)
-
 ## Contributors
 
 - [Suresh S](https://github.com/sureshfizzy)❤️
+- Special thanks to [Paolo](https://github.com/RunAway189) for testing the application.!
 - [Buy Me a Coffee](https://www.buymeacoffee.com/Sureshfizzy)☕
