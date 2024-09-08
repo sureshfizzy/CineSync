@@ -9,8 +9,8 @@ import sys
 import pkg_resources
 
 # Script Metadata
-SCRIPT_VERSION = "1.0"
-SCRIPT_DATE = "2024-06-29"
+SCRIPT_VERSION = "2.0"
+SCRIPT_DATE = "2024-09-08"
 
 # Define variables
 SCRIPTS_FOLDER = "MediaHub"
