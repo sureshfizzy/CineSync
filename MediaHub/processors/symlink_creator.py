@@ -17,6 +17,8 @@ log_imported_db = False
 
 def delete_broken_symlinks(dest_dir):
     """Delete broken symlinks in the destination directory and update the database."""
+    symlinks_deleted = False
+
     for root, _, files in os.walk(dest_dir):
         for file in files:
             file_path = os.path.join(root, file)
@@ -25,6 +27,7 @@ def delete_broken_symlinks(dest_dir):
                 if not os.path.exists(target):
                     log_message(f"Deleting broken symlink: {file_path}", level="DEBUG")
                     os.remove(file_path)
+                    symlinks_deleted = True
                     if check_file_in_db(file_path):
                         log_message(f"Removing {file_path} from database.", level="DEBUG")
                         with sqlite3.connect(DB_FILE) as conn:
