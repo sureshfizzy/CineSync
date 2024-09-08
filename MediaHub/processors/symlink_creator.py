@@ -152,6 +152,9 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     # Load the record of processed files
     processed_files_log = load_processed_files()
 
+    #Cleanup broken links
+    cleanup_database()
+
     # Log database import message
     log_message("Database import completed.", level="INFO")
     log_imported_db = True

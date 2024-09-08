@@ -92,10 +92,9 @@ def delete_broken_symlinks(file_path):
         log_message(f"Error removing file path from database: {e}", level="ERROR")
 
 def normalize_file_path(file_path):
-    """Ensure file path is correctly formatted."""
-    if file_path.count('/') > 1:
-        return file_path.split('/')[-1]
-    return file_path
+    """Ensure file path is consistently formatted."""
+    normalized_path = os.path.normpath(file_path)
+    return normalized_path
 
 def cleanup_database():
     """Clean up entries with extra segments in the file path."""
