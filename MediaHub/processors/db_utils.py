@@ -11,33 +11,26 @@ def initialize_db():
     """Initialize the SQLite database and create the necessary tables."""
     os.makedirs(DB_DIR, exist_ok=True)
 
-    log_message("Initializing the database...", level="INFO")
-
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        log_message("Creating processed_files table if not exists...", level="INFO")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
                 file_path TEXT PRIMARY KEY
             )
         """)
         conn.commit()
-        log_message("processed_files table created or already exists.", level="INFO")
 
     with sqlite3.connect(ARCHIVE_DB_FILE) as conn:
         cursor = conn.cursor()
-        log_message("Creating processed_files_archive table if not exists...", level="INFO")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files_archive (
                 file_path TEXT PRIMARY KEY
             )
         """)
         conn.commit()
-        log_message("processed_files_archive table created or already exists.", level="INFO")
 
 def archive_old_records():
     """Archive old records to keep the primary database size manageable."""
-    log_message("Archiving old records...", level="INFO")
 
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
@@ -59,7 +52,6 @@ def archive_old_records():
 
 def load_processed_files():
     """Load the processed files from the database."""
-    log_message("Loading processed files from the database...", level="INFO")
     processed_files = set()
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()

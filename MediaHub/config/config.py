@@ -35,7 +35,6 @@ def get_api_key():
             api_warning_logged = True
         return None
 
-    log_message(f"API key validation successful: {api_key}", level="INFO")
     return api_key
 
 def is_valid_api_key(api_key):
