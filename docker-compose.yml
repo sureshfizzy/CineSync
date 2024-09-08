@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cinesync:
+    image: sureshfizzy/cinesync:latest
+    container_name: cinesync
+    restart: unless-stopped
+    volumes:
+      - /home:/home  # Mount home directory to provide access to home files
+      - /mnt:/mnt  # Mount /mnt for access to external storage
+      - ./db:/app/db  # Mount local db folder to persist database files
+      - ./.env:/app/.env
+    networks:
+      - cinesync_network  # Use a custom network for isolation and communication
