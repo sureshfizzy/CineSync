@@ -1,25 +1,41 @@
 import argparse
 import subprocess
 import os
+import platform
 from config.config import get_directories
 from processors.symlink_creator import create_symlinks
 from utils.logging_utils import log_message
 
-LOCK_FILE = '/tmp/inotify_monitor.lock'
+LOCK_FILE = '/tmp/inotify_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\watchdog_monitor.lock'
+
+def ensure_windows_temp_directory():
+    """Create the C:\\temp directory if it does not exist on Windows."""
+    if platform.system() == 'Windows':
+        temp_dir = 'C:\\temp'
+        if not os.path.exists(temp_dir):
+            try:
+                os.makedirs(temp_dir)
+                log_message(f"Created directory: {temp_dir}", level="INFO")
+            except OSError as e:
+                log_message(f"Error creating directory {temp_dir}: {e}", level="ERROR")
+                exit(1)
 
 def start_inotify_monitor():
     if os.path.exists(LOCK_FILE):
         return
 
     with open(LOCK_FILE, 'w') as lock_file:
-        lock_file.write("Inotify monitor running\n")
+        lock_file.write("Monitor running\n")
 
-    log_message("Processing complete. Setting up inotify monitoring.", level="INFO")
+    log_message("Processing complete. Setting up directory monitoring.", level="INFO")
 
     try:
-        subprocess.run(['python3', 'MediaHub/monitor/inotify_monitor.py'], check=True)
+        if platform.system() == 'Windows':
+            subprocess.run(['python', 'MediaHub/monitor/watchdog_monitor.py'], check=True)
+        else:
+            subprocess.run(['python3', 'MediaHub/monitor/inotify_monitor.py'], check=True)
     except subprocess.CalledProcessError as e:
-        log_message(f"Error running inotify monitor script: {e}", level="ERROR")
+        log_message(f"Error running monitor script: {e}", level="ERROR")
     finally:
         if os.path.exists(LOCK_FILE):
             os.remove(LOCK_FILE)
