@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import time
 from utils.logging_utils import log_message
 
 DB_DIR = "db"
@@ -113,27 +114,56 @@ def normalize_file_path(file_path):
     return normalized_path
 
 def find_file_in_directory(file_name, directory):
-    """Recursively search for a file in a directory and its subdirectories."""
+    """Check if a file is present in the directory set."""
     for root, dirs, files in os.walk(directory):
         if file_name in files:
             return os.path.join(root, file_name)
     return None
 
+def build_file_set(directory):
+    """Build a set of file names in the directory."""
+    file_set = set()
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_set.add(file)
+    return file_set
+
 def display_missing_files(destination_folder):
-    """
-    Display missing files from the destination folder, remove them from the database,
+    """Display missing files from the destination folder, remove them from the database,
     and point to their paths in the database.
 
     Args:
     - destination_folder (str): The folder where the files should be present.
     """
+    start_time = time.time()
+
+    log_message("Starting display_missing_files function.", level="INFO")
+
+    # Fetch all file paths from the database
+    db_fetch_start_time = time.time()
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT file_path FROM processed_files")
         all_files_in_db = cursor.fetchall()
+    db_fetch_duration = time.time() - db_fetch_start_time
+    log_message(f"Time taken to fetch all file paths from database: {db_fetch_duration:.2f} seconds", level="INFO")
+
+    log_message("Fetched all file paths from the database.", level="INFO")
 
     destination_folder = os.path.normpath(destination_folder)
+
+    # Build a set of file names in the destination folder
+    build_start_time = time.time()
+    file_set = build_file_set(destination_folder)
+    build_duration = time.time() - build_start_time
+    log_message(f"Time taken to build file set: {build_duration:.2f} seconds", level="INFO")
+
+    log_message("Built file set for the destination folder.", level="INFO")
+
     missing_files = []
+
+    # Check each file from the database against the file set
+    check_start_time = time.time()
 
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
@@ -141,9 +171,7 @@ def display_missing_files(destination_folder):
         for (file_path,) in all_files_in_db:
             file_name = os.path.basename(file_path)
 
-            found_path = find_file_in_directory(file_name, destination_folder)
-
-            if not found_path:
+            if file_name not in file_set:
                 missing_files.append(file_path)
                 log_message(f"Missing file: {file_path} - Expected at: {os.path.join(destination_folder, file_name)}", level="DEBUG")
 
@@ -153,3 +181,11 @@ def display_missing_files(destination_folder):
                     log_message(f"File path removed from the database: {file_path}", level="DEBUG")
                 except Exception as e:
                     log_message(f"Error removing file path from database: {e}", level="ERROR")
+
+    check_duration = time.time() - check_start_time
+    log_message(f"Time taken to check files against the file set: {check_duration:.2f} seconds", level="INFO")
+
+    total_duration = time.time() - start_time
+    log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
+
+    return missing_files
