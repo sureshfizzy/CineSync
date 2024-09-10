@@ -14,6 +14,7 @@ from processors.db_utils import *
 
 error_event = Event()
 log_imported_db = False
+db_initialized = False
 
 def delete_broken_symlinks(dest_dir):
     """Delete broken symlinks in the destination directory and update the database."""
@@ -60,8 +61,7 @@ def process_file(args, processed_files_log):
 
     skip_extras_folder = is_skip_extras_folder_enabled()
 
-    # Skip processing if the file has already been processed
-    if src_file in processed_files_log:
+    if check_file_in_db(src_file):
         return
 
     # Check if a symlink already exists
@@ -155,8 +155,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     # Load the record of processed files
     processed_files_log = load_processed_files()
 
-    #Cleanup broken links
-    cleanup_database()
+    # Update the database from the destination folder
+    display_missing_files(dest_dir)
 
     # Log database import message
     log_message("Database import completed.", level="INFO")

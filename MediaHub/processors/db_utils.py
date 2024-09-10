@@ -6,9 +6,16 @@ DB_DIR = "db"
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
 MAX_RECORDS = 100000
+LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
 
 def initialize_db():
+    global db_initialized
     """Initialize the SQLite database and create the necessary tables."""
+    if os.path.exists(LOCK_FILE):
+        log_message("Database already initialized. Skipping initialization.", level="INFO")
+        return
+
+    log_message("Initializing database...", level="INFO")
     os.makedirs(DB_DIR, exist_ok=True)
 
     with sqlite3.connect(DB_FILE) as conn:
@@ -19,6 +26,7 @@ def initialize_db():
             )
         """)
         conn.commit()
+        log_message("Processed files table initialized.", level="INFO")
 
     with sqlite3.connect(ARCHIVE_DB_FILE) as conn:
         cursor = conn.cursor()
@@ -28,6 +36,10 @@ def initialize_db():
             )
         """)
         conn.commit()
+        log_message("Processed files archive table initialized.", level="INFO")
+
+    with open(LOCK_FILE, 'w') as lock_file:
+        lock_file.write("Database initialized.")
 
 def archive_old_records():
     """Archive old records to keep the primary database size manageable."""
@@ -65,8 +77,12 @@ def save_processed_file(file_path):
     file_path = normalize_file_path(file_path)
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO processed_files (file_path) VALUES (?)", (file_path,))
-        conn.commit()
+        try:
+            cursor.execute("INSERT OR IGNORE INTO processed_files (file_path) VALUES (?)", (file_path,))
+            conn.commit()
+        except sqlite3.Error as e:
+            log_message(f"Database error: {e}", level="ERROR")
+            conn.rollback()
 
 def check_file_in_db(file_path):
     """Check if a file path is present in the database."""
@@ -87,7 +103,7 @@ def delete_broken_symlinks(file_path):
             cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
             conn.commit()
             log_message(f"DELETE FROM processed_files WHERE file_path = {file_path}", level="DEBUG")
-            log_message(f"File path removed from the database: {file_path}", level="DEBUG")
+            log_message(f"File path removed from the database: {file_path}", level="INFO")
     except Exception as e:
         log_message(f"Error removing file path from database: {e}", level="ERROR")
 
@@ -96,12 +112,44 @@ def normalize_file_path(file_path):
     normalized_path = os.path.normpath(file_path)
     return normalized_path
 
-def cleanup_database():
-    """Clean up entries with extra segments in the file path."""
+def find_file_in_directory(file_name, directory):
+    """Recursively search for a file in a directory and its subdirectories."""
+    for root, dirs, files in os.walk(directory):
+        if file_name in files:
+            return os.path.join(root, file_name)
+    return None
+
+def display_missing_files(destination_folder):
+    """
+    Display missing files from the destination folder, remove them from the database,
+    and point to their paths in the database.
+
+    Args:
+    - destination_folder (str): The folder where the files should be present.
+    """
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            DELETE FROM processed_files
-            WHERE file_path LIKE '%/%'
-        """)
-        conn.commit()
+        cursor.execute("SELECT file_path FROM processed_files")
+        all_files_in_db = cursor.fetchall()
+
+    destination_folder = os.path.normpath(destination_folder)
+    missing_files = []
+
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+
+        for (file_path,) in all_files_in_db:
+            file_name = os.path.basename(file_path)
+
+            found_path = find_file_in_directory(file_name, destination_folder)
+
+            if not found_path:
+                missing_files.append(file_path)
+                log_message(f"Missing file: {file_path} - Expected at: {os.path.join(destination_folder, file_name)}", level="DEBUG")
+
+                try:
+                    cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+                    conn.commit()
+                    log_message(f"File path removed from the database: {file_path}", level="DEBUG")
+                except Exception as e:
+                    log_message(f"Error removing file path from database: {e}", level="ERROR")
