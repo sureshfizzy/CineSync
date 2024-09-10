@@ -146,7 +146,7 @@ def display_missing_files(destination_folder):
         cursor.execute("SELECT file_path FROM processed_files")
         all_files_in_db = cursor.fetchall()
     db_fetch_duration = time.time() - db_fetch_start_time
-    log_message(f"Time taken to fetch all file paths from database: {db_fetch_duration:.2f} seconds", level="INFO")
+    log_message("Time taken to fetch all file paths from database: {db_fetch_duration:.2f} seconds", level="INFO")
 
     log_message("Fetched all file paths from the database.", level="INFO")
 
@@ -156,7 +156,7 @@ def display_missing_files(destination_folder):
     build_start_time = time.time()
     file_set = build_file_set(destination_folder)
     build_duration = time.time() - build_start_time
-    log_message(f"Time taken to build file set: {build_duration:.2f} seconds", level="INFO")
+    log_message("Time taken to build file set: {build_duration:.2f} seconds", level="INFO")
 
     log_message("Built file set for the destination folder.", level="INFO")
 
@@ -173,19 +173,19 @@ def display_missing_files(destination_folder):
 
             if file_name not in file_set:
                 missing_files.append(file_path)
-                log_message(f"Missing file: {file_path} - Expected at: {os.path.join(destination_folder, file_name)}", level="DEBUG")
+                log_message("Missing file: {file_path} - Expected at: {os.path.join(destination_folder, file_name)}", level="DEBUG")
 
                 try:
                     cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                     conn.commit()
-                    log_message(f"File path removed from the database: {file_path}", level="DEBUG")
+                    log_message("File path removed from the database: {file_path}", level="DEBUG")
                 except Exception as e:
-                    log_message(f"Error removing file path from database: {e}", level="ERROR")
+                    log_message("Error removing file path from database: {e}", level="ERROR")
 
     check_duration = time.time() - check_start_time
-    log_message(f"Time taken to check files against the file set: {check_duration:.2f} seconds", level="INFO")
+    log_message("Time taken to check files against the file set: {check_duration:.2f} seconds", level="INFO")
 
     total_duration = time.time() - start_time
-    log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
+    log_message("Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
 
     return missing_files

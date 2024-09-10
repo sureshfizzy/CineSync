@@ -146,25 +146,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     if single_path:
         src_dirs = [single_path]
 
-    # Initialize the database
-    initialize_db()
-
-    # Archive old records if needed
-    archive_old_records()
-
     # Load the record of processed files
     processed_files_log = load_processed_files()
-
-    # Update the database from the destination folder
-    display_missing_files(dest_dir)
-
-    # Log database import message
-    log_message("Database import completed.", level="INFO")
-    log_imported_db = True
-
-    if not log_imported_db:
-        log_message("Database import message was not logged. Aborting scan.", level="ERROR")
-        return
 
     # Delete broken symlinks before starting the scan
     delete_broken_symlinks(dest_dir)
