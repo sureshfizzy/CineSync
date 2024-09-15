@@ -4,9 +4,9 @@ FROM python:3.11-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install inotify-tools and bash
+# Install required packages
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash && \
+    apt-get install -y inotify-tools bash gosu && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -24,8 +24,18 @@ ENV PYTHONPATH=/app/MediaHub
 # Set environment variables from the .env file
 RUN export $(grep -v '^#' .env | xargs -d '\n' -I {} echo "ENV {}")
 
-# Add entrypoint to ensure bash is available
-ENTRYPOINT ["/bin/bash", "-c"]
+# Create necessary directories
+RUN mkdir -p /app/db
+
+# Set environment variables for PUID and PGID
+ENV PUID=1000
+ENV PGID=1000
+
+# Add entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Run the application
-CMD ["python3 MediaHub/main.py --auto-select"]
+CMD ["python3", "MediaHub/main.py", "--auto-select"]

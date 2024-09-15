@@ -4,8 +4,8 @@ services:
     container_name: cinesync
     restart: unless-stopped
     environment:
-      - UID=1000
-      - GID=1000
+      - PUID=1000
+      - PGID=1000
     volumes:
       - /home:/home  # Mount home directory to provide access to home files
       - /mnt:/mnt  # Mount /mnt for access to external storage
