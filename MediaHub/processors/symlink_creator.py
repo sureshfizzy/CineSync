@@ -36,6 +36,12 @@ def delete_broken_symlinks(dest_dir):
                             cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                             conn.commit()
 
+def skip_files(file):
+    """Determine if the file should be skipped based on its extension."""
+    extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.ping', '.txt'}
+    _, ext = os.path.splitext(file.lower())
+    return ext in extensions
+
 def determine_is_show(directory):
     """
     Determine if a directory contains TV shows or mini-series based on episode patterns or keywords.
@@ -43,10 +49,12 @@ def determine_is_show(directory):
     """
     episode_patterns = re.compile(r'(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES)', re.IGNORECASE)
     match_count = 0
-    threshold = 2  # Minimum number of matches to determine as a TV show
+    threshold = 2
 
     for root, _, files in os.walk(directory):
         for file in files:
+            if skip_files(file):
+                continue
             if episode_patterns.search(file):
                 match_count += 1
                 if match_count >= threshold:
@@ -60,6 +68,14 @@ def process_file(args, processed_files_log):
         return
 
     skip_extras_folder = is_skip_extras_folder_enabled()
+
+    if skip_files(file):
+        log_message(f"Skipping image file: {file}", level="INFO")
+        return
+
+    if file.lower() == 'sample.mkv':
+        log_message(f"Ignoring sample file: {file}", level="INFO")
+        return
 
     if check_file_in_db(src_file):
         return
