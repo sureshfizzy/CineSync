@@ -97,7 +97,7 @@ def process_file(args, processed_files_log):
     is_show_directory = bool(season_pattern.search(root))
 
     if not is_show_directory and not episode_match and not mini_series_match:
-        is_show_directory = determine_is_show(root)
+        is_show_directory = determine_is_show(src_file)
 
     try:
         if skip_extras_folder and is_extras:
