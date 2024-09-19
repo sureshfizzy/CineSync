@@ -138,6 +138,7 @@ def initialize_db():
             lock_file.write("Database initialized.")
     except DatabaseError as e:
         log_message(f"Failed to initialize database: {e}", level="ERROR")
+        conn.rollback()
         sys.exit(1)
 
 @throttle
@@ -180,6 +181,7 @@ def load_processed_files(conn):
             processed_files.update(row[0] for row in batch)
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in load_processed_files: {e}", level="ERROR")
+        conn.rollback()
     return processed_files
 
 @throttle
@@ -207,6 +209,7 @@ def check_file_in_db(conn, file_path):
         return count > 0
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in check_file_in_db: {e}", level="ERROR")
+        conn.rollback()
         return False
 
 @throttle

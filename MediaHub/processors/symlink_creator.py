@@ -124,31 +124,34 @@ def process_file(args, processed_files_log):
         # Ensure the destination directory exists
         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
-        # Handle existing symlinks or files
+        # Handle existing symlink or file
         if os.path.islink(dest_file):
             if os.readlink(dest_file) == src_file:
                 log_message(f"Symlink already exists for {os.path.basename(dest_file)}", level="INFO")
                 return
             else:
                 os.remove(dest_file)
+                log_message(f"Removed existing symlink for {os.path.basename(dest_file)}", level="INFO")
 
         if os.path.exists(dest_file) and not os.path.islink(dest_file):
             log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
             return
 
         # Create symlink
-        os.symlink(src_file, dest_file)
+        try:
+            os.symlink(src_file, dest_file)
+            log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
+            log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
+            save_processed_file(src_file)
 
-        log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
-        log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
-
-        # Mark the file as processed
-        save_processed_file(src_file)
+        except FileExistsError:
+            log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
+        except OSError as e:
+            log_message(f"Error creating symlink for {src_file}: {e}", level="ERROR")
 
     except Exception as e:
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
         log_message(error_message, level="ERROR")
-        error_event.set()
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     global log_imported_db
