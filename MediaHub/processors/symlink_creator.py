@@ -9,7 +9,7 @@ from processors.movie_processor import process_movie
 from processors.show_processor import process_show
 from utils.logging_utils import log_message
 from utils.file_utils import build_dest_index
-from config.config import is_tmdb_folder_id_enabled, is_rename_enabled, is_skip_extras_folder_enabled
+from config.config import *
 from processors.db_utils import *
 
 error_event = Event()
@@ -42,6 +42,23 @@ def skip_files(file):
     _, ext = os.path.splitext(file.lower())
     return ext in extensions
 
+def is_file_extra(file, file_path):
+    """
+    Determine if the file is an extra based on size.
+    Skip .srt files regardless of size.
+    """
+    if file.lower().endswith('.srt'):
+        return False
+
+    file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+    extras_max_size_mb = get_extras_max_size_mb()
+
+    if file_size_mb <= extras_max_size_mb:
+        return True
+    else:
+        return False
+
 def determine_is_show(directory):
     """
     Determine if a directory contains TV shows or mini-series based on episode patterns or keywords.
@@ -69,14 +86,6 @@ def process_file(args, processed_files_log):
 
     skip_extras_folder = is_skip_extras_folder_enabled()
 
-    if skip_files(file):
-        log_message(f"Skipping image file: {file}", level="INFO")
-        return
-
-    if file.lower() == 'sample.mkv':
-        log_message(f"Ignoring sample file: {file}", level="INFO")
-        return
-
     if check_file_in_db(src_file):
         return
 
@@ -90,7 +99,6 @@ def process_file(args, processed_files_log):
     # Enhanced Regex Patterns to Identify Shows or Mini-Series
     episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
     mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
-    is_extras = re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE)
 
     # Fallback logic to determine if the folder is a TV show directory
     season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
@@ -100,8 +108,9 @@ def process_file(args, processed_files_log):
         is_show_directory = determine_is_show(src_file)
 
     try:
-        if skip_extras_folder and is_extras:
-            log_message(f"Skipping extras file: {file}", level="INFO")
+        # Check if the file should be considered an extra based on size
+        if skip_extras_folder and is_file_extra(file, src_file):
+            log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
             return
 
         if episode_match or is_show_directory or mini_series_match:
@@ -197,13 +206,13 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
                             return
 
                         src_file = os.path.join(root, file)
-                        # Check if the file is an extra and should be skipped
-                        if skip_extras_folder and re.search(r'(Behind.the.Scenes|Part\.\d+)', file, re.IGNORECASE):
-                            log_message(f"Skipping extras file: {file}", level="INFO")
+
+                        # Check if the file is an extra based on the size
+                        if skip_extras_folder and is_file_extra(file, src_file):
+                            log_message(f"Skipping extras file: {file}", level="DEBUG")
                             continue
 
                         if src_file in processed_files_log:
-                            #log_message(f"Skipping already processed file: {file}", level="INFO")
                             continue
 
                         args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)

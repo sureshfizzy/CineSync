@@ -69,3 +69,6 @@ def is_movie_collection_enabled():
 
 def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
+
+def get_extras_max_size_mb():
+    return int(os.getenv('EXTRAS_MAX_SIZE_MB', '100'))
