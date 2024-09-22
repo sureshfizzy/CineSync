@@ -94,6 +94,8 @@ def process_file(args, processed_files_log):
 
     if symlink_exists:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
+        log_message(f"Attempting to save {src_file} to the database.", level="INFO")
+        save_processed_file(src_file)
         return
 
     # Enhanced Regex Patterns to Identify Shows or Mini-Series
@@ -102,7 +104,7 @@ def process_file(args, processed_files_log):
 
     # Fallback logic to determine if the folder is a TV show directory
     season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
-    is_show_directory = bool(season_pattern.search(root))
+    is_show_directory = bool(season_pattern.search(src_file))
 
     if not is_show_directory and not episode_match and not mini_series_match:
         is_show_directory = determine_is_show(src_file)
@@ -137,6 +139,8 @@ def process_file(args, processed_files_log):
         if os.path.islink(dest_file):
             if os.readlink(dest_file) == src_file:
                 log_message(f"Symlink already exists for {os.path.basename(dest_file)}", level="INFO")
+                log_message(f"Attempting to save {src_file} to the database.", level="INFO")
+                save_processed_file(src_file)
                 return
             else:
                 os.remove(dest_file)
