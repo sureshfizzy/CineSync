@@ -2,6 +2,9 @@ import argparse
 import subprocess
 import os
 import platform
+import time
+import psutil
+import signal
 from config.config import get_directories
 from processors.symlink_creator import create_symlinks
 from utils.logging_utils import log_message
@@ -11,6 +14,7 @@ from processors.symlink_creator import *
 db_initialized = False
 
 LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
+LOCK_TIMEOUT = 3600
 
 def ensure_windows_temp_directory():
     """Create the C:\\temp directory if it does not exist on Windows."""
@@ -24,12 +28,67 @@ def ensure_windows_temp_directory():
                 log_message(f"Error creating directory {temp_dir}: {e}", level="ERROR")
                 exit(1)
 
-def start_polling_monitor():
+def is_process_running(pid):
+    """Check if a process with a given PID is still running."""
+    try:
+        return psutil.pid_exists(pid) and psutil.Process(pid).is_running()
+    except psutil.NoSuchProcess:
+        return False
+
+def create_lock_file():
+    """Create the lock file and write the process ID and timestamp."""
+    with open(LOCK_FILE, 'w') as lock_file:
+        lock_file.write(f"{os.getpid()}\n")
+        lock_file.write(f"{time.time()}\n")
+
+def check_lock_file():
+    """Check if a lock file exists and whether it's stale or the process is still running."""
     if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, 'r') as lock_file:
+                pid = int(lock_file.readline().strip())
+                lock_time = float(lock_file.readline().strip())
+
+                # Check if the process is still running
+                if is_process_running(pid):
+                    return True
+
+                # Check if the lock file is too old (stale)
+                if time.time() - lock_time > LOCK_TIMEOUT:
+                    log_message(f"Stale lock file found. Removing lock.", level="WARNING")
+                    os.remove(LOCK_FILE)
+                else:
+                    log_message(f"Lock file exists but process not running. Removing lock.", level="WARNING")
+                    os.remove(LOCK_FILE)
+        except (OSError, ValueError):
+            log_message(f"Error reading lock file. Removing lock.", level="ERROR")
+            os.remove(LOCK_FILE)
+    return False
+
+def remove_lock_file():
+    """Remove the lock file."""
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+
+def handle_exit(signum, frame):
+    """Handle script termination and clean up the lock file."""
+    log_message("Terminating process and cleaning up lock file.", level="INFO")
+    remove_lock_file()
+    exit(0)
+
+def setup_signal_handlers():
+    """Setup signal handlers for Linux and Windows."""
+    if platform.system() == 'Windows':
+        signal.signal(signal.SIGBREAK, handle_exit)
+    else:
+        signal.signal(signal.SIGINT, handle_exit)
+        signal.signal(signal.SIGTERM, handle_exit)
+
+def start_polling_monitor():
+    if check_lock_file():
         return
 
-    with open(LOCK_FILE, 'w') as lock_file:
-        lock_file.write("Monitor running\n")
+    create_lock_file()
 
     log_message("Processing complete. Setting up directory monitoring.", level="INFO")
 
@@ -38,8 +97,7 @@ def start_polling_monitor():
     except subprocess.CalledProcessError as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
     finally:
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+        remove_lock_file()
 
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
@@ -67,5 +125,6 @@ def main(dest_dir):
     start_polling_monitor()
 
 if __name__ == "__main__":
+    setup_signal_handlers()
     src_dirs, dest_dir = get_directories()
     main(dest_dir)
