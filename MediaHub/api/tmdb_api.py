@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
-from config.config import get_api_key
+from config.config import get_api_key, is_imdb_folder_id_enabled
 from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title
 
 _api_cache = {}
@@ -28,6 +28,18 @@ def check_api_key():
             log_message(f"API key validation failed: {e}", level="ERROR")
             api_warning_logged = True
         return False
+
+def get_external_ids(item_id, media_type):
+    url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
+    params = {'api_key': api_key}
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error fetching external IDs: {e}", level="ERROR")
+        return {}
 
 @lru_cache(maxsize=None)
 def search_tv_show(query, year=None, auto_select=False):
@@ -110,7 +122,15 @@ def search_tv_show(query, year=None, auto_select=False):
         first_air_date = chosen_show.get('first_air_date')
         show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
         tmdb_id = chosen_show.get('id')
-        proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
+
+        if is_imdb_folder_id_enabled():
+            external_ids = get_external_ids(tmdb_id, 'tv')
+            imdb_id = external_ids.get('imdb_id', '')
+            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}}"
+            log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="INFO")
+        else:
+            proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
+
         _api_cache[cache_key] = proper_name
         return proper_name
     else:
@@ -251,17 +271,21 @@ def search_movie(query, year=None, auto_select=False):
                 else:
                     chosen_movie = None
 
-        if chosen_movie:
-            movie_name = chosen_movie.get('title')
-            release_date = chosen_movie.get('release_date')
-            movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-            tmdb_id = chosen_movie.get('id')
-            return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
+    if chosen_movie:
+        movie_name = chosen_movie.get('title')
+        release_date = chosen_movie.get('release_date')
+        movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+        tmdb_id = chosen_movie.get('id')
+
+        if is_imdb_folder_id_enabled():
+            external_ids = get_external_ids(tmdb_id, 'movie')
+            imdb_id = external_ids.get('imdb_id', '')
+            log_message(f"Movie: {movie_name}, IMDB ID: {imdb_id}", level="INFO")
+            return {'id': imdb_id, 'title': movie_name, 'release_date': release_date, 'imdb_id': imdb_id}
         else:
-            log_message(f"No valid selection for '{query}', skipping.")
-            return None
+            return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
     else:
-        log_message(f"No results for '{query}'.")
+        log_message(f"No valid selection for '{query}', skipping.")
         return None
 
 def perform_fallback_search(query):

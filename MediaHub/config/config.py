@@ -72,3 +72,6 @@ def is_skip_extras_folder_enabled():
 
 def get_extras_max_size_mb():
     return int(os.getenv('EXTRAS_MAX_SIZE_MB', '100'))
+
+def is_imdb_folder_id_enabled():
+    return os.getenv('IMDB_FOLDER_ID', 'false').lower() == 'true'

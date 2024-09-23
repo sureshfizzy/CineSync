@@ -3,7 +3,7 @@ import re
 from utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year, extract_resolution_from_folder
 from api.tmdb_api import search_tv_show, get_episode_name
 from utils.logging_utils import log_message
-from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode
+from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled
 from dotenv import load_dotenv, find_dotenv
 
 # Retrieve base_dir from environment variables
@@ -102,8 +102,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             proper_show_name = show_folder
         if tmdb_folder_id_enabled:
             show_folder = proper_show_name
+        elif get_imdb_structure_enabled():
+            show_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
         else:
-            show_folder = re.sub(r' \{tmdb-\d+\}$', '', proper_show_name)
+            show_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
     else:
         show_folder = show_folder
 

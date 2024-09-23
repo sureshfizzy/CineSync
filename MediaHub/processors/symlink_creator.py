@@ -173,6 +173,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None):
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
     rename_enabled = is_rename_enabled()
     skip_extras_folder = is_skip_extras_folder_enabled()
+    imdb_structure_id_enabled = is_imdb_folder_id_enabled()
 
     # Use single_path if provided
     if single_path:

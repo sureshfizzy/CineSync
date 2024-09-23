@@ -4,7 +4,7 @@ import requests
 from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, remove_genre_names, clean_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
-from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode
+from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled
 from dotenv import load_dotenv, find_dotenv
 
 # Retrieve base_dir from environment variables
@@ -50,7 +50,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     elif api_key:
         result = search_movie(movie_name, year, auto_select=auto_select)
         if isinstance(result, dict):
-            proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]}) {{tmdb-{result['id']}}}"
+            if is_imdb_folder_id_enabled() and 'imdb_id' in result:
+                proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]}) {{imdb-{result['imdb_id']}}}"
+            else:
+                proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]}) {{tmdb-{result['id']}}}"
         else:
             if not offline_mode:
                 log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
@@ -69,11 +72,11 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     else:
         collection_folder = None
         if tmdb_folder_id_enabled:
-            log_message(f"TMDB_FOLDER_ID enabled: {is_tmdb_folder_id_enabled()}", level="DEBUG")
             movie_folder = proper_movie_name
+        elif is_imdb_folder_id_enabled():
+            movie_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_movie_name)
         else:
-            log_message(f"TMDB_FOLDER_ID not enabled: {is_tmdb_folder_id_enabled()}", level="DEBUG")
-            movie_folder = re.sub(r' \{tmdb-\d+\}$', '', proper_movie_name)
+            movie_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_movie_name)
 
         movie_folder = movie_folder.replace('/', '')
 
