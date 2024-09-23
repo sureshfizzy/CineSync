@@ -41,32 +41,34 @@ def search_tv_show(query, year=None, auto_select=False):
 
     url = "https://api.themoviedb.org/3/search/tv"
 
-    def fetch_results(query):
+    def fetch_results(query, year=None):
         params = {'api_key': api_key, 'query': query}
+        if year:
+            params['first_air_date_year'] = year
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
         return response
 
-    def search_with_extracted_title(query):
+    def search_with_extracted_title(query, year=None):
         title = extract_title(query)
-        return fetch_results(title)
+        return fetch_results(title, year)
 
-    def search_fallback(query):
+    def search_fallback(query, year=None):
         query = re.sub(r'\s*\(.*$', '', query).strip()
         log_message(f"Fallback search query: '{query}'", "DEBUG", "stdout")
-        return fetch_results(query)
+        return fetch_results(query, year)
 
-    results = fetch_results(query)
-
-    if not results:
-        results = search_with_extracted_title(query)
+    results = fetch_results(query, year)
 
     if not results:
-        results = perform_fallback_tv_search(query)
+        results = search_with_extracted_title(query, year)
+
+    if not results:
+        results = perform_fallback_tv_search(query, year)
 
     if not results and year:
-        results = search_fallback(query)
+        results = search_fallback(query, year)
 
     if not results and year:
         fallback_url = f"https://api.themoviedb.org/3/search/tv?api_key={api_key}&query={year}"
@@ -116,7 +118,7 @@ def search_tv_show(query, year=None, auto_select=False):
         _api_cache[cache_key] = f"{query}"
         return f"{query}"
 
-def perform_fallback_tv_search(query):
+def perform_fallback_tv_search(query, year=None):
     cleaned_query = remove_genre_names(query)
     search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
 
