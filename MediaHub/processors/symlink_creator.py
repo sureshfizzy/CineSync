@@ -86,8 +86,25 @@ def process_file(args, processed_files_log):
 
     skip_extras_folder = is_skip_extras_folder_enabled()
 
-    if check_file_in_db(src_file):
-        return
+    existing_dest_path = get_destination_path(src_file)
+    if existing_dest_path:
+        # Check if the file has been renamed
+        if not os.path.exists(existing_dest_path):
+            # File might have been renamed, let's check the directory
+            dir_path = os.path.dirname(existing_dest_path)
+            if os.path.exists(dir_path):
+                for filename in os.listdir(dir_path):
+                    potential_new_path = os.path.join(dir_path, filename)
+                    if os.path.islink(potential_new_path) and os.readlink(potential_new_path) == src_file:
+                        # Found the renamed file
+                        log_message(f"Detected renamed file: {existing_dest_path} -> {potential_new_path}", level="INFO")
+                        update_renamed_file(existing_dest_path, potential_new_path)
+                        return
+
+            log_message(f"Destination file missing. Re-processing: {src_file}", level="INFO")
+        else:
+            log_message(f"File already processed. Source: {src_file}, Existing destination: {existing_dest_path}", level="INFO")
+            return
 
     # Check if a symlink already exists
     symlink_exists = any(os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file for full_dest_file in dest_index)
@@ -135,16 +152,16 @@ def process_file(args, processed_files_log):
         # Ensure the destination directory exists
         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
-        # Handle existing symlink or file
+        # Check if symlink already exists
         if os.path.islink(dest_file):
-            if os.readlink(dest_file) == src_file:
-                log_message(f"Symlink already exists for {os.path.basename(dest_file)}", level="INFO")
-                log_message(f"Attempting to save {src_file} to the database.", level="INFO")
-                save_processed_file(src_file)
+            existing_src = os.readlink(dest_file)
+            if existing_src == src_file:
+                log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+                save_processed_file(src_file, dest_file)
                 return
             else:
+                log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
                 os.remove(dest_file)
-                log_message(f"Removed existing symlink for {os.path.basename(dest_file)}", level="INFO")
 
         if os.path.exists(dest_file) and not os.path.islink(dest_file):
             log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
@@ -155,7 +172,7 @@ def process_file(args, processed_files_log):
             os.symlink(src_file, dest_file)
             log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
             log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
-            save_processed_file(src_file)
+            save_processed_file(src_file, dest_file)
 
         except FileExistsError:
             log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")

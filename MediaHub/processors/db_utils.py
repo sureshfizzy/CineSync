@@ -100,46 +100,48 @@ def initialize_db():
     global db_initialized
     """Initialize the SQLite database and create the necessary tables."""
     if os.path.exists(LOCK_FILE):
-        log_message("Database already initialized. Skipping initialization.", level="INFO")
-        return
+        log_message("Database already initialized. Checking for updates.", level="INFO")
+    else:
+        log_message("Initializing database...", level="INFO")
+        os.makedirs(DB_DIR, exist_ok=True)
 
-    log_message("Initializing database...", level="INFO")
-    os.makedirs(DB_DIR, exist_ok=True)
-
-    @with_connection(main_pool)
-    def init_main_db(conn):
+    conn = sqlite3.connect(DB_FILE)
+    try:
         cursor = conn.cursor()
+
+        # Create the processed_files table if it doesn't exist
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
-                file_path TEXT PRIMARY KEY
+                file_path TEXT PRIMARY KEY,
+                destination_path TEXT
             )
         """)
+
+        # Check if the destination_path column exists
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if "destination_path" not in columns:
+            # Add the destination_path column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
+            log_message("Added destination_path column to processed_files table.", level="INFO")
+
+        # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+
         conn.commit()
-        log_message("Processed files table initialized.", level="INFO")
+        log_message("Database schema is up to date.", level="INFO")
 
-    @with_connection(archive_pool)
-    def init_archive_db(conn):
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS processed_files_archive (
-                file_path TEXT PRIMARY KEY
-            )
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files_archive(file_path)")
-        conn.commit()
-        log_message("Processed files archive table initialized.", level="INFO")
-
-    try:
-        init_main_db()
-        init_archive_db()
-
+        # Create or update the lock file
         with open(LOCK_FILE, 'w') as lock_file:
-            lock_file.write("Database initialized.")
-    except DatabaseError as e:
-        log_message(f"Failed to initialize database: {e}", level="ERROR")
+            lock_file.write("Database initialized and up to date.")
+
+    except sqlite3.Error as e:
+        log_message(f"Failed to initialize or update database: {e}", level="ERROR")
         conn.rollback()
-        sys.exit(1)
+    finally:
+        conn.close()
 
 @throttle
 @retry_on_db_lock
@@ -187,11 +189,15 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, file_path):
-    file_path = normalize_file_path(file_path)
+def save_processed_file(conn, source_path, dest_path):
+    source_path = normalize_file_path(source_path)
+    dest_path = normalize_file_path(dest_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO processed_files (file_path) VALUES (?)", (file_path,))
+        cursor.execute("""
+            INSERT OR REPLACE INTO processed_files (file_path, destination_path)
+            VALUES (?, ?)
+        """, (source_path, dest_path))
         conn.commit()
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
@@ -204,8 +210,13 @@ def check_file_in_db(conn, file_path):
     file_path = normalize_file_path(file_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (file_path,))
+        cursor.execute("""
+            SELECT COUNT(*) FROM processed_files
+            WHERE file_path = ? OR destination_path = ?
+        """, (file_path, file_path))
         count = cursor.fetchone()[0]
+        if count > 0:
+            log_message(f"File found in database: {file_path}", level="DEBUG")
         return count > 0
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in check_file_in_db: {e}", level="ERROR")
@@ -263,49 +274,106 @@ def display_missing_files(conn, destination_folder):
 
     destination_folder = os.path.normpath(destination_folder)
 
-    db_fetch_start_time = time.time()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT file_path FROM processed_files")
-    except (sqlite3.Error, DatabaseError) as e:
-        log_message(f"Error fetching files from database: {e}", level="ERROR")
-        return []
+        cursor.execute("SELECT file_path, destination_path FROM processed_files")
 
-    db_fetch_duration = time.time() - db_fetch_start_time
-    log_message(f"Time taken to prepare database query: {db_fetch_duration:.2f} seconds", level="INFO")
-
-    build_start_time = time.time()
-    file_set = build_file_set(destination_folder)
-    build_duration = time.time() - build_start_time
-    log_message(f"Time taken to build file set: {build_duration:.2f} seconds", level="INFO")
-
-    missing_files = []
-    check_start_time = time.time()
-
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = []
-            while True:
-                batch = cursor.fetchmany(BATCH_SIZE)
-                if not batch:
-                    break
-                futures.append(executor.submit(process_file_batch, batch, file_set, destination_folder))
-
-            for future in concurrent.futures.as_completed(futures):
-                missing_files.extend(future.result())
+        missing_files = []
+        for source_path, dest_path in cursor.fetchall():
+            if not os.path.exists(dest_path):
+                # Check if the file has been renamed
+                dir_path = os.path.dirname(dest_path)
+                if os.path.exists(dir_path):
+                    for filename in os.listdir(dir_path):
+                        potential_new_path = os.path.join(dir_path, filename)
+                        if os.path.islink(potential_new_path) and os.readlink(potential_new_path) == source_path:
+                            # Found the renamed file
+                            log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
+                            update_renamed_file(dest_path, potential_new_path)
+                            break
+                    else:
+                        missing_files.append((source_path, dest_path))
+                        log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+                else:
+                    missing_files.append((source_path, dest_path))
+                    log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
 
         # Delete missing files from the database
-        cursor.executemany("DELETE FROM processed_files WHERE file_path = ?", [(f,) for f in missing_files])
+        cursor.executemany("DELETE FROM processed_files WHERE file_path = ?", [(f[0],) for f in missing_files])
         conn.commit()
 
+        total_duration = time.time() - start_time
+        log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
+
+        return missing_files
+
     except (sqlite3.Error, DatabaseError) as e:
-        log_message(f"Error processing missing files: {e}", level="ERROR")
+        log_message(f"Error in display_missing_files: {e}", level="ERROR")
+        conn.rollback()
+        return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def update_db_schema():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        # Check if the destination_path column exists
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if "destination_path" not in columns:
+            # Add the destination_path column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
+
+            # Create an index on the new column
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+
+            log_message("Database schema updated successfully.", level="INFO")
+        else:
+            log_message("Database schema is already up to date.", level="INFO")
+
+        conn.commit()
+    except sqlite3.Error as e:
+        log_message(f"Error updating database schema: {e}", level="ERROR")
+    finally:
+        conn.close()
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def update_renamed_file(conn, old_dest_path, new_dest_path):
+    old_dest_path = normalize_file_path(old_dest_path)
+    new_dest_path = normalize_file_path(new_dest_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE processed_files
+            SET destination_path = ?
+            WHERE destination_path = ?
+        """, (new_dest_path, old_dest_path))
+        conn.commit()
+        if cursor.rowcount > 0:
+            log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path}", level="INFO")
+        else:
+            log_message(f"No matching record found for renamed file: {old_dest_path}", level="WARNING")
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error updating renamed file in database: {e}", level="ERROR")
         conn.rollback()
 
-    check_duration = time.time() - check_start_time
-    log_message(f"Time taken to check files against the file set: {check_duration:.2f} seconds", level="INFO")
-
-    total_duration = time.time() - start_time
-    log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
-
-    return missing_files
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_destination_path(conn, source_path):
+    source_path = normalize_file_path(source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (source_path,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_destination_path: {e}", level="ERROR")
+        conn.rollback()
+        return None
