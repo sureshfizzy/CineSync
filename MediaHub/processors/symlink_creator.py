@@ -107,12 +107,13 @@ def process_file(args, processed_files_log):
             return
 
     # Check if a symlink already exists
-    symlink_exists = any(os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file for full_dest_file in dest_index)
+    existing_symlink = next((full_dest_file for full_dest_file in dest_index
+                             if os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file), None)
 
-    if symlink_exists:
+    if existing_symlink:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
         log_message(f"Attempting to save {src_file} to the database.", level="INFO")
-        save_processed_file(src_file)
+        save_processed_file(src_file, existing_symlink)
         return
 
     # Enhanced Regex Patterns to Identify Shows or Mini-Series

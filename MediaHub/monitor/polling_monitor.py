@@ -76,7 +76,6 @@ def process_file(file_path):
             subprocess.run(['python3', 'MediaHub/main.py', file_path, '--auto-select'], check=True)
         except subprocess.CalledProcessError as e:
             log_message(f"Failed to process file: {e}", level="ERROR")
-        save_processed_file(file_path)
     else:
         log_message(f"File already exists in the database: {file_path}", level="DEBUG")
 
