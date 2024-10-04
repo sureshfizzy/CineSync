@@ -1,27 +1,27 @@
 #!/bin/bash
 set -e
 
-# Function to create group if it doesn't exist
-create_group_if_not_exists() {
-    if ! getent group appuser > /dev/null 2>&1; then
-        groupadd -o -g "$PGID" appuser
+# Function to create or modify group
+create_or_modify_group() {
+    if getent group appuser > /dev/null 2>&1; then
+        groupmod -o -g "$PGID" appuser > /dev/null 2>&1
     else
-        groupmod -o -g "$PGID" appuser
+        groupadd -o -g "$PGID" appuser > /dev/null 2>&1
     fi
 }
 
-# Function to create user if it doesn't exist
-create_user_if_not_exists() {
-    if ! id -u appuser > /dev/null 2>&1; then
-        useradd -o -u "$PUID" -g appuser appuser
+# Function to create or modify user
+create_or_modify_user() {
+    if id appuser > /dev/null 2>&1; then
+        usermod -o -u "$PUID" -g appuser appuser > /dev/null 2>&1
     else
-        usermod -o -u "$PUID" -g appuser appuser
+        useradd -o -u "$PUID" -g appuser appuser > /dev/null 2>&1
     fi
 }
 
 # Create or modify group and user
-create_group_if_not_exists
-create_user_if_not_exists
+create_or_modify_group
+create_or_modify_user
 
 # Ensure the app directory and its contents are owned by the appuser
 chown -R appuser:appuser /app
