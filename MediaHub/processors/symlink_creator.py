@@ -147,7 +147,7 @@ def process_file(args, processed_files_log):
 
         # Check if dest_file is None
         if dest_file is None:
-            log_message(f"Destination file path is None for {src_file}. Skipping.", level="ERROR")
+            log_message(f"Destination file path is None for {src_file}. Skipping.", level="WARNING")
             return
 
         # Ensure the destination directory exists
