@@ -210,46 +210,17 @@ def search_movie(query, year=None, auto_select=False):
     results = perform_search(params, url)
 
     if not results:
-        # Use the simplified query for the fallback search
         simplified_query = re.sub(r'[^\w\s]', '', standardized_query)
-        encoded_simplified_query = urllib.parse.quote_plus(simplified_query)
         results = perform_fallback_search(simplified_query)
 
     if not results and year_from_query:
-        # Perform fallback search using year alone
-        year_query = year_from_query
-        year_encoded_query = urllib.parse.quote_plus(year_query)
-        year_url = f"https://www.themoviedb.org/search?query={year_encoded_query}"
-        try:
-            response = requests.get(year_url)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
-            movie_link = soup.find('a', class_='result')
-            if movie_link:
-                movie_id = re.search(r'/movie/(\d+)', movie_link['href'])
-                if movie_id:
-                    tmdb_id = movie_id.group(1)
-
-                    # Fetch movie details using the movie ID
-                    details_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                    params = {'api_key': api_key}
-                    details_response = requests.get(details_url, params=params)
-                    details_response.raise_for_status()
-                    movie_details = details_response.json()
-
-                    if movie_details:
-                        movie_name = movie_details.get('title')
-                        release_date = movie_details.get('release_date')
-                        movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-                        return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
-        except requests.RequestException as e:
-            log_message(f"Error fetching data: {e}", level="ERROR")
+        results = perform_year_fallback_search(year_from_query)
 
     if not results:
         standardized_query = standardize_title(normalized_query, check_word_count=False)
-        encoded_standardized_query = urllib.parse.quote_plus(standardized_query)
         results = perform_fallback_search(standardized_query)
 
+    chosen_movie = None
     if results:
         if auto_select:
             chosen_movie = results[0]
@@ -257,43 +228,47 @@ def search_movie(query, year=None, auto_select=False):
             if len(results) == 1:
                 chosen_movie = results[0]
             else:
-                log_message(f"Multiple movies found for query '{query}':", level="INFO")
-                for idx, movie in enumerate(results[:3]):
-                    movie_name = movie.get('title')
-                    movie_id = movie.get('id')
-                    release_date = movie.get('release_date')
-                    movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-                    log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
-
-                choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
-                if choice.isdigit() and 1 <= int(choice) <= 3:
-                    chosen_movie = results[int(choice) - 1]
-                else:
-                    chosen_movie = None
+                chosen_movie = present_movie_choices(results, query)
 
     if chosen_movie:
-        movie_name = chosen_movie.get('title')
-        release_date = chosen_movie.get('release_date')
-        movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-        tmdb_id = chosen_movie.get('id')
-
-        if is_imdb_folder_id_enabled():
-            external_ids = get_external_ids(tmdb_id, 'movie')
-            imdb_id = external_ids.get('imdb_id', '')
-            log_message(f"Movie: {movie_name}, IMDB ID: {imdb_id}", level="INFO")
-            return {'id': imdb_id, 'title': movie_name, 'release_date': release_date, 'imdb_id': imdb_id}
-        else:
-            return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
+        return process_chosen_movie(chosen_movie)
     else:
         log_message(f"No valid selection for '{query}', skipping.")
         return None
 
-def perform_fallback_search(query):
-    cleaned_query = remove_genre_names(query)
-    search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
+def present_movie_choices(results, query):
+    log_message(f"Multiple movies found for query '{query}':", level="INFO")
+    for idx, movie in enumerate(results[:3]):
+        movie_name = movie.get('title')
+        movie_id = movie.get('id')
+        release_date = movie.get('release_date')
+        movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+        log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
 
+    choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= 3:
+        return results[int(choice) - 1]
+    return None
+
+def process_chosen_movie(chosen_movie):
+    movie_name = chosen_movie.get('title')
+    release_date = chosen_movie.get('release_date')
+    movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+    tmdb_id = chosen_movie.get('id')
+
+    if is_imdb_folder_id_enabled():
+        external_ids = get_external_ids(tmdb_id, 'movie')
+        imdb_id = external_ids.get('imdb_id', '')
+        log_message(f"Movie: {movie_name}, IMDB ID: {imdb_id}", level="INFO")
+        return {'id': imdb_id, 'title': movie_name, 'release_date': release_date, 'imdb_id': imdb_id}
+    else:
+        return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
+
+def perform_fallback_search(year):
+    year_encoded_query = urllib.parse.quote_plus(year)
+    year_url = f"https://www.themoviedb.org/search?query={year_encoded_query}"
     try:
-        response = requests.get(search_url)
+        response = requests.get(year_url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         movie_link = soup.find('a', class_='result')
@@ -301,10 +276,8 @@ def perform_fallback_search(query):
             movie_id = re.search(r'/movie/(\d+)', movie_link['href'])
             if movie_id:
                 tmdb_id = movie_id.group(1)
-
-                # Fetch movie details using the movie ID
                 details_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                params = {'api_key': get_api_key()}
+                params = {'api_key': api_key}
                 details_response = requests.get(details_url, params=params)
                 details_response.raise_for_status()
                 movie_details = details_response.json()
@@ -312,7 +285,6 @@ def perform_fallback_search(query):
                 if movie_details:
                     movie_name = movie_details.get('title')
                     release_date = movie_details.get('release_date')
-                    movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
                     return [{'id': tmdb_id, 'title': movie_name, 'release_date': release_date}]
     except requests.RequestException as e:
         log_message(f"Error fetching data: {e}", level="ERROR")
