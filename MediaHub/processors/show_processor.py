@@ -3,7 +3,7 @@ import re
 from utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year, extract_resolution_from_folder
 from api.tmdb_api import search_tv_show, get_episode_name
 from utils.logging_utils import log_message
-from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled
+from config.config import is_skip_extras_folder_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled, is_source_structure_enabled, is_tmdb_folder_id_enabled
 from dotenv import load_dotenv, find_dotenv
 
 # Retrieve base_dir from environment variables
@@ -16,10 +16,13 @@ global offline_mode
 
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match):
     global offline_mode
+
     if any(root == source_dir.strip() for source_dir in source_dirs):
         parent_folder_name = os.path.basename(src_file)
+        source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
     else:
         parent_folder_name = os.path.basename(root)
+        source_folder = os.path.basename(os.path.dirname(root))
 
     clean_folder_name, _ = clean_query(parent_folder_name)
 
@@ -100,9 +103,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if "TMDb API error" in proper_show_name:
             log_message(f"Could not find TV show in TMDb or TMDb API error: {show_folder} ({year})", level="ERROR")
             proper_show_name = show_folder
-        if tmdb_folder_id_enabled:
+        if is_tmdb_folder_id_enabled():
             show_folder = proper_show_name
-        elif get_imdb_structure_enabled():
+        elif is_imdb_folder_id_enabled():
             show_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
         else:
             show_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
@@ -112,14 +115,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     show_folder = show_folder.replace('/', '')
 
     # Determine resolution-specific folder for shows
-    resolution = extract_resolution_from_filename(file)
+    resolution = extract_resolution_from_filename(file) or extract_resolution_from_folder(parent_folder_name)
     if not resolution:
-        # If resolution extraction from filename fails, use folder name as a fallback
-        resolution = extract_resolution_from_folder(parent_folder_name)
-        if resolution:
-            log_message(f"Resolution extracted from folder name: {resolution}", level="DEBUG")
-        else:
-            log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
+        log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
+        resolution = 'Shows'
 
     if 'remux' in file.lower():
         if '2160' in file or '4k' in file.lower():
@@ -138,10 +137,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             'DVD': 'RetroDVD'
         }.get(resolution, 'Shows')
 
-    # Define paths
-    base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
-    season_dest_path = os.path.join(base_dest_path, season_folder)
-    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+    if is_source_structure_enabled():
+        base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+    else:
+        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+
+    season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
     extras_dest_path = os.path.join(extras_base_dest_path, 'Extras')
 
     # Function to check if show folder exists in any resolution folder
@@ -157,22 +160,23 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if existing_show_folder_path:
         extras_dest_path = os.path.join(existing_show_folder_path, 'Extras')
 
-        # Check if SKIP_EXTRAS_FOLDER is enabled
-        if is_skip_extras_folder_enabled() and create_extras_folder:
-            log_message(f"Skipping symlinking of extras file: {file} due to SKIP_EXTRAS_FOLDER being enabled.", level="INFO")
-            return  # Exit without processing extras folder files
-        else:
-            # Only create Extras folder if it doesn't exist and is needed
-            if create_extras_folder and not os.path.exists(extras_dest_path):
-                os.makedirs(extras_dest_path, exist_ok=True)
-            dest_file = os.path.join(extras_dest_path, file)
+    # Check if SKIP_EXTRAS_FOLDER is enabled and handle accordingly
+    if is_skip_extras_folder_enabled():
+        if create_extras_folder:
+            if is_source_structure_enabled():
+                log_message(f"Skipping extras file: {file} in source structure mode due to SKIP_EXTRAS_FOLDER being enabled.", level="INFO")
+                return  # Exit without processing extras folder files
+            else:
+                # If source structure is not enabled, skip extras folder creation
+                log_message(f"Skipping extras file: {file} due to SKIP_EXTRAS_FOLDER being enabled.", level="INFO")
+                return  # Exit without processing extras folder files
     else:
-        # Create Extras folder only if files are being placed inside it and SKIP_EXTRAS_FOLDER is not enabled
-        if create_extras_folder and not is_skip_extras_folder_enabled():
-            os.makedirs(extras_base_dest_path, exist_ok=True)
-            dest_file = os.path.join(extras_dest_path, file)
-        else:
-            dest_file = os.path.join(base_dest_path, file)
+        # If SKIP_EXTRAS_FOLDER is not enabled, create the Extras folder if necessary
+        if create_extras_folder and not os.path.exists(extras_dest_path):
+            os.makedirs(extras_dest_path, exist_ok=True)
+            log_message(f"Created Extras folder at: {extras_dest_path}", level="INFO")
+        dest_file = os.path.join(extras_dest_path, file)  # Extras path assignment
+        log_message(f"Destination file for extras: {dest_file}", level="DEBUG")
 
     if episode_match:
         if rename_enabled:

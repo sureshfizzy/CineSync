@@ -75,3 +75,6 @@ def get_extras_max_size_mb():
 
 def is_imdb_folder_id_enabled():
     return os.getenv('IMDB_FOLDER_ID', 'false').lower() == 'true'
+
+def is_source_structure_enabled():
+    return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
