@@ -36,6 +36,11 @@ def delete_broken_symlinks(dest_dir):
                             cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                             conn.commit()
 
+                    parent_dir = os.path.dirname(file_path)
+                    if not os.listdir(parent_dir):
+                        log_message(f"Deleting empty folder: {parent_dir}", level="DEBUG")
+                        os.rmdir(parent_dir)
+
 def skip_files(file):
     """Determine if the file should be skipped based on its extension."""
     extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.ping', '.txt'}
