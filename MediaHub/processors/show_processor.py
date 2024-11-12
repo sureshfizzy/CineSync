@@ -24,6 +24,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         parent_folder_name = os.path.basename(root)
         source_folder = os.path.basename(os.path.dirname(root))
 
+    source_folder = os.path.basename(source_folder)
+
     clean_folder_name, _ = clean_query(parent_folder_name)
 
     # Initialize variables
