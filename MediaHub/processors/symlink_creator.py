@@ -17,7 +17,7 @@ log_imported_db = False
 db_initialized = False
 
 def delete_broken_symlinks(dest_dir):
-    """Delete broken symlinks in the destination directory and update the database."""
+    """Delete broken symlinks in the destination directory and recursively delete empty parent folders."""
     symlinks_deleted = False
 
     for root, _, files in os.walk(dest_dir):
@@ -25,10 +25,14 @@ def delete_broken_symlinks(dest_dir):
             file_path = os.path.join(root, file)
             if os.path.islink(file_path):
                 target = os.readlink(file_path)
+
+                # Check if the symlink target exists
                 if not os.path.exists(target):
                     log_message(f"Deleting broken symlink: {file_path}", level="DEBUG")
                     os.remove(file_path)
                     symlinks_deleted = True
+
+                    # Remove from database if present
                     if check_file_in_db(file_path):
                         log_message(f"Removing {file_path} from database.", level="DEBUG")
                         with sqlite3.connect(DB_FILE) as conn:
@@ -36,10 +40,12 @@ def delete_broken_symlinks(dest_dir):
                             cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                             conn.commit()
 
-                    parent_dir = os.path.dirname(file_path)
-                    if not os.listdir(parent_dir):
-                        log_message(f"Deleting empty folder: {parent_dir}", level="DEBUG")
-                        os.rmdir(parent_dir)
+                    # Recursively delete empty parent directories
+                    dir_path = os.path.dirname(file_path)
+                    while os.path.isdir(dir_path) and not os.listdir(dir_path):
+                        log_message(f"Deleting empty folder: {dir_path}", level="DEBUG")
+                        os.rmdir(dir_path)
+                        dir_path = os.path.dirname(dir_path)
 
 def skip_files(file):
     """Determine if the file should be skipped based on its extension."""
