@@ -78,3 +78,6 @@ def is_imdb_folder_id_enabled():
 
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
+
+def is_skip_patterns_enabled():
+    return os.getenv('SKIP_ADULT_PATTERNS', 'false').lower() == 'true'

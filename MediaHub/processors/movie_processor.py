@@ -1,19 +1,52 @@
 import os
 import re
+import json
 import requests
 from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, remove_genre_names, clean_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
-from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled, is_source_structure_enabled
+from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled, is_source_structure_enabled, is_skip_patterns_enabled
 from dotenv import load_dotenv, find_dotenv
-
-# Retrieve base_dir from environment variables
-source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 # Global variables to track API key state
 global api_key
 global api_warning_logged
 global offline_mode
+
+# Retrieve base_dir and skip patterns from environment variables
+source_dirs = os.getenv('SOURCE_DIR', '').split(',')
+
+def load_skip_patterns():
+    """Load skip patterns from keywords.json in utils folder"""
+    try:
+        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        keywords_path = os.path.join(current_dir, 'utils', 'keywords.json')
+
+        with open(keywords_path, 'r') as f:
+            data = json.load(f)
+            return data.get('skip_patterns', [])
+    except Exception as e:
+        log_message(f"Error loading skip patterns from keywords.json: {str(e)}", level="ERROR")
+        return []
+
+SKIP_PATTERNS = load_skip_patterns()
+
+def should_skip_file(filename):
+    """
+    Check if the file should be skipped based on patterns from keywords.json
+    """
+    if not is_skip_patterns_enabled():
+        return False
+
+    for pattern in SKIP_PATTERNS:
+        try:
+            if re.match(pattern, filename, re.IGNORECASE):
+                log_message(f"Skipping file due to pattern match in Adult Content {filename}", level="INFO")
+                return True
+        except re.error as e:
+            log_message(f"Invalid regex pattern '{pattern}': {str(e)}", level="ERROR")
+            continue
+    return False
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
     global offline_mode
@@ -26,6 +59,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         source_folder = os.path.basename(os.path.dirname(root))
 
     source_folder = os.path.basename(source_folder)
+
+    # Check if folder should be skipped
+    if should_skip_file(parent_folder_name):
+        return None
 
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
     if not movie_name:
