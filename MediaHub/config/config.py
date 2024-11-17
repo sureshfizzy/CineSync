@@ -81,3 +81,9 @@ def is_source_structure_enabled():
 
 def is_skip_patterns_enabled():
     return os.getenv('SKIP_ADULT_PATTERNS', 'false').lower() == 'true'
+
+def is_rclone_mount_enabled():
+    return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
+
+def is_mount_check_interval():
+    return int(os.getenv('MOUNT_CHECK_INTERVAL', '30'))

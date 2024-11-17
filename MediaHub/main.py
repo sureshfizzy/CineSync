@@ -5,16 +5,60 @@ import platform
 import time
 import psutil
 import signal
-from config.config import get_directories
+from config.config import *
 from processors.symlink_creator import create_symlinks
 from utils.logging_utils import log_message
 from processors.db_utils import *
 from processors.symlink_creator import *
+from monitor.polling_monitor import *
 
 db_initialized = False
 
 LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
 LOCK_TIMEOUT = 3600
+
+# Load .env file from the parent directory
+dotenv_path = find_dotenv('../.env')
+if not dotenv_path:
+    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
+    exit(1)
+
+load_dotenv(dotenv_path)
+
+def wait_for_mount():
+    """Wait for the rclone mount to become available with minimal logging."""
+    initial_message = True
+    while True:
+        if check_rclone_mount():
+            if initial_message:
+                log_message("Mount is now available.", level="INFO")
+            return True
+
+        if initial_message:
+            log_message(f"Waiting for mount directory to become available...", level="INFO")
+            initial_message = False
+
+        time.sleep(is_mount_check_interval())
+
+def initialize_db_with_mount_check():
+    """Initialize database after ensuring mount is available."""
+    global db_initialized
+
+    if not db_initialized:
+
+        if is_rclone_mount_enabled():
+            wait_for_mount()
+
+        initialize_db()
+        db_initialized = True
+
+def display_missing_files_with_mount_check(dest_dir):
+    """Display missing files after ensuring mount is available."""
+
+    if is_rclone_mount_enabled():
+        wait_for_mount()
+
+    display_missing_files(dest_dir)
 
 def ensure_windows_temp_directory():
     """Create the C:\\temp directory if it does not exist on Windows."""
@@ -106,13 +150,14 @@ def main(dest_dir):
     args = parser.parse_args()
 
     if not os.path.exists(LOCK_FILE):
-        # Ensure database is initialized
-        initialize_db()
-
-        # Update the database from the destination folder
-        display_missing_files(dest_dir)
+        # Wait for mount if needed and initialize database
+        initialize_db_with_mount_check()
 
         # Log database import message
+        log_message("Database import completed.", level="INFO")
+
+        # Wait for mount if needed and display missing files
+        display_missing_files_with_mount_check(dest_dir)
         log_message("Database import completed.", level="INFO")
 
     src_dirs, dest_dir = get_directories()
@@ -120,8 +165,11 @@ def main(dest_dir):
         log_message("Source or destination directory not set in environment variables.", level="ERROR")
         exit(1)
 
-    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path)
+    # Wait for mount before creating symlinks if needed
+    if is_rclone_mount_enabled() and not check_rclone_mount():
+        wait_for_mount()
 
+    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path)
     start_polling_monitor()
 
 if __name__ == "__main__":
