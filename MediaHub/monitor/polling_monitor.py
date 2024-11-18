@@ -59,43 +59,14 @@ def get_mount_point(path):
 
     # Don't consider root directory as a valid mount point
     if path == '/':
-        log_message("Root directory is not a valid rclone mount point", level="DEBUG")
+        log_message("Root directory is not a valid mount point", level="DEBUG")
         return False, None
 
-    # Check if this is actually an rclone mount if RCLONE_MOUNT is enabled
-    if os.getenv('RCLONE_MOUNT', 'false').lower() == 'true':
-        try:
-            result = subprocess.run(
-                ['ps', 'aux'],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                # Look for a specific rclone mount process related to this path
-                rclone_found = False
-                for line in result.stdout.split('\n'):
-                    if 'rclone' in line and 'mount' in line and path in line:
-                        rclone_found = True
-                        if mount_state is not True:
-                            log_message(f"Found rclone mount point at: {path}", level="INFO")
-                        return True, path
-
-                if not rclone_found:
-                    log_message(f"Path {path} is a mount point but no rclone process found for it", level="DEBUG")
-                    return False, None
-
-        except Exception as e:
-            log_message(f"Error checking rclone process: {str(e)}", level="ERROR")
-            return False, None
-    else:
-        log_message(f"RCLONE_MOUNT is set to false; skipping rclone mount check for {path}", level="DEBUG")
-        return False, None
-
-    return False, None
+    return True, path
 
 def verify_rclone_mount(directory):
     """
-    Verifies if the directory is under an rclone mount and manages version.txt file.
+    Verifies if the directory is under a mount and checks mount health.
     Returns tuple: (is_mounted, has_version_file)
     """
     global mount_state
@@ -109,30 +80,40 @@ def verify_rclone_mount(directory):
     # Find the mount point for this directory
     is_mounted, mount_point = get_mount_point(directory)
 
-    if is_mounted:
+    if is_mounted and mount_point:
         if mount_state is not True:
-            log_message(f"Directory {directory} is under rclone mount point: {mount_point}", level="INFO")
+            log_message(f"Directory {directory} is under mount point: {mount_point}", level="INFO")
             mount_state = True
 
-        # Check version file in the mount point
-        version_file = os.path.join(mount_point, 'version.txt')
-        has_version_file = os.path.exists(version_file)
-        log_message(f"Version file is {'present' if has_version_file else 'missing'} at mount point {mount_point}", level="DEBUG")
+        # Perform mount health check
+        try:
+            # Try to list directory contents to verify mount is responsive
+            os.listdir(directory)
 
-        return True, has_version_file
+            # Simply check if version.txt exists
+            version_file = os.path.join(mount_point, 'version.txt')
+            has_version_file = os.path.exists(version_file)
+
+            log_message(f"Version file is {'present' if has_version_file else 'missing'} at mount point {mount_point}", level="DEBUG")
+            return True, has_version_file
+
+        except Exception as e:
+            log_message(f"Mount point appears unresponsive: {str(e)}", level="WARNING")
+            mount_state = False
+            return False, False
     else:
         mount_state = False
         return False, False
 
 def check_rclone_mount():
     """
-    Checks if the rclone mount is available and manages version.txt.
+    Checks if the mount is available and healthy.
     Returns True if either RCLONE_MOUNT is False or if the mount is verified.
     """
     global mount_state
 
     if not is_rclone_mount_enabled():
-        log_message("Rclone mount check is disabled", level="INFO")
+        log_message("Mount check is disabled", level="INFO")
         return True
 
     src_dirs, _ = get_directories()
@@ -148,24 +129,23 @@ def check_rclone_mount():
 
         if is_mounted:
             if not has_version_file:
-                log_message(f"Rclone mount detected, creating version file", level="INFO")
+                log_message(f"Mount detected, creating version file", level="INFO")
                 if not create_version_file(directory):
                     log_message("Failed to create version file, mount may be read-only", level="ERROR")
                     return False
             return True
         else:
-            # Only log when state changes and combine both directory and mount status messages
             if current_state is not False:
                 if not os.path.exists(directory):
                     log_message(f"Mount unavailable - Directory does not exist: {directory}", level="WARNING")
                 else:
-                    log_message(f"Mount unavailable - Directory is not mounted: {directory}", level="WARNING")
+                    log_message(f"Mount unavailable - Directory is not mounted or unresponsive: {directory}", level="WARNING")
                 mount_state = False
             return False
 
     except Exception as e:
         if current_state is not False:
-            log_message(f"Error checking rclone mount: {str(e)}", level="ERROR")
+            log_message(f"Error checking mount: {str(e)}", level="ERROR")
             mount_state = False
         return False
 
