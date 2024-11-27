@@ -137,7 +137,9 @@ def start_polling_monitor():
     log_message("Processing complete. Setting up directory monitoring.", level="INFO")
 
     try:
-        subprocess.run(['python3', 'MediaHub/monitor/polling_monitor.py'], check=True)
+        # Use python or python3 depending on the platform
+        python_command = 'python' if platform.system() == 'Windows' else 'python3'
+        subprocess.run([python_command, 'MediaHub/monitor/polling_monitor.py'], check=True)
     except subprocess.CalledProcessError as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
     finally:

@@ -7,6 +7,7 @@ import logging
 import subprocess
 import sys
 import pkg_resources
+import platform
 
 # Script Metadata
 SCRIPT_VERSION = "2.0"
@@ -23,6 +24,9 @@ RENAMER_SCRIPT = os.path.join(SCRIPTS_FOLDER, "utils/tmdb_renamer.py")
 
 # Setup logging
 logging.basicConfig(filename='script.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Determine the Python command based on the OS
+python_command = 'python' if platform.system() == 'Windows' else 'python3'
 
 # Function to print text with color
 def print_color(text, color):
@@ -132,13 +136,13 @@ def greet_user():
 def edit_env_file():
     try:
         if os.path.exists(ENV_FILE):
-            subprocess.run(['nano', ENV_FILE], check=True)
+            subprocess.run([python_command, '-m', 'nano', ENV_FILE], check=True)
             print("\n.env file editing completed.")
         else:
             print("The .env file does not exist. Creating a new one.")
             with open(ENV_FILE, 'w') as f:
                 pass
-            subprocess.run(['nano', ENV_FILE], check=True)
+            subprocess.run([python_command, '-m', 'nano', ENV_FILE], check=True)
             print("\n.env file created and edited.")
     except subprocess.CalledProcessError as e:
         logging.error(f"Error editing .env file: {e}")
@@ -163,10 +167,10 @@ def real_time_monitoring():
 
         try:
             if choice == '1':
-                subprocess.run(['python3', MONITOR_SCRIPT, 'enable'], check=True)
+                subprocess.run([python_command, MONITOR_SCRIPT, 'enable'], check=True)
                 input("Press Enter to continue...")
             elif choice == '2':
-                subprocess.run(['python3', MONITOR_SCRIPT, 'disable'], check=True)
+                subprocess.run([python_command, MONITOR_SCRIPT, 'disable'], check=True)
                 input("Press Enter to continue...")
             elif choice == '3':
                 break
@@ -195,14 +199,14 @@ def execute_full_library_scan():
         try:
             if choice == '1':
                 if os.path.exists(LIBRARY_SCRIPT):
-                        subprocess.run(['python3', LIBRARY_SCRIPT, '--auto-select'], check=True)
+                        subprocess.run([python_command, LIBRARY_SCRIPT, '--auto-select'], check=True)
                         input("Auto scan completed. Press Enter to return to the main menu...")
                 else:
                     print_color("Error: The script does not exist.", "red")
                     input("Press Enter to return to the main menu...")
             elif choice == '2':
                 if os.path.exists(LIBRARY_SCRIPT):
-                        subprocess.run(['python3', LIBRARY_SCRIPT], check=True)
+                        subprocess.run([python_command, LIBRARY_SCRIPT], check=True)
                         input("Manual scan completed. Press Enter to return to the main menu...")
                 else:
                     print_color("Error: The library.py script does not exist.", "red")
@@ -300,7 +304,7 @@ def execute_vault_scan():
     if os.path.exists(BROKEN_LINKS_SCRIPT):
         logging.info(f"Executing script at: {BROKEN_LINKS_SCRIPT}")
         try:
-            result = subprocess.run(['python3', BROKEN_LINKS_SCRIPT], check=True, text=True, capture_output=True)
+            result = subprocess.run([python_command, BROKEN_LINKS_SCRIPT], check=True, text=True, capture_output=True)
             print("Broken symlinks scan completed.")
             print("Output:\n", result.stdout)
             logging.info(f"Script output:\n{result.stdout}")
