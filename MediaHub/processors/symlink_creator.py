@@ -58,6 +58,10 @@ def is_file_extra(file, file_path):
     Determine if the file is an extra based on size.
     Skip .srt files regardless of size.
     """
+
+    if os.path.islink(file_path):
+        return False
+
     if file.lower().endswith('.srt'):
         return False
 
