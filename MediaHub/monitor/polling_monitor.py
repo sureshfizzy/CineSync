@@ -113,7 +113,9 @@ def check_rclone_mount():
     global mount_state
 
     if not is_rclone_mount_enabled():
-        log_message("Mount check is disabled", level="INFO")
+        if mount_state is not False:
+            log_message("Mount check is disabled", level="INFO")
+            mount_state = False
         return True
 
     src_dirs, _ = get_directories()
