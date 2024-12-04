@@ -87,3 +87,6 @@ def is_rclone_mount_enabled():
 
 def is_mount_check_interval():
     return int(os.getenv('MOUNT_CHECK_INTERVAL', '30'))
+
+def is_anime_scan():
+    return os.getenv('ANIME_SCAN', 'false').lower() == 'true'

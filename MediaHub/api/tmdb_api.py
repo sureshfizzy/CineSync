@@ -75,6 +75,7 @@ def search_tv_show(query, year=None, auto_select=False):
 
     if not results:
         results = search_with_extracted_title(query, year)
+        log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
 
     if not results:
         results = perform_fallback_tv_search(query, year)
@@ -91,6 +92,13 @@ def search_tv_show(query, year=None, auto_select=False):
             results = response.json().get('results', [])
         except requests.exceptions.RequestException as e:
             log_message(f"Error during fallback search: {e}", level="ERROR")
+
+    if not results:
+        log_message(f"All previous searches failed, attempting with Search with Cleaned Name", "DEBUG", "stdout")
+        cleaned_title, year_from_query = clean_query(query)
+        if cleaned_title != query:
+            log_message(f"Cleaned query: {cleaned_title}", "DEBUG", "stdout")
+            results = fetch_results(cleaned_title, year or year_from_query)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
@@ -303,7 +311,12 @@ def get_episode_name(show_id, season_number, episode_number):
         response = requests.get(url, params=params)
         response.raise_for_status()
         episode_data = response.json()
-        return episode_data.get('name')
+        episode_name = episode_data.get('name')
+
+        # Format the episode information
+        episode_info = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
+
+        return episode_name
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching episode data: {e}", level="ERROR")
         return None

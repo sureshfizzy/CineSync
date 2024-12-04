@@ -2,7 +2,18 @@ import re
 import os
 import json
 import inspect
+import requests
 from utils.logging_utils import log_message
+
+def fetch_json(url):
+    """Fetch JSON data from the provided URL."""
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        log_message(f"HTTP request failed: {e}", level="ERROR")
+        return {}
 
 def extract_year(query):
     match = re.search(r'\((\d{4})\)$', query.strip())
@@ -211,3 +222,27 @@ def extract_title(filename):
         return title
     else:
         return "", None
+
+def get_anime_patterns():
+    """
+    Returns a compiled regex pattern for detecting anime files.
+    Includes patterns for common anime release groups, formats, and naming conventions.
+    """
+    anime_patterns = [
+        r'\[(?:SubsPlease|Erai-raws|HorribleSubs|Judas|EMBER|ASW|Commie|GJM|SSA|Mezashite|Underwater|Seregorn)\]',
+        r'\s-\s\d{2,3}\s',
+        r'\[(?:Sub|Dub|Raw)\]',
+        r'\[(?:1080p|720p|480p)\]',
+        r'\[(?:H264|H\.264|H265|H\.265|x264|x265)\]',
+        r'\[(?:AAC|AC3|FLAC)\]',
+        r'\[(?:10bit|8bit)\]',
+        r'\[(?:BD|BluRay|WEB|WEBRip|HDTV)\]',
+        r'(?:JAP|JPN|ENG|ITA)(?:-SUB)?',
+        r'(?:SUB-ITA|VOSTFR|Multi-Subs|Dual Audio)',
+        r'(?:COMPLETA|\[Complete\])',
+        r'\[\d+\.\d+GB\]',
+        r'\(V\d+\)'
+    ]
+
+    combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)
+    return re.compile(combined_pattern, re.IGNORECASE)

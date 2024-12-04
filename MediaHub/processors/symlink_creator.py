@@ -8,7 +8,7 @@ from threading import Event
 from processors.movie_processor import process_movie
 from processors.show_processor import process_show
 from utils.logging_utils import log_message
-from utils.file_utils import build_dest_index
+from utils.file_utils import build_dest_index, get_anime_patterns
 from config.config import *
 from processors.db_utils import *
 
@@ -76,21 +76,51 @@ def is_file_extra(file, file_path):
 
 def determine_is_show(directory):
     """
-    Determine if a directory contains TV shows or mini-series based on episode patterns or keywords.
-    If at least 2 or 3 files match common episode patterns or mini-series keywords, return True.
+    Determine if a path contains TV shows, mini-series, or anime based on episode patterns or keywords.
+    If at least 2 or 3 files match common episode patterns, mini-series keywords, or anime patterns, return True.
     """
+    # If path is a file, use its parent directory
+    directory = os.path.dirname(path) if os.path.isfile(path) else path
+
+    # Regular TV show and mini-series patterns
     episode_patterns = re.compile(r'(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES)', re.IGNORECASE)
+
+    # Get anime patterns
+    anime_patterns = get_anime_patterns()
+
     match_count = 0
     threshold = 2
 
-    for root, _, files in os.walk(directory):
+    log_message(f"Checking if directory '{directory}' contains TV shows, mini-series, or anime.", level="DEBUG")
+
+    # Simply check files in the directory without walking
+    try:
+        files = os.listdir(directory)
         for file in files:
             if skip_files(file):
+                log_message(f"Skipping file {file} due to its extension.", level="DEBUG")
                 continue
+
+            log_message(f"Checking file: {file}", level="DEBUG")
+
+            # Check for TV show/mini-series patterns
             if episode_patterns.search(file):
+                log_message(f"File '{file}' matches episode pattern.", level="DEBUG")
                 match_count += 1
-                if match_count >= threshold:
-                    return True
+            # Check for anime patterns
+            elif anime_patterns.search(file):
+                log_message(f"File '{file}' matches anime pattern.", level="DEBUG")
+                match_count += 1
+            else:
+                log_message(f"File '{file}' does not match any pattern.", level="DEBUG")
+
+            if match_count >= threshold:
+                return True
+
+    except OSError as e:
+        log_message(f"Error accessing directory '{directory}': {e}", level="ERROR")
+        return False
+
     return False
 
 def process_file(args, processed_files_log):
@@ -132,8 +162,12 @@ def process_file(args, processed_files_log):
         return
 
     # Enhanced Regex Patterns to Identify Shows or Mini-Series
-    episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
+    episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s\d{2,3}\s|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2})', file, re.IGNORECASE)
     mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
+    anime_episode_pattern = re.compile(r'\s-\s\d{2,3}\s', re.IGNORECASE)
+
+    # Get additional anime patterns
+    other_anime_patterns = get_anime_patterns()
 
     # Fallback logic to determine if the folder is a TV show directory
     season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)

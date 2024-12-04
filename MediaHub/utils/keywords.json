@@ -2,7 +2,8 @@
     "keywords": [
         "Unrated", "Remastered", "IMAX", "Extended", "BDRemux", "ITA", "ENG", "x265", "H265", "HDR10",
         "WebDl", "Rip", "4K", "HDR", "DV", "2160p", "BDRip", "AC3", "5.1", "Sub", "NAHOM", "mkv", "Complete",
-        "www", "Torrenting", "com", "TamilMV"
+        "www", "Torrenting", "com", "TamilMV", "Mp4", "mp4", "[Anime Time]", "[Dual Audio]", "[1080p]", "[HEVC 10bit]", "[AAC]", "[Batch]",
+        "[Erai-raws]", "[720p]", "[Multiple Subtitle]", "[ENG]", "[POR-BR]", "[SPA-LA]", "[SPA]", "[ARA]", "[FRE]", "[GER]", "[ITA]", "[RUS]"
     ],
     "skip_patterns": [
         "^FC2-PPV-\\d+",
@@ -13,6 +14,10 @@
         "^[A-Z]+-\\d+",
         "^[A-Z]+\\d+-\\d+",
         "^\\d+_\\d+",
-        "^[A-Z]{2,5}-\\d+"
+        "^[A-Z]{2,5}-\\d+",
+        "\\[.*?Anime Time.*?\\]",
+        "\\[.*?Dual Audio.*?\\]",
+        "\\[.*?1080p.*?\\]",
+        "\\[.*?Batch.*?\\]"
     ]
 }
