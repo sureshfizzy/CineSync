@@ -13,12 +13,11 @@ def is_anime_file(filename):
     anime_patterns = [
         r'\[.+?\]',
         r'\s-\s\d+\s',
-        r'(?:(?:Season|S)\s*\d+\s*Episode|Ep\.?\s*\d+)',
+        r'(?:(?:Season|S|\d+(?:st|nd|rd|th)\s+Season)\s*\d*\s*Episode|Ep\.?\s*\d+)',
         r'\.(mkv|mp4)$'
     ]
 
     return any(re.search(pattern, filename, re.IGNORECASE) for pattern in anime_patterns)
-
 
 def extract_anime_episode_info(filename):
     """
@@ -32,7 +31,16 @@ def extract_anime_episode_info(filename):
     clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
     clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
 
-    # Patterns for anime episode extraction
+    ordinal_season_pattern = r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season\s*-\s*(\d+)$'
+    match = re.match(ordinal_season_pattern, clean_filename, re.IGNORECASE)
+    if match:
+        return {
+            'show_name': match.group(1).strip(),
+            'season_number': str(int(match.group(2))).zfill(2),
+            'episode_number': match.group(3),
+            'episode_title': None
+        }
+
     anime_patterns = [
         r'^(.+?)\s*S(\d+)\s*-\s*.*?-\s*(\d+)$',
         r'^(.+?)\s*-\s*(\d+)\s*(?:-\s*(.+))?$',

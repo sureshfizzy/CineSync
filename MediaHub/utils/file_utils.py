@@ -230,7 +230,7 @@ def get_anime_patterns():
     Includes patterns for common anime release groups, formats, and naming conventions.
     """
     anime_patterns = [
-        r'\[(?:SubsPlease|Erai-raws|HorribleSubs|Judas|EMBER|ASW|Commie|GJM|SSA|Mezashite|Underwater|Seregorn)\]',
+        r'\[(?:SubsPlease|Erai-raws|HorribleSubs|HorribleRips|Judas|EMBER|ASW|Commie|GJM|SSA|Mezashite|Underwater|Seregorn)\]',
         r'\s-\s\d{2,3}\s',
         r'\[(?:Sub|Dub|Raw)\]',
         r'\[(?:1080p|720p|480p)\]',
