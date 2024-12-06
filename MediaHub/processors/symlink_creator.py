@@ -74,7 +74,7 @@ def is_file_extra(file, file_path):
     else:
         return False
 
-def determine_is_show(directory):
+def determine_is_show(path):
     """
     Determine if a path contains TV shows, mini-series, or anime based on episode patterns or keywords.
     If at least 2 or 3 files match common episode patterns, mini-series keywords, or anime patterns, return True.

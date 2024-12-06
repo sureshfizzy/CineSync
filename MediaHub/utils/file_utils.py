@@ -238,9 +238,9 @@ def get_anime_patterns():
         r'\[(?:AAC|AC3|FLAC)\]',
         r'\[(?:10bit|8bit)\]',
         r'\[(?:BD|BluRay|WEB|WEBRip|HDTV)\]',
-        r'(?:JAP|JPN|ENG|ITA)(?:-SUB)?',
-        r'(?:SUB-ITA|VOSTFR|Multi-Subs|Dual Audio)',
-        r'(?:COMPLETA|\[Complete\])',
+        r'\[(?:JAP|JPN|ENG|ITA)(?:-SUB)?\]',
+        r'\[(?:SUB-ITA|VOSTFR|Multi-Subs|Dual Audio)\]',
+        r'\[(?:COMPLETA|Complete)\]',
         r'\[\d+\.\d+GB\]',
         r'\(V\d+\)'
     ]
