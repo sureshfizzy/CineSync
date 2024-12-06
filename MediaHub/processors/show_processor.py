@@ -24,7 +24,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         parent_folder_name = os.path.basename(src_file)
         source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
     else:
-        parent_folder_name = os.path.basename(root)
+        parent_folder_name = os.path.basename(src_file)
         source_folder = os.path.basename(os.path.dirname(root))
 
     source_folder = os.path.basename(source_folder)
@@ -139,12 +139,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if anime_result:
         show_folder = anime_result.get('show_name', '')
         proper_show_name = show_folder
-    else:
-        # Handle year extraction and appending if necessary
-        year = extract_folder_year(os.path.basename(root)) or extract_year(show_folder)
-        if year:
-            show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
-            show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
 
     # Check if API is available and not in offline mode
     api_key = get_api_key()

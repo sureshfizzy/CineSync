@@ -118,6 +118,7 @@ def clean_query(query, keywords_file='keywords.json'):
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
     query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}\b.*', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\[.*?\]', '', query)
 
     log_message(f"No year found. Final cleaned query: '{query}'", "DEBUG", "stdout")
     return query, None
