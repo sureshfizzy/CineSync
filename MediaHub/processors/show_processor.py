@@ -187,7 +187,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             '720p': 'SDClassics',
             '480p': 'Retro480p',
             'DVD': 'RetroDVD'
-        }.get(resolution, 'Shows')
+        }.get(resolution.lower(), 'Shows')
 
     # Destination path determination
     if is_cinesync_layout_enabled():

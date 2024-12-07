@@ -162,16 +162,24 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     new_name = file
     episode_name = None
+
+    # Parse the original filename to get the correct episode number
+    original_episode_match = re.search(r'(?:E|x|^)(\d+)', file)
+    if original_episode_match:
+        actual_episode = original_episode_match.group(1)
+    else:
+        actual_episode = episode_number
+
     if rename_enabled and show_id:
         try:
             try:
-                episode_name = get_episode_name(show_id, int(season_number), int(episode_number))
+                episode_name = get_episode_name(show_id, int(season_number), int(actual_episode))
             except Exception as e:
                 log_message(f"Failed to fetch episode name: {e}", level="WARNING")
 
             episode_name = episode_name or episode_title or ""
 
-            new_name = f"{show_name} - S{str(season_number).zfill(2)}E{str(episode_number).zfill(3)}"
+            new_name = f"{show_name} - S{str(season_number).zfill(2)}E{str(actual_episode).zfill(3)}"
             if episode_name:
                 new_name += f" - {episode_name}"
             if resolution:
@@ -190,6 +198,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'is_anime': True,
         'show_id': show_id,
         'episode_title': episode_name or episode_title,
-        'episode_number': episode_number,
+        'episode_number': actual_episode,
         'resolution': resolution
     }

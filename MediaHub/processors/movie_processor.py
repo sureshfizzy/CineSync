@@ -165,7 +165,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     '720p': 'SDMovies',
                     '480p': 'Retro480p',
                     'DVD': 'DVDClassics'
-                }.get(resolution, 'Movies')
+                }.get(resolution.lower(), 'Movies')
 
         if collection_info:
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
