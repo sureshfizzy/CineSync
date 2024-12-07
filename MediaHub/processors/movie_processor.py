@@ -5,7 +5,7 @@ import requests
 from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, remove_genre_names, clean_query
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
-from config.config import is_movie_collection_enabled, is_tmdb_folder_id_enabled, is_rename_enabled, get_api_key, offline_mode, is_imdb_folder_id_enabled, is_source_structure_enabled, is_skip_patterns_enabled
+from config.config import *
 from dotenv import load_dotenv, find_dotenv
 
 # Global variables to track API key state
@@ -108,10 +108,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         proper_movie_name = f"{movie_name} ({year})"
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
+    movie_folder = proper_movie_name.replace('/', '-')
 
-    if is_source_structure_enabled():
-        movie_folder = proper_movie_name.replace('/', '-')
-
+    if is_source_structure_enabled() or is_cinesync_layout_enabled():
         if collection_info and is_movie_collection_enabled():
             collection_name, collection_id = collection_info
             log_message(f"Movie belongs to collection: {collection_name}", level="INFO")
@@ -119,7 +118,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
-            dest_path = os.path.join(dest_dir, 'CineSync', source_folder, movie_folder)
+            if is_cinesync_layout_enabled():
+                dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
+            else:
+                dest_path = os.path.join(dest_dir, 'CineSync', source_folder, movie_folder)
     else:
         if collection_info and is_movie_collection_enabled():
             collection_name, collection_id = collection_info

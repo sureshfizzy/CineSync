@@ -321,13 +321,39 @@ def get_episode_name(show_id, season_number, episode_number):
         log_message(f"Error fetching episode data: {e}", level="ERROR")
         return None
 
-def get_movie_collection(movie_id):
+def get_movie_collection(movie_id=None, movie_title=None, year=None):
     api_key = get_api_key()
     if not api_key:
         return None
 
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
+    if movie_id:
+        url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+        params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
+    elif movie_title and year:
+        search_url = "https://api.themoviedb.org/3/search/movie"
+        search_params = {
+            'api_key': api_key,
+            'query': movie_title,
+            'primary_release_year': year
+        }
+        try:
+            search_response = requests.get(search_url, params=search_params)
+            search_response.raise_for_status()
+            search_results = search_response.json().get('results', [])
+
+            if search_results:
+                movie_id = search_results[0]['id']
+                url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+                params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
+            else:
+                log_message(f"No movie found for {movie_title} ({year})", level="WARNING")
+                return None
+        except requests.exceptions.RequestException as e:
+            log_message(f"Error searching for movie: {e}", level="ERROR")
+            return None
+    else:
+        log_message("Either movie_id or (movie_title and year) must be provided", level="ERROR")
+        return None
 
     try:
         response = requests.get(url, params=params)

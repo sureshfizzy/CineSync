@@ -90,3 +90,6 @@ def is_mount_check_interval():
 
 def is_anime_scan():
     return os.getenv('ANIME_SCAN', 'false').lower() == 'true'
+
+def is_cinesync_layout_enabled():
+    return os.getenv('CINESYNC_LAYOUT', 'false').lower() == 'true'

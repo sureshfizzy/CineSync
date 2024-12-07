@@ -190,7 +190,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         }.get(resolution, 'Shows')
 
     # Destination path determination
-    if is_source_structure_enabled():
+    if is_cinesync_layout_enabled():
+        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+    elif is_source_structure_enabled():
         base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
     else:
