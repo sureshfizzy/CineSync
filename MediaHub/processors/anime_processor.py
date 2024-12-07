@@ -2,7 +2,7 @@ import os
 import re
 import requests
 from utils.logging_utils import log_message
-from utils.file_utils import fetch_json
+from utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder
 from api.tmdb_api import search_tv_show, get_episode_name
 from config.config import *
 
@@ -99,6 +99,11 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     season_number = anime_info['season_number']
     episode_title = anime_info['episode_title']
 
+    # Extract resolution from filename and parent folder
+    file_resolution = extract_resolution(file)
+    folder_resolution = extract_resolution_from_folder(os.path.basename(root))
+    resolution = file_resolution or folder_resolution
+
     # Clean up show name
     show_name = re.sub(r'[._]', ' ', show_name).strip()
 
@@ -169,6 +174,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             new_name = f"{show_name} - S{str(season_number).zfill(2)}E{str(episode_number).zfill(3)}"
             if episode_name:
                 new_name += f" - {episode_name}"
+            if resolution:
+                new_name += f" [{resolution}]"
             new_name += os.path.splitext(file)[1]
         except Exception as e:
             log_message(f"Error processing anime filename: {e}", level="ERROR")
@@ -183,5 +190,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'is_anime': True,
         'show_id': show_id,
         'episode_title': episode_name or episode_title,
-        'episode_number': episode_number
+        'episode_number': episode_number,
+        'resolution': resolution
     }

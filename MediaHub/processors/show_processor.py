@@ -44,6 +44,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     anime_result = None
     create_season_folder = False
     create_extras_folder = False
+    resolution = None
 
     if is_anime_scan()  and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
@@ -61,6 +62,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         show_id = anime_result.get('show_id')
         episode_title = anime_result.get('episode_title')
         episode_number = anime_result.get('episode_number')
+        resolution = anime_result.get('resolution')
 
         episode_match = re.search(r'S(\d+)E(\d+)', new_name)
         if episode_match:
@@ -161,10 +163,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     show_folder = show_folder.replace('/', '')
 
     # Determine resolution-specific folder for shows
-    resolution = extract_resolution_from_filename(file) or extract_resolution_from_folder(parent_folder_name)
-    if not resolution:
-        log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
-        resolution = 'Shows'
+    if anime_result and anime_result.get('resolution'):
+        resolution = anime_result['resolution']
+    else:
+        resolution = extract_resolution_from_filename(file) or extract_resolution_from_folder(parent_folder_name)
+        if not resolution:
+            log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
+            resolution = 'Shows'
 
     # Resolution folder determination logic remains the same as in original code
     if 'remux' in file.lower():
