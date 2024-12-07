@@ -77,26 +77,41 @@ def is_file_extra(file, file_path):
 def determine_is_show(path):
     """
     Determine if a path contains TV shows, mini-series, or anime based on episode patterns or keywords.
-    If at least 2 or 3 files match common episode patterns, mini-series keywords, or anime patterns, return True.
-    """
-    # If path is a file, use its parent directory
-    directory = os.path.dirname(path) if os.path.isfile(path) else path
+    Works with both direct file paths and directory paths.
+    If at least 2 files match common episode patterns, mini-series keywords, or anime patterns, return True.
 
+    Args:
+        path (str): Path to either a file or directory to check
+
+    Returns:
+        bool: True if the path contains TV shows/anime content, False otherwise
+    """
     # Regular TV show and mini-series patterns
     episode_patterns = re.compile(r'(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES)', re.IGNORECASE)
-
     # Get anime patterns
     anime_patterns = get_anime_patterns()
-
     match_count = 0
     threshold = 2
 
-    log_message(f"Checking if directory '{directory}' contains TV shows, mini-series, or anime.", level="DEBUG")
+    # First check if the path itself matches any patterns
+    if os.path.isfile(path):
+        filename = os.path.basename(path)
+        if episode_patterns.search(filename) or anime_patterns.search(filename):
+            log_message(f"Direct file '{filename}' matches pattern.", level="DEBUG")
+            match_count += 1
+        directory = os.path.dirname(path)
+    else:
+        directory = path
 
-    # Simply check files in the directory without walking
+    log_message(f"Checking directory '{directory}' for TV shows, mini-series, or anime.", level="DEBUG")
+
     try:
         files = os.listdir(directory)
         for file in files:
+            # Skip the file we already checked if it was passed directly
+            if os.path.isfile(path) and file == os.path.basename(path):
+                continue
+
             if skip_files(file):
                 log_message(f"Skipping file {file} due to its extension.", level="DEBUG")
                 continue
@@ -116,12 +131,11 @@ def determine_is_show(path):
 
             if match_count >= threshold:
                 return True
-
     except OSError as e:
         log_message(f"Error accessing directory '{directory}': {e}", level="ERROR")
         return False
 
-    return False
+    return match_count >= threshold
 
 def process_file(args, processed_files_log):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
