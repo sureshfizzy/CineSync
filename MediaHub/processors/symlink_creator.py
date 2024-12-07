@@ -176,7 +176,7 @@ def process_file(args, processed_files_log):
         return
 
     # Enhanced Regex Patterns to Identify Shows or Mini-Series
-    episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s\d{2,3}\s|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2})', file, re.IGNORECASE)
+    episode_match = re.search(r'(.*?)(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s\d{2,3}|\s-\d{2,3}|\s-\s*\d{2,3}|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2})', file, re.IGNORECASE)
     mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
     anime_episode_pattern = re.compile(r'\s-\s\d{2,3}\s', re.IGNORECASE)
 
