@@ -1,0 +1,10 @@
+{
+    "VideoCodecs": ["H.264", "H.265", "x264", "x265", "AVC", "HEVC", "VP9", "AV1"],
+    "AudioCodecs": ["TrueHD.ATMOS", "DDP.ATMOS", "ATMOS", "DDP", "Dolby Digital", "DTS-HD MA", "DTS", "AAC", "FLAC"],
+    "AudioAtmos": ["ATMOS"],
+    "DynamicRange": ["HDR10+", "HDR10", "HDR", "PQ", "HLG", "DV", "Dolby Vision"],
+    "Resolutions": ["2160p", "1080p", "720p", "480p"],
+    "MovieVersions": ["4K Remaster", "IMAX", "Criterion Collection", "IMAX Enhanced", "Special Edition", "Theatrical Cut", "Director's Cut", "Open Matte"],
+    "StreamingServices": ["Amazon", "Netflix", "Disney+", "Apple TV+", "HBO Max", "Hulu", "Peacock", "Paramount+"],
+    "ValidLanguages": ["ENGLISH", "HINDI", "SPANISH", "FRENCH", "GERMAN", "JAPANESE", "KOREAN", "CHINESE", "ENG", "GER"]
+}

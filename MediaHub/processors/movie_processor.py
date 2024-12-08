@@ -7,6 +7,7 @@ from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
 from config.config import *
 from dotenv import load_dotenv, find_dotenv
+from utils.mediainfo import *
 
 # Global variables to track API key state
 global api_key
@@ -165,7 +166,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     '720p': 'SDMovies',
                     '480p': 'Retro480p',
                     'DVD': 'DVDClassics'
-                }.get(resolution.lower(), 'Movies')
+#                }.get(resolution.lower(), 'Movies')
+                }.get(resolution.lower() if resolution else 'default_resolution', 'Movies')
 
         if collection_info:
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
@@ -174,8 +176,56 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     os.makedirs(dest_path, exist_ok=True)
 
-    if rename_enabled:
-        new_name = f"{os.path.basename(proper_movie_name)}{os.path.splitext(file)[1]}"
+    # Extract media information for renaming
+    media_info = extract_media_info(file, keywords)
+
+    # Optionally append extracted media information to movie folder name
+    if media_info:
+        if 'Resolution' in media_info:
+            movie_folder += f" [{media_info['Resolution']}]"
+        if 'VideoCodec' in media_info:
+            movie_folder += f" [{media_info['VideoCodec']}]"
+        if 'AudioCodec' in media_info:
+            movie_folder += f" [{media_info['AudioCodec']}]"
+        if 'AudioChannels' in media_info:
+            movie_folder += f" [{media_info['AudioChannels']}]"
+        if 'AudioAtmos' in media_info:
+            movie_folder += f" [Atmos]"
+
+    # Initialize 'details' with media info extracted from the filename
+    details = extract_media_info(file, keywords)
+    details = [detail for detail in details if detail]
+
+    enhanced_movie_folder = f"{proper_movie_name} [{' '.join(details)}]".strip()
+
+    if is_rename_enabled() and get_rename_tags():
+        media_info = extract_media_info(file, keywords)
+        details = []
+
+        clean_movie_name = re.sub(r' \{(?:tmdb-\d+|imdb-tt\w+)\}$', '', proper_movie_name)
+
+        for tag in get_rename_tags():
+            tag = tag.strip()
+            if tag == 'TMDB':
+                tmdb_match = re.search(r'\{tmdb-(\d+)\}', proper_movie_name)
+                if tmdb_match:
+                    details.append(f"{{tmdb-{tmdb_match.group(1)}}}")
+            elif tag == 'IMDB':
+                imdb_match = re.search(r'\{imdb-(\w+)\}', proper_movie_name)
+                if imdb_match:
+                    details.append(f"{{imdb-{imdb_match.group(1)}}}")
+            elif tag in media_info:
+                value = media_info[tag]
+
+                if isinstance(value, list):
+                    formatted_value = '+'.join([str(language).upper() for language in value])
+                    details.append(f"[{formatted_value}]")
+                else:
+                    details.append(f"[{value}]")
+
+        enhanced_movie_folder = f"{clean_movie_name} {' '.join(details)}".strip()
+
+        new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:
         new_name = file
 

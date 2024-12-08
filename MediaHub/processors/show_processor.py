@@ -8,6 +8,7 @@ from config.config import *
 from dotenv import load_dotenv, find_dotenv
 from processors.anime_processor import is_anime_file, process_anime_show
 from utils.file_utils import fetch_json
+from utils.mediainfo import *
 
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
@@ -242,7 +243,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"Created Extras folder at: {extras_dest_path}", level="INFO")
         dest_file = os.path.join(extras_dest_path, file)
 
-    # Rename files accordingly
+    # Extract media information and Rename files
+    media_info = extract_media_info(file, keywords)
     if anime_result and rename_enabled:
         dest_file = os.path.join(season_dest_path, new_name)
     else:
@@ -257,15 +259,33 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     episode_name = get_episode_name(show_id, int(season_number), int(episode_number))
 
                     if episode_name:
-                        new_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}{os.path.splitext(file)[1]}"
-                        log_message(f"Renaming {file} to {new_name} based on episode name {episode_name}", level="INFO")
+                        base_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}"
+                        log_message(f"Renaming {file}", level="INFO")
                     else:
-                        new_name = f"{show_name} - S{season_number}E{episode_number}{os.path.splitext(file)[1]}"
-                        log_message(f"Episode name not found for {file}, renaming to {new_name}", level="WARNING")
+                        base_name = f"{show_name} - S{season_number}E{episode_number}"
                 else:
-                    new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
+                    base_name = f"{show_name} - {episode_identifier}"
             else:
-                new_name = f"{show_name} - {episode_identifier}{os.path.splitext(file)[1]}"
+                base_name = f"{show_name} - {episode_identifier}"
+
+            if is_rename_enabled() and get_rename_tags():
+                media_info = extract_media_info(file, keywords)
+                details = []
+
+                for tag in get_rename_tags():
+                    tag = tag.strip()
+                    if tag in media_info:
+                        value = media_info[tag]
+
+                        if isinstance(value, list):
+                            formatted_value = '+'.join([str(language).upper() for language in value])
+                            details.append(f"[{formatted_value}]")
+                        else:
+                            details.append(f"[{value}]")
+
+                new_name = f"{base_name} {' '.join(details)}{os.path.splitext(file)[1]}"
+            else:
+                new_name = f"{base_name}{os.path.splitext(file)[1]}"
 
             new_name = re.sub(r'-{2,}', '-', new_name).strip('-')
             dest_file = os.path.join(season_dest_path, new_name)

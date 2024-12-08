@@ -93,3 +93,7 @@ def is_anime_scan():
 
 def is_cinesync_layout_enabled():
     return os.getenv('CINESYNC_LAYOUT', 'false').lower() == 'true'
+
+def get_rename_tags():
+    tags = os.getenv('RENAME_TAGS', '').split(',')
+    return [tag.strip() for tag in tags if tag.strip()]

@@ -5,6 +5,7 @@ from utils.logging_utils import log_message
 from utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder
 from api.tmdb_api import search_tv_show, get_episode_name
 from config.config import *
+from utils.mediainfo import *
 
 def is_anime_file(filename):
     """
@@ -103,6 +104,20 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     file_resolution = extract_resolution(file)
     folder_resolution = extract_resolution_from_folder(os.path.basename(root))
     resolution = file_resolution or folder_resolution
+    media_info = {}
+
+    # Check for media info
+    root_folder_name = os.path.basename(os.path.dirname(root))
+    if root_folder_name:
+        root_media_info = extract_media_info(root_folder_name, keywords)
+        media_info.update(root_media_info)
+
+    if actual_dir:
+        actual_dir_media_info = extract_media_info(actual_dir, keywords)
+        media_info.update(actual_dir_media_info)
+
+    file_media_info = extract_media_info(file, keywords)
+    media_info.update(file_media_info)
 
     # Clean up show name
     show_name = re.sub(r'[._]', ' ', show_name).strip()
@@ -184,7 +199,34 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
                 new_name += f" - {episode_name}"
             if resolution:
                 new_name += f" [{resolution}]"
+
+            # Add media info tags with separate brackets
+            media_tags = []
+
+            if media_info.get('VideoCodec'):
+                codec = media_info['VideoCodec']
+                if '10bit' in actual_dir or '10bit' in file:
+                    media_tags.append(f"[{codec} 10bit]")
+                else:
+                    media_tags.append(f"[{codec}]")
+            if media_info.get('AudioCodec'):
+                audio_tag = media_info['AudioCodec']
+                if media_info.get('AudioChannels'):
+                    audio_tag += f" {media_info['AudioChannels']}"
+                if media_info.get('AudioAtmos'):
+                    audio_tag += f" {media_info['AudioAtmos']}"
+                media_tags.append(f"[{audio_tag}]")
+            if media_info.get('DynamicRange'):
+                media_tags.append(f"[{media_info['DynamicRange']}]")
+            if media_info.get('Languages'):
+                if 'ENG' in media_info['Languages'] and len(media_info['Languages']) > 1:
+                    media_tags.append("[Dual Audio]")
+
+            if media_tags:
+                new_name += f" {''.join(media_tags)}"
+
             new_name += os.path.splitext(file)[1]
+
         except Exception as e:
             log_message(f"Error processing anime filename: {e}", level="ERROR")
             new_name = file
@@ -199,5 +241,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'show_id': show_id,
         'episode_title': episode_name or episode_title,
         'episode_number': actual_episode,
-        'resolution': resolution
+        'resolution': resolution,
+        'media_info': media_info
     }
