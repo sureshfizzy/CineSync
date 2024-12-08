@@ -223,7 +223,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 else:
                     details.append(f"[{value}]")
 
-        enhanced_movie_folder = f"{clean_movie_name} {' '.join(details)}".strip()
+        details_str = ''.join(details)
+        enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
 
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:

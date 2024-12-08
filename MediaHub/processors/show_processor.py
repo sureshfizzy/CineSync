@@ -283,7 +283,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         else:
                             details.append(f"[{value}]")
 
-                new_name = f"{base_name} {' '.join(details)}{os.path.splitext(file)[1]}"
+                new_name = f"{base_name} {''.join(details)}{os.path.splitext(file)[1]}"
             else:
                 new_name = f"{base_name}{os.path.splitext(file)[1]}"
 
