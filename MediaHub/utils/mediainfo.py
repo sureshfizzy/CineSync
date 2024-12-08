@@ -46,10 +46,17 @@ def extract_media_info(filepath: str, keywords: dict) -> dict:
             media_info['AudioChannels'] = channels_match.group(0)
             break
 
+    # Extract Languages and force short names
     for source in sources:
         lang_match = re.findall(r'([A-Z]{3,})', source)
         valid_languages = keywords["ValidLanguages"]
-        filtered_languages = [lang for lang in lang_match if lang.upper() in valid_languages]
+
+        # Create a mapping of full language names to short codes
+        language_map = {long_name: short_code for long_name, short_code in zip(keywords["ValidLanguages"][::2], keywords["ValidLanguages"][1::2])}
+
+        # Map matched languages to their short codes
+        filtered_languages = [language_map.get(lang.upper(), lang.upper()) for lang in lang_match if lang.upper() in valid_languages]
+
         if filtered_languages:
             media_info['Languages'] = filtered_languages
             break

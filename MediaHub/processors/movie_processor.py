@@ -166,7 +166,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     '720p': 'SDMovies',
                     '480p': 'Retro480p',
                     'DVD': 'DVDClassics'
-#                }.get(resolution.lower(), 'Movies')
                 }.get(resolution.lower() if resolution else 'default_resolution', 'Movies')
 
         if collection_info:
@@ -201,22 +200,26 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     if is_rename_enabled() and get_rename_tags():
         media_info = extract_media_info(file, keywords)
         details = []
+        id_tag = ''
 
-        clean_movie_name = re.sub(r' \{(?:tmdb-\d+|imdb-tt\w+)\}$', '', proper_movie_name)
+        # Extract ID tag only if TMDB or IMDB is in RENAME_TAGS
+        rename_tags = get_rename_tags()
+        if 'TMDB' in rename_tags:
+            id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
+            id_tag = id_tag_match.group(0) if id_tag_match else ''
+        elif 'IMDB' in rename_tags:
+            id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
+            id_tag = id_tag_match.group(0) if id_tag_match else ''
 
-        for tag in get_rename_tags():
+        # Remove ID tag from the movie name
+        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+
+        # Extract media details
+        details = []
+        for tag in rename_tags:
             tag = tag.strip()
-            if tag == 'TMDB':
-                tmdb_match = re.search(r'\{tmdb-(\d+)\}', proper_movie_name)
-                if tmdb_match:
-                    details.append(f"{{tmdb-{tmdb_match.group(1)}}}")
-            elif tag == 'IMDB':
-                imdb_match = re.search(r'\{imdb-(\w+)\}', proper_movie_name)
-                if imdb_match:
-                    details.append(f"{{imdb-{imdb_match.group(1)}}}")
-            elif tag in media_info:
+            if tag not in ['TMDB', 'IMDB'] and tag in media_info:
                 value = media_info[tag]
-
                 if isinstance(value, list):
                     formatted_value = '+'.join([str(language).upper() for language in value])
                     details.append(f"[{formatted_value}]")
@@ -224,7 +227,15 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     details.append(f"[{value}]")
 
         details_str = ''.join(details)
-        enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
+
+        # Construct new filename only if there are details or an ID tag
+        if id_tag or details_str:
+            if id_tag and details_str:
+                enhanced_movie_folder = f"{clean_movie_name} {id_tag} - {details_str}".strip()
+            elif id_tag:
+                enhanced_movie_folder = f"{clean_movie_name} {id_tag}".strip()
+            else:
+                enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
 
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:

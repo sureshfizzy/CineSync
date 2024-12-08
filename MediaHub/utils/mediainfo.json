@@ -5,6 +5,13 @@
     "DynamicRange": ["HDR10+", "HDR10", "HDR", "PQ", "HLG", "DV", "Dolby Vision"],
     "Resolutions": ["2160p", "1080p", "720p", "480p"],
     "MovieVersions": ["4K Remaster", "IMAX", "Criterion Collection", "IMAX Enhanced", "Special Edition", "Theatrical Cut", "Director's Cut", "Open Matte"],
-    "StreamingServices": ["Amazon", "Netflix", "Disney+", "Apple TV+", "HBO Max", "Hulu", "Peacock", "Paramount+"],
-    "ValidLanguages": ["ENGLISH", "HINDI", "SPANISH", "FRENCH", "GERMAN", "JAPANESE", "KOREAN", "CHINESE", "ENG", "GER"]
+    "StreamingServices": ["Amazon", "AMZN", "Apple TV+", "ATVP", "CRiT", "Disney+", "DSNP", "HBO Max", "HBO", "HMAX", "Hulu", "Paramount+", "PMTP", "Netflix", "NF", "Peacock", "PCOK", "Stan", "STAN"],
+    "ValidLanguages": [
+        "ENGLISH", "EN", "HINDI", "HI", "SPANISH", "ES", "FRENCH", "FR", "GERMAN", "DE", "JAPANESE", "JA", "KOREAN", "KO",
+        "CHINESE", "ZH", "RUSSIAN", "RU", "ITALIAN", "IT", "PORTUGUESE", "PT", "ARABIC", "AR", "TURKISH", "TR", "DUTCH", "NL",
+        "POLISH", "PL", "SWEDISH", "SV", "NORWEGIAN", "NO", "DANISH", "DA", "FINNISH", "FI", "GREEK", "EL", "CZECH", "CS",
+        "ROMANIAN", "RO", "BULGARIAN", "BG", "HUNGARIAN", "HU", "SERBIAN", "SR", "HEBREW", "HE", "THAI", "TH", "VIETNAMESE", "VI",
+        "INDONESIAN", "ID", "MALAY", "MS", "TAMIL", "TA", "TELUGU", "TE", "BENGALI", "BN", "MARATHI", "MR", "PUNJABI", "PA",
+        "URDU", "UR", "SWAHILI", "SW", "FILLIPINO", "FIL"
+    ]
 }
