@@ -204,13 +204,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Use anime season number if available, otherwise use the default season handling
     if anime_result:
         season_dest_path = os.path.join(base_dest_path, f"Season {int(anime_result.get('season_number', '01'))}")
-        log_message(f"season_dest_path: {season_dest_path}", level="DEBUG")
     else:
         season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
 
-    extras_dest_path = os.path.join(extras_base_dest_path, 'Extras')
-
-    season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
     extras_dest_path = os.path.join(extras_base_dest_path, 'Extras')
 
     # Function to check if show folder exists in any resolution folder

@@ -179,11 +179,17 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     episode_name = None
 
     # Parse the original filename to get the correct episode number
-    original_episode_match = re.search(r'(?:E|x|^)(\d+)', file)
+    original_episode_match = re.search(r'S(\d{2})E(\d{2})', file)
     if original_episode_match:
-        actual_episode = original_episode_match.group(1)
+        season_number = original_episode_match.group(1)
+        actual_episode = original_episode_match.group(2)
     else:
-        actual_episode = episode_number
+        original_episode_match = re.search(r'(\d+)x(\d+)', file)
+        if original_episode_match:
+            season_number = str(int(original_episode_match.group(1))).zfill(2)
+            actual_episode = original_episode_match.group(2)
+        else:
+            actual_episode = episode_number
 
     if rename_enabled and show_id:
         try:
