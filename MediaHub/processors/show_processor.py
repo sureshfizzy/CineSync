@@ -7,7 +7,7 @@ from utils.logging_utils import log_message
 from config.config import *
 from dotenv import load_dotenv, find_dotenv
 from processors.anime_processor import is_anime_file, process_anime_show
-from utils.file_utils import fetch_json
+from utils.file_utils import *
 from utils.mediainfo import *
 
 # Retrieve base_dir from environment variables
@@ -223,21 +223,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         extras_dest_path = os.path.join(existing_show_folder_path, 'Extras')
 
     # Check if SKIP_EXTRAS_FOLDER is enabled and handle accordingly
-    if is_skip_extras_folder_enabled():
-        if create_extras_folder:
-            if is_source_structure_enabled():
-                log_message(f"Skipping extras file: {file} in source structure mode due to SKIP_EXTRAS_FOLDER being enabled.", level="INFO")
-                return
-            else:
-                # If source structure is not enabled, skip extras folder creation
-                log_message(f"Skipping extras file: {file} due to SKIP_EXTRAS_FOLDER being enabled.", level="INFO")
-                return
-    else:
-        # If SKIP_EXTRAS_FOLDER is not enabled, create the Extras folder if necessary
-        if create_extras_folder and not os.path.exists(extras_dest_path):
-            os.makedirs(extras_dest_path, exist_ok=True)
-            log_message(f"Created Extras folder at: {extras_dest_path}", level="INFO")
-        dest_file = os.path.join(extras_dest_path, file)
+    if is_skip_extras_folder_enabled() and is_file_extra(file, src_file):
+        log_message(f"Skipping extras file: {file} based on size and SKIP_EXTRAS_FOLDER setting", level="INFO")
+        return None
 
     # Extract media information and Rename files
     media_info = extract_media_info(file, keywords)

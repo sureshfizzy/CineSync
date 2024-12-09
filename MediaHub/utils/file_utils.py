@@ -4,6 +4,7 @@ import json
 import inspect
 import requests
 from utils.logging_utils import log_message
+from config.config import *
 
 def fetch_json(url):
     """Fetch JSON data from the provided URL."""
@@ -247,3 +248,30 @@ def get_anime_patterns():
 
     combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)
     return re.compile(combined_pattern, re.IGNORECASE)
+
+def skip_files(file):
+    """Determine if the file should be skipped based on its extension."""
+    extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.ping', '.txt'}
+    _, ext = os.path.splitext(file.lower())
+    return ext in extensions
+
+def is_file_extra(file, file_path):
+    """
+    Determine if the file is an extra based on size.
+    Skip .srt files regardless of size.
+    """
+
+    if os.path.islink(file_path):
+        return False
+
+    if file.lower().endswith('.srt'):
+        return False
+
+    file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+    extras_max_size_mb = get_extras_max_size_mb()
+
+    if file_size_mb <= extras_max_size_mb:
+        return True
+    else:
+        return False
