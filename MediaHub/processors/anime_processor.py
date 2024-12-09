@@ -2,7 +2,7 @@ import os
 import re
 import requests
 from utils.logging_utils import log_message
-from utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder
+from utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder, get_anime_patterns
 from api.tmdb_api import search_tv_show, get_episode_name
 from config.config import *
 from utils.mediainfo import *
@@ -11,14 +11,8 @@ def is_anime_file(filename):
     """
     Detect if the file is likely an anime file based on naming patterns
     """
-    anime_patterns = [
-        r'\[.+?\]',
-        r'\s-\s\d+\s',
-        r'(?:(?:Season|S|\d+(?:st|nd|rd|th)\s+Season)\s*\d*\s*Episode|Ep\.?\s*\d+)',
-        r'\.(mkv|mp4)$'
-    ]
-
-    return any(re.search(pattern, filename, re.IGNORECASE) for pattern in anime_patterns)
+    anime_pattern = get_anime_patterns()
+    return bool(anime_pattern.search(filename))
 
 def extract_anime_episode_info(filename):
     """
