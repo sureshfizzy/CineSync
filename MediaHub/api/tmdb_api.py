@@ -1,3 +1,4 @@
+import os
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -42,7 +43,7 @@ def get_external_ids(item_id, media_type):
         return {}
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None):
     global api_key
     if not check_api_key():
         return query
@@ -94,11 +95,17 @@ def search_tv_show(query, year=None, auto_select=False):
             log_message(f"Error during fallback search: {e}", level="ERROR")
 
     if not results:
-        log_message(f"All previous searches failed, attempting with Search with Cleaned Name", "DEBUG", "stdout")
+        log_message(f"Attempting with Search with Cleaned Name", "DEBUG", "stdout")
         cleaned_title, year_from_query = clean_query(query)
         if cleaned_title != query:
             log_message(f"Cleaned query: {cleaned_title}", "DEBUG", "stdout")
             results = fetch_results(cleaned_title, year or year_from_query)
+
+    if not results and actual_dir:
+        dir_based_query = os.path.basename(actual_dir)
+        log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
+        cleaned_dir_query, dir_year = clean_query(dir_based_query)
+        results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
