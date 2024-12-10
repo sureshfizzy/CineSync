@@ -104,7 +104,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 create_extras_folder = True
 
             # Extract season number
-            season_match = re.search(r'S(\d{2})E\d{2}', episode_identifier, re.IGNORECASE)
+            season_match = re.search(r'(?:S|Season)(\d+)', clean_folder_name, re.IGNORECASE)
             if season_match:
                 season_number = season_match.group(1)
             else:

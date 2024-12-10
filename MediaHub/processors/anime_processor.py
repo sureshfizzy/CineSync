@@ -26,6 +26,26 @@ def extract_anime_episode_info(filename):
     clean_filename = os.path.splitext(clean_filename)[0]
     clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
 
+    season_detection_patterns = [
+        r'^(.+?)\s*S(\d+)\s*-\s*(\d+)$',
+        r'^(.+?)\s*Season\s*(\d+)[-_\s]*(?:-\s*)?(\d+)(?:\s|$)'
+    ]
+
+    for pattern in season_detection_patterns:
+        match = re.match(pattern, clean_filename, re.IGNORECASE)
+        if match:
+            show_name = match.group(1).strip()
+            season_number = str(int(match.group(2))).zfill(2)
+            episode_number = str(int(match.group(3))).zfill(2)
+
+            show_name = re.sub(r'[._-]', ' ', show_name).strip()
+            return {
+                'show_name': show_name,
+                'season_number': season_number,
+                'episode_number': episode_number,
+                'episode_title': None
+            }
+
     ordinal_season_patterns = [
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season[-_\s]*(?:-\s*)?(\d+)(?:\s|$)',
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season.*?[-_](\d+)(?:\s|$)',
