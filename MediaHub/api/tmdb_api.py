@@ -56,11 +56,16 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None):
 
     def fetch_results(query, year=None):
         params = {'api_key': api_key, 'query': query}
-        if year:
-            params['first_air_date_year'] = year
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
+        log_message(f"Primary search URL (without year): {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
+
+        if not response and year:
+            params['first_air_date_year'] = year
+            full_url_with_year = f"{url}?{urllib.parse.urlencode(params)}"
+            log_message(f"Secondary search URL (with year): {full_url_with_year}", "DEBUG", "stdout")
+            response = perform_search(params, url)
+
         return response
 
     def search_with_extracted_title(query, year=None):
