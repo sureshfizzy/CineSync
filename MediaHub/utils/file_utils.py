@@ -243,7 +243,8 @@ def get_anime_patterns():
         r'\[(?:SUB-ITA|VOSTFR|Multi-Subs|Dual Audio)\]',
         r'\[(?:COMPLETA|Complete)\]',
         r'\[\d+\.\d+GB\]',
-        r'\(V\d+\)'
+        r'\(V\d+\)',
+        r'Season_-\d{2}',
     ]
 
     combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)

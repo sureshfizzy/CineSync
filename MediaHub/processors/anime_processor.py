@@ -17,24 +17,34 @@ def is_anime_file(filename):
 def extract_anime_episode_info(filename):
     """
     Extract anime-specific episode information from the provided filename.
+    Returns a dictionary with show_name, season_number, episode_number, and episode_title.
     """
 
     clean_filename = re.sub(r'^\[.*?\]\s*', '', filename)
     clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
     clean_filename = re.sub(r'\(.*?\)', '', clean_filename)
     clean_filename = os.path.splitext(clean_filename)[0]
-    clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
     clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
 
-    ordinal_season_pattern = r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season\s*-\s*(\d+)$'
-    match = re.match(ordinal_season_pattern, clean_filename, re.IGNORECASE)
-    if match:
-        return {
-            'show_name': match.group(1).strip(),
-            'season_number': str(int(match.group(2))).zfill(2),
-            'episode_number': match.group(3),
-            'episode_title': None
-        }
+    ordinal_season_patterns = [
+        r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season[-_\s]*(?:-\s*)?(\d+)(?:\s|$)',
+        r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season.*?[-_](\d+)(?:\s|$)',
+    ]
+
+    for pattern in ordinal_season_patterns:
+        match = re.match(pattern, clean_filename, re.IGNORECASE)
+        if match:
+            show_name = match.group(1).strip()
+            season_number = str(int(match.group(2))).zfill(2)
+            episode_number = str(int(match.group(3))).zfill(2)
+
+            if len(episode_number) <= 3:
+                return {
+                    'show_name': show_name,
+                    'season_number': season_number,
+                    'episode_number': episode_number,
+                    'episode_title': None
+                }
 
     anime_patterns = [
         r'^(.+?)\s*S(\d+)\s*-\s*.*?-\s*(\d+)$',
@@ -51,25 +61,22 @@ def extract_anime_episode_info(filename):
             if pattern_index == 1:
                 show_name = match.group(1).strip()
                 season_number = match.group(2).zfill(2)
-                episode_number = match.group(3)
+                episode_number = match.group(3).zfill(2)
                 episode_title = None
-
             elif pattern_index == 2:
                 show_name = match.group(1).strip()
                 season_number = None
-                episode_number = match.group(2)
+                episode_number = match.group(2).zfill(2)
                 episode_title = match.group(3)
-
             elif pattern_index == 3:
                 show_name = match.group(1).strip()
                 season_number = match.group(2).zfill(2)
-                episode_number = match.group(3)
+                episode_number = match.group(3).zfill(2)
                 episode_title = match.group(4)
-
             else:
                 show_name = match.group(1).strip()
                 season_number = None
-                episode_number = match.group(2)
+                episode_number = match.group(2).zfill(2)
                 episode_title = match.group(3) if len(match.groups()) > 2 else None
 
             show_name = re.sub(r'[._-]', ' ', show_name).strip()
