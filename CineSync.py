@@ -324,22 +324,19 @@ def main():
         greet_user()
         print("\nMain Menu:")
         print("1) Edit .env file")
-        print("2) Real-Time Monitoring")
-        print("3) Full Library Scan")
-        print("4) Configure Broken Symlinks")
-        print("5) Exit")
+        print("2) Full Library Scan")
+        print("3) Configure Broken Symlinks")
+        print("4) Exit")
 
         choice = input("Select an option: ")
 
         if choice == '1':
             edit_env_file()
         elif choice == '2':
-            real_time_monitoring()
-        elif choice == '3':
             execute_full_library_scan()
-        elif choice == '4':
+        elif choice == '3':
             configure_broken_symlinks()
-        elif choice == '5':
+        elif choice == '4':
             print("Exiting the script. Have a great day!")
             break
         else:
