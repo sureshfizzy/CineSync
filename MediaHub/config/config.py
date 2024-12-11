@@ -61,6 +61,12 @@ def get_directories():
 def is_tmdb_folder_id_enabled():
     return os.getenv('TMDB_FOLDER_ID', 'true').lower() in ['true', '1', 'yes']
 
+def is_imdb_folder_id_enabled():
+    return os.getenv('IMDB_FOLDER_ID', 'false').lower() == 'true'
+
+def is_tvdb_folder_id_enabled():
+    return os.getenv('TVDB_FOLDER_ID', 'false').lower() == 'true'
+
 def is_rename_enabled():
     return os.getenv('RENAME_ENABLED', 'false').lower() in ['true', '1', 'yes']
 
@@ -72,9 +78,6 @@ def is_skip_extras_folder_enabled():
 
 def get_extras_max_size_mb():
     return int(os.getenv('EXTRAS_MAX_SIZE_MB', '100'))
-
-def is_imdb_folder_id_enabled():
-    return os.getenv('IMDB_FOLDER_ID', 'false').lower() == 'true'
 
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'

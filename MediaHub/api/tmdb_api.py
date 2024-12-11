@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
-from config.config import get_api_key, is_imdb_folder_id_enabled
+from config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled
 from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title
 
 _api_cache = {}
@@ -143,11 +143,16 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None):
         show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
         tmdb_id = chosen_show.get('id')
 
+        external_ids = get_external_ids(tmdb_id, 'tv')
+
         if is_imdb_folder_id_enabled():
-            external_ids = get_external_ids(tmdb_id, 'tv')
             imdb_id = external_ids.get('imdb_id', '')
-            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}}"
             log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="INFO")
+            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}}"
+        elif is_tvdb_folder_id_enabled():
+            tvdb_id = external_ids.get('tvdb_id', '')
+            log_message(f"TV Show: {show_name}, TVDB ID: {tvdb_id}", level="INFO")
+            proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}}"
         else:
             proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
