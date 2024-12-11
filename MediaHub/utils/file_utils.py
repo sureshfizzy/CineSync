@@ -175,7 +175,7 @@ def standardize_title(title, check_word_count=True):
     replacements = {
         '0': 'o', '1': 'i', '4': 'a', '5': 's', '7': 't', '9': 'g',
         '@': 'a', '#': 'h', '$': 's', '%': 'p', '&': 'and', '*': 'x',
-        '3': 'e', '8': 'b'
+        '3': 'e', '8': 'b', '6': 'u'
     }
 
     def replacement_func(match):
