@@ -125,6 +125,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             create_extras_folder = True
             episode_identifier = "S01E01"
 
+    anime_episode_pattern = re.search(r'[-\s]E(\d+)\s', file)
+    if anime_episode_pattern:
+        episode_number = anime_episode_pattern.group(1)
+        episode_number = episode_number.zfill(2)
+        season_match = re.search(r'Season\s*(\d+)', file, re.IGNORECASE)
+        if season_match:
+            season_number = season_match.group(1).zfill(2)
+        episode_identifier = f"S{season_number}E{episode_number}"
+
     # Handle invalid show names by using parent folder name
     if not show_name or show_name.lower() in ["invalid name", "unknown"]:
         show_name = clean_folder_name
