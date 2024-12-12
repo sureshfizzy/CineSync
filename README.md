@@ -1,3 +1,18 @@
+![Github](https://github.com/user-attachments/assets/1d61e450-b5df-4a7d-960c-a4d77770c933)
+
+<p align="center">
+  <a href="https://discord.gg/BtZYTCQtAR">
+    <img src="https://img.shields.io/badge/discord-cinesync-5865F2?logo=discord&logoColor=white" alt="Discord">
+  </a>
+  <a href="https://github.com/sureshfizzy/CineSync/releases/latest">
+    <img src="https://img.shields.io/github/downloads/sureshfizzy/CineSync/total.svg?maxAge=60&style=flat-square" alt="GitHub Releases">
+  </a>
+  <a href="https://hub.docker.com/r/sureshfizzy/cinesync">
+    <img src="https://img.shields.io/docker/pulls/sureshfizzy/cinesync.svg?maxAge=60&style=flat-square" alt="Docker Pulls">
+  </a>
+</p>
+
+
 # CineSync - Organize Your Debrid Library Easily
 
 CineSync is a Python-based library management system designed to efficiently organize debrid libraries for Movies & TV shows, eliminating the need for Sonarr/Radarr. Users downloading from DMM Manager can seamlessly sort their library into seasons, whether it's a single file or a folder. CineSync streamlines the organization of your library and creates symbolic links, providing full control over your data locally. While highly optimized for debrid platforms, CineSync is also versatile and works effectively with non-debrid platforms.
@@ -5,6 +20,15 @@ CineSync is a Python-based library management system designed to efficiently org
 # General Info
 
 CineSync works by creating symbolic links from the source directory to the destination directory and organizing them according to the user's preferences. This allows users to maintain a well-structured library without physically moving or duplicating the original files.
+
+## Getting Started
+
+For detailed instructions on installation, configuration, and usage, please visit our Wiki:
+
+- [Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)
+- [Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration)
+- [Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage)
+- [Docker Volumes](https://github.com/sureshfizzy/CineSync/wiki/Volumes)
 
 ## Docker Hub Repository
 
@@ -58,15 +82,6 @@ CineSync now includes a fully integrated real-time monitoring feature that autom
 - **Customization:** You can easily customize the monitoring interval and other settings to better suit your specific needs and library requirements.
 
 CineSync’s real-time monitoring is now a core feature of the script and Docker images, allowing for seamless integration into your workflow. With this feature, users can effortlessly manage their media library and maintain a well-organized collection of files.
-
-## Getting Started
-
-For detailed instructions on installation, configuration, and usage, please visit our Wiki:
-
-- [Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)
-- [Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration)
-- [Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage)
-- [Docker Volumes](https://github.com/sureshfizzy/CineSync/wiki/Volumes)
 
 ## Contributors
 
