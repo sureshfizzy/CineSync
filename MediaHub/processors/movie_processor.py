@@ -2,7 +2,7 @@ import os
 import re
 import json
 import requests
-from utils.file_utils import extract_movie_name_and_year, extract_resolution_from_filename, check_existing_variations, standardize_title, remove_genre_names, clean_query
+from utils.file_utils import *
 from api.tmdb_api import search_movie, get_movie_collection
 from utils.logging_utils import log_message
 from config.config import *
@@ -77,8 +77,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     collection_info = None
     api_key = get_api_key()
     if api_key and is_movie_collection_enabled():
-        result = search_movie(movie_name, year, auto_select=auto_select)
-        if isinstance(result, dict):
+        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
+        if isinstance(result, tuple):
+            original_name, cleaned_title = result
+            movie_name = cleaned_title
+            proper_movie_name = f"{cleaned_title} ({year})"
+        elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
             tmdb_id = result['id']
             if is_tmdb_folder_id_enabled():
@@ -90,20 +94,20 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             else:
                 collection_info = get_movie_collection(movie_title=movie_name, year=year)
         else:
-            if not offline_mode:
-                log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
-        result = search_movie(movie_name, year, auto_select=auto_select)
-        if isinstance(result, dict):
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file)
+        if isinstance(result, tuple):
+            original_name, cleaned_title = result
+            movie_name = cleaned_title
+            proper_movie_name = f"{cleaned_title} ({year})"
+        elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
         else:
-            if not offline_mode:
-                log_message(f"Could not find movie in TMDb or TMDb API error: {movie_name} ({year})", level="ERROR")
             proper_movie_name = f"{movie_name} ({year})"
     else:
         proper_movie_name = f"{movie_name} ({year})"

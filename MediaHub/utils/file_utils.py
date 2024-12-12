@@ -108,6 +108,8 @@ def clean_query(query, keywords_file='keywords.json'):
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
+    query = re.sub(r'(?:www\.\S+\.\S+\s*-?)', '', query)
+
     remove_keywords = load_keywords(keywords_file)
 
     query = query.replace('.', ' ')
@@ -118,10 +120,15 @@ def clean_query(query, keywords_file='keywords.json'):
     query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
-    query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}\b.*', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}EP?\d+\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\[.*?\]', '', query)
+    query = re.sub(r'\(\d{4}\)', '', query)
+    query = re.sub(r'\.(mkv|mp4|avi)$', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\b(x264|x265|h264|h265|720p|1080p|4K|2160p)\b', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\b\d+MB\b', '', query)
+    query = re.sub(r'\b(ESub|Eng Sub)\b', '', query, flags=re.IGNORECASE)
 
-    log_message(f"No year found. Final cleaned query: '{query}'", "DEBUG", "stdout")
+    print(f"Final cleaned query: '{query}'")
     return query, None
 
 def normalize_query(query):
@@ -276,3 +283,30 @@ def is_file_extra(file, file_path):
         return True
     else:
         return False
+
+def clean_query_movie(query, keywords_file='keywords.json'):
+    if not isinstance(query, str):
+        log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
+        return ""
+
+    log_message(f"Original query: '{query}'", "DEBUG", "stdout")
+
+    # Load keywords to remove
+    remove_keywords = load_keywords(keywords_file)
+
+    query = re.sub(r'www\.[^\s]+\s+-\s+', '', query)
+    query = query.replace('.', ' ')
+    keywords_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_keywords)) + r')\b', re.IGNORECASE)
+    query = keywords_pattern.sub('', query)
+    query = re.sub(r'\b(?:\d{3,4}p|WEB-DL|HDRIP|BLURAY|DVDRIP|UNTOUCHED|AVC|AAC|ESub)\b', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\b\d+(?:\.\d+)?\s*(?:GB|MB)\b', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\(\d{4}\)', '', query)
+    query = re.sub(r'\[.*?\]', '', query)
+    query = re.sub(r'-+', ' ', query)
+    query = re.sub(r'\s+', ' ', query).strip()
+    query = re.sub(r'\b\d+\b', '', query).strip()
+    query = re.sub(r'\b(?:Telugu|Hindi|Tamil|Malayalam|Kannada|Bengali|Punjabi|Marathi|Gujarati|English)\b', '', query, flags=re.IGNORECASE).strip()
+    query = re.sub(r'\b(?:mkv|mp4|avi)\b', '', query, flags=re.IGNORECASE).strip()
+
+    log_message(f"Cleaned movie query: '{query}'", "DEBUG", "stdout")
+    return query
