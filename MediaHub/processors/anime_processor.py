@@ -126,6 +126,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     folder_resolution = extract_resolution_from_folder(os.path.basename(root))
     resolution = file_resolution or folder_resolution
     media_info = {}
+    resolution = resolution.lower()
 
     # Check for media info
     root_folder_name = os.path.basename(os.path.dirname(root))
@@ -216,12 +217,16 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         try:
             try:
                 episode_name = get_episode_name(show_id, int(season_number), int(actual_episode))
+                if episode_name and episode_name != episode_title:
+                    new_name += f" - {episode_name}"
+                elif episode_title:
+                    new_name += f" - {episode_title}"
             except Exception as e:
                 log_message(f"Failed to fetch episode name: {e}", level="WARNING")
 
             episode_name = episode_name or episode_title or ""
 
-            new_name = f"{show_name} - S{str(season_number).zfill(2)}E{str(actual_episode).zfill(3)}"
+            new_name = f"{show_name}"
             if episode_name:
                 new_name += f" - {episode_name}"
             if resolution:

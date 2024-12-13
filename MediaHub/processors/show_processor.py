@@ -252,7 +252,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     episode_name = get_episode_name(show_id, int(season_number), int(episode_number))
 
                     if episode_name:
-                        base_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}"
+                        base_name = f"{show_name} - {episode_name}".replace(' - -', ' -')
                         log_message(f"Renaming {file}", level="INFO")
                     else:
                         base_name = f"{show_name} - S{season_number}E{episode_number}"

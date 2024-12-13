@@ -70,7 +70,7 @@ def extract_media_info(filepath: str, keywords: dict) -> dict:
     for source in sources:
         for resolution in keywords["Resolutions"]:
             if re.search(resolution, source, re.IGNORECASE):
-                media_info['Resolution'] = resolution.upper()
+                media_info['Resolution'] = resolution.lower()
                 break
 
     for source in sources:
