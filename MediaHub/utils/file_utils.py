@@ -95,11 +95,11 @@ def extract_resolution_from_filename(filename):
         return resolution
     return None
 
-def load_keywords(file_name):
+def load_keywords(file_name, key="keywords"):
     file_path = os.path.join(os.path.dirname(__file__), file_name)
     with open(file_path, 'r') as file:
         data = json.load(file)
-    return data.get("keywords", [])
+    return data.get(key, [])
 
 def clean_query(query, keywords_file='keywords.json'):
     if not isinstance(query, str):
@@ -232,13 +232,16 @@ def extract_title(filename):
     else:
         return "", None
 
-def get_anime_patterns():
+def get_anime_patterns(keywords_file='keywords.json'):
     """
     Returns a compiled regex pattern for detecting anime files.
     Includes patterns for common anime release groups, formats, and naming conventions.
     """
+
+    release_groups = load_keywords(keywords_file, key="release_groups")
+
     anime_patterns = [
-        r'\[(?:SubsPlease|Erai-raws|HorribleSubs|HorribleRips|Judas|EMBER|ASW|Commie|GJM|SSA|Mezashite|Underwater|Seregorn)\]',
+        r'\[(?:' + '|'.join(map(re.escape, release_groups)) + r')\]',
         r'\s-\s\d{2,3}\s',
         r'\[(?:Sub|Dub|Raw)\]',
         r'\[(?:1080p|720p|480p)\]',

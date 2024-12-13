@@ -20,5 +20,11 @@
         "\\[.*?Dual Audio.*?\\]",
         "\\[.*?1080p.*?\\]",
         "\\[.*?Batch.*?\\]"
+    ],
+    "release_groups": [
+        "SubsPlease", "Erai-raws", "HorribleSubs", "HorribleRips", "Judas", "EMBER", "ASW", "Commie", "GJM",
+        "SSA", "Mezashite", "Underwater", "Anime Time", "Seregorn", "Memento", "Sakura-Subs", "Chronos",
+        "R1", "DmonHiro", "Frostii", "Otakusensei", "AYZ", "Live-eviL", "ShindenSubs", "Vivid", "Kawaii-Subs",
+        "NyaaSi", "Hikari-Subs", "Yumeko", "Tenshi", "Gokudera", "TokyoTosho"
     ]
 }
