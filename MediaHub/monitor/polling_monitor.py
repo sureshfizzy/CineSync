@@ -64,45 +64,58 @@ def get_mount_point(path):
 
     return True, path
 
+def verify_mount_health(directory):
+    """
+    Performs health checks on the mounted directory without requiring write access.
+    Returns True if the mount appears healthy, False otherwise.
+    """
+    try:
+        contents = os.listdir(directory)
+        if not contents:
+            return True
+
+        for item in contents[:1]:
+            full_path = os.path.join(directory, item)
+            os.stat(full_path)
+
+        os.statvfs(directory)
+
+        return True
+
+    except OSError:
+        return False
+    except Exception:
+        return False
+
 def verify_rclone_mount(directory):
     """
     Verifies if the directory is under a mount and checks mount health.
-    Returns tuple: (is_mounted, has_version_file)
+    Returns tuple: (is_mounted, is_healthy)
     """
     global mount_state
-    log_message(f"Verifying mount status for directory: {directory}", level="DEBUG")
 
-    # Check if directory exists
     if not os.path.exists(directory):
-        mount_state = False
         return False, False
 
-    # Find the mount point for this directory
     is_mounted, mount_point = get_mount_point(directory)
 
     if is_mounted and mount_point:
-        if mount_state is not True:
-            log_message(f"Directory {directory} is under mount point: {mount_point}", level="INFO")
-            mount_state = True
+        is_healthy = verify_mount_health(directory)
 
-        # Perform mount health check
-        try:
-            # Try to list directory contents to verify mount is responsive
-            os.listdir(directory)
-
-            # Simply check if version.txt exists
-            version_file = os.path.join(mount_point, 'version.txt')
-            has_version_file = os.path.exists(version_file)
-
-            log_message(f"Version file is {'present' if has_version_file else 'missing'} at mount point {mount_point}", level="DEBUG")
-            return True, has_version_file
-
-        except Exception as e:
-            log_message(f"Mount point appears unresponsive: {str(e)}", level="WARNING")
-            mount_state = False
+        if is_healthy:
+            if mount_state != True:
+                log_message(f"Mount is now available: {mount_point}", level="INFO")
+                mount_state = True
+            return True, True
+        else:
+            if mount_state is not False:
+                log_message(f"Mount has become unresponsive: {mount_point}", level="WARNING")
+                mount_state = False
             return False, False
     else:
-        mount_state = False
+        if mount_state is not False:
+            log_message(f"Mount is not available: {directory}", level="WARNING")
+            mount_state = False
         return False, False
 
 def check_rclone_mount():
@@ -124,63 +137,16 @@ def check_rclone_mount():
         return False
 
     directory = src_dirs[0]
-    current_state = mount_state
 
     try:
-        is_mounted, has_version_file = verify_rclone_mount(directory)
-
-        if is_mounted:
-            if not has_version_file:
-                log_message(f"Mount detected, creating version file", level="INFO")
-                if not create_version_file(directory):
-                    log_message("Failed to create version file, mount may be read-only", level="ERROR")
-                    return False
-            return True
-        else:
-            if current_state is not False:
-                if not os.path.exists(directory):
-                    log_message(f"Mount unavailable - Directory does not exist: {directory}", level="WARNING")
-                else:
-                    log_message(f"Mount unavailable - Directory is not mounted or unresponsive: {directory}", level="WARNING")
-                mount_state = False
-            return False
+        is_mounted, is_healthy = verify_rclone_mount(directory)
+        return is_mounted and is_healthy
 
     except Exception as e:
-        if current_state is not False:
+        if mount_state is not False:
             log_message(f"Error checking mount: {str(e)}", level="ERROR")
             mount_state = False
         return False
-
-def create_version_file(directory):
-    """Creates version.txt file if it doesn't exist in the mounted directory."""
-    # First find the mount point
-    is_mounted, mount_point = get_mount_point(directory)
-    if not is_mounted or not mount_point:
-        log_message(f"Cannot create version file - no valid mount point found for {directory}", level="ERROR")
-        return False
-
-    version_file = os.path.join(mount_point, 'version.txt')
-    log_message(f"Checking for version file at mount point: {version_file}", level="DEBUG")
-
-    if not os.path.exists(version_file):
-        try:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            content = (
-                f"MediaHub Rclone Mount Verification File\n"
-                f"Created: {timestamp}\n"
-                f"Mount Point: {mount_point}\n"
-                f"Monitored Directory: {directory}"
-            )
-            with open(version_file, 'w') as f:
-                f.write(content)
-            log_message(f"Successfully created version.txt in mount point {mount_point}", level="INFO")
-            return True
-        except Exception as e:
-            log_message(f"Failed to create version.txt in mount point {mount_point}: {str(e)}", level="ERROR")
-            return False
-    else:
-        log_message(f"Version file already exists at mount point {mount_point}", level="DEBUG")
-    return True
 
 def scan_directories(dirs_to_watch, current_files):
     """Scans directories for new or removed files."""
