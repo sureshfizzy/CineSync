@@ -415,7 +415,7 @@ def get_episode_name(show_id, season_number, episode_number):
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            log_message(f"Episode {episode_number} not found for season {season_number}. Falling back to season data.", level="WARNING")
+            log_message(f"Episode {episode_number} not found for season {season_number}. Falling back to season data.", level="DEBUG")
             season_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}"
             season_params = {'api_key': api_key}
             try:
