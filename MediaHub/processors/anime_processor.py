@@ -126,7 +126,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     folder_resolution = extract_resolution_from_folder(os.path.basename(root))
     resolution = file_resolution or folder_resolution
     media_info = {}
-    resolution = resolution.lower()
+    resolution = resolution.lower() if resolution is not None else None
 
     # Check for media info
     root_folder_name = os.path.basename(os.path.dirname(root))
