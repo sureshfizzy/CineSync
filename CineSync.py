@@ -10,8 +10,8 @@ import pkg_resources
 import platform
 
 # Script Metadata
-SCRIPT_VERSION = "2.0"
-SCRIPT_DATE = "2024-09-08"
+SCRIPT_VERSION = "2.1"
+SCRIPT_DATE = "2024-12-14"
 
 # Define variables
 SCRIPTS_FOLDER = "MediaHub"
