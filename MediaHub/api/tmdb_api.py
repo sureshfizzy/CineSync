@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
-from config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled
+from config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
 from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie
 
 _api_cache = {}
@@ -320,17 +320,18 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
+        external_ids = get_external_ids(tmdb_id, 'movie')
+        imdb_id = external_ids.get('imdb_id', '')
 
         if is_imdb_folder_id_enabled():
-            external_ids = get_external_ids(tmdb_id, 'movie')
-            imdb_id = external_ids.get('imdb_id', '')
-            log_message(f"Movie: {movie_name}, IMDB ID: {imdb_id}", level="INFO")
             proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
-        else:
+        elif is_tmdb_folder_id_enabled():
             proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
+        else:
+            proper_name = f"{movie_name} ({movie_year})"
 
         _api_cache[cache_key] = proper_name
-        return proper_name
+        return tmdb_id, imdb_id, movie_name
     else:
         log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
         _api_cache[cache_key] = f"{query}"

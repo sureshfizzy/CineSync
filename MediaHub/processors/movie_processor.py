@@ -76,17 +76,21 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     collection_info = None
     api_key = get_api_key()
+
     if api_key and is_movie_collection_enabled():
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
-        if isinstance(result, tuple):
-            original_name, cleaned_title = result
-            movie_name = cleaned_title
-            proper_movie_name = f"{cleaned_title} ({year})"
-        elif isinstance(result, dict):
-            proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
-            tmdb_id = result['id']
+        if isinstance(result, (tuple, dict)):
+            if isinstance(result, tuple):
+                tmdb_id, imdb_id, proper_name = result
+            elif isinstance(result, dict):
+                proper_name = result['title']
+                year = result.get('release_date', '').split('-')[0]
+                tmdb_id = result['id']
+
+            proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+
             tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_movie_name)
             if tmdb_id_match:
                 movie_id = tmdb_id_match.group(1)
@@ -98,9 +102,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     elif api_key:
         result = search_movie(movie_name, year, auto_select=auto_select, file=file)
         if isinstance(result, tuple):
-            original_name, cleaned_title = result
-            movie_name = cleaned_title
-            proper_movie_name = f"{cleaned_title} ({year})"
+            tmdb_id, imdb_id, proper_name = result
+            proper_movie_name = f"{movie_name} ({year})"
+            if is_tmdb_folder_id_enabled() and tmdb_id:
+                proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+            if is_imdb_folder_id_enabled() and imdb_id:
+                proper_movie_name += f" {{imdb-{imdb_id}}}"
         elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
