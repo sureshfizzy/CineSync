@@ -32,6 +32,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     clean_folder_name, _ = clean_query(parent_folder_name)
 
+    is_extra = is_file_extra(file, src_file)
+
     # Initialize variables
     show_name = ""
     season_number = "01"
@@ -200,23 +202,31 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         }.get(resolution.lower(), 'Shows')
 
     # Destination path determination
-    if is_cinesync_layout_enabled():
-        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
-        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
-    elif is_source_structure_enabled():
-        base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
-        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
-    else:
-        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
-        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+    if is_extra:
+        if is_cinesync_layout_enabled():
+             base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
+        elif is_source_structure_enabled():
+            base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
+        else:
+            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
-    # Use anime season number if available, otherwise use the default season handling
-    if anime_result:
-        season_dest_path = os.path.join(base_dest_path, f"Season {int(anime_result.get('season_number', '01'))}")
+        season_dest_path = base_dest_path
     else:
-        season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
+        if is_cinesync_layout_enabled():
+            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+            extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+        elif is_source_structure_enabled():
+            base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+            extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+        else:
+            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+            extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
-    extras_dest_path = os.path.join(extras_base_dest_path, 'Extras')
+        # Use anime season number if available, otherwise use the default season handling
+        if anime_result:
+            season_dest_path = os.path.join(base_dest_path, f"Season {int(anime_result.get('season_number', '01'))}")
+        else:
+            season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
 
     # Function to check if show folder exists in any resolution folder
     def find_show_folder_in_resolution_folders():
