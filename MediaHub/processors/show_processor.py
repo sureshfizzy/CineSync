@@ -77,19 +77,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if not anime_result or episode_match:
         if episode_match:
             episode_identifier = episode_match.group(2)
-            if re.match(r'S\d{2}[eE]\d{2}', episode_identifier):
+            if re.match(r'S\d{2}[eE]\d{2}', episode_identifier, re.IGNORECASE):
                 show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', clean_folder_name).replace('-', ' ').replace('.', ' ').strip()
                 create_season_folder = True
-            elif re.match(r'[0-9]+x[0-9]+', episode_identifier):
+            elif re.match(r'[0-9]+x[0-9]+', episode_identifier, re.IGNORECASE):
                 show_name = episode_match.group(1).replace('.', ' ').strip()
                 season_number = re.search(r'([0-9]+)x', episode_identifier).group(1)
                 episode_identifier = f"S{season_number}E{episode_identifier.split('x')[1]}"
                 create_season_folder = True
-            elif re.match(r'S\d{2}[0-9]+', episode_identifier):
+            elif re.match(r'S\d{2}[0-9]+', episode_identifier, re.IGNORECASE):
                 show_name = episode_match.group(1).replace('.', ' ').strip()
                 episode_identifier = f"S{episode_identifier[1:3]}E{episode_identifier[3:]}"
                 create_season_folder = True
-            elif re.match(r'[0-9]+e[0-9]+', episode_identifier):
+            elif re.match(r'[0-9]+e[0-9]+', episode_identifier, re.IGNORECASE):
                 show_name = episode_match.group(1).replace('.', ' ').strip()
                 episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
                 create_season_folder = True
@@ -255,7 +255,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
             if tmdb_id_match:
                 show_id = tmdb_id_match.group(1)
-                episode_number_match = re.search(r'E(\d+)', episode_identifier)
+                episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
 
                 if episode_number_match:
                     episode_number = episode_number_match.group(1)
