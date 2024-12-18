@@ -11,6 +11,7 @@ from utils.logging_utils import log_message
 from utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra, skip_files
 from config.config import *
 from processors.db_utils import *
+from utils.plex_utils import *
 
 error_event = Event()
 log_imported_db = False
@@ -212,6 +213,9 @@ def process_file(args, processed_files_log):
             log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
             log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
             save_processed_file(src_file, dest_file)
+
+            if plex_update() and plex_token():
+                update_plex_after_symlink(dest_file)
 
         except FileExistsError:
             log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")

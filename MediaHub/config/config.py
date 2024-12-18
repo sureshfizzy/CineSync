@@ -100,3 +100,14 @@ def is_cinesync_layout_enabled():
 def get_rename_tags():
     tags = os.getenv('RENAME_TAGS', '').split(',')
     return [tag.strip() for tag in tags if tag.strip()]
+
+def plex_update():
+    return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
+
+def plex_token():
+    token = os.getenv('PLEX_TOKEN', None)
+    return token
+
+def plex_url():
+    token = os.getenv('PLEX_URL', None)
+    return token
