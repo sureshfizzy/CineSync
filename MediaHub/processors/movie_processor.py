@@ -131,7 +131,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
             if is_cinesync_layout_enabled():
-                dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
+                if custom_movie_layout():
+                    dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
+                else:
+                    dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
             else:
                 dest_path = os.path.join(dest_dir, 'CineSync', source_folder, movie_folder)
     else:

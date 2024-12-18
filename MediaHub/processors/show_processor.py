@@ -204,7 +204,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Destination path determination
     if is_extra:
         if is_cinesync_layout_enabled():
-             base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
+            if custom_show_layout():
+                base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder, 'Extras')
+            else:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
         elif is_source_structure_enabled():
             base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
         else:
@@ -213,8 +216,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         season_dest_path = base_dest_path
     else:
         if is_cinesync_layout_enabled():
-            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
-            extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+            if custom_show_layout():
+                base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
+            else:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
         elif is_source_structure_enabled():
             base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
             extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)

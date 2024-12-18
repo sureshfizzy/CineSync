@@ -97,6 +97,14 @@ def is_anime_scan():
 def is_cinesync_layout_enabled():
     return os.getenv('CINESYNC_LAYOUT', 'false').lower() == 'true'
 
+def custom_show_layout():
+    token = os.getenv('CUSTOM_SHOW_FOLDER', None)
+    return token
+
+def custom_movie_layout():
+    token = os.getenv('CUSTOM_MOVIE_FOLDER', None)
+    return token
+
 def get_rename_tags():
     tags = os.getenv('RENAME_TAGS', '').split(',')
     return [tag.strip() for tag in tags if tag.strip()]
