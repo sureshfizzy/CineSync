@@ -152,12 +152,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
         if is_imdb_folder_id_enabled():
             imdb_id = external_ids.get('imdb_id', '')
-            log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="INFO")
-            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}}"
+            log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="DEBUG")
+            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}} {{tmdb-{tmdb_id}}}"
         elif is_tvdb_folder_id_enabled():
             tvdb_id = external_ids.get('tvdb_id', '')
-            log_message(f"TV Show: {show_name}, TVDB ID: {tvdb_id}", level="INFO")
-            proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}}"
+            log_message(f"TV Show: {show_name}, TVDB ID: {tvdb_id}", level="DEBUG")
+            proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}} {{tmdb-{tmdb_id}}}"
         else:
             proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
