@@ -48,70 +48,6 @@ def delete_broken_symlinks(dest_dir):
                         os.rmdir(dir_path)
                         dir_path = os.path.dirname(dir_path)
 
-def determine_is_show(path):
-    """
-    Determine if a path contains TV shows, mini-series, or anime based on episode patterns or keywords.
-    Works with both direct file paths and directory paths.
-    If at least 2 files match common episode patterns, mini-series keywords, or anime patterns, return True.
-
-    Args:
-        path (str): Path to either a file or directory to check
-
-    Returns:
-        bool: True if the path contains TV shows/anime content, False otherwise
-    """
-    # Regular TV show and mini-series patterns
-    episode_patterns = re.compile(r'(S\d{2}\.E\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|[0-9]+x[0-9]+|S\d{2}[0-9]+|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|Season_-\d{2})', re.IGNORECASE)
-
-    # Get anime patterns
-    anime_patterns = get_anime_patterns()
-    match_count = 0
-    threshold = 2
-
-    # First check if the path itself matches any patterns
-    if os.path.isfile(path):
-        filename = os.path.basename(path)
-        if episode_patterns.search(filename) or anime_patterns.search(filename):
-            log_message(f"Direct file '{filename}' matches pattern.", level="DEBUG")
-            match_count += 1
-        directory = os.path.dirname(path)
-    else:
-        directory = path
-
-    log_message(f"Checking directory '{directory}' for TV shows, mini-series, or anime.", level="DEBUG")
-
-    try:
-        files = os.listdir(directory)
-        for file in files:
-            # Skip the file we already checked if it was passed directly
-            if os.path.isfile(path) and file == os.path.basename(path):
-                continue
-
-            if skip_files(file):
-                log_message(f"Skipping file {file} due to its extension.", level="DEBUG")
-                continue
-
-            log_message(f"Checking file: {file}", level="DEBUG")
-
-            # Check for TV show/mini-series patterns
-            if episode_patterns.search(file):
-                log_message(f"File '{file}' matches episode pattern.", level="DEBUG")
-                match_count += 1
-            # Check for anime patterns
-            elif anime_patterns.search(file):
-                log_message(f"File '{file}' matches anime pattern.", level="DEBUG")
-                match_count += 1
-            else:
-                log_message(f"File '{file}' does not match any pattern.", level="DEBUG")
-
-            if match_count >= threshold:
-                return True
-    except OSError as e:
-        log_message(f"Error accessing directory '{directory}': {e}", level="ERROR")
-        return False
-
-    return match_count >= threshold
-
 def process_file(args, processed_files_log):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
 
@@ -159,68 +95,60 @@ def process_file(args, processed_files_log):
     # Get additional anime patterns
     other_anime_patterns = get_anime_patterns()
 
-    # Fallback logic to determine if the folder is a TV show directory
-    season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
-    is_show_directory = bool(season_pattern.search(src_file))
+    # Check if the file should be considered an extra based on size
+    if skip_extras_folder and is_file_extra(file, src_file):
+        log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
+        return
 
-    if not is_show_directory and not episode_match and not mini_series_match:
-        is_show_directory = determine_is_show(src_file)
-
-    try:
-        # Check if the file should be considered an extra based on size
-        if skip_extras_folder and is_file_extra(file, src_file):
-            log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
-            return
-
-        if episode_match or is_show_directory or mini_series_match:
-            # Determine if the file is an episode or extra
-            if mini_series_match:
-                # Handle mini-series
-                dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
-            else:
-                # Handle regular show or episodes
-                dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
+    if episode_match or mini_series_match:
+        # Determine if the file is an episode or extra
+        if mini_series_match:
+            # Handle mini-series
+            dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
         else:
-            # Handle movies
-            dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+            # Handle regular show or episodes
+            dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
+    else:
+        # Handle movies
+        dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
 
-        # Check if dest_file is None
-        if dest_file is None:
-            log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
-            return
+    # Check if dest_file is None
+    if dest_file is None:
+        log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
+        return
 
-        # Ensure the destination directory exists
-        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+    # Ensure the destination directory exists
+    os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
-        # Check if symlink already exists
-        if os.path.islink(dest_file):
-            existing_src = os.readlink(dest_file)
-            if existing_src == src_file:
-                log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-                save_processed_file(src_file, dest_file)
-                return
-            else:
-                log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
-                os.remove(dest_file)
-
-        if os.path.exists(dest_file) and not os.path.islink(dest_file):
-            log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
-            return
-
-        # Create symlink
-        try:
-            os.symlink(src_file, dest_file)
-            log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
-            log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
+    # Check if symlink already exists
+    if os.path.islink(dest_file):
+        existing_src = os.readlink(dest_file)
+        if existing_src == src_file:
+            log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             save_processed_file(src_file, dest_file)
+            return
+        else:
+            log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
+            os.remove(dest_file)
 
-            if plex_update() and plex_token():
-                update_plex_after_symlink(dest_file)
+    if os.path.exists(dest_file) and not os.path.islink(dest_file):
+        log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
+        return
 
-        except FileExistsError:
-            log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
-        except OSError as e:
-            log_message(f"Error creating symlink for {src_file}: {e}", level="ERROR")
+    # Create symlink
+    try:
+        os.symlink(src_file, dest_file)
+        log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
+        log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
+        save_processed_file(src_file, dest_file)
+
+        if plex_update() and plex_token():
+            update_plex_after_symlink(dest_file)
+
+    except FileExistsError:
+        log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
+    except OSError as e:
+        log_message(f"Error creating symlink for {src_file}: {e}", level="ERROR")
 
     except Exception as e:
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"

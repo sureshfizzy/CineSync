@@ -52,14 +52,8 @@ def should_skip_file(filename):
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
     global offline_mode
 
-    if any(root == source_dir.strip() for source_dir in source_dirs):
-        parent_folder_name = os.path.basename(src_file)
-        source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
-    else:
-        parent_folder_name = os.path.basename(root)
-        source_folder = os.path.basename(os.path.dirname(root))
-
-    source_folder = os.path.basename(source_folder)
+    source_folder = os.path.basename(os.path.dirname(root))
+    parent_folder_name = os.path.basename(src_file)
 
     # Check if folder should be skipped
     if should_skip_file(parent_folder_name):
