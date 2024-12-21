@@ -49,6 +49,7 @@ def extract_anime_episode_info(filename):
     ordinal_season_patterns = [
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season[-_\s]*(?:-\s*)?(\d+)(?:\s|$)',
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season.*?[-_](\d+)(?:\s|$)',
+        r'^(.+?)\s*S(\d+)\s*(\d+)(?:\s|$)'
     ]
 
     for pattern in ordinal_season_patterns:

@@ -5,6 +5,7 @@ import inspect
 import requests
 from utils.logging_utils import log_message
 from config.config import *
+from typing import Tuple, Optional
 
 def fetch_json(url):
     """Fetch JSON data from the provided URL."""
@@ -287,29 +288,136 @@ def is_file_extra(file, file_path):
     else:
         return False
 
-def clean_query_movie(query, keywords_file='keywords.json'):
+def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple[str, Optional[int]]:
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
-        return ""
+        return "", None
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
-    # Load keywords to remove
+    # Load configurable keywords to remove
     remove_keywords = load_keywords(keywords_file)
 
-    query = re.sub(r'www\.[^\s]+\s+-\s+', '', query)
-    query = query.replace('.', ' ')
-    keywords_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_keywords)) + r')\b', re.IGNORECASE)
-    query = keywords_pattern.sub('', query)
-    query = re.sub(r'\b(?:\d{3,4}p|WEB-DL|HDRIP|BLURAY|DVDRIP|UNTOUCHED|AVC|AAC|ESub)\b', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\b\d+(?:\.\d+)?\s*(?:GB|MB)\b', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\(\d{4}\)', '', query)
-    query = re.sub(r'\[.*?\]', '', query)
-    query = re.sub(r'-+', ' ', query)
-    query = re.sub(r'\s+', ' ', query).strip()
-    query = re.sub(r'\b\d+\b', '', query).strip()
-    query = re.sub(r'\b(?:Telugu|Hindi|Tamil|Malayalam|Kannada|Bengali|Punjabi|Marathi|Gujarati|English)\b', '', query, flags=re.IGNORECASE).strip()
-    query = re.sub(r'\b(?:mkv|mp4|avi)\b', '', query, flags=re.IGNORECASE).strip()
+    year_match = re.search(r'(?:19|20)\d{2}', query)
+    year = int(year_match.group(0)) if year_match else None
 
-    log_message(f"Cleaned movie query: '{query}'", "DEBUG", "stdout")
-    return query
+    query = re.sub(r'^\[[^\]]+\]', '', query)
+    query = re.sub(r'-[\w\.]+-?$', '', query)
+    query = re.sub(r'\[[\w\.]+\.(?:com|org|net)[^\]]*\]', '', query)
+
+    query = re.sub(r'\[[^\]]*(?:Audio|字幕|双语|音轨)[^\]]*\]', '', query)
+
+    tech_patterns = [
+        r'\b\d{3,4}[pi]\b',
+        r'\bWEB-?DL\b',
+        r'\b(?:H|x)(?:264|265)\b',
+        r'\bBlu-?Ray\b',
+        r'\bHDR\d*\b',
+        r'\bDDP?\d\.?\d?\b',
+        r'\b(?:\d+)?Audio\b',
+        r'\b\d+bit\b',
+        r'\[\d+\.\d+GB\]',
+        r'\b(?:AAC|AC3)\b',
+        r'\.\w+$'
+    ]
+    for pattern in tech_patterns:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
+
+    english_match = re.search(r'([A-Za-z][A-Za-z\s\.]+(?:Gone[A-Za-z\s\.]+)?)', query)
+    if english_match:
+        potential_title = english_match.group(1)
+        if not re.search(r'\b(?:WEB|DL|HDR|DDP|AAC)\b', potential_title, re.IGNORECASE):
+            final_title = potential_title
+        else:
+            final_title = query
+    else:
+        parts = re.split(r'[\[\]\(\)]', query)
+        final_title = next((part for part in parts if part and not re.search(r'\b(?:WEB|DL|HDR|DDP|AAC)\b', part, re.IGNORECASE)), parts[0])
+
+    final_title = re.sub(r'\s*\b\d{4}\b\s*', '', final_title)
+    final_title = re.sub(r'\s*\[.*?\]\s*', '', final_title)
+    final_title = re.sub(r'\s*\(.*?\)\s*', '', final_title)
+    final_title = re.sub(r'(?<=\w)\.(?=\w)', ' ', final_title)
+    final_title = re.sub(r'^[\W_]+|[\W_]+$', '', final_title)
+    final_title = re.sub(r'\s+', ' ', final_title)
+    final_title = final_title.strip()
+
+    log_message(f"Cleaned movie title: '{final_title}'", "DEBUG", "stdout")
+    return final_title, year
+
+def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'keywords.json') -> Tuple[str, Optional[str]]:
+    """
+    Enhanced query cleaning function that uses advanced pattern recognition
+    to clean TV show and movie titles, limiting to specified number of words.
+
+    Args:
+        query (str): The input query string to clean
+        max_words (int): Maximum number of words to keep in the final output
+        keywords_file (str): Path to keywords JSON file
+
+    Returns:
+        Tuple[str, Optional[str]]: Cleaned query and episode info if present
+    """
+    if not isinstance(query, str):
+        return "", None
+
+    episode_patterns = [
+        r'(?:\d+of\d+)',
+        r'(?:S\d{1,2}E\d{1,2})',
+        r'(?:Season\s*\d+)',
+        r'(?:Series\s*\d+)',
+        r'(?:\d{1,2}x\d{1,2})',
+        r'(?:E\d{1,2})',
+        r'(?:\d{1,2}\s*-\s*\d{1,2})',
+        r'\bS\d{1,2}\b',
+        r'\bSeason\s*\d{1,2}\b',
+        r'\[S\d{1,2}\]',
+        r'\(S\d{1,2}\)',
+        r'S\d{1,2}$'
+    ]
+
+    technical_patterns = [
+        r'\d{3,4}p',
+        r'(?:WEB-DL|HDTV|BluRay|BDRip)',
+        r'(?:x264|x265|h264|h265)',
+        r'(?:AAC|AC3|MP3)',
+        r'(?:HEVC|10bit)',
+        r'\[.*?\]',
+        r'\(.*?\)',
+        r'(?:MVGroup|Forum)',
+        r'\b\d{4}\b',
+        r'(?:mkv|mp4|avi)',
+        r'S\d{1,2}E\d{1,2}',
+        r'-\s*S\d+E\d+E\d+',
+        r'\[\d+\]'
+    ]
+
+    channel_pattern = r'^(?:Ch\d+|BBC\d*|ITV\d*|NBC|CBS|ABC|Fox|A&C)\.'
+    query = re.sub(channel_pattern, '', query, flags=re.IGNORECASE)
+
+    for pattern in technical_patterns:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
+
+    episode_info = None
+    for pattern in episode_patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            episode_info = match.group(0)
+            query = re.sub(pattern, '', query)
+            break
+
+    query = query.replace('.', ' ')
+    query = query.replace('_', ' ')
+    query = query.replace('-', ' ')
+    query = re.sub(r'\[.*?\]', '', query)
+    query = re.sub(r'\(.*?\)', '', query)
+    query = re.sub(r'[^\w\s]', '', query)
+    query = re.sub(r'\s+', ' ', query)
+    common_words = {'complete', 'series', 'season', 'episode', 'part'}
+    query_words = query.split()
+    query_words = [word for word in query_words if word.lower() not in common_words]
+    query_words = query_words[:max_words]
+    query = ' '.join(query_words)
+
+    query = query.strip()
+    return query, None

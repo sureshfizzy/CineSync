@@ -4,7 +4,7 @@
         "WebDl", "Rip", "4K", "HDR", "DV", "2160p", "BDRip", "AC3", "5.1", "Sub", "NAHOM", "mkv", "Complete",
         "www", "Torrenting", "com", "TamilMV", "Mp4", "Series", "HorribleRips", "mp4", "[Anime Time]", "[Dual Audio]", "[1080p]", "[HEVC 10bit]", "[AAC]", "[Batch]",
         "[Erai-raws]", "[720p]", "[Multiple Subtitle]", "[ENG]", "[POR-BR]", "[SPA-LA]", "[SPA]", "[ARA]", "[FRE]", "[GER]", "[ITA]", "[RUS]",
-        "iobop", " DTS", "x2ua", "bluray"
+        "iobop", " DTS", "x2ua", "bluray", "cz", "Sample"
     ],
     "skip_patterns": [
         "^FC2-PPV-\\d+",
@@ -25,6 +25,6 @@
         "SubsPlease", "Erai-raws", "HorribleSubs", "HorribleRips", "Judas", "EMBER", "ASW", "Commie", "GJM",
         "SSA", "Mezashite", "Underwater", "Anime Time", "Seregorn", "Memento", "Sakura-Subs", "Chronos",
         "R1", "DmonHiro", "Frostii", "Otakusensei", "AYZ", "Live-eviL", "ShindenSubs", "Vivid", "Kawaii-Subs",
-        "NyaaSi", "Hikari-Subs", "Yumeko", "Tenshi", "Gokudera", "TokyoTosho"
+        "NyaaSi", "Hikari-Subs", "Yumeko", "Tenshi", "Gokudera", "TokyoTosho", "NoobSubs"
     ]
 }

@@ -95,9 +95,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
         result = search_movie(movie_name, year, auto_select=auto_select, file=file)
-        if isinstance(result, tuple):
+        if isinstance(result, tuple) and len(result) == 3:
             tmdb_id, imdb_id, proper_name = result
-            proper_movie_name = f"{movie_name} ({year})"
+            proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
             if is_imdb_folder_id_enabled() and imdb_id:
@@ -109,7 +109,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
         else:
-            proper_movie_name = f"{movie_name} ({year})"
+            proper_movie_name = f"{proper_name} ({year})"
     else:
         proper_movie_name = f"{movie_name} ({year})"
 

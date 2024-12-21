@@ -77,7 +77,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if not anime_result or episode_match:
         if episode_match:
             episode_identifier = episode_match.group(2)
-            if re.match(r'S\d{2}[eE]\d{2}', episode_identifier, re.IGNORECASE):
+            series_pattern = re.search(r'series\.(\d+)\.(\d+)of\d+', file, re.IGNORECASE)
+            if series_pattern:
+                season_number = series_pattern.group(1).zfill(2)
+                episode_number = series_pattern.group(2).zfill(2)
+                episode_identifier = f"S{season_number}E{episode_number}"
+                show_name = re.sub(r'\.series\.\d+\.\d+of\d+.*$', '', clean_folder_name, flags=re.IGNORECASE)
+                show_name = show_name.replace('.', ' ').strip()
+                create_season_folder = True
+            elif re.match(r'S\d{2}[eE]\d{2}', episode_identifier, re.IGNORECASE):
                 show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', clean_folder_name).replace('-', ' ').replace('.', ' ').strip()
                 create_season_folder = True
             elif re.match(r'[0-9]+x[0-9]+', episode_identifier, re.IGNORECASE):

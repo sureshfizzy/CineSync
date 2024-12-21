@@ -6,7 +6,7 @@ from functools import lru_cache
 import urllib.parse
 from utils.logging_utils import log_message
 from config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
-from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie
+from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
 
 _api_cache = {}
 
@@ -90,8 +90,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         results = search_fallback(query, year)
 
     if not results:
-        log_message(f"Searching with Cleaned Show Name", "DEBUG", "stdout")
+        log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
         title = clean_query(file)
+        results = fetch_results(title, year)
+
+    if not results:
+        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
+        title = advanced_clean_query(file)
         results = fetch_results(title, year)
 
     if not results and year:
@@ -228,43 +233,43 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             params['primary_release_year'] = year
 
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"Primary search URL (without year): {full_url}", "DEBUG", "stdout")
+        log_message(f"Fetching results from URL: {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
 
         if not response and year:
+            log_message("No results found with year, retrying without year.", "DEBUG", "stdout")
             del params['primary_release_year']
-            full_url_without_year = f"{url}?{urllib.parse.urlencode(params)}"
-            log_message(f"Secondary search URL (without year): {full_url_without_year}", "DEBUG", "stdout")
             response = perform_search(params, url)
 
         return response
 
     def search_with_extracted_title(query, year=None):
         title = extract_title(query)
+        log_message(f"Searching with extracted title: '{title}'", "DEBUG", "stdout")
         return fetch_results(title, year)
 
     def search_fallback(query, year=None):
-        query = re.sub(r'\s*\(.*$', '', query).strip()
-        log_message(f"Fallback search query: '{query}'", "DEBUG", "stdout")
-        return fetch_results(query, year)
+        fallback_query = re.sub(r'\s*\(.*$', '', query).strip()
+        log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
+        return fetch_results(fallback_query, year)
 
     results = fetch_results(query, year)
 
     if not results:
-        log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
+        log_message("Primary search failed. Attempting extracted title search.", "DEBUG", "stdout")
         results = search_with_extracted_title(query, year)
 
     if not results and file:
-        log_message(f"Searching with Cleaned Movie Name", "DEBUG", "stdout")
-        cleaned_title = clean_query_movie(file)
+        log_message("Attempting search with cleaned movie name.", "DEBUG", "stdout")
+        cleaned_title = clean_query_movie(file)[0]
         results = fetch_results(cleaned_title, year)
-        return file, cleaned_title
 
     if not results:
         log_message(f"Extracted title search failed, attempting web scraping fallback", "DEBUG", "stdout")
         results = perform_fallback_movie_search(query, year)
 
     if not results and year:
+        log_message("Performing additional fallback search without query.", "DEBUG", "stdout")
         results = search_fallback(query, year)
 
     if not results and year:
@@ -291,7 +296,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
-        log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
+        log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")
         _api_cache[cache_key] = f"{query}"
         return f"{query}"
 
@@ -301,13 +306,13 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         if len(results) == 1:
             chosen_movie = results[0]
         else:
-            log_message(f"Multiple movies found for query '{query}':", level="INFO")
+            log_message(f"Multiple movies found for query '{query}':", "INFO", "stdout")
             for idx, movie in enumerate(results[:3]):
                 movie_name = movie.get('title')
                 movie_id = movie.get('id')
                 release_date = movie.get('release_date')
                 movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-                log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
+                log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", "INFO", "stdout")
 
             choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
             if choice.isdigit() and 1 <= int(choice) <= 3:
@@ -320,6 +325,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
+
         external_ids = get_external_ids(tmdb_id, 'movie')
         imdb_id = external_ids.get('imdb_id', '')
 
@@ -332,10 +338,10 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
         _api_cache[cache_key] = proper_name
         return tmdb_id, imdb_id, movie_name
-    else:
-        log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
-        _api_cache[cache_key] = f"{query}"
-        return f"{query}"
+
+    log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
+    _api_cache[cache_key] = f"{query}"
+    return f"{query}"
 
 def present_movie_choices(results, query):
     log_message(f"Multiple movies found for query '{query}':", level="INFO")
