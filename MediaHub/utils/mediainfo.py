@@ -46,19 +46,42 @@ def extract_media_info(filepath: str, keywords: dict) -> dict:
             media_info['AudioChannels'] = channels_match.group(0)
             break
 
-    # Extract Languages and force short names
     for source in sources:
-        lang_match = re.findall(r'([A-Z]{3,})', source)
+        bracket_match = re.findall(r'\[([^\]]+)\]', source)
+        paren_match = re.findall(r'\(([^\)]+)\)', source)
         valid_languages = keywords["ValidLanguages"]
+        language_map = {long_name: short_code for long_name, short_code in zip(valid_languages[::2], valid_languages[1::2])}
+        filtered_languages = []
 
-        # Create a mapping of full language names to short codes
-        language_map = {long_name: short_code for long_name, short_code in zip(keywords["ValidLanguages"][::2], keywords["ValidLanguages"][1::2])}
+        if bracket_match:
+            for block in bracket_match:
+                lang_codes = re.split(r'\s*[+\-]\s*', block)
+                for lang in lang_codes:
+                    clean_lang = lang.strip().upper()
+                    for word in clean_lang.split():
+                        if word in valid_languages:
+                            lang_code = language_map.get(word, word)
+                            filtered_languages.append(lang_code)
 
-        # Map matched languages to their short codes
-        filtered_languages = [language_map.get(lang.upper(), lang.upper()) for lang in lang_match if lang.upper() in valid_languages]
+        if paren_match:
+            for block in paren_match:
+                lang_codes = re.split(r'\s*[+\-]\s*', block)
+                for lang in lang_codes:
+                    clean_lang = lang.strip().upper()
+                    for word in clean_lang.split():
+                        if word in valid_languages:
+                            lang_code = language_map.get(word, word)
+                            filtered_languages.append(lang_code)
+
+        lang_match = re.findall(r'\b[A-Z]{2,}\b', source)
+
+        filtered_languages += [language_map.get(lang.upper(), lang.upper())
+                             for lang in lang_match
+                             if lang.upper() in valid_languages]
+
 
         if filtered_languages:
-            media_info['Languages'] = filtered_languages
+            media_info['Languages'] = list(set(filtered_languages))
             break
 
     for source in sources:
