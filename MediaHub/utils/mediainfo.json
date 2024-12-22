@@ -1,17 +1,19 @@
 {
-    "VideoCodecs": ["H.264", "H.265", "x264", "x265", "AVC", "HEVC", "VP9", "AV1"],
-    "AudioCodecs": ["TrueHD.ATMOS", "DDP.ATMOS", "ATMOS", "DDP", "Dolby Digital", "DTS-HD MA", "DTS", "AAC", "FLAC"],
+    "VideoCodecs": ["H.264", "H.265", "x264", "x265", "AVC", "HEVC", "VP9", "AV1", "H264", "H265", "H264"],
+    "AudioCodecs": ["TrueHD", "DDP.ATMOS", "ATMOS", "DDP", "Dolby Digital", "DTS-HD MA", "DTS", "AAC", "FLAC"],
     "AudioAtmos": ["ATMOS"],
-    "DynamicRange": ["HDR10+", "HDR10", "HDR", "PQ", "HLG", "DV", "Dolby Vision"],
+    "DynamicRange": ["HDR10+", "HDR10", "HDR", "PQ", "HLG", "DV", "Dolby Vision", "SDR", "DoVi"],
     "Resolutions": ["2160p", "1080p", "720p", "480p"],
-    "MovieVersions": ["4K Remaster", "IMAX", "Criterion Collection", "IMAX Enhanced", "Special Edition", "Theatrical Cut", "Director's Cut", "Open Matte"],
+    "MovieVersions": ["4K Remaster", "IMAX", "Criterion Collection", "IMAX Enhanced", "Special Edition", "Theatrical Cut", "Director's Cut", "Open Matte", "Theatrical"],
     "StreamingServices": ["Amazon", "AMZN", "Apple TV+", "ATVP", "CRiT", "Disney+", "DSNP", "HBO Max", "HBO", "HMAX", "Hulu", "Paramount+", "PMTP", "Netflix", "NF", "Peacock", "PCOK", "Stan", "STAN"],
+    "Sources": ["BluRay", "WEBDL", "WEBRip", "HDTV", "SDTV", "DVDRip", "BluRay Remux", "Remux", "BR-DISK", "DVD", "CAM", "TELESYNC", "DVD-R", "WORKPRINT"],
     "ValidLanguages": [
-        "ENGLISH", "EN", "HINDI", "HI", "SPANISH", "ES", "FRENCH", "FR", "GERMAN", "DE", "JAPANESE", "JA", "KOREAN", "KO",
-        "CHINESE", "ZH", "RUSSIAN", "RU", "ITALIAN", "IT", "PORTUGUESE", "PT", "ARABIC", "AR", "TURKISH", "TR", "DUTCH", "NL",
-        "POLISH", "PL", "SWEDISH", "SV", "NORWEGIAN", "NO", "DANISH", "DA", "FINNISH", "FI", "GREEK", "EL", "CZECH", "CS",
-        "ROMANIAN", "RO", "BULGARIAN", "BG", "HUNGARIAN", "HU", "SERBIAN", "SR", "HEBREW", "HE", "THAI", "TH", "VIETNAMESE", "VI",
-        "INDONESIAN", "ID", "MALAY", "MS", "TAMIL", "TA", "TELUGU", "TE", "BENGALI", "BN", "MARATHI", "MR", "PUNJABI", "PA",
-        "URDU", "UR", "SWAHILI", "SW", "FILLIPINO", "FIL"
+        "ENGLISH", "EN", "ENG", "HINDI", "HI", "HIN", "SPANISH", "ES", "SPA", "FRENCH", "FR", "FRE", "GERMAN", "DE", "DEU",
+        "JAPANESE", "JA", "JPN", "KOREAN", "KO", "KOR", "CHINESE", "ZH", "CHI", "RUSSIAN", "RU", "RUS", "ITALIAN", "IT", "ITA",
+        "PORTUGUESE", "PT", "POR", "ARABIC", "AR", "ARA", "TURKISH", "TR", "TUR", "DUTCH", "NL", "NLD", "POLISH", "PL", "POL", "SWEDISH", "SV", "SWE",
+        "NORWEGIAN", "NO", "NOR", "DANISH", "DA", "DAN", "FINNISH", "FI", "FIN", "GREEK", "EL", "GRE", "CZECH", "CS", "CZE", "ROMANIAN", "RO", "RON",
+        "BULGARIAN", "BG", "BUL", "HUNGARIAN", "HU", "HUN", "SERBIAN", "SR", "SRB", "HEBREW", "HE", "HEB", "THAI", "TH", "THA", "VIETNAMESE", "VI", "VIE",
+        "INDONESIAN", "ID", "IND", "MALAY", "MS", "MAL", "TAMIL", "TA", "TAM", "TELUGU", "TE", "TEL", "BENGALI", "BN", "BEN", "MARATHI", "MR", "MAR",
+        "PUNJABI", "PA", "PAN", "URDU", "UR", "URD", "SWAHILI", "SW", "SWA", "FILLIPINO", "FIL", "FIL"
     ]
 }
