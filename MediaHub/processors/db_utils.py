@@ -1,12 +1,16 @@
 import sqlite3
 import os
 import time
-from utils.logging_utils import log_message
 import threading
-from functools import wraps
-from dotenv import load_dotenv, find_dotenv
 import sys
 import concurrent.futures
+import csv
+import sqlite3
+from typing import List, Tuple, Optional
+from sqlite3 import DatabaseError
+from functools import wraps
+from dotenv import load_dotenv, find_dotenv
+from utils.logging_utils import log_message
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
@@ -377,3 +381,303 @@ def get_destination_path(conn, source_path):
         log_message(f"Error in get_destination_path: {e}", level="ERROR")
         conn.rollback()
         return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def reset_database(conn):
+    """Reset the database by dropping and recreating all tables and reclaiming space."""
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute("DROP TABLE IF EXISTS processed_files")
+        cursor.execute("DROP TABLE IF EXISTS processed_files_archive")
+
+        cursor.execute("""
+            CREATE TABLE processed_files (
+                file_path TEXT PRIMARY KEY,
+                destination_path TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS processed_files_archive (
+                file_path TEXT PRIMARY KEY,
+                destination_path TEXT,
+                archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("CREATE INDEX idx_file_path ON processed_files(file_path)")
+        cursor.execute("CREATE INDEX idx_destination_path ON processed_files(destination_path)")
+        conn.commit()
+
+        cursor.execute("VACUUM")
+
+        log_message("Database has been reset successfully and disk space reclaimed.", level="INFO")
+        return True
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error resetting database: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def cleanup_database(conn):
+    """Clean up the database by removing entries for non-existent files."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path, destination_path FROM processed_files")
+        rows = cursor.fetchall()
+
+        deleted_count = 0
+        for file_path, dest_path in rows:
+            if not os.path.exists(file_path) and not os.path.exists(dest_path):
+                cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+                deleted_count += 1
+
+        conn.commit()
+        log_message(f"Database cleanup completed. Removed {deleted_count} invalid entries.", level="INFO")
+        return deleted_count
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during database cleanup: {e}", level="ERROR")
+        conn.rollback()
+        return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def vacuum_database(conn):
+    """Perform database vacuum to optimize storage and performance."""
+    try:
+        cursor = conn.cursor()
+
+        # Set pragma to enable auto vacuum
+        cursor.execute("PRAGMA auto_vacuum = FULL")
+
+        # Execute vacuum
+        cursor.execute("VACUUM")
+
+        # Analyze tables after vacuum
+        cursor.execute("ANALYZE")
+
+        log_message("Database vacuum completed successfully.", level="INFO")
+        return True
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during database vacuum: {e}", level="ERROR")
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def verify_database_integrity(conn):
+    """Verify database integrity and check for corruption."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA integrity_check")
+        result = cursor.fetchone()[0]
+
+        if result == "ok":
+            log_message("Database integrity check passed.", level="INFO")
+            return True
+        else:
+            log_message(f"Database integrity check failed: {result}", level="ERROR")
+            return False
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during integrity check: {e}", level="ERROR")
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def export_database(conn, export_path):
+    """Export database contents to a CSV file."""
+    try:
+        cursor = conn.cursor()
+
+        # Export main table
+        with open(export_path, 'w', newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(['file_path', 'destination_path'])
+
+            cursor.execute("SELECT file_path, destination_path FROM processed_files")
+            while True:
+                rows = cursor.fetchmany(BATCH_SIZE)
+                if not rows:
+                    break
+                csv_writer.writerows(rows)
+
+        log_message(f"Database successfully exported to {export_path}", level="INFO")
+        return True
+    except (sqlite3.Error, DatabaseError, IOError) as e:
+        log_message(f"Error exporting database: {e}", level="ERROR")
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_database_stats(conn):
+    """Get statistics about the database including all related files, after validating entries."""
+    try:
+        cursor = conn.cursor()
+        stats = {}
+
+        # First, clean up missing files with improved validation
+        cursor.execute("SELECT file_path, destination_path FROM processed_files")
+        rows = cursor.fetchall()
+        deleted_count = 0
+
+        for file_path, dest_path in rows:
+            should_delete = False
+            if file_path:
+                file_path = os.path.normpath(file_path)
+            if dest_path:
+                dest_path = os.path.normpath(dest_path)
+
+            if (file_path and not os.path.exists(file_path) and
+                dest_path and not os.path.exists(dest_path)):
+                should_delete = True
+                log_message(f"Both paths missing for entry - Source: {file_path}, Dest: {dest_path}", level="DEBUG")
+
+            if should_delete:
+                cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+                deleted_count += 1
+
+        if deleted_count > 0:
+            conn.commit()
+            log_message(f"Removed {deleted_count} entries for missing files", level="INFO")
+
+        cursor.execute("SELECT COUNT(*) FROM processed_files")
+        stats['total_records'] = cursor.fetchone()[0]
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_files_archive'")
+        if cursor.fetchone():
+            cursor.execute("SELECT COUNT(*) FROM processed_files_archive")
+            stats['archived_records'] = cursor.fetchone()[0]
+        else:
+            stats['archived_records'] = 0
+
+        def get_total_db_size(db_path):
+            total_size = 0
+            if os.path.exists(db_path):
+                total_size += os.path.getsize(db_path)
+                # Add WAL file size if exists
+                wal_path = db_path + "-wal"
+                if os.path.exists(wal_path):
+                    total_size += os.path.getsize(wal_path)
+                # Add SHM file size if exists
+                shm_path = db_path + "-shm"
+                if os.path.exists(shm_path):
+                    total_size += os.path.getsize(shm_path)
+            return total_size / (1024 * 1024)
+
+        stats['main_db_size'] = get_total_db_size(DB_FILE)
+        stats['archive_db_size'] = get_total_db_size(ARCHIVE_DB_FILE)
+
+        stats['details'] = {
+            'main_db': {
+                'db': f"{os.path.getsize(DB_FILE) / (1024 * 1024):.2f} MB" if os.path.exists(DB_FILE) else "0.00 MB",
+                'wal': f"{os.path.getsize(DB_FILE + '-wal') / (1024 * 1024):.2f} MB" if os.path.exists(DB_FILE + '-wal') else "0.00 MB",
+                'shm': f"{os.path.getsize(DB_FILE + '-shm') / (1024 * 1024):.2f} MB" if os.path.exists(DB_FILE + '-shm') else "0.00 MB"
+            }
+        }
+
+        return stats
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error getting database stats: {e}", level="ERROR")
+        return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def import_database(conn, import_path):
+    """Import database contents from a CSV file with path validation."""
+    try:
+        cursor = conn.cursor()
+        imported_count = 0
+
+        with open(import_path, 'r', newline='') as csvfile:
+            csv_reader = csv.reader(csvfile)
+            next(csv_reader)
+
+            # Process in batches
+            batch = []
+            for row in csv_reader:
+                if len(row) >= 2:
+                    source_path = os.path.normpath(row[0]) if row[0] else None
+                    dest_path = os.path.normpath(row[1]) if row[1] else None
+
+                    if (source_path and os.path.exists(source_path)) or (dest_path and os.path.exists(dest_path)):
+                        batch.append((source_path, dest_path))
+
+                if len(batch) >= BATCH_SIZE:
+                    cursor.executemany("""
+                        INSERT OR REPLACE INTO processed_files (file_path, destination_path)
+                        VALUES (?, ?)
+                    """, batch)
+                    imported_count += len(batch)
+                    batch = []
+
+            if batch:
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO processed_files (file_path, destination_path)
+                    VALUES (?, ?)
+                """, batch)
+                imported_count += len(batch)
+
+        conn.commit()
+        log_message(f"Successfully imported {imported_count} records from {import_path}", level="INFO")
+        return True
+    except (sqlite3.Error, DatabaseError, IOError) as e:
+        log_message(f"Error importing database: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def search_database(conn, pattern):
+    """Search for files in database matching the given pattern."""
+    try:
+        cursor = conn.cursor()
+        search_pattern = f"%{pattern}%"
+        cursor.execute("""
+            SELECT file_path, destination_path
+            FROM processed_files
+            WHERE file_path LIKE ? OR destination_path LIKE ?
+        """, (search_pattern, search_pattern))
+
+        results = cursor.fetchall()
+
+        if results:
+            log_message("-" * 50, level="INFO")
+            log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
+            log_message("-" * 50, level="INFO")
+            for file_path, dest_path in results:
+                log_message(f"Source: {file_path}", level="INFO")
+                log_message(f"Destination: {dest_path}", level="INFO")
+                log_message("-" * 50, level="INFO")
+        else:
+            log_message(f"No matches found for pattern '{pattern}'", level="INFO")
+
+        return results
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error searching database: {e}", level="ERROR")
+        return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def optimize_database(conn):
+    """Optimize database indexes and analyze tables."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("REINDEX")
+        cursor.execute("ANALYZE")
+        cursor.execute("PRAGMA optimize")
+        log_message("Database optimization completed successfully.", level="INFO")
+        return True
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error optimizing database: {e}", level="ERROR")
+        return False

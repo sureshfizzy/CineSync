@@ -149,7 +149,67 @@ def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
     parser.add_argument("single_path", nargs="?", help="Single path to process instead of using SOURCE_DIRS from environment variables")
+
+    db_group = parser.add_argument_group('Database Management')
+    db_group.add_argument("--reset", action="store_true",
+                         help="Reset the database to its initial state")
+    db_group.add_argument("--status", action="store_true",
+                         help="Display database statistics")
+    db_group.add_argument("--vacuum", action="store_true",
+                         help="Perform database vacuum to optimize storage and performance")
+    db_group.add_argument("--verify", action="store_true",
+                         help="Verify database integrity and check for corruption")
+    db_group.add_argument("--export", metavar="FILE",
+                         help="Export database contents to a CSV file")
+    db_group.add_argument("--import", metavar="FILE", dest="import_file",
+                         help="Import database contents from a CSV file")
+    db_group.add_argument("--archive", action="store_true",
+                         help="Manually trigger archiving of old records")
+    db_group.add_argument("--search", metavar="PATTERN",
+                         help="Search for files in database matching the given pattern")
+    db_group.add_argument("--optimize", action="store_true",
+                         help="Optimize database indexes and analyze tables")
+
     args = parser.parse_args()
+
+    if args.vacuum:
+        vacuum_database()
+        return
+
+    if args.verify:
+        verify_database_integrity()
+        return
+
+    if args.export:
+        export_database(args.export)
+        return
+
+    if args.import_file:
+        import_database(args.import_file)
+        return
+
+    if args.search:
+        search_database(args.search)
+        return
+
+    if args.optimize:
+        optimize_database()
+        return
+
+    if args.reset:
+        if input("Are you sure you want to reset the database? This will delete all entries. (Y/N): ").lower() == 'y':
+            reset_database()
+            return
+
+    if args.status:
+        stats = get_database_stats()
+        if stats:
+            log_message("Database Statistics:", level="INFO")
+            log_message(f"Total Records: {stats['total_records']}", level="INFO")
+            log_message(f"Archived Records: {stats['archived_records']}", level="INFO")
+            log_message(f"Main DB Size: {stats['main_db_size']:.2f} MB", level="INFO")
+            log_message(f"Archive DB Size: {stats['archive_db_size']:.2f} MB", level="INFO")
+        return
 
     if not os.path.exists(LOCK_FILE):
         # Wait for mount if needed and initialize database
