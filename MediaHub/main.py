@@ -163,8 +163,6 @@ def main(dest_dir):
                          help="Export database contents to a CSV file")
     db_group.add_argument("--import", metavar="FILE", dest="import_file",
                          help="Import database contents from a CSV file")
-    db_group.add_argument("--archive", action="store_true",
-                         help="Manually trigger archiving of old records")
     db_group.add_argument("--search", metavar="PATTERN",
                          help="Search for files in database matching the given pattern")
     db_group.add_argument("--optimize", action="store_true",
