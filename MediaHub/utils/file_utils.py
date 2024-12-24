@@ -129,7 +129,7 @@ def clean_query(query, keywords_file='keywords.json'):
     query = re.sub(r'\b\d+MB\b', '', query)
     query = re.sub(r'\b(ESub|Eng Sub)\b', '', query, flags=re.IGNORECASE)
 
-    print(f"Final cleaned query: '{query}'")
+    log_message(f"Final cleaned query: {query}", level="DEBUG")
     return query, None
 
 def normalize_query(query):
