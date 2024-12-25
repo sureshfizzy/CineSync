@@ -149,6 +149,7 @@ def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
     parser.add_argument("single_path", nargs="?", help="Single path to process instead of using SOURCE_DIRS from environment variables")
+    parser.add_argument("--force", action="store_true", help="Force recreate symlinks even if they already exist")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -229,7 +230,7 @@ def main(dest_dir):
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
 
-    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path)
+    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force)
     start_polling_monitor()
 
 if __name__ == "__main__":
