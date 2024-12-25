@@ -303,7 +303,7 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
 
     query = re.sub(r'^\[[^\]]+\]', '', query)
     query = re.sub(r'-[\w\.]+-?$', '', query)
-    query = re.sub(r'\[[\w\.]+\.(?:com|org|net)[^\]]*\]', '', query)
+    query = re.sub(r'^(?:www\.)?\w+\.(?:com|org|net)(?:\s*-\s*|\s+)', '', query)
 
     query = re.sub(r'\[[^\]]*(?:Audio|字幕|双语|音轨)[^\]]*\]', '', query)
 
