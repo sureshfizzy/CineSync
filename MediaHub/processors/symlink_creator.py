@@ -220,3 +220,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
         if error_event.is_set():
             log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
             return
+
+        try:
+            task.result()
+        except Exception as e:
+            log_message(f"Error processing task: {str(e)}", level="ERROR")

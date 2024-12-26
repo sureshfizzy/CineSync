@@ -111,12 +111,15 @@ def clean_query(query, keywords_file='keywords.json'):
 
     query = re.sub(r'(?:www\.\S+\.\S+\s*-?)', '', query)
 
-    remove_keywords = load_keywords(keywords_file)
+    remove_keywords = load_keywords(keywords_file, key="keywords")
+    remove_countries = load_keywords(keywords_file, key="countries")
 
     query = query.replace('.', ' ')
 
-    keywords_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_keywords)) + r')\b', re.IGNORECASE)
-    query = keywords_pattern.sub('', query)
+    # Combine keywords and countries into a single list
+    remove_terms = remove_keywords + remove_countries
+    terms_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_terms)) + r')\b', re.IGNORECASE)
+    query = terms_pattern.sub('', query)
 
     query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\(\s*\)', '', query)
@@ -413,7 +416,7 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
     query = re.sub(r'\(.*?\)', '', query)
     query = re.sub(r'[^\w\s]', '', query)
     query = re.sub(r'\s+', ' ', query)
-    common_words = {'complete', 'series', 'season', 'episode', 'part'}
+    common_words = set(load_keywords(keywords_file, key="keywords"))
     query_words = query.split()
     query_words = [word for word in query_words if word.lower() not in common_words]
     query_words = query_words[:max_words]

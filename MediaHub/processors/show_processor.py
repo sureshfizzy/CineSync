@@ -166,7 +166,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     api_key = get_api_key()
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
-        proper_show_name = search_tv_show(show_folder, year, auto_select=auto_select,actual_dir=actual_dir, file=file)
+        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
+        if isinstance(result, tuple) and len(result) == 2:
+            proper_show_name, show_name = result
+        else:
+            proper_show_name = result
         if "TMDb API error" in proper_show_name:
             log_message(f"Could not find TV show in TMDb or TMDb API error: {show_folder} ({year})", level="ERROR")
             proper_show_name = show_folder

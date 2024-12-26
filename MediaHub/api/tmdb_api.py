@@ -167,7 +167,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
         _api_cache[cache_key] = proper_name
-        return proper_name
+        return proper_name, show_name
     else:
         log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
         _api_cache[cache_key] = f"{query}"
