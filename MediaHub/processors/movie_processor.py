@@ -2,12 +2,12 @@ import os
 import re
 import json
 import requests
-from utils.file_utils import *
-from api.tmdb_api import search_movie, get_movie_collection
-from utils.logging_utils import log_message
-from config.config import *
 from dotenv import load_dotenv, find_dotenv
-from utils.mediainfo import *
+from MediaHub.utils.file_utils import *
+from MediaHub.api.tmdb_api import search_movie, get_movie_collection
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import *
+from MediaHub.utils.mediainfo import *
 
 # Global variables to track API key state
 global api_key

@@ -2,7 +2,7 @@ import os
 import sys
 import requests
 from dotenv import load_dotenv
-from utils.logging_utils import log_message
+from MediaHub.utils.logging_utils import log_message
 
 api_key = None
 api_warning_logged = False

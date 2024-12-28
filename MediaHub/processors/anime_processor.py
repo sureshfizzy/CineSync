@@ -1,11 +1,11 @@
 import os
 import re
 import requests
-from utils.logging_utils import log_message
-from utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder, get_anime_patterns
-from api.tmdb_api import search_tv_show, get_episode_name
-from config.config import *
-from utils.mediainfo import *
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder, get_anime_patterns
+from MediaHub.api.tmdb_api import search_tv_show, get_episode_name
+from MediaHub.config.config import *
+from MediaHub.utils.mediainfo import *
 
 def is_anime_file(filename):
     """

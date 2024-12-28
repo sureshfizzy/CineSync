@@ -1,19 +1,26 @@
 import argparse
 import subprocess
 import os
+import sys
 import platform
 import time
 import psutil
 import signal
-from config.config import *
-from processors.symlink_creator import create_symlinks
-from utils.logging_utils import log_message
-from processors.db_utils import *
-from processors.symlink_creator import *
-from monitor.polling_monitor import *
+
+# Append the parent directory to the system path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Local imports from MediaHub
+from MediaHub.config.config import *
+from MediaHub.processors.symlink_creator import create_symlinks
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.processors.db_utils import *
+from MediaHub.processors.symlink_creator import *
+from MediaHub.monitor.polling_monitor import *
 
 db_initialized = False
 
+POLLING_MONITOR_PATH = os.path.join(os.path.dirname(__file__), 'monitor', 'polling_monitor.py')
 LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
 LOCK_TIMEOUT = 3600
 
@@ -139,7 +146,7 @@ def start_polling_monitor():
     try:
         # Use python or python3 depending on the platform
         python_command = 'python' if platform.system() == 'Windows' else 'python3'
-        subprocess.run([python_command, 'MediaHub/monitor/polling_monitor.py'], check=True)
+        subprocess.run([python_command, POLLING_MONITOR_PATH], check=True)
     except subprocess.CalledProcessError as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
     finally:

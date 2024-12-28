@@ -8,6 +8,14 @@ import subprocess
 import sys
 import pkg_resources
 import platform
+import sqlite3
+
+# Append the parent directory to the system path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Local imports from MediaHub
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.processors.db_utils import get_database_stats, vacuum_database, verify_database_integrity, export_database, import_database, search_database, optimize_database, reset_database
 
 # Script Metadata
 SCRIPT_VERSION = "2.1"
@@ -192,8 +200,10 @@ def execute_full_library_scan():
         print_banner()
         print("\nFull Library Scan Options:")
         print("1) Auto Scan")
-        print("2) Manual Scan (Use only when TMDB ID is enabled)")
-        print("3) Back to Main Menu")
+        print("2) Auto Force Scan (Useful to recreate symlinks with auto select enabled)")
+        print("3) Manual Scan (Use only when TMDB ID is enabled)")
+        print("4) Manual Force Scan (Useful to recreate symlinks)")
+        print("5) Back to Main Menu")
         choice = input("Select an option: ")
 
         try:
@@ -206,12 +216,26 @@ def execute_full_library_scan():
                     input("Press Enter to return to the main menu...")
             elif choice == '2':
                 if os.path.exists(LIBRARY_SCRIPT):
+                        subprocess.run([python_command, LIBRARY_SCRIPT, '--auto-select', '--force'], check=True)
+                        input("Force scan completed. Press Enter to return to the main menu...")
+                else:
+                    print_color("Error: The library.py script does not exist.", "red")
+                    input("Press Enter to return to the main menu...")
+            elif choice == '3':
+                if os.path.exists(LIBRARY_SCRIPT):
                         subprocess.run([python_command, LIBRARY_SCRIPT], check=True)
                         input("Manual scan completed. Press Enter to return to the main menu...")
                 else:
                     print_color("Error: The library.py script does not exist.", "red")
                     input("Press Enter to return to the main menu...")
-            elif choice == '3':
+            elif choice == '4':
+                if os.path.exists(LIBRARY_SCRIPT):
+                        subprocess.run([python_command, LIBRARY_SCRIPT, '--force'], check=True)
+                        input("Force scan completed. Press Enter to return to the main menu...")
+                else:
+                    print_color("Error: The library.py script does not exist.", "red")
+                    input("Press Enter to return to the main menu...")
+            elif choice == '5':
                 break
             else:
                 print_color("Invalid option. Please select again.", "red")
@@ -316,6 +340,62 @@ def execute_vault_scan():
         print("Error: The script does not exist.")
     input("Press Enter to return to the main menu...")
 
+# Function to execute Database Management
+def database_management():
+    while True:
+        clear_screen()
+        print_banner()
+        print("\nDatabase Management Options:")
+        print("1) View Database Status")
+        print("2) Optimize Database")
+        print("3) Verify Database Integrity")
+        print("4) Vacuum Database")
+        print("5) Export Database")
+        print("6) Import Database")
+        print("7) Search Database")
+        print("8) Reset Database")
+        print("9) Back to Main Menu")
+
+        choice = input("Select an option: ")
+
+        try:
+            if choice == '1':
+                stats = get_database_stats()
+                if stats:
+                    print("\nDatabase Statistics:")
+                    print(f"Total Records: {stats['total_records']}")
+                    print(f"Archived Records: {stats['archived_records']}")
+                    print(f"Main DB Size: {stats['main_db_size']:.2f} MB")
+                    print(f"Archive DB Size: {stats['archive_db_size']:.2f} MB")
+            elif choice == '2':
+                optimize_database()
+            elif choice == '3':
+                verify_database_integrity()
+            elif choice == '4':
+                vacuum_database()
+            elif choice == '5':
+                filename = input("Enter export filename (CSV): ")
+                export_database(filename)
+            elif choice == '6':
+                filename = input("Enter import filename (CSV): ")
+                import_database(filename)
+            elif choice == '7':
+                pattern = input("Enter search pattern: ")
+                search_database(pattern)
+            elif choice == '8':
+                if input("Are you sure you want to reset the database? This will delete all entries. (Y/N): ").lower() == 'y':
+                    reset_database()
+            elif choice == '9':
+                break
+            else:
+                print_color("Invalid option. Please select again.", "red")
+
+            input("\nPress Enter to continue...")
+        except Exception as e:
+            logging.error(f"Error in database management: {e}")
+            print_color(f"An error occurred: {e}", "red")
+            input("\nPress Enter to continue...")
+
 # Main function
 def main():
     while True:
@@ -326,7 +406,8 @@ def main():
         print("1) Edit .env file")
         print("2) Full Library Scan")
         print("3) Configure Broken Symlinks")
-        print("4) Exit")
+        print("4) Database Management")
+        print("5) Exit")
 
         choice = input("Select an option: ")
 
@@ -337,6 +418,8 @@ def main():
         elif choice == '3':
             configure_broken_symlinks()
         elif choice == '4':
+            database_management()
+        elif choice == '5':
             print("Exiting the script. Have a great day!")
             break
         else:

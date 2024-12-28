@@ -3,9 +3,9 @@ import os
 import json
 import inspect
 import requests
-from utils.logging_utils import log_message
-from config.config import *
 from typing import Tuple, Optional
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import *
 
 def fetch_json(url):
     """Fetch JSON data from the provided URL."""

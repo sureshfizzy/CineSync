@@ -6,10 +6,10 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 from dotenv import load_dotenv
-from config.config import *
 from urllib.parse import quote
 from logging.handlers import RotatingFileHandler
-from utils.logging_utils import log_message
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import *
 
 # Load environment variables
 load_dotenv()

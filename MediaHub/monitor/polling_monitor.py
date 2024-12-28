@@ -5,11 +5,14 @@ import logging
 import sys
 from dotenv import load_dotenv, find_dotenv
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Append the parent directory to the system path
+base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+sys.path.append(base_dir)
 
-from processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
-from config.config import *
-from processors.symlink_creator import delete_broken_symlinks
+# Local imports from MediaHub
+from MediaHub.processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
+from MediaHub.config.config import *
+from MediaHub.processors.symlink_creator import delete_broken_symlinks
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')

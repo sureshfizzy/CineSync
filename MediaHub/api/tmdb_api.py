@@ -4,9 +4,9 @@ import requests
 from bs4 import BeautifulSoup
 from functools import lru_cache
 import urllib.parse
-from utils.logging_utils import log_message
-from config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
-from utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
 
 _api_cache = {}
 

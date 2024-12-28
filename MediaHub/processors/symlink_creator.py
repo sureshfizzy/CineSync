@@ -5,13 +5,13 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from threading import Event
-from processors.movie_processor import process_movie
-from processors.show_processor import process_show
-from utils.logging_utils import log_message
-from utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra, skip_files
-from config.config import *
-from processors.db_utils import *
-from utils.plex_utils import *
+from MediaHub.processors.movie_processor import process_movie
+from MediaHub.processors.show_processor import process_show
+from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra, skip_files
+from MediaHub.config.config import *
+from MediaHub.processors.db_utils import *
+from MediaHub.utils.plex_utils import *
 
 error_event = Event()
 log_imported_db = False

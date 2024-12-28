@@ -10,7 +10,7 @@ from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv, find_dotenv
-from utils.logging_utils import log_message
+from MediaHub.utils.logging_utils import log_message
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
