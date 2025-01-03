@@ -13,6 +13,7 @@ sys.path.append(base_dir)
 from MediaHub.processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import delete_broken_symlinks
+from MediaHub.utils.logging_utils import log_message
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -22,21 +23,10 @@ if not dotenv_path:
 
 load_dotenv(dotenv_path)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=sys.stdout)
-
 # Add state variables for mount status tracking
 mount_state = None
-
-def log_message(message, level="INFO"):
-    """Logs a message at the specified level with additional context."""
-    levels = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
-    logging.log(levels.get(level, logging.INFO), message)
+previous_file_counts = {}
+last_scan_time = None
 
 def get_mount_point(path):
     """
@@ -154,9 +144,9 @@ def check_rclone_mount():
 def scan_directories(dirs_to_watch, current_files):
     """Scans directories for new or removed files."""
     new_files = {}
-    for directory in dirs_to_watch:
-        log_message(f"Scanning directory: {directory}", level="DEBUG")
+    has_changes = False
 
+    for directory in dirs_to_watch:
         if not os.path.exists(directory):
             log_message(f"Watch directory not found: {directory}", level="ERROR")
             continue
@@ -164,21 +154,27 @@ def scan_directories(dirs_to_watch, current_files):
         try:
             dir_files = set(os.listdir(directory))
             new_files[directory] = dir_files
-            log_message(f"Found {len(dir_files)} files in {directory}", level="DEBUG")
+
+            # Check if there are any changes compared to current_files
+            if directory in current_files and dir_files != current_files[directory]:
+                has_changes = True
         except Exception as e:
             log_message(f"Failed to scan directory {directory}: {str(e)}", level="ERROR")
             continue
 
-    return new_files
+    return new_files, has_changes
 
 def process_changes(current_files, new_files, dest_dir):
     """Processes changes by detecting added or removed files and triggering actions."""
+    changes_detected = False
+
     for directory, files in new_files.items():
         old_files = current_files.get(directory, set())
         added_files = files - old_files
         removed_files = old_files - files
 
         if added_files:
+            changes_detected = True
             log_message(f"New files detected in {directory}: {added_files}", level="INFO")
             for file in added_files:
                 if file != 'version.txt':  # Skip processing version.txt file
@@ -189,10 +185,11 @@ def process_changes(current_files, new_files, dest_dir):
                     log_message("Skipping version.txt file processing", level="DEBUG")
 
         if removed_files:
+            changes_detected = True
             log_message(f"Detected {len(removed_files)} removed files from {directory}: {removed_files}", level="INFO")
+            delete_broken_symlinks(dest_dir)
 
-    log_message(f"Checking for broken symlinks in {dest_dir}", level="DEBUG")
-    delete_broken_symlinks(dest_dir)
+    return changes_detected
 
 def process_file(file_path):
     """Processes individual files by checking the database and invoking media processing."""
@@ -238,17 +235,14 @@ def main():
     # Load previously processed files from the database
     load_processed_files()
 
-    # Get source and destination directories from environment variables
     src_dirs, dest_dir = get_directories()
     if not src_dirs or not dest_dir:
         log_message("Source or destination directory not set in environment variables", level="ERROR")
         exit(1)
 
-    # Get configuration from environment
     sleep_time = int(os.getenv('SLEEP_TIME', 60))
-    #mount_check_interval = int(os.getenv('MOUNT_CHECK_INTERVAL', 30))
-
     current_files = {}
+
     while True:
         try:
             # Check if rclone mount is available (if enabled)
@@ -256,8 +250,6 @@ def main():
                 if mount_state is not False:
                     log_message("Mount not available, waiting for rclone mount...", level="INFO")
                     mount_state = False
-                #return False, False
-                #time.sleep(mount_check_interval)
                 time.sleep(is_mount_check_interval())
                 continue
 
@@ -265,14 +257,19 @@ def main():
             if not current_files:
                 current_files = initial_scan(src_dirs)
                 log_message("Initial scan after mount verification completed, Monitor Service is Running", level="INFO")
+                log_message(f"Looking for Changes...", level="DEBUG")
+            else:
+                # Scan for changes
+                new_files, has_changes = scan_directories(src_dirs, current_files)
 
-            # Normal directory monitoring
-            log_message("Performing regular directory scan", level="DEBUG")
-            new_files = scan_directories(src_dirs, current_files)
-            process_changes(current_files, new_files, dest_dir)
-            current_files = new_files
+                # Process changes if any were detected
+                if has_changes:
+                    changes_processed = process_changes(current_files, new_files, dest_dir)
+                    current_files = new_files
 
-            log_message(f"Sleeping for {sleep_time} seconds", level="DEBUG")
+                    if changes_processed:
+                        log_message(f"Looking for Changes...", level="DEBUG")
+
             time.sleep(sleep_time)
 
         except KeyboardInterrupt:

@@ -29,13 +29,13 @@ def delete_broken_symlinks(dest_dir):
 
                 # Check if the symlink target exists
                 if not os.path.exists(target):
-                    log_message(f"Deleting broken symlink: {file_path}", level="DEBUG")
+                    log_message(f"Deleting broken symlink: {file_path}", level="INFO")
                     os.remove(file_path)
                     symlinks_deleted = True
 
                     # Remove from database if present
                     if check_file_in_db(file_path):
-                        log_message(f"Removing {file_path} from database.", level="DEBUG")
+                        log_message(f"Removing {file_path} from database.", level="INFO")
                         with sqlite3.connect(DB_FILE) as conn:
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
@@ -44,7 +44,7 @@ def delete_broken_symlinks(dest_dir):
                     # Recursively delete empty parent directories
                     dir_path = os.path.dirname(file_path)
                     while os.path.isdir(dir_path) and not os.listdir(dir_path):
-                        log_message(f"Deleting empty folder: {dir_path}", level="DEBUG")
+                        log_message(f"Deleting empty folder: {dir_path}", level="INFO")
                         os.rmdir(dir_path)
                         dir_path = os.path.dirname(dir_path)
 

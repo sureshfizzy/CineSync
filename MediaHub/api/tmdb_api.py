@@ -264,10 +264,6 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         cleaned_title = clean_query_movie(file)[0]
         results = fetch_results(cleaned_title, year)
 
-    if not results:
-        log_message(f"Extracted title search failed, attempting web scraping fallback", "DEBUG", "stdout")
-        results = perform_fallback_movie_search(query, year)
-
     if not results and year:
         log_message("Performing additional fallback search without query.", "DEBUG", "stdout")
         results = search_fallback(query, year)
