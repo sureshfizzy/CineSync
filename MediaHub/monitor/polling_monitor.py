@@ -12,7 +12,7 @@ sys.path.append(base_dir)
 # Local imports from MediaHub
 from MediaHub.processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
 from MediaHub.config.config import *
-from MediaHub.processors.symlink_creator import delete_broken_symlinks
+from MediaHub.processors.symlink_creator import *
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -20,23 +20,27 @@ if not dotenv_path:
     print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
     exit(1)
 
-load_dotenv(dotenv_path)
+# Define the logging level dictionary
+LOG_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=sys.stdout)
+# Get LOG_LEVEL from environment variable
+log_level = LOG_LEVELS.get(os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+
+# Configure logging
+logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=sys.stdout)
 
 # Add state variables for mount status tracking
 mount_state = None
 
 def log_message(message, level="INFO"):
     """Logs a message at the specified level with additional context."""
-    levels = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
-    logging.log(levels.get(level, logging.INFO), message)
+    logging.log(LOG_LEVELS.get(level.upper(), logging.INFO), message)
 
 def get_mount_point(path):
     """
@@ -190,21 +194,33 @@ def process_changes(current_files, new_files, dest_dir):
 
         if removed_files:
             log_message(f"Detected {len(removed_files)} removed files from {directory}: {removed_files}", level="INFO")
-
-    log_message(f"Checking for broken symlinks in {dest_dir}", level="DEBUG")
-    delete_broken_symlinks(dest_dir)
+            for removed_file in removed_files:
+                removed_file_path = os.path.join(directory, removed_file)
+                log_message(f"Checking for broken symlink for removed file: {removed_file_path}", level="DEBUG")
+                delete_broken_symlinks(dest_dir, removed_file_path)
 
 def process_file(file_path):
-    """Processes individual files by checking the database and invoking media processing."""
-    log_message(f"Processing file: {file_path}", level="INFO")
+    """
+    Processes individual files by checking the database and creating symlinks.
+    Only handles the symlink creation without triggering the full main function.
+    """
     if not check_file_in_db(file_path):
-        log_message(f"File not found in database. Initiating processing for: {file_path}", level="DEBUG")
+        log_message(f"File not found in database. Initiating processing for: {file_path}", level="INFO")
+
         try:
-            subprocess.run(['python3', 'MediaHub/main.py', file_path, '--auto-select'], check=True)
-        except subprocess.CalledProcessError as e:
+            # Get source and destination directories
+            src_dirs, dest_dir = get_directories()
+            if not src_dirs or not dest_dir:
+                log_message("Source or destination directory not set in environment variables", level="ERROR")
+                return
+
+            # Call create_symlinks with the specific file path
+            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False)
+
+        except Exception as e:
             log_message(f"Failed to process file: {e}", level="ERROR")
     else:
-        log_message(f"File already exists in the database: {file_path}", level="DEBUG")
+        log_message(f"File already exists in the database: {file_path}", level="WARNING")
 
 def initial_scan(dirs_to_watch):
     """Performs an initial scan of directories to capture the current state of files."""
@@ -246,7 +262,6 @@ def main():
 
     # Get configuration from environment
     sleep_time = int(os.getenv('SLEEP_TIME', 60))
-    #mount_check_interval = int(os.getenv('MOUNT_CHECK_INTERVAL', 30))
 
     current_files = {}
     while True:
@@ -256,8 +271,6 @@ def main():
                 if mount_state is not False:
                     log_message("Mount not available, waiting for rclone mount...", level="INFO")
                     mount_state = False
-                #return False, False
-                #time.sleep(mount_check_interval)
                 time.sleep(is_mount_check_interval())
                 continue
 

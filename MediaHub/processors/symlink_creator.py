@@ -9,6 +9,7 @@ from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra, skip_files
+from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
@@ -17,36 +18,138 @@ error_event = Event()
 log_imported_db = False
 db_initialized = False
 
-def delete_broken_symlinks(dest_dir):
-    """Delete broken symlinks in the destination directory and recursively delete empty parent folders."""
+def delete_broken_symlinks(dest_dir, removed_path=None):
+    """Delete broken symlinks in the destination directory.
+
+    Args:
+        dest_dir: The destination directory containing symlinks
+        removed_path: Optional path of the removed file/folder to check
+    """
     symlinks_deleted = False
 
-    for root, _, files in os.walk(dest_dir):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if os.path.islink(file_path):
-                target = os.readlink(file_path)
+    if removed_path:
+        # Normalize the removed path and handle spaces
+        removed_path = os.path.normpath(removed_path)
+        log_message(f"Processing removed path: {removed_path}", level="DEBUG")
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
 
-                # Check if the symlink target exists
-                if not os.path.exists(target):
-                    log_message(f"Deleting broken symlink: {file_path}", level="INFO")
-                    os.remove(file_path)
-                    symlinks_deleted = True
+            # Check if this is a directory
+            if removed_path.endswith(']') or os.path.isdir(removed_path):
+                log_message(f"Detected folder removal: {removed_path}", level="DEBUG")
+                search_path = f"{removed_path}/%"
+                log_message(f"Searching for all files under: {search_path}", level="DEBUG")
 
-                    # Remove from database if present
-                    if check_file_in_db(file_path):
-                        log_message(f"Removing {file_path} from database.", level="INFO")
-                        with sqlite3.connect(DB_FILE) as conn:
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
-                            conn.commit()
+                cursor.execute("""
+                    SELECT file_path, destination_path
+                    FROM processed_files
+                    WHERE file_path LIKE ?
+                """, (search_path,))
 
-                    # Recursively delete empty parent directories
-                    dir_path = os.path.dirname(file_path)
-                    while os.path.isdir(dir_path) and not os.listdir(dir_path):
-                        log_message(f"Deleting empty folder: {dir_path}", level="INFO")
-                        os.rmdir(dir_path)
-                        dir_path = os.path.dirname(dir_path)
+                results = cursor.fetchall()
+                log_message(f"Found {len(results)} matching files in database", level="INFO")
+
+                for source_path, symlink_path in results:
+                    log_message(f"Processing database entry - Source: {source_path}", level="DEBUG")
+                    log_message(f"Symlink path: {symlink_path}", level="DEBUG")
+
+                    if os.path.islink(symlink_path):
+                        target = os.readlink(symlink_path)
+                        log_message(f"Found symlink pointing to: {target}", level="DEBUG")
+
+                        log_message(f"Deleting symlink: {symlink_path}", level="INFO")
+                        os.remove(symlink_path)
+                        symlinks_deleted = True
+
+                        cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                        log_message(f"Removed database entry for: {symlink_path}", level="DEBUG")
+
+                        _cleanup_empty_dirs(os.path.dirname(symlink_path))
+
+            else:
+                log_message(f"Trying exact match for: {removed_path}", level="DEBUG")
+                cursor.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (removed_path,))
+                result = cursor.fetchone()
+
+                # If no match, try with the file duplicated in path (common pattern)
+                if not result:
+                    filename = os.path.basename(removed_path)
+                    alternative_path = os.path.join(removed_path, filename)
+                    log_message(f"Trying alternative path: {alternative_path}", level="DEBUG")
+                    cursor.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (alternative_path,))
+                    result = cursor.fetchone()
+
+                    # If still no match, try with SQL LIKE for partial matches
+                    if not result:
+                        pattern = f"%{filename}"
+                        log_message(f"Trying partial match with pattern: {pattern}", level="DEBUG")
+                        cursor.execute("SELECT file_path, destination_path FROM processed_files WHERE file_path LIKE ?", (pattern,))
+                        results = cursor.fetchall()
+
+                        if results:
+                            log_message(f"Found {len(results)} potential matches:", level="DEBUG")
+                            for src, dest in results:
+                                log_message(f"Potential match - Source: {src}", level="DEBUG")
+                                log_message(f"Destination: {dest}", level="DEBUG")
+
+                            result = (results[0][1],)
+
+                if result:
+                    symlink_path = result[0]
+                    log_message(f"Found matching database entry: {symlink_path}", level="INFO")
+
+                    if os.path.islink(symlink_path):
+                        target = os.readlink(symlink_path)
+                        log_message(f"Symlink target: {target}", level="DEBUG")
+                        log_message(f"Deleting symlink: {symlink_path}", level="INFO")
+                        os.remove(symlink_path)
+                        symlinks_deleted = True
+
+                        cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                        log_message(f"Removed database entry for: {symlink_path}", level="DEBUG")
+                        _cleanup_empty_dirs(os.path.dirname(symlink_path))
+                    else:
+                        log_message(f"Database entry found but symlink doesn't exist: {symlink_path}", level="WARNING")
+                else:
+                    log_message(f"No database entry found for file: {removed_path}", level="DEBUG")
+            conn.commit()
+    else:
+        _check_all_symlinks(dest_dir)
+
+    return symlinks_deleted
+
+def _cleanup_empty_dirs(dir_path):
+    """Helper function to clean up empty directories."""
+    while dir_path and os.path.isdir(dir_path) and not os.listdir(dir_path):
+        log_message(f"Deleting empty folder: {dir_path}", level="INFO")
+        try:
+            os.rmdir(dir_path)
+            dir_path = os.path.dirname(dir_path)
+        except OSError:
+            break
+
+def _check_all_symlinks(dest_dir):
+    """Helper function to check all symlinks in a directory."""
+    log_message(f"Checking all symlinks in: {dest_dir}", level="INFO")
+    files = os.listdir(dest_dir)
+    for file in files:
+        file_path = os.path.join(dest_dir, file)
+        if os.path.islink(file_path):
+            target = os.readlink(file_path)
+            log_message(f"Checking symlink: {file_path} -> {target}", level="DEBUG")
+
+            if not os.path.exists(target):
+                log_message(f"Deleting broken symlink: {file_path}", level="INFO")
+                os.remove(file_path)
+
+                with sqlite3.connect(DB_FILE) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
+                    affected_rows = cursor.rowcount
+                    conn.commit()
+                    log_message(f"Removed {affected_rows} database entries", level="DEBUG")
+
+                _cleanup_empty_dirs(os.path.dirname(file_path))
 
 def get_existing_symlink_info(src_file):
     """Get information about existing symlink for a source file."""
@@ -144,7 +247,7 @@ def process_file(args, processed_files_log, force=False):
     # Create symlink
     try:
         os.symlink(src_file, dest_file)
-        log_message(f"Created symlink: {dest_file} -> {src_file}", level="DEBUG")
+        log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
         save_processed_file(src_file, dest_file)
 
@@ -174,9 +277,6 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
     # Load the record of processed files
     processed_files_log = load_processed_files()
-
-    # Delete broken symlinks before starting the scan
-    delete_broken_symlinks(dest_dir)
 
     tasks = []
     with ThreadPoolExecutor(max_workers=cpu_count()) as executor:

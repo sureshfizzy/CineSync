@@ -1,18 +1,21 @@
 import os
 import re
 import requests
+import urllib.parse
+import logging
 from bs4 import BeautifulSoup
 from functools import lru_cache
-import urllib.parse
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
-
 _api_cache = {}
 
 # Global variables for API key status and warnings
 api_key = get_api_key()
 api_warning_logged = False
+
+# Disable urllib3 debug logging
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 def check_api_key():
     global api_key, api_warning_logged

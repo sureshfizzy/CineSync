@@ -221,12 +221,24 @@ def main(dest_dir):
         # Wait for mount if needed and initialize database
         initialize_db_with_mount_check()
 
-        # Log database import message
-        log_message("Database import completed.", level="INFO")
+        # Define the callback function to be called once the background task finishes
+        def on_missing_files_check_done():
+            log_message("Database import completed.", level="INFO")
 
-        # Wait for mount if needed and display missing files
-        display_missing_files_with_mount_check(dest_dir)
-        log_message("Database import completed.", level="INFO")
+        # Function to run the missing files check and call the callback when done
+        def display_missing_files_with_callback(dest_dir, callback):
+            display_missing_files_with_mount_check(dest_dir)
+            callback()
+
+        # Run missing files check in a separate thread
+        missing_files_thread = threading.Thread(target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
+        missing_files_thread.daemon = True
+        missing_files_thread.start()
+
+        #Symlink cleanup
+        cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
+        cleanup_thread.daemon = True
+        cleanup_thread.start()
 
     src_dirs, dest_dir = get_directories()
     if not src_dirs or not dest_dir:
