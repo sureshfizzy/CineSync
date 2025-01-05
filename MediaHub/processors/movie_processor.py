@@ -70,6 +70,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     collection_info = None
     api_key = get_api_key()
+    proper_name = movie_name
 
     if api_key and is_movie_collection_enabled():
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
