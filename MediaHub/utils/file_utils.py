@@ -264,12 +264,6 @@ def get_anime_patterns(keywords_file='keywords.json'):
     combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)
     return re.compile(combined_pattern, re.IGNORECASE)
 
-def skip_files(file):
-    """Determine if the file should be skipped based on its extension."""
-    extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.ping', '.txt'}
-    _, ext = os.path.splitext(file.lower())
-    return ext in extensions
-
 def is_file_extra(file, file_path):
     """
     Determine if the file is an extra based on size.

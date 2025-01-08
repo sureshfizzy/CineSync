@@ -12,7 +12,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra, skip_files
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
@@ -185,6 +185,11 @@ def process_file(args, processed_files_log, force=False):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
 
     if error_event.is_set():
+        return
+
+    # Skip if not a known file type
+    if not get_known_types(file):
+        log_message(f"Skipping unsupported file type: {file}", level="INFO")
         return
 
     skip_extras_folder = is_skip_extras_folder_enabled()
