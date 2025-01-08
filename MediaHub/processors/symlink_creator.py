@@ -294,7 +294,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     imdb_structure_id_enabled = is_imdb_folder_id_enabled()
 
     # Initialize database if in monitor mode
-    if mode == 'monitor' and not os.path.exists('file_database.db'):
+    if mode == 'monitor' and not os.path.exists(PROCESS_DB):
         initialize_file_database()
 
     # Use single_path if provided
