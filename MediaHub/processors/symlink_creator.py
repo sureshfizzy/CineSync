@@ -1,7 +1,11 @@
 import os
 import re
+import time
 import traceback
 import sqlite3
+from threading import Thread
+from queue import Queue, Empty
+from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from threading import Event
@@ -13,13 +17,14 @@ from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
+from MediaHub.processors.process_db import *
 
 error_event = Event()
 log_imported_db = False
 db_initialized = False
 
 def delete_broken_symlinks(dest_dir, removed_path=None):
-    """Delete broken symlinks in the destination directory.
+    """Delete broken symlinks in the destination directory and update databases.
 
     Args:
         dest_dir: The destination directory containing symlinks
@@ -31,28 +36,41 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
         # Normalize the removed path and handle spaces
         removed_path = os.path.normpath(removed_path)
         log_message(f"Processing removed path: {removed_path}", level="DEBUG")
-        with sqlite3.connect(DB_FILE) as conn:
-            cursor = conn.cursor()
+
+        # Handle both databases in a single transaction
+        with sqlite3.connect(DB_FILE) as conn1, sqlite3.connect(PROCESS_DB) as conn2:
+            cursor1 = conn1.cursor()
+            cursor2 = conn2.cursor()
 
             # Check if this is a directory
             if removed_path.endswith(']') or os.path.isdir(removed_path):
                 log_message(f"Detected folder removal: {removed_path}", level="DEBUG")
                 search_path = f"{removed_path}/%"
-                log_message(f"Searching for all files under: {search_path}", level="DEBUG")
 
-                cursor.execute("""
+                # Query processed_files table
+                cursor1.execute("""
                     SELECT file_path, destination_path
                     FROM processed_files
                     WHERE file_path LIKE ?
                 """, (search_path,))
+                results = cursor1.fetchall()
 
-                results = cursor.fetchall()
-                log_message(f"Found {len(results)} matching files in database", level="INFO")
+                # Query file_index table
+                cursor2.execute("""
+                    SELECT path, target_path
+                    FROM file_index
+                    WHERE target_path LIKE ?
+                """, (search_path,))
+                file_index_results = cursor2.fetchall()
 
+                # Combine results from both tables
+                all_paths = set()
                 for source_path, symlink_path in results:
-                    log_message(f"Processing database entry - Source: {source_path}", level="DEBUG")
-                    log_message(f"Symlink path: {symlink_path}", level="DEBUG")
+                    all_paths.add((source_path, symlink_path))
+                for symlink_path, source_path in file_index_results:
+                    all_paths.add((source_path, symlink_path))
 
+                for source_path, symlink_path in all_paths:
                     if os.path.islink(symlink_path):
                         target = os.readlink(symlink_path)
                         log_message(f"Found symlink pointing to: {target}", level="DEBUG")
@@ -61,58 +79,56 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                         os.remove(symlink_path)
                         symlinks_deleted = True
 
-                        cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
-                        log_message(f"Removed database entry for: {symlink_path}", level="DEBUG")
+                        # Remove from both databases
+                        cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                        cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
 
                         _cleanup_empty_dirs(os.path.dirname(symlink_path))
 
             else:
-                log_message(f"Trying exact match for: {removed_path}", level="DEBUG")
-                cursor.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (removed_path,))
-                result = cursor.fetchone()
+                # Handle single file removal
+                cursor1.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (removed_path,))
+                result1 = cursor1.fetchone()
 
-                # If no match, try with the file duplicated in path (common pattern)
-                if not result:
+                cursor2.execute("SELECT path FROM file_index WHERE target_path = ?", (removed_path,))
+                result2 = cursor2.fetchone()
+
+                symlink_paths = set()
+                if result1:
+                    symlink_paths.add(result1[0])
+                if result2:
+                    symlink_paths.add(result2[0])
+
+                if not symlink_paths:
+                    # Try alternative matching methods
                     filename = os.path.basename(removed_path)
                     alternative_path = os.path.join(removed_path, filename)
-                    log_message(f"Trying alternative path: {alternative_path}", level="DEBUG")
-                    cursor.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (alternative_path,))
-                    result = cursor.fetchone()
+                    pattern = f"%{filename}"
 
-                    # If still no match, try with SQL LIKE for partial matches
-                    if not result:
-                        pattern = f"%{filename}"
-                        log_message(f"Trying partial match with pattern: {pattern}", level="DEBUG")
-                        cursor.execute("SELECT file_path, destination_path FROM processed_files WHERE file_path LIKE ?", (pattern,))
-                        results = cursor.fetchall()
+                    cursor1.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (alternative_path,))
+                    alt_result1 = cursor1.fetchone()
+                    if alt_result1:
+                        symlink_paths.add(alt_result1[0])
 
-                        if results:
-                            log_message(f"Found {len(results)} potential matches:", level="DEBUG")
-                            for src, dest in results:
-                                log_message(f"Potential match - Source: {src}", level="DEBUG")
-                                log_message(f"Destination: {dest}", level="DEBUG")
+                    cursor2.execute("SELECT path FROM file_index WHERE target_path LIKE ?", (pattern,))
+                    alt_results2 = cursor2.fetchall()
+                    symlink_paths.update(path[0] for path in alt_results2)
 
-                            result = (results[0][1],)
-
-                if result:
-                    symlink_path = result[0]
-                    log_message(f"Found matching database entry: {symlink_path}", level="INFO")
-
+                for symlink_path in symlink_paths:
                     if os.path.islink(symlink_path):
                         target = os.readlink(symlink_path)
-                        log_message(f"Symlink target: {target}", level="DEBUG")
                         log_message(f"Deleting symlink: {symlink_path}", level="INFO")
                         os.remove(symlink_path)
                         symlinks_deleted = True
 
-                        cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
-                        log_message(f"Removed database entry for: {symlink_path}", level="DEBUG")
+                        # Remove from both databases
+                        cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                        cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+
                         _cleanup_empty_dirs(os.path.dirname(symlink_path))
-                    else:
-                        log_message(f"Database entry found but symlink doesn't exist: {symlink_path}", level="WARNING")
-                else:
-                    log_message(f"No database entry found for file: {removed_path}", level="DEBUG")
-            conn.commit()
+
+            conn1.commit()
+            conn2.commit()
     else:
         _check_all_symlinks(dest_dir)
 
@@ -142,11 +158,14 @@ def _check_all_symlinks(dest_dir):
                 log_message(f"Deleting broken symlink: {file_path}", level="INFO")
                 os.remove(file_path)
 
-                with sqlite3.connect(DB_FILE) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
+                with sqlite3.connect(DB_FILE) as conn1, sqlite3.connect(PROCESS_DB) as conn2:
+                    cursor1 = conn1.cursor()
+                    cursor2 = conn2.cursor()
+                    cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
+                    cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))
                     affected_rows = cursor.rowcount
-                    conn.commit()
+                    conn1.commit()
+                    conn2.commit()
                     log_message(f"Removed {affected_rows} database entries", level="DEBUG")
 
                 _cleanup_empty_dirs(os.path.dirname(file_path))
@@ -254,6 +273,8 @@ def process_file(args, processed_files_log, force=False):
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)
 
+        return (dest_file, True, src_file)
+
     except FileExistsError:
         log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
     except OSError as e:
@@ -262,7 +283,8 @@ def process_file(args, processed_files_log, force=False):
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
         log_message(error_message, level="ERROR")
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False):
+    return None
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create'):
     global log_imported_db
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -270,6 +292,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     rename_enabled = is_rename_enabled()
     skip_extras_folder = is_skip_extras_folder_enabled()
     imdb_structure_id_enabled = is_imdb_folder_id_enabled()
+
+    # Initialize database if in monitor mode
+    if mode == 'monitor' and not os.path.exists('file_database.db'):
+        initialize_file_database()
 
     # Use single_path if provided
     if single_path:
@@ -286,15 +312,21 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                 root = os.path.dirname(src_file)
                 file = os.path.basename(src_file)
                 actual_dir = os.path.basename(root)
-                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, build_dest_index(dest_dir))
+
+                # Get appropriate destination index based on mode
+                dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                            else build_dest_index(dest_dir))
+
+                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
                 tasks.append(executor.submit(process_file, args, processed_files_log, force))
             else:
                 # Handle directory
                 actual_dir = os.path.basename(os.path.normpath(src_dir))
                 log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
-                files_to_process = []
-                dest_index = build_dest_index(dest_dir)
+                # Get appropriate destination index based on mode
+                dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                            else build_dest_index(dest_dir))
 
                 for root, _, files in os.walk(src_dir):
                     for file in files:
@@ -309,19 +341,25 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             log_message(f"Skipping extras file: {file}", level="DEBUG")
                             continue
 
-                        if src_file in processed_files_log and not force:
+                        if mode == 'create' and src_file in processed_files_log and not force:
                             continue
 
                         args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
                         tasks.append(executor.submit(process_file, args, processed_files_log, force))
 
-    # Wait for all tasks to complete
+    # Process completed tasks
     for task in as_completed(tasks):
         if error_event.is_set():
             log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
             return
 
         try:
-            task.result()
+            result = task.result()
+            if result and isinstance(result, tuple) and len(result) == 3:
+                dest_file, is_symlink, target_path = result
+                if mode == 'monitor':
+                    update_single_file_index(dest_file, is_symlink, target_path)
+            else:
+                task.result()
         except Exception as e:
             log_message(f"Error processing task: {str(e)}", level="ERROR")

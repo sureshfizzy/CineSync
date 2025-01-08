@@ -232,12 +232,12 @@ def main(dest_dir):
 
         # Run missing files check in a separate thread
         missing_files_thread = threading.Thread(target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
-        missing_files_thread.daemon = True
+        missing_files_thread.daemon = False
         missing_files_thread.start()
 
         #Symlink cleanup
         cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
-        cleanup_thread.daemon = True
+        cleanup_thread.daemon = False
         cleanup_thread.start()
 
     src_dirs, dest_dir = get_directories()
@@ -249,8 +249,14 @@ def main(dest_dir):
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
 
-    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force)
-    start_polling_monitor()
+    # Start polling monitor in main thread
+    monitor_thread = threading.Thread(target=start_polling_monitor)
+    monitor_thread.daemon = False
+    monitor_thread.start()
+    time.sleep(2)
+
+    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create')
+    monitor_thread.join()
 
 if __name__ == "__main__":
     setup_signal_handlers()

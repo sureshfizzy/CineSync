@@ -215,10 +215,11 @@ def process_file(file_path):
                 return
 
             # Call create_symlinks with the specific file path
-            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False)
+            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+            log_message(f"Symlink monitoring completed for {file_path}", level="INFO")
 
         except Exception as e:
-            log_message(f"Failed to process file: {e}", level="ERROR")
+            log_message(f"Failed to process file: {file_path}. Error: {e}", level="ERROR")
     else:
         log_message(f"File already exists in the database: {file_path}", level="WARNING")
 
