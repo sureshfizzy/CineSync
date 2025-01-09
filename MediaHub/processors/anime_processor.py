@@ -149,10 +149,16 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     api_key = get_api_key()
     year = None
     proper_show_name = show_name
+    original_show_name = show_name
     show_id = None
 
     if api_key and not offline_mode:
-        proper_show_name = search_tv_show(show_name, auto_select=auto_select)
+        search_result = search_tv_show(show_name, auto_select=auto_select)
+        if isinstance(search_result, tuple):
+            proper_show_name, original_show_name = search_result
+        else:
+            proper_show_name = original_show_name = search_result
+
         tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
         if tmdb_id_match:
             show_id = tmdb_id_match.group(1)
@@ -227,7 +233,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
             episode_name = episode_name or episode_title or ""
 
-            new_name = f"{show_name}"
+            new_name = f"{original_show_name}"
             if episode_name:
                 new_name += f" - {episode_name}"
             if resolution:
