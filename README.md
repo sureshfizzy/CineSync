@@ -25,6 +25,7 @@ CineSync works by creating symbolic links from the source directory to the desti
 
 For detailed instructions on installation, configuration, and usage, please visit our Wiki:
 
+- [Getting Started](https://github.com/sureshfizzy/CineSync/wiki)
 - [Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)
 - [Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration)
 - [Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage)
