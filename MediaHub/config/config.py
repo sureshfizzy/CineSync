@@ -119,3 +119,12 @@ def plex_token():
 def plex_url():
     token = os.getenv('PLEX_URL', None)
     return token
+
+def get_known_types(filename=None):
+    known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4').split(','))
+    if filename is not None:
+        if not filename:
+            return False
+        _, ext = os.path.splitext(filename.lower())
+        return ext in known_types
+    return known_types
