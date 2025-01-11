@@ -171,7 +171,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
         else:
-            collection_folder = None
             if tmdb_folder_id_enabled:
                 movie_folder = proper_movie_name
             elif is_imdb_folder_id_enabled():
@@ -180,6 +179,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_movie_name)
 
             movie_folder = movie_folder.replace('/', '')
+
+            # Set destination path for non-collection movies
+            if is_movie_resolution_structure_enabled():
+                dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
+            else:
+                dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
 
     # Function to check if movie folder exists in any resolution folder
     def find_movie_folder_in_resolution_folders():
