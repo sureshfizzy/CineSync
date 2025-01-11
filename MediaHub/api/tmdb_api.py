@@ -214,6 +214,16 @@ def perform_search(params, url):
         response = requests.get(url, params=params)
         response.raise_for_status()
         results = response.json().get('results', [])
+
+        english_results = [
+            r for r in results
+            if r.get('original_language') == 'en' or
+            (r.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in r.get('origin_country')))
+        ]
+
+        if english_results:
+            return english_results
+
         return results
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching data: {e}", level="ERROR")
