@@ -46,7 +46,7 @@ def get_external_ids(item_id, media_type):
         return {}
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None):
     global api_key
     if not check_api_key():
         return query
@@ -114,16 +114,17 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             log_message(f"Cleaned query: {cleaned_title}", "DEBUG", "stdout")
             results = fetch_results(cleaned_title, year or year_from_query)
 
-    if not results:
-        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
-        title = advanced_clean_query(file)
-        results = fetch_results(title, year)
-
     if not results and actual_dir:
-        dir_based_query = os.path.basename(actual_dir)
+        dir_based_query = os.path.basename(root)
         log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
         cleaned_dir_query, dir_year = clean_query(dir_based_query)
         results = fetch_results(cleaned_dir_query, year or dir_year)
+
+    if not results:
+        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
+        dir_based_query = os.path.basename(root)
+        title = advanced_clean_query(dir_based_query)
+        results = fetch_results(title, year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")

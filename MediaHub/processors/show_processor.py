@@ -102,7 +102,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
                 create_season_folder = True
             elif re.match(r'Ep\.?\s*\d+', episode_identifier, re.IGNORECASE):
-                show_name = episode_match.group(1).replace('.', ' ').strip()
+                extracted_filename = episode_match.string
+                show_name = re.sub(r'^\[.*?\]\s*', '', extracted_filename).replace('.', ' ').strip()
                 episode_number = re.search(r'Ep\.?\s*(\d+)', episode_identifier, re.IGNORECASE).group(1)
                 season_number = re.search(r'S(\d{2})', parent_folder_name, re.IGNORECASE)
                 season_number = season_number.group(1) if season_number else "01"
@@ -157,7 +158,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if year:
         show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
         show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
-
     if anime_result:
         show_folder = anime_result.get('show_name', '')
         proper_show_name = show_folder
@@ -166,7 +166,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     api_key = get_api_key()
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
-        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
+        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root)
         if isinstance(result, tuple) and len(result) == 2:
             proper_show_name, show_name = result
         else:

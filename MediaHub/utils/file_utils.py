@@ -110,6 +110,22 @@ def load_keywords(file_name, key="keywords"):
         data = json.load(file)
     return data.get(key, [])
 
+def load_mediainfo_terms(file_name: str) -> set:
+    """Load and flatten all terms from mediainfo.json into a single set."""
+    mediainfo_file = os.path.join(os.path.dirname(__file__), file_name)
+    try:
+        with open(mediainfo_file, 'r') as file:
+            data = json.load(file)
+
+        terms = set()
+        for category in data.values():
+            terms.update([term.lower() for term in category])
+
+        return terms
+    except Exception as e:
+        log_message(f"Error loading mediainfo terms: {e}", level="ERROR")
+        return set()
+
 def clean_query(query, keywords_file='keywords.json'):
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
@@ -133,6 +149,7 @@ def clean_query(query, keywords_file='keywords.json'):
     query = re.sub(r'\(\s*\)', '', query)
     query = re.sub(r'\s+', ' ', query).strip()
     query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}EP?\d+\b.*', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\bS\d{1,2}[EЕP]?\d+\b.*', '', query, flags=re.IGNORECASE)
     query = re.sub(r'\[.*?\]', '', query)
     query = re.sub(r'\(\d{4}\)', '', query)
     query = re.sub(r'\.(mkv|mp4|avi)$', '', query, flags=re.IGNORECASE)
@@ -350,7 +367,7 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
     log_message(f"Cleaned movie title: '{final_title}'", "DEBUG", "stdout")
     return final_title, year
 
-def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'keywords.json') -> Tuple[str, Optional[str]]:
+def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'keywords.json', mediainfo_file: str = 'mediainfo.json') -> Tuple[str, Optional[str]]:
     """
     Enhanced query cleaning function that uses advanced pattern recognition
     to clean TV show and movie titles, limiting to specified number of words.
@@ -424,5 +441,10 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
     query_words = query_words[:max_words]
     query = ' '.join(query_words)
 
+    media_words = load_mediainfo_terms(mediainfo_file)
+    query_words = query.split()
+    query_words = [word for word in query_words if word.lower() not in media_words]
+    query = ' '.join(query_words)
     query = query.strip()
+
     return query, None
