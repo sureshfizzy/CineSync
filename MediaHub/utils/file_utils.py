@@ -75,6 +75,10 @@ def extract_movie_name_and_year(filename):
         r'(.+?)\s*(\d{4})'
     ]
 
+    resolution_match = re.search(r'(2160p|1080p|720p|480p|2160|1080|720|480)', filename, re.IGNORECASE)
+    if resolution_match:
+        resolution = resolution_match.group(0)
+
     # Attempt to match each pattern
     for pattern in patterns:
         match = re.search(pattern, filename)
@@ -82,6 +86,10 @@ def extract_movie_name_and_year(filename):
             name = match.group(1).replace('.', ' ').replace('-', ' ').strip()
             name = re.sub(r'[\[\]]', '', name).strip()
             year = match.group(2)
+
+            if resolution_match and year == resolution_match.group(0).split('p')[0]:
+                year = None
+
             return name, year
     return None, None
 

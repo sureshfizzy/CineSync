@@ -336,7 +336,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             proper_name = f"{movie_name} ({movie_year})"
 
         _api_cache[cache_key] = proper_name
-        return tmdb_id, imdb_id, movie_name
+        return tmdb_id, imdb_id, movie_name, movie_year
 
     log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
     _api_cache[cache_key] = f"{query}"
