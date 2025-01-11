@@ -118,6 +118,27 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')
 
+    # Determine resolution-specific folder
+    resolution = extract_resolution_from_filename(file)
+
+    # Resolution folder determination logic
+    if 'remux' in file.lower():
+        if '2160' in file or '4k' in file.lower():
+            resolution_folder = '4KRemux'
+        elif '1080' in file:
+            resolution_folder = '1080pRemux'
+        else:
+            resolution_folder = 'MoviesRemux'
+    else:
+        resolution_folder = {
+            '2160p': 'UltraHD',
+            '1080p': 'FullHD',
+            '720p': 'SDMovies',
+            '480p': 'Retro480p',
+            'DVD': 'DVDClassics'
+        }.get(resolution.lower() if resolution else 'default_resolution', 'Movies')
+
+    # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():
         if collection_info and is_movie_collection_enabled():
             collection_name, collection_id = collection_info
@@ -128,11 +149,20 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             if is_cinesync_layout_enabled():
                 if custom_movie_layout():
-                    dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
+                    if is_movie_resolution_structure_enabled():
+                        dest_path = os.path.join(dest_dir, custom_movie_layout(), resolution_folder, movie_folder)
+                    else:
+                        dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
                 else:
-                    dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
+                    if is_movie_resolution_structure_enabled():
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
+                    else:
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
             else:
-                dest_path = os.path.join(dest_dir, 'CineSync', source_folder, movie_folder)
+                if is_movie_resolution_structure_enabled():
+                    dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, movie_folder)
+                else:
+                    dest_path = os.path.join(dest_dir, 'CineSync', source_folder, movie_folder)
     else:
         if collection_info and is_movie_collection_enabled():
             collection_name, collection_id = collection_info
@@ -151,37 +181,20 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
             movie_folder = movie_folder.replace('/', '')
 
-        # Check for existing variations
-        existing_variation = check_existing_variations(movie_folder, year, dest_dir)
-        if existing_variation:
-            log_message(f"Found existing variation for {movie_folder}: {existing_variation}", level="INFO")
-            movie_folder = existing_variation
+    # Function to check if movie folder exists in any resolution folder
+    def find_movie_folder_in_resolution_folders():
+        if is_movie_resolution_structure_enabled():
+            base_path = os.path.join(dest_dir, custom_movie_layout()) if custom_movie_layout() else os.path.join(dest_dir, 'CineSync', 'Movies')
+            for res_folder in ['UltraHD', 'FullHD', 'SDMovies', 'Retro480p', 'DVDClassics', 'Movies']:
+                movie_folder_path = os.path.join(base_path, res_folder, movie_folder)
+                if os.path.isdir(movie_folder_path):
+                    return movie_folder_path
+        return None
 
-        # Determine resolution-specific folder if not already set (for collections)
-        if 'resolution_folder' not in locals():
-            resolution = extract_resolution_from_filename(file)
-
-            # Check for remux files first
-            if 'remux' in file.lower():
-                if '2160' in file or '4k' in file.lower():
-                    resolution_folder = '4KRemux'
-                elif '1080' in file:
-                    resolution_folder = '1080pRemux'
-                else:
-                    resolution_folder = 'MoviesRemux'
-            else:
-                resolution_folder = {
-                    '2160p': 'UltraHD',
-                    '1080p': 'FullHD',
-                    '720p': 'SDMovies',
-                    '480p': 'Retro480p',
-                    'DVD': 'DVDClassics'
-                }.get(resolution.lower() if resolution else 'default_resolution', 'Movies')
-
-        if collection_info:
-            dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
-        else:
-            dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
+    # Check for existing movie in other resolution folders
+    existing_folder = find_movie_folder_in_resolution_folders()
+    if existing_folder:
+        log_message(f"Found existing movie folder in different resolution: {existing_folder}", level="INFO")
 
     os.makedirs(dest_path, exist_ok=True)
 

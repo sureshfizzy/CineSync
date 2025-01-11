@@ -128,3 +128,11 @@ def get_known_types(filename=None):
         _, ext = os.path.splitext(filename.lower())
         return ext in known_types
     return known_types
+
+def is_show_resolution_structure_enabled():
+    """Check if resolution structure is enabled in configuration"""
+    return os.getenv('SHOW_RESOLUTION_STRUCTURE', 'false').lower() == 'true'
+
+def is_movie_resolution_structure_enabled():
+    """Check if resolution structure is enabled in configuration"""
+    return os.getenv('MOVIE_RESOLUTION_STRUCTURE', 'false').lower() == 'true'
