@@ -48,6 +48,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     create_season_folder = False
     create_extras_folder = False
     resolution = None
+    is_anime_genre = False
 
     if is_anime_scan()  and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
@@ -66,6 +67,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         episode_title = anime_result.get('episode_title')
         episode_number = anime_result.get('episode_number')
         resolution = anime_result.get('resolution')
+        is_anime_genre = anime_result.get('is_anime_genre')
 
         episode_match = re.search(r'S(\d+)E(\d+)', new_name)
         if episode_match:
@@ -167,8 +169,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
         result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root)
-        if isinstance(result, tuple) and len(result) == 2:
-            proper_show_name, show_name = result
+        if isinstance(result, tuple) and len(result) == 3:
+            proper_show_name, show_name, is_anime_genre = result
         else:
             proper_show_name = result
         if "TMDb API error" in proper_show_name:
@@ -218,47 +220,88 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if is_cinesync_layout_enabled():
             if custom_show_layout():
                 if is_show_resolution_structure_enabled():
-                    base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder, 'Extras')
+                    if is_anime_genre:
+                        anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
+                        base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder, 'Extras')
+                    else:
+                        base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder, 'Extras')
                 else:
-                    base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder, 'Extras')
+                    if is_anime_genre:
+                        anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
+                        base_dest_path = os.path.join(dest_dir, anime_base, show_folder, 'Extras')
+                    else:
+                        base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder, 'Extras')
             else:
-                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
+                if is_anime_genre:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
+                else:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
         elif is_show_source_structure_enabled():
             if is_show_resolution_structure_enabled():
-                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder, 'Extras')
+                if is_anime_genre:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, 'AnimeShows', resolution_folder, show_folder, 'Extras')
+                else:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder, 'Extras')
             else:
-                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
+                if is_anime_genre:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, 'AnimeShows', show_folder, 'Extras')
+                else:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
         else:
-            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+            if is_anime_genre:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+            else:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
         season_dest_path = base_dest_path
     else:
         if is_cinesync_layout_enabled():
-            print("Hola Layout")
             if custom_show_layout():
                 if is_show_resolution_structure_enabled():
-                    base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
+                    if is_anime_genre:
+                        anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
+                        base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder)
+                    else:
+                        base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
                 else:
-                    base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
+                    if is_anime_genre:
+                        anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
+                        base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
+                    else:
+                        base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
             else:
                 if is_show_resolution_structure_enabled():
-                    base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+                    if is_anime_genre:
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
+                    else:
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
                 else:
-                    base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+                    if is_anime_genre:
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
+                    else:
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
         elif is_source_structure_enabled():
             if is_show_resolution_structure_enabled():
-                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
-                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
+                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
             else:
-                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
-                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
         else:
-            base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
-            extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+            if is_anime_genre:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+            else:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
         # Use anime season number if available, otherwise use the default season handling
         if anime_result:

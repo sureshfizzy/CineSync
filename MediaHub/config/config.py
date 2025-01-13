@@ -105,6 +105,14 @@ def custom_movie_layout():
     token = os.getenv('CUSTOM_MOVIE_FOLDER', None)
     return token
 
+def custom_anime_movie_layout():
+    token = os.getenv('CUSTOM_ANIME_MOVIE_FOLDER', None)
+    return token
+
+def custom_anime_show_layout():
+    token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', None)
+    return token
+
 def get_rename_tags():
     tags = os.getenv('RENAME_TAGS', '').split(',')
     return [tag.strip() for tag in tags if tag.strip()]

@@ -45,6 +45,102 @@ def get_external_ids(item_id, media_type):
         log_message(f"Error fetching external IDs: {e}", level="ERROR")
         return {}
 
+def get_movie_genres(movie_id):
+    """
+    Fetch genre information and other metadata for a movie from TMDb API.
+    Parameters:
+    movie_id (int): TMDb movie ID
+    Returns:
+    dict: Dictionary containing genres, language, and anime status
+    """
+    api_key = get_api_key()
+    if not api_key:
+        log_message("TMDb API key not found.", level="ERROR")
+        return None
+
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+    params = {'api_key': api_key}
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        movie_details = response.json()
+
+        genres = [genre['name'] for genre in movie_details.get('genres', [])]
+        language = movie_details.get('original_language', '')
+
+        keywords_url = f"https://api.themoviedb.org/3/movie/{movie_id}/keywords"
+        keywords_response = requests.get(keywords_url, params=params)
+        keywords_response.raise_for_status()
+        keywords = [kw['name'].lower() for kw in keywords_response.json().get('keywords', [])]
+
+        is_anime = any([
+            'anime' in movie_details.get('title', '').lower(),
+            'animation' in genres and language == 'ja',
+            'anime' in keywords,
+            'japanese animation' in keywords
+        ])
+
+        return {
+            'genres': genres,
+            'language': language,
+            'is_anime_genre': is_anime
+        }
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error fetching movie genres: {e}", level="ERROR")
+        return None
+
+def get_show_genres(show_id):
+    """
+    Fetch genre information and other metadata for a TV show from TMDb API.
+    Parameters:
+    show_id (int): TMDb show ID
+    Returns:
+    dict: Dictionary containing genres, language, and anime status
+    """
+    api_key = get_api_key()
+    if not api_key:
+        log_message("TMDb API key not found.", level="ERROR")
+        return None
+
+    url = f"https://api.themoviedb.org/3/tv/{show_id}"
+    params = {'api_key': api_key}
+
+    try:
+        # Get show details including genres
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        show_details = response.json()
+
+        genres = [genre['name'] for genre in show_details.get('genres', [])]
+        language = show_details.get('original_language', '')
+
+        # Get keywords for the show
+        keywords_url = f"https://api.themoviedb.org/3/tv/{show_id}/keywords"
+        keywords_response = requests.get(keywords_url, params=params)
+        keywords_response.raise_for_status()
+        keywords = [kw['name'].lower() for kw in keywords_response.json().get('results', [])]
+
+        # Check if it's an anime based on multiple criteria
+        is_anime = any([
+            'anime' in show_details.get('name', '').lower(),
+            'animation' in genres and language == 'ja',
+            'anime' in keywords,
+            'japanese animation' in keywords,
+            any('anime' in keyword for keyword in keywords)
+        ])
+
+        return {
+            'genres': genres,
+            'language': language,
+            'is_anime_genre': is_anime
+        }
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error fetching TV show genres: {e}", level="ERROR")
+        return None
+
 @lru_cache(maxsize=None)
 def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None):
     global api_key
@@ -158,6 +254,8 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         tmdb_id = chosen_show.get('id')
 
         external_ids = get_external_ids(tmdb_id, 'tv')
+        genre_info = get_show_genres(tmdb_id)
+        is_anime_genre = genre_info['is_anime_genre']
 
         if is_imdb_folder_id_enabled():
             imdb_id = external_ids.get('imdb_id', '')
@@ -171,7 +269,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
         _api_cache[cache_key] = proper_name
-        return proper_name, show_name
+        return proper_name, show_name, is_anime_genre
     else:
         log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
         _api_cache[cache_key] = f"{query}"
@@ -338,6 +436,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
         external_ids = get_external_ids(tmdb_id, 'movie')
         imdb_id = external_ids.get('imdb_id', '')
+        genre_info = get_movie_genres(tmdb_id)
+        is_anime_genre = genre_info['is_anime_genre']
 
         if is_imdb_folder_id_enabled():
             proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
@@ -347,7 +447,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             proper_name = f"{movie_name} ({movie_year})"
 
         _api_cache[cache_key] = proper_name
-        return tmdb_id, imdb_id, movie_name, movie_year
+        return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
 
     log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
     _api_cache[cache_key] = f"{query}"
