@@ -28,7 +28,6 @@ MONITOR_SCRIPT = os.path.join(SCRIPTS_FOLDER, "utils/service_manager.py")
 ENV_FILE = ".env"
 LIBRARY_SCRIPT = os.path.join(SCRIPTS_FOLDER, "main.py")
 BROKEN_LINKS_SCRIPT = os.path.join(SCRIPTS_FOLDER, "utils/broken_links.py")
-RENAMER_SCRIPT = os.path.join(SCRIPTS_FOLDER, "utils/tmdb_renamer.py")
 
 # Setup logging
 logging.basicConfig(filename='script.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -407,7 +406,8 @@ def main():
         print("2) Full Library Scan")
         print("3) Configure Broken Symlinks")
         print("4) Database Management")
-        print("5) Exit")
+        print("5) RealTime-Monitoring Background Mode (Linux Only, Use NSSM for Windows)")
+        print("6) Exit")
 
         choice = input("Select an option: ")
 
@@ -420,6 +420,8 @@ def main():
         elif choice == '4':
             database_management()
         elif choice == '5':
+            real_time_monitoring()
+        elif choice == '6':
             print("Exiting the script. Have a great day!")
             break
         else:

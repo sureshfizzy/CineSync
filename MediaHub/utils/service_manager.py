@@ -52,7 +52,7 @@ def enable_real_time_monitoring():
     service_file_path = '/etc/systemd/system/cinesync-monitor.service'
     if not os.path.isfile(service_file_path):
         current_dir = os.path.dirname(os.path.realpath(__file__))
-        monitor_script_path = os.path.join(current_dir, 'RealTime-Monitor.py')
+        monitor_script_path = os.path.join(current_dir, '../monitor', 'polling_monitor.py')
         create_monitor_service(monitor_script_path)
 
     execute_command('sudo', 'systemctl', 'enable', 'cinesync-monitor.service')
