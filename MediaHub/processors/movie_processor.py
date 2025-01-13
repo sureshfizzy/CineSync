@@ -151,25 +151,25 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             if is_cinesync_layout_enabled():
                 if custom_movie_layout():
                     if is_movie_resolution_structure_enabled():
-                        if is_anime_genre:
+                        if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, resolution_folder, movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, custom_movie_layout(), resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre:
+                        if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
                 else:
                     if is_movie_resolution_structure_enabled():
-                        if is_anime_genre:
+                        if is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre:
+                        if is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
@@ -197,12 +197,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
             # Set destination path for non-collection movies
             if is_movie_resolution_structure_enabled():
-                if is_anime_genre:
+                if is_anime_genre and is_anime_separation_enabled():
                     dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                 else:
                     dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
             else:
-                if is_anime_genre:
+                if is_anime_genre and is_anime_separation_enabled():
                     dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                 else:
                     dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)

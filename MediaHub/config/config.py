@@ -144,3 +144,7 @@ def is_show_resolution_structure_enabled():
 def is_movie_resolution_structure_enabled():
     """Check if resolution structure is enabled in configuration"""
     return os.getenv('MOVIE_RESOLUTION_STRUCTURE', 'false').lower() == 'true'
+
+def is_anime_separation_enabled():
+    """Check if anime content should be separated into different folders"""
+    return os.getenv('ANIME_SEPARATION', 'false').lower() == 'true'

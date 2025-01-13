@@ -220,35 +220,35 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if is_cinesync_layout_enabled():
             if custom_show_layout():
                 if is_show_resolution_structure_enabled():
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder, 'Extras')
                     else:
                         base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder, 'Extras')
                 else:
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, show_folder, 'Extras')
                     else:
                         base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder, 'Extras')
             else:
-                if is_anime_genre:
+                if is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
                 else:
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
         elif is_show_source_structure_enabled():
             if is_show_resolution_structure_enabled():
-                if is_anime_genre:
+                if is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, 'AnimeShows', resolution_folder, show_folder, 'Extras')
                 else:
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder, 'Extras')
             else:
-                if is_anime_genre:
+                if is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, 'AnimeShows', show_folder, 'Extras')
                 else:
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
         else:
-            if is_anime_genre:
+            if is_anime_genre and is_anime_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
             else:
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
@@ -258,7 +258,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if is_cinesync_layout_enabled():
             if custom_show_layout():
                 if is_show_resolution_structure_enabled():
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder)
@@ -266,7 +266,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), resolution_folder, show_folder)
                 else:
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
@@ -275,14 +275,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
             else:
                 if is_show_resolution_structure_enabled():
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
                     else:
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
                 else:
-                    if is_anime_genre:
+                    if is_anime_genre and is_anime_separation_enabled():
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                     else:
@@ -290,13 +290,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
         elif is_source_structure_enabled():
             if is_show_resolution_structure_enabled():
-                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, resolution_folder, show_folder)
             else:
-                    base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
-                    extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
         else:
-            if is_anime_genre:
+            if is_anime_genre and is_anime_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
             else:
