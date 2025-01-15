@@ -176,6 +176,14 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         log_message(f"Fallback search query: '{query}'", "DEBUG", "stdout")
         return fetch_results(query, year)
 
+    def display_results(results, start_idx=0):
+        for idx, show in enumerate(results[start_idx:start_idx + 3], start=start_idx + 1):
+            show_name = show.get('name')
+            show_id = show.get('id')
+            first_air_date = show.get('first_air_date')
+            show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+            log_message(f"{idx}: {show_name} ({show_year}) [tmdb-{show_id}]", level="INFO")
+
     results = fetch_results(query, year)
 
     if not results:
@@ -230,22 +238,30 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     if auto_select:
         chosen_show = results[0]
     else:
-        if len(results) == 1:
-            chosen_show = results[0]
-        else:
+        while True:
             log_message(f"Multiple shows found for query '{query}':", level="INFO")
-            for idx, show in enumerate(results[:3]):
-                show_name = show.get('name')
-                show_id = show.get('id')
-                first_air_date = show.get('first_air_date')
-                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-                log_message(f"{idx + 1}: {show_name} ({show_year}) [tmdb-{show_id}]", level="INFO")
+            display_results(results)
 
-            choice = input("Choose a show (1-3) or press Enter to skip: ").strip()
-            if choice.isdigit() and 1 <= int(choice) <= 3:
+            log_message("Options:", level="INFO")
+            log_message("- Enter 1-3 to select a show", level="INFO")
+            log_message("- Enter a search term for a new search", level="INFO")
+
+            choice = input("Enter your choice: ").strip()
+
+            if choice.lower() in ['1', '2', '3']:
                 chosen_show = results[int(choice) - 1]
+                break
+            elif choice.strip():
+                new_results = fetch_results(choice, year)
+                if new_results:
+                    results = new_results
+                    continue
+                else:
+                    log_message(f"No results found for '{choice}'", level="WARNING")
+                    continue
             else:
                 chosen_show = None
+                break
 
     if chosen_show:
         show_name = chosen_show.get('name')
@@ -411,22 +427,36 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     if auto_select:
         chosen_movie = results[0]
     else:
-        if len(results) == 1:
-            chosen_movie = results[0]
-        else:
-            log_message(f"Multiple movies found for query '{query}':", "INFO", "stdout")
-            for idx, movie in enumerate(results[:3]):
-                movie_name = movie.get('title')
-                movie_id = movie.get('id')
-                release_date = movie.get('release_date')
-                movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-                log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", "INFO", "stdout")
+        while True:
+            log_message(f"Multiple movies found for query '{query}':", level="INFO")
+            display_results(results)
+            log_message("Options:", level="INFO")
+            log_message("- Enter 1-3 to select a movie", level="INFO")
+            log_message("- Enter a search term for a new search", level="INFO")
 
-            choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
-            if choice.isdigit() and 1 <= int(choice) <= 3:
+            choice = input("Enter your choice: ").strip()
+
+            if choice.lower() in ['1', '2', '3']:
                 chosen_movie = results[int(choice) - 1]
+                break
+            elif choice.strip():
+                new_query = choice.strip()
+                log_message(f"Searching for new query: '{new_query}'", "DEBUG", "stdout")
+                new_results = fetch_results(new_query)
+                if not new_results and year:
+                    new_results = fetch_results(new_query, year)
+                if not new_results:
+                    new_results = search_with_extracted_title(new_query, year)
+
+                if new_results:
+                    results = new_results
+                    continue
+                else:
+                    log_message(f"No results found for '{new_query}'", level="WARNING")
+                    continue
             else:
                 chosen_movie = None
+                break
 
     if chosen_movie:
         movie_name = chosen_movie.get('title')
@@ -453,19 +483,13 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     _api_cache[cache_key] = f"{query}"
     return f"{query}"
 
-def present_movie_choices(results, query):
-    log_message(f"Multiple movies found for query '{query}':", level="INFO")
-    for idx, movie in enumerate(results[:3]):
+def display_results(results, start_idx=0):
+    for idx, movie in enumerate(results[start_idx:start_idx + 3], start=start_idx + 1):
         movie_name = movie.get('title')
         movie_id = movie.get('id')
         release_date = movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
-        log_message(f"{idx + 1}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
-
-    choice = input("Choose a movie (1-3) or press Enter to skip: ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= 3:
-        return results[int(choice) - 1]
-    return None
+        log_message(f"{idx}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
 
 def process_chosen_movie(chosen_movie):
     movie_name = chosen_movie.get('title')
