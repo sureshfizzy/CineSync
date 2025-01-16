@@ -3,6 +3,7 @@ import re
 import requests
 import urllib.parse
 import logging
+import unicodedata
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
@@ -325,20 +326,58 @@ def perform_fallback_tv_search(query, year=None):
 
 def perform_search(params, url):
     try:
+        query = params['query']
+        if isinstance(query, tuple):
+            query = query[0]
+        query = query.lower()
+
+        normalized_query = query.replace('&', 'and').replace('and', '&')
+        params['query'] = normalized_query
+
         response = requests.get(url, params=params)
         response.raise_for_status()
         results = response.json().get('results', [])
 
+        if not results:
+            return []
+
+        exact_matches = [
+            r for r in results
+            if r.get('name', '').lower() == query or
+            r.get('original_name', '').lower() == query
+        ]
+        if exact_matches:
+            return exact_matches
+
+        def normalize_string(s):
+            if not isinstance(s, str):
+                return ''
+            return ''.join(
+                c for c in unicodedata.normalize('NFKD', s.lower())
+                if not unicodedata.combining(c)
+            )
+
+        normalized_query = normalize_string(query)
+        close_matches = [
+            r for r in results
+            if (normalize_string(r.get('name', '')) == normalized_query or
+                normalize_string(r.get('original_name', '')) == normalized_query)
+        ]
+        if close_matches:
+            return close_matches
+
         english_results = [
             r for r in results
-            if r.get('original_language') == 'en' or
-            (r.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in r.get('origin_country')))
+            if (r.get('original_language') == 'en' or
+                (r.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ']
+                     for country in r.get('origin_country'))))
         ]
 
         if english_results:
             return english_results
 
-        return results
+        return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
+
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching data: {e}", level="ERROR")
         return []
