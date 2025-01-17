@@ -331,8 +331,9 @@ def perform_search(params, url):
             query = query[0]
         query = query.lower()
 
-        normalized_query = query.replace('&', 'and').replace('and', '&')
-        params['query'] = normalized_query
+        query = re.sub(r'\b&\b', 'and', query)
+        query = re.sub(r'\band\b', '&', query)
+        params['query'] = query
 
         response = requests.get(url, params=params)
         response.raise_for_status()
