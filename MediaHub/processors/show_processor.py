@@ -236,7 +236,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
                 else:
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
-        elif is_show_source_structure_enabled():
+        elif is_source_structure_enabled():
             if is_show_resolution_structure_enabled():
                 if is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, 'AnimeShows', resolution_folder, show_folder, 'Extras')
