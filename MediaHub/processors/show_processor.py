@@ -192,7 +192,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if anime_result and anime_result.get('resolution'):
         resolution = anime_result['resolution']
     else:
-        resolution = extract_resolution_from_filename(file) or extract_resolution_from_folder(parent_folder_name)
+        resolution = extract_resolution_from_filename(file) or extract_resolution_from_folder(actual_dir)
         if not resolution:
             log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
             resolution = 'Shows'
