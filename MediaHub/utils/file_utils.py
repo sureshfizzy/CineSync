@@ -390,7 +390,11 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
         r'\bSeason\s*\d{1,2}\b',
         r'\[S\d{1,2}\]',
         r'\(S\d{1,2}\)',
-        r'S\d{1,2}$'
+        r'S\d{1,2}$',
+        r'S(\d+)E(\d+)',
+        r'Episode\s+(\d+)\s+(.*)',
+        r'(?i)Episode\s+(\d+)\s+(.*?)\.(\w+)$', 
+        r'Episode\s+(\d+)\s+(.*?)\.(\w+)$',
     ]
 
     technical_patterns = [
