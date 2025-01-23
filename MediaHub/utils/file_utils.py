@@ -336,6 +336,7 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
         r'\[\d+\.\d+GB\]',
         r'\b(?:AAC|AC3)\b',
         r'\.\w+$'
+        
     ]
     for pattern in tech_patterns:
         query = re.sub(pattern, '', query, flags=re.IGNORECASE)
@@ -391,6 +392,12 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
         r'\[S\d{1,2}\]',
         r'\(S\d{1,2}\)',
         r'S\d{1,2}$'
+        r'S(\d+)E(\d+)'
+        r'Episode\s+(\d+)\s+(.*)'
+        r'(?i)Episode\s+(\d+)\s+(.*?)\.(\w+)$
+
+
+
     ]
 
     technical_patterns = [
