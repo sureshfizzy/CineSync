@@ -296,6 +296,9 @@ def is_file_extra(file, file_path):
     if file.lower().endswith('.srt'):
         return False
 
+    if file.lower().endswith('.mkv'):
+        return False # Never classify '.mkv' files as extras.
+
     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
     extras_max_size_mb = get_extras_max_size_mb()
@@ -391,6 +394,9 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
         r'\[S\d{1,2}\]',
         r'\(S\d{1,2}\)',
         r'S\d{1,2}$'
+        r'S(\d+)E(\d+)'
+        r'Episode\s+(\d+)\s+(.*)'
+
     ]
 
     technical_patterns = [
