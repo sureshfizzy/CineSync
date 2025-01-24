@@ -232,8 +232,22 @@ def process_file(args, processed_files_log, force=False):
         existing_symlink_path = get_existing_symlink_info(src_file)
         if existing_symlink_path:
             log_message(f"Force mode: Found existing symlink at {existing_symlink_path}", level="DEBUG")
+            parent_dir = os.path.dirname(existing_symlink_path)
+            parent_parent_dir = os.path.dirname(parent_dir)
             os.remove(existing_symlink_path)
             log_message(f"Force mode: Initiating reprocessing of {file}", level="INFO")
+
+            # Delete if parent directory is empty
+            try:
+                if not os.listdir(parent_dir):
+                    log_message(f"Deleting empty directory: {parent_dir}", level="INFO")
+                    os.rmdir(parent_dir)
+
+                    if not os.listdir(parent_parent_dir):
+                        log_message(f"Deleting empty directory: {parent_parent_dir}", level="INFO")
+                        os.rmdir(parent_parent_dir)
+            except OSError as e:
+                log_message(f"Error deleting directory: {e}", level="WARNING")
 
     existing_dest_path = get_destination_path(src_file)
     if existing_dest_path and not force:
