@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import time
 import traceback
@@ -203,6 +204,23 @@ def _check_all_symlinks(dest_dir):
 
                 _cleanup_empty_dirs(os.path.dirname(file_path))
 
+def normalize_path(path):
+    """
+    Normalizes a file path to ensure consistent formatting for comparison.
+    Only applies normalization specific to Windows (e.g., removing \\?\).
+
+    Args:
+        path (str): The file path to normalize.
+
+    Returns:
+        str: The normalized file path.
+    """
+    if platform.system() == "Windows":
+        if path.startswith("\\\\?\\"):
+            path = path[4:]
+        path = os.path.abspath(path)
+    return path
+
 def get_existing_symlink_info(src_file):
     """Get information about existing symlink for a source file."""
     existing_dest_path = get_destination_path(src_file)
@@ -210,8 +228,15 @@ def get_existing_symlink_info(src_file):
         dir_path = os.path.dirname(existing_dest_path)
         for filename in os.listdir(dir_path):
             full_path = os.path.join(dir_path, filename)
-            if os.path.islink(full_path) and os.readlink(full_path) == src_file:
-                return full_path
+            if os.path.islink(full_path):
+                target_path = os.readlink(full_path)
+
+                # Normalize paths only on Windows
+                normalized_src_file = normalize_path(src_file)
+                normalized_target_path = normalize_path(target_path)
+
+                if normalized_target_path == normalized_src_file:
+                    return full_path
     return None
 
 def process_file(args, processed_files_log, force=False):
@@ -219,6 +244,9 @@ def process_file(args, processed_files_log, force=False):
 
     if error_event.is_set():
         return
+
+    # Normalize path
+    src_file = os.path.normpath(src_file)
 
     # Skip if not a known file type
     if not get_known_types(file):
@@ -251,6 +279,7 @@ def process_file(args, processed_files_log, force=False):
 
     existing_dest_path = get_destination_path(src_file)
     if existing_dest_path and not force:
+        return
         if not os.path.exists(existing_dest_path):
             dir_path = os.path.dirname(existing_dest_path)
             if os.path.exists(dir_path):
@@ -347,6 +376,7 @@ def process_file(args, processed_files_log, force=False):
         log_message(error_message, level="ERROR")
 
     return None
+
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create'):
     global log_imported_db
 
