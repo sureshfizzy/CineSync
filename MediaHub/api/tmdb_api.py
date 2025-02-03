@@ -215,8 +215,8 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     if not results:
         if len(query.split()) > 1:
             log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
-            title = clean_query(file)
-            results = fetch_results(title, year)
+            cleaned_title, _ = clean_query(file)
+            results = fetch_results(cleaned_title, year)
         else:
             log_message(f"Skipping cleaned query search for single-word query: '{query}'", "DEBUG", "stdout")
 
