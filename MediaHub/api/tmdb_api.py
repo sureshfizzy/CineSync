@@ -228,8 +228,14 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     if not results:
         log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
         dir_based_query = os.path.basename(root)
-        title = advanced_clean_query(dir_based_query)
+        title = advanced_clean_query(dir_based_query, max_words=4)
         results = fetch_results(title, year)
+
+        # If no results found with max_words=4, try again with max_words=2
+        if not results:
+            log_message(f"No results found. Retrying with more aggressive cleaning", "DEBUG", "stdout")
+            title = advanced_clean_query(dir_based_query, max_words=2)
+            results = fetch_results(title, year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")

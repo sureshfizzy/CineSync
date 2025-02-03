@@ -446,4 +446,5 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
     query = ' '.join(query_words)
     query = query.strip()
 
+    log_message(f"Cleaned show title: '{query}'", "DEBUG", "stdout")
     return query, None
