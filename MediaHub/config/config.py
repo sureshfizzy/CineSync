@@ -148,3 +148,99 @@ def is_movie_resolution_structure_enabled():
 def is_anime_separation_enabled():
     """Check if anime content should be separated into different folders"""
     return os.getenv('ANIME_SEPARATION', 'false').lower() == 'true'
+
+def get_movie_resolution_folder(file, resolution):
+    """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""
+
+    default_mappings = {
+        'remux_4k': '4KRemux',
+        'remux_1080p': '1080pRemux',
+        'remux_default': 'MoviesRemux',
+        '2160p': 'UltraHD',
+        '1080p': 'FullHD',
+        '720p': 'SDMovies',
+        '480p': 'Retro480p',
+        'dvd': 'DVDClassics',
+        'default': 'Movies'
+    }
+
+    custom_mappings = {}
+    for key in default_mappings.keys():
+        env_key = f'MOVIE_RESOLUTION_FOLDER_{key.upper()}'
+        custom_value = os.getenv(env_key)
+        if custom_value:
+            custom_mappings[key] = custom_value
+
+    mappings = {**default_mappings, **custom_mappings}
+
+    if 'remux' in file.lower():
+        if '2160' in file or '4k' in file.lower():
+            return mappings.get('remux_4k', '4KRemux')
+        elif '1080' in file:
+            return mappings.get('remux_1080p', '1080pRemux')
+        else:
+            return mappings.get('remux_default', 'MoviesRemux')
+    else:
+        resolution = resolution.lower() if resolution else 'default'
+        if resolution == '2160p' or resolution == '4k':
+            return mappings.get('2160p', 'UltraHD')
+        elif resolution == '1080p':
+            return mappings.get('1080p', 'FullHD')
+        elif resolution == '720p':
+            return mappings.get('720p', 'SDMovies')
+        elif resolution == '480p':
+            return mappings.get('480p', 'Retro480p')
+        elif resolution == 'dvd':
+            return mappings.get('dvd', 'DVDClassics')
+        else:
+            return mappings.get('default', 'Movies')
+
+def get_movie_collections_folder():
+    """Get the movie collections folder name from environment variables"""
+    return os.getenv('MOVIE_COLLECTIONS_FOLDER', 'Movie Collections')
+
+def get_show_resolution_folder(file, resolution):
+    """Get resolution folder mappings from environment variables and determine the resolution folder."""
+
+    default_mappings = {
+        'remux_4k': 'UltraHDRemuxShows',
+        'remux_1080p': '1080pRemuxLibrary',
+        'remux_default': 'RemuxShows',
+        '2160p': 'UltraHD',
+        '1080p': 'FullHD',
+        '720p': 'SDClassics',
+        '480p': 'Retro480p',
+        'dvd': 'RetroDVD',
+        'default': 'Shows'
+    }
+
+    custom_mappings = {}
+    for key in default_mappings.keys():
+        env_key = f'SHOW_RESOLUTION_FOLDER_{key.upper()}'
+        custom_value = os.getenv(env_key)
+        if custom_value:
+            custom_mappings[key] = custom_value
+
+    mappings = {**default_mappings, **custom_mappings}
+
+    if 'remux' in file.lower():
+        if '2160' in file or '4k' in file.lower():
+            return mappings.get('remux_4k', 'UltraHDRemuxShows')
+        elif '1080' in file:
+            return mappings.get('remux_1080p', '1080pRemuxLibrary')
+        else:
+            return mappings.get('remux_default', 'RemuxShows')
+    else:
+        resolution = resolution.lower()
+        if resolution == '2160p' or resolution == '4k':
+            return mappings.get('2160p', 'UltraHD')
+        elif resolution == '1080p':
+            return mappings.get('1080p', 'FullHD')
+        elif resolution == '720p':
+            return mappings.get('720p', 'SDClassics')
+        elif resolution == '480p':
+            return mappings.get('480p', 'Retro480p')
+        elif resolution == 'dvd':
+            return mappings.get('dvd', 'RetroDVD')
+        else:
+            return mappings.get('default', 'Shows')

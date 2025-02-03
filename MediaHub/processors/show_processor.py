@@ -197,23 +197,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"Resolution could not be extracted from filename or folder name. Defaulting to 'Shows'.", level="DEBUG")
             resolution = 'Shows'
 
-    # Resolution folder determination logic remains the same as in original code
-    if 'remux' in file.lower():
-        if '2160' in file or '4k' in file.lower():
-            resolution_folder = 'UltraHDRemuxShows'
-        elif '1080' in file:
-            resolution_folder = '1080pRemuxLibrary'
-        else:
-            resolution_folder = 'RemuxShows'
-    else:
-        resolution_folder = {
-            '2160p': 'UltraHD',
-            '4k': 'UltraHD',
-            '1080p': 'FullHD',
-            '720p': 'SDClassics',
-            '480p': 'Retro480p',
-            'DVD': 'RetroDVD'
-        }.get(resolution.lower(), 'Shows')
+    # Replace the existing resolution folder determination logic with:
+    resolution_folder = get_show_resolution_folder(file, resolution)
 
     # Modified destination path determination
     if is_extra:
@@ -313,12 +298,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     def find_show_folder_in_resolution_folders():
         if is_show_resolution_structure_enabled():
             base_path = os.path.join(dest_dir, custom_show_layout()) if custom_show_layout() else os.path.join(dest_dir, 'CineSync', 'Shows')
-            for res_folder in ['UltraHD', 'FullHD', 'SDClassics', 'Retro480p', 'RetroDVD', 'Shows']:
+            resolution_folders = [get_show_resolution_folder(file, resolution)]
+            for res_folder in resolution_folders:
                 show_folder_path = os.path.join(base_path, res_folder, show_folder)
                 if os.path.isdir(show_folder_path):
                     return show_folder_path
         else:
-            for res_folder in ['UltraHD', 'FullHD', 'SDClassics', 'Retro480p', 'RetroDVD', 'Shows']:
+            resolution_folders = [get_show_resolution_folder(file, resolution)]
+            for res_folder in resolution_folders:
                 show_folder_path = os.path.join(dest_dir, 'CineSync', 'Shows', res_folder, show_folder)
                 if os.path.isdir(show_folder_path):
                     return show_folder_path
