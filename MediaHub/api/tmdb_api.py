@@ -155,8 +155,11 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     url = "https://api.themoviedb.org/3/search/tv"
 
     def fetch_results(query, year=None):
-        if len(query.split()) == 1:
-            log_message(f"Skipping API search for single-word query: '{query}'", "DEBUG", "stdout")
+        if isinstance(query, tuple):
+            query = query[0] if query else ""
+
+        if len(query.strip()) == 1:
+            log_message(f"Skipping API search for single-letter query: '{query}'", "DEBUG", "stdout")
             return None
 
         params = {'api_key': api_key, 'query': query}
@@ -192,33 +195,33 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     results = fetch_results(query, year)
 
     if not results:
-        if len(query.split()) > 1:
+        if len(query.strip()) > 1:
             results = search_with_extracted_title(query, year)
             log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
         else:
-            log_message(f"Skipping extracted title search for single-word query: '{query}'", "DEBUG", "stdout")
+            log_message(f"Skipping extracted title search for single-letter query: '{query}'", "DEBUG", "stdout")
 
     if not results:
-        if len(query.split()) > 1:
+        if len(query.strip()) > 1:
             results = perform_fallback_tv_search(query, year)
             log_message(f"Primary search failed, attempting fallback TV search", "DEBUG", "stdout")
         else:
-            log_message(f"Skipping fallback TV search for single-word query: '{query}'", "DEBUG", "stdout")
+            log_message(f"Skipping fallback TV search for single-letter query: '{query}'", "DEBUG", "stdout")
 
     if not results and year:
-        if len(query.split()) > 1:
+        if len(query.strip()) > 1:
             results = search_fallback(query, year)
             log_message(f"TV search fallback failed, attempting final search", "DEBUG", "stdout")
         else:
-            log_message(f"Skipping final fallback search for single-word query: '{query}'", "DEBUG", "stdout")
+            log_message(f"Skipping final fallback search for single-letter query: '{query}'", "DEBUG", "stdout")
 
     if not results:
-        if len(query.split()) > 1:
+        if len(query.strip()) > 1:
             log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
             cleaned_title, _ = clean_query(file)
             results = fetch_results(cleaned_title, year)
         else:
-            log_message(f"Skipping cleaned query search for single-word query: '{query}'", "DEBUG", "stdout")
+            log_message(f"Skipping cleaned query search for single-letter query: '{query}'", "DEBUG", "stdout")
 
     if not results and year:
         fallback_url = f"https://api.themoviedb.org/3/search/tv?api_key={api_key}&query={year}"
