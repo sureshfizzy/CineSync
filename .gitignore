@@ -6,3 +6,4 @@ __pycache__/
 # Ignore other potential bytecode files
 *.pyd
 db
+logs

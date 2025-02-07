@@ -61,8 +61,11 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
     if not movie_name:
-        log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
-        return
+        log_message(f"Attempting secondary extraction: {parent_folder_name}", level="DEBUG")
+        movie_name, year = clean_query_movie(parent_folder_name)
+        if not movie_name:
+            log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
+            return
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
