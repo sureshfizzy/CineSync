@@ -20,7 +20,9 @@ def extract_anime_episode_info(filename):
     Returns a dictionary with show_name, season_number, episode_number, and episode_title.
     """
 
-    clean_filename = re.sub(r'^\[.*?\]\s*', '', filename)
+    clean_filename = filename
+    clean_filename = re.sub(r'^\[(.*?)\]', '', clean_filename)
+    clean_filename = re.sub(r'\[[A-F0-9]{8}\](?:\.[^.]+)?$', '', clean_filename)
     clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
     clean_filename = re.sub(r'\(.*?\)', '', clean_filename)
     clean_filename = os.path.splitext(clean_filename)[0]
@@ -66,6 +68,27 @@ def extract_anime_episode_info(filename):
                     'episode_number': episode_number,
                     'episode_title': None
                 }
+
+    # Add new pattern for simple show name + episode number format
+    simple_episode_patterns = [
+        r'^(.+?)\s+(\d{1,3})(?:\s|$)',
+        r'^(.+?)\s*-\s*(\d{1,3})(?:\s|$)',
+        r'^(.+?)\s*EP?\.?\s*(\d{1,3})(?:\s|$)',
+    ]
+
+    for pattern in simple_episode_patterns:
+        match = re.match(pattern, clean_filename, re.IGNORECASE)
+        if match:
+            show_name = match.group(1).strip()
+            episode_number = str(int(match.group(2))).zfill(2)
+
+            show_name = re.sub(r'[._-]', ' ', show_name).strip()
+            return {
+                'show_name': show_name,
+                'season_number': '01',
+                'episode_number': episode_number,
+                'episode_title': None
+            }
 
     anime_patterns = [
         r'^(.+?)\s*S(\d+)\s*-\s*.*?-\s*(\d+)$',
