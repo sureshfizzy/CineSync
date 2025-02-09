@@ -9,6 +9,7 @@ from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+
 _api_cache = {}
 
 # Global variables for API key status and warnings
@@ -143,7 +144,7 @@ def get_show_genres(show_id):
         return None
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None):
     global api_key
     if not check_api_key():
         return query
@@ -217,9 +218,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     if not results:
         if len(query.strip()) > 1:
-            log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
-            cleaned_title, _ = clean_query(file)
-            results = fetch_results(cleaned_title, year)
+            # Search with cleaned query only if the episode pattern matches
+            if episode_match:
+                log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
+                cleaned_title, _ = clean_query(file)
+                results = fetch_results(cleaned_title, year)
+            else:
+                log_message(f"Skipping cleaned query search for non-episode file", "DEBUG", "stdout")
         else:
             log_message(f"Skipping cleaned query search for single-letter query: '{query}'", "DEBUG", "stdout")
 
