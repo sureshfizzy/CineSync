@@ -397,62 +397,121 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     # Load the record of processed files
     processed_files_log = load_processed_files()
 
-    tasks = []
-    with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
+    if auto_select:
+        # Use thread pool for parallel processing when auto-select is enabled
+        tasks = []
+        with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
+            for src_dir in src_dirs:
+                if os.path.isfile(src_dir):
+                    src_file = src_dir
+                    root = os.path.dirname(src_file)
+                    file = os.path.basename(src_file)
+                    actual_dir = os.path.basename(root)
+
+                    # Get appropriate destination index based on mode
+                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                else build_dest_index(dest_dir))
+
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                    tasks.append(executor.submit(process_file, args, processed_files_log, force))
+                else:
+                    # Handle directory
+                    actual_dir = os.path.basename(os.path.normpath(src_dir))
+                    log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+
+                    # Get appropriate destination index based on mode
+                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                else build_dest_index(dest_dir))
+
+                    for root, _, files in os.walk(src_dir):
+                        for file in files:
+                            if error_event.is_set():
+                                log_message("Stopping further processing due to an earlier error.", level="WARNING")
+                                return
+
+                            src_file = os.path.join(root, file)
+
+                            # Check if the file is an extra based on the size
+                            if skip_extras_folder and is_file_extra(file, src_file):
+                                log_message(f"Skipping extras file: {file}", level="DEBUG")
+                                continue
+
+                            if mode == 'create' and src_file in processed_files_log and not force:
+                                continue
+
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                            tasks.append(executor.submit(process_file, args, processed_files_log, force))
+
+            # Process completed tasks
+            for task in as_completed(tasks):
+                if error_event.is_set():
+                    log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
+                    return
+
+                try:
+                    result = task.result()
+                    if result and isinstance(result, tuple) and len(result) == 3:
+                        dest_file, is_symlink, target_path = result
+                        if mode == 'monitor':
+                            update_single_file_index(dest_file, is_symlink, target_path)
+                except Exception as e:
+                    log_message(f"Error processing task: {str(e)}", level="ERROR")
+    else:
+        # Process sequentially when auto-select is disabled
         for src_dir in src_dirs:
-            if os.path.isfile(src_dir):
-                src_file = src_dir
-                root = os.path.dirname(src_file)
-                file = os.path.basename(src_file)
-                actual_dir = os.path.basename(root)
+            if error_event.is_set():
+                log_message("Stopping further processing due to an earlier error.", level="WARNING")
+                return
 
-                # Get appropriate destination index based on mode
-                dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                            else build_dest_index(dest_dir))
+            try:
+                if os.path.isfile(src_dir):
+                    src_file = src_dir
+                    root = os.path.dirname(src_file)
+                    file = os.path.basename(src_file)
+                    actual_dir = os.path.basename(root)
 
-                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
-                tasks.append(executor.submit(process_file, args, processed_files_log, force))
-            else:
-                # Handle directory
-                actual_dir = os.path.basename(os.path.normpath(src_dir))
-                log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+                    # Get appropriate destination index based on mode
+                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                else build_dest_index(dest_dir))
 
-                # Get appropriate destination index based on mode
-                dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                            else build_dest_index(dest_dir))
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                    result = process_file(args, processed_files_log, force)
 
-                for root, _, files in os.walk(src_dir):
-                    for file in files:
-                        if error_event.is_set():
-                            log_message("Stopping further processing due to an earlier error.", level="WARNING")
-                            return
+                    if result and isinstance(result, tuple) and len(result) == 3:
+                        dest_file, is_symlink, target_path = result
+                        if mode == 'monitor':
+                            update_single_file_index(dest_file, is_symlink, target_path)
+                else:
+                    # Handle directory
+                    actual_dir = os.path.basename(os.path.normpath(src_dir))
+                    log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
-                        src_file = os.path.join(root, file)
+                    # Get appropriate destination index based on mode
+                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                else build_dest_index(dest_dir))
 
-                        # Check if the file is an extra based on the size
-                        if skip_extras_folder and is_file_extra(file, src_file):
-                            log_message(f"Skipping extras file: {file}", level="DEBUG")
-                            continue
+                    for root, _, files in os.walk(src_dir):
+                        for file in files:
+                            if error_event.is_set():
+                                log_message("Stopping further processing due to an earlier error.", level="WARNING")
+                                return
 
-                        if mode == 'create' and src_file in processed_files_log and not force:
-                            continue
+                            src_file = os.path.join(root, file)
 
-                        args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
-                        tasks.append(executor.submit(process_file, args, processed_files_log, force))
+                            # Check if the file is an extra based on the size
+                            if skip_extras_folder and is_file_extra(file, src_file):
+                                log_message(f"Skipping extras file: {file}", level="DEBUG")
+                                continue
 
-    # Process completed tasks
-    for task in as_completed(tasks):
-        if error_event.is_set():
-            log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
-            return
+                            if mode == 'create' and src_file in processed_files_log and not force:
+                                continue
 
-        try:
-            result = task.result()
-            if result and isinstance(result, tuple) and len(result) == 3:
-                dest_file, is_symlink, target_path = result
-                if mode == 'monitor':
-                    update_single_file_index(dest_file, is_symlink, target_path)
-            else:
-                task.result()
-        except Exception as e:
-            log_message(f"Error processing task: {str(e)}", level="ERROR")
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                            result = process_file(args, processed_files_log, force)
+
+                            if result and isinstance(result, tuple) and len(result) == 3:
+                                dest_file, is_symlink, target_path = result
+                                if mode == 'monitor':
+                                    update_single_file_index(dest_file, is_symlink, target_path)
+            except Exception as e:
+                log_message(f"Error processing directory {src_dir}: {str(e)}", level="ERROR")
