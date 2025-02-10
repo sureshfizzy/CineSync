@@ -240,7 +240,7 @@ def get_existing_symlink_info(src_file):
     return None
 
 def process_file(args, processed_files_log, force=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id = args
 
     if error_event.is_set():
         return
@@ -325,9 +325,9 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show:
-        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match)
+        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
     else:
-        dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+        dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
 
     # Check if the file should be considered an extra based on size
     if skip_extras_folder and is_file_extra(file, src_file):
@@ -377,7 +377,7 @@ def process_file(args, processed_files_log, force=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create'):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None):
     global log_imported_db
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -412,7 +412,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force))
                 else:
                     # Handle directory
@@ -439,7 +439,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force))
 
             # Process completed tasks
@@ -474,7 +474,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
                     result = process_file(args, processed_files_log, force)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
@@ -506,7 +506,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
                             result = process_file(args, processed_files_log, force)
 
                             if result and isinstance(result, tuple) and len(result) == 3:

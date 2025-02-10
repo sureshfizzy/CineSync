@@ -144,10 +144,75 @@ def get_show_genres(show_id):
         return None
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None):
     global api_key
     if not check_api_key():
         return query
+
+    # Handle direct ID searches first
+    if tmdb_id or imdb_id or tvdb_id:
+        try:
+            if tmdb_id:
+                log_message(f"Using provided TMDB ID: {tmdb_id}", level="INFO")
+                url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+                params = {'api_key': api_key}
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                show_data = response.json()
+
+            elif imdb_id or tvdb_id:
+                external_id_type = 'imdb_id' if imdb_id else 'tvdb_id'
+                external_id = imdb_id if imdb_id else str(tvdb_id)
+
+                url = f"https://api.themoviedb.org/3/find/{external_id}"
+                params = {
+                    'api_key': api_key,
+                    'external_source': 'imdb_id' if imdb_id else 'tvdb_id'
+                }
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                results = response.json().get('tv_results', [])
+
+                if not results:
+                    log_message(f"No show found for {external_id_type}: {external_id}", level="WARNING")
+                    return query
+
+                show_data = results[0]
+                tmdb_id = show_data['id']
+
+                # Get full show details
+                url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+                params = {'api_key': api_key}
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                show_data = response.json()
+
+            # Process show data
+            show_name = show_data['name']
+            first_air_date = show_data.get('first_air_date', '')
+            show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+
+            # Get external IDs for the show
+            external_ids = get_external_ids(tmdb_id, 'tv')
+            genre_info = get_show_genres(tmdb_id)
+            is_anime_genre = genre_info['is_anime_genre']
+
+            # Format the proper name based on settings
+            if is_imdb_folder_id_enabled():
+                imdb_id = external_ids.get('imdb_id', '')
+                proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}} {{tmdb-{tmdb_id}}}"
+            elif is_tvdb_folder_id_enabled():
+                tvdb_id = external_ids.get('tvdb_id', '')
+                proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}} {{tmdb-{tmdb_id}}}"
+            else:
+                proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
+
+            log_message(f"Successfully retrieved show data using ID: {proper_name}", level="INFO")
+            return proper_name, show_name, is_anime_genre
+
+        except requests.exceptions.RequestException as e:
+            log_message(f"Error fetching show data: {e}", level="ERROR")
+            log_message(f"Falling back to search due to API error", level="INFO")
 
     cache_key = (query, year)
     if cache_key in _api_cache:
@@ -416,10 +481,70 @@ def perform_search(params, url):
         return []
 
 @lru_cache(maxsize=None)
-def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None):
+def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None):
     global api_key
     if not check_api_key():
         return query
+
+    # Handle direct ID searches first
+    if tmdb_id or imdb_id:
+        try:
+            if tmdb_id:
+                log_message(f"Using provided TMDB ID: {tmdb_id}", level="INFO")
+                url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+                params = {'api_key': api_key}
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                movie_data = response.json()
+
+            elif imdb_id:
+                url = f"https://api.themoviedb.org/3/find/{imdb_id}"
+                params = {
+                    'api_key': api_key,
+                    'external_source': 'imdb_id'
+                }
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                results = response.json().get('movie_results', [])
+
+                if not results:
+                    log_message(f"No movie found for IMDb ID: {imdb_id}", level="WARNING")
+                    return query
+
+                movie_data = results[0]
+                tmdb_id = movie_data['id']
+
+                # Get full movie details
+                url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+                params = {'api_key': api_key}
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                movie_data = response.json()
+
+            # Process movie data
+            movie_name = movie_data['title']
+            release_date = movie_data.get('release_date', '')
+            movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+
+            # Get external IDs for the movie
+            external_ids = get_external_ids(tmdb_id, 'movie')
+            imdb_id = external_ids.get('imdb_id', '')
+            genre_info = get_movie_genres(tmdb_id)
+            is_anime_genre = genre_info['is_anime_genre']
+
+            if is_imdb_folder_id_enabled():
+                proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
+            elif is_tmdb_folder_id_enabled():
+                proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
+            else:
+                proper_name = f"{movie_name} ({movie_year})"
+
+            log_message(f"Successfully retrieved movie data using ID: {proper_name}", level="INFO")
+            return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
+
+        except requests.exceptions.RequestException as e:
+            log_message(f"Error fetching movie data: {e}", level="ERROR")
+            log_message(f"Falling back to search due to API error", level="INFO")
 
     cache_key = (query, year)
     if cache_key in _api_cache:

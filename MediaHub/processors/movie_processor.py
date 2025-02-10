@@ -49,7 +49,7 @@ def should_skip_file(filename):
             continue
     return False
 
-def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index):
+def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None):
     global offline_mode
 
     source_folder = os.path.basename(os.path.dirname(root))
@@ -77,7 +77,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     is_anime_genre = False
 
     if api_key and is_movie_collection_enabled():
-        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file)
+        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
                 tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
@@ -99,7 +99,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
-        result = search_movie(movie_name, year, auto_select=auto_select, file=file)
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
         year = result[3] if result[3] is not None else year
         if isinstance(result, tuple) and len(result) == 5:
             tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result

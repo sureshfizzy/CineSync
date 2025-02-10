@@ -158,6 +158,9 @@ def main(dest_dir):
     parser.add_argument("single_path", nargs="?", help="Single path to process instead of using SOURCE_DIRS from environment variables")
     parser.add_argument("--force", action="store_true", help="Force recreate symlinks even if they already exist")
     parser.add_argument("--disable-monitor", action="store_true", help="Disable polling monitor and symlink cleanup processes")
+    parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
+    parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
+    parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -263,10 +266,10 @@ def main(dest_dir):
         monitor_thread.daemon = False
         monitor_thread.start()
         time.sleep(2)
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create')
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb)
         monitor_thread.join()
     else:
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create')
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb)
 
 if __name__ == "__main__":
     setup_signal_handlers()
