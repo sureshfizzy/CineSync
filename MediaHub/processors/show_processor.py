@@ -3,12 +3,13 @@ import re
 import requests
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year, extract_resolution_from_folder
-from MediaHub.api.tmdb_api import search_tv_show, get_episode_name
+from MediaHub.api.tmdb_api import search_tv_show
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
 from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
+from MediaHub.api.tmdb_api_helpers import get_episode_name
 
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')

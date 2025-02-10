@@ -4,10 +4,11 @@ import json
 import requests
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import *
-from MediaHub.api.tmdb_api import search_movie, get_movie_collection
+from MediaHub.api.tmdb_api import search_movie
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
+from MediaHub.api.tmdb_api_helpers import get_movie_collection
 
 # Global variables to track API key state
 global api_key

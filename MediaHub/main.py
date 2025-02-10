@@ -12,11 +12,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Local imports from MediaHub
 from MediaHub.config.config import *
-from MediaHub.processors.symlink_creator import create_symlinks
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
+from MediaHub.processors.symlink_utils import *
 
 db_initialized = False
 

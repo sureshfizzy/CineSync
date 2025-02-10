@@ -3,9 +3,10 @@ import re
 import requests
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.file_utils import fetch_json, extract_resolution, extract_resolution_from_folder, get_anime_patterns
-from MediaHub.api.tmdb_api import search_tv_show, get_episode_name
+from MediaHub.api.tmdb_api import search_tv_show
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
+from MediaHub.api.tmdb_api_helpers import get_episode_name
 
 def is_anime_file(filename):
     """
