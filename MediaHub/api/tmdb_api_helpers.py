@@ -245,3 +245,56 @@ def get_movie_collection(movie_id=None, movie_title=None, year=None):
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching movie collection data: {e}", level="ERROR")
     return None
+
+def calculate_score(result, query, year=None):
+    """
+    Calculate a match score between a search result and the query.
+    Higher scores indicate better matches.
+
+    Parameters:
+    result (dict): TMDB API search result
+    query (str): Original search query
+    year (str): Optional year to match against
+
+    Returns:
+    float: Match score between 0 and 100
+    """
+    score = 0
+
+    query = query.lower().strip()
+    title = result.get('name', '').lower().strip()
+    original_title = result.get('original_name', '').lower().strip()
+
+    # Title exact match (40 points)
+    if query == title or query == original_title:
+        score += 40
+    # Title contains query or vice versa (20 points)
+    elif query in title or title in query or query in original_title or original_title in query:
+        score += 20
+
+    # Year match (30 points)
+    if year:
+        first_air_date = result.get('first_air_date', '')
+        if first_air_date:
+            result_year = first_air_date.split('-')[0]
+            if result_year == str(year):
+                score += 30
+            # Partial year match (within 1 year) (15 points)
+            elif abs(int(result_year) - int(year)) <= 1:
+                score += 15
+
+    # Language and country bonus (15 points)
+    if result.get('original_language') == 'en':
+        score += 10
+    if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ']
+                                          for country in result.get('origin_country')):
+        score += 5
+
+    # Popularity bonus (up to 15 points)
+    popularity = result.get('popularity', 0)
+    if popularity > 0:
+        # Normalize popularity score (0-15 points)
+        popularity_score = min(15, (popularity / 100) * 15)
+        score += popularity_score
+
+    return score

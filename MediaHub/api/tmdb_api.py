@@ -107,14 +107,37 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
         params = {'api_key': api_key, 'query': query}
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"Primary search URL (without year): {full_url}", "DEBUG", "stdout")
+        log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
 
-        if not response and year:
+        if response:
+            scored_results = []
+            for result in response:
+                score = calculate_score(result, query, year)
+                if score >= 40:
+                    scored_results.append((score, result))
+
+            scored_results.sort(reverse=True, key=lambda x: x[0])
+            if scored_results:
+                return [r[1] for r in scored_results]
+
+        if year:
             params['first_air_date_year'] = year
             full_url_with_year = f"{url}?{urllib.parse.urlencode(params)}"
             log_message(f"Secondary search URL (with year): {full_url_with_year}", "DEBUG", "stdout")
             response = perform_search(params, url)
+
+            if response:
+                scored_results = []
+                for result in response:
+                    score = calculate_score(result, query, year)
+                    if score >= 40:
+                        scored_results.append((score, result))
+
+                scored_results.sort(reverse=True, key=lambda x: x[0])
+
+                if scored_results:
+                    return [r[1] for r in scored_results]
 
         return response
 
@@ -177,6 +200,15 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             response = requests.get(fallback_url)
             response.raise_for_status()
             results = response.json().get('results', [])
+            if results:
+                # Score and filter year-based results
+                scored_results = []
+                for result in results:
+                    score = calculate_score(result, query, year)
+                    if score >= 40:
+                        scored_results.append((score, result))
+                scored_results.sort(reverse=True, key=lambda x: x[0])
+                results = [r[1] for r in scored_results]
         except requests.exceptions.RequestException as e:
             log_message(f"Error during fallback search: {e}", level="ERROR")
 
@@ -301,6 +333,7 @@ def perform_fallback_tv_search(query, year=None):
 def perform_search(params, url):
     try:
         query = params['query']
+        year = params.get('first_air_date_year')
         if isinstance(query, tuple):
             query = query[0]
         query = query.lower()
@@ -316,42 +349,21 @@ def perform_search(params, url):
         if not results:
             return []
 
-        exact_matches = [
-            r for r in results
-            if r.get('name', '').lower() == query or
-            r.get('original_name', '').lower() == query
-        ]
-        if exact_matches:
-            return exact_matches
+        # Score all results
+        scored_results = []
+        for result in results:
+            score = calculate_score(result, query, year)
+            scored_results.append((score, result))
 
-        def normalize_string(s):
-            if not isinstance(s, str):
-                return ''
-            return ''.join(
-                c for c in unicodedata.normalize('NFKD', s.lower())
-                if not unicodedata.combining(c)
-            )
+        scored_results.sort(reverse=True, key=lambda x: x[0])
 
-        normalized_query = normalize_string(query)
-        close_matches = [
-            r for r in results
-            if (normalize_string(r.get('name', '')) == normalized_query or
-                normalize_string(r.get('original_name', '')) == normalized_query)
-        ]
-        if close_matches:
-            return close_matches
+        MIN_SCORE_THRESHOLD = 50
+        filtered_results = [r[1] for r in scored_results if r[0] >= MIN_SCORE_THRESHOLD]
 
-        english_results = [
-            r for r in results
-            if (r.get('original_language') == 'en' or
-                (r.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ']
-                     for country in r.get('origin_country'))))
-        ]
+        if filtered_results:
+            return filtered_results
 
-        if english_results:
-            return english_results
-
-        return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
+        return [r[1] for r in scored_results]
 
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching data: {e}", level="ERROR")
