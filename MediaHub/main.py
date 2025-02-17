@@ -157,6 +157,8 @@ def main(dest_dir):
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
     parser.add_argument("single_path", nargs="?", help="Single path to process instead of using SOURCE_DIRS from environment variables")
     parser.add_argument("--force", action="store_true", help="Force recreate symlinks even if they already exist")
+    parser.add_argument("--force-show", action="store_true", help="Force process file as a TV show regardless of naming pattern")
+    parser.add_argument("--force-movie", action="store_true", help="Force process file as a movie regardless of naming pattern")
     parser.add_argument("--disable-monitor", action="store_true", help="Disable polling monitor and symlink cleanup processes")
     parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
     parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
@@ -181,6 +183,11 @@ def main(dest_dir):
                          help="Optimize database indexes and analyze tables")
 
     args = parser.parse_args()
+
+    # Ensure --force-show and --force-movie aren't used together
+    if args.force_show and args.force_movie:
+        log_message("Error: Cannot use --force-show and --force-movie together", level="ERROR")
+        exit(1)
 
     if args.vacuum:
         vacuum_database()
@@ -266,10 +273,10 @@ def main(dest_dir):
         monitor_thread.daemon = False
         monitor_thread.start()
         time.sleep(2)
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb)
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie)
         monitor_thread.join()
     else:
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb)
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie)
 
 if __name__ == "__main__":
     setup_signal_handlers()

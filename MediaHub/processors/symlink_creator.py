@@ -26,7 +26,7 @@ log_imported_db = False
 db_initialized = False
 
 def process_file(args, processed_files_log, force=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie  = args
 
     if error_event.is_set():
         return
@@ -92,22 +92,31 @@ def process_file(args, processed_files_log, force=False):
 
     # Show detection logic
     is_show = False
-    episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|S\d{1,2}\s*\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+))', file, re.IGNORECASE)
-    mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
-    anime_episode_pattern = re.compile(r'\s-\s\d{2,3}\s', re.IGNORECASE)
-    anime_patterns = get_anime_patterns()
-    season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
+    episode_match = None
 
-    # Check file path and name for show patterns
-    if season_pattern.search(src_file):
+    if force_show:
         is_show = True
-        log_message(f"Processing as show based on directory structure: {src_file}", level="DEBUG")
-    elif episode_match or mini_series_match:
-        is_show = True
-        log_message(f"Processing as show based on file pattern: {src_file}", level="DEBUG")
-    elif anime_episode_pattern.search(file) or anime_patterns.search(file):
-        is_show = True
-        log_message(f"Processing as show based on anime pattern: {src_file}", level="DEBUG")
+        log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
+    elif force_movie:
+        is_show = False
+        log_message(f"Processing as movie based on Force Movie flag: {file}", level="INFO")
+    else:
+        episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|S\d{1,2}\s*\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+))', file, re.IGNORECASE)
+        mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
+        anime_episode_pattern = re.compile(r'\s-\s\d{2,3}\s', re.IGNORECASE)
+        anime_patterns = get_anime_patterns()
+        season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
+
+        # Check file path and name for show patterns
+        if season_pattern.search(src_file):
+            is_show = True
+            log_message(f"Processing as show based on directory structure: {src_file}", level="DEBUG")
+        elif episode_match or mini_series_match:
+            is_show = True
+            log_message(f"Processing as show based on file pattern: {src_file}", level="DEBUG")
+        elif anime_episode_pattern.search(file) or anime_patterns.search(file):
+            is_show = True
+            log_message(f"Processing as show based on anime pattern: {src_file}", level="DEBUG")
 
     # Determine whether to process as show or movie
     if is_show:
@@ -163,7 +172,7 @@ def process_file(args, processed_files_log, force=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False):
     global log_imported_db
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -198,7 +207,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force))
                 else:
                     # Handle directory
@@ -225,7 +234,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force))
 
             # Process completed tasks
@@ -260,7 +269,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie)
                     result = process_file(args, processed_files_log, force)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
@@ -292,7 +301,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie)
                             result = process_file(args, processed_files_log, force)
 
                             if result and isinstance(result, tuple) and len(result) == 3:
