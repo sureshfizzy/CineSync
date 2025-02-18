@@ -37,7 +37,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Initialize variables
     show_name = ""
-    season_number = "01"
+    season_number = None
     new_name = file
     year = None
     show_id = None
@@ -50,6 +50,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     create_extras_folder = False
     resolution = None
     is_anime_genre = False
+    season_folder = None
 
     if is_anime_scan()  and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
@@ -61,7 +62,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     if anime_result:
         show_name = anime_result.get('show_name', '')
-        season_number = anime_result.get('season_number', '01')
+        season_number = anime_result.get('season_number', None)
         new_name = anime_result.get('new_name', file)
         year = anime_result.get('year')
         show_id = anime_result.get('show_id')
@@ -70,7 +71,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         resolution = anime_result.get('resolution')
         is_anime_genre = anime_result.get('is_anime_genre')
 
-        episode_match = re.search(r'S(\d+)E(\d+)', new_name)
+        episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
         if episode_match:
             season_number = episode_match.group(1)
             episode_identifier = f"S{season_number}E{episode_match.group(2)}"
@@ -86,6 +87,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 episode_num = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
                 if episode_num:
                     episode_identifier = f"S{season_number}E{episode_num.group(1)}"
+                    episode_number = f"{episode_num.group(1)}"
                     show_name = re.sub(r'\s*-?\s*S\d{2}\s*E\d{2}.*$', '', clean_folder_name).strip()
                     create_season_folder = True
             else:
@@ -116,6 +118,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     show_name = episode_match.group(1).replace('.', ' ').strip()
                     episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
                     create_season_folder = True
+                elif re.search(r'Season\s*(\d{2})\s*Episode\s*(\d{2})', file, re.IGNORECASE):
+                    season_episode_match = re.search(r'Season\s*(\d{2})\s*Episode\s*(\d{2})', file, re.IGNORECASE)
+                    season_number = season_episode_match.group(1)
+                    episode_number = season_episode_match.group(2)
+                    episode_identifier = f"S{season_number}E{episode_number}"
+                    show_name = re.sub(r'\s*Season\s*\d{2}\s*Episode\s*\d{2}.*$', '', clean_folder_name).strip()
+                    create_season_folder = True
                 elif re.match(r'Ep\.?\s*\d+', episode_identifier, re.IGNORECASE):
                     extracted_filename = episode_match.string
                     show_name = re.sub(r'^\[.*?\]\s*', '', extracted_filename).replace('.', ' ').strip()
@@ -123,21 +132,26 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     season_number = re.search(r'S(\d{2})', parent_folder_name, re.IGNORECASE)
                     season_number = season_number.group(1) if season_number else "01"
                     episode_identifier = f"S{season_number}E{episode_number}"
-                    create_season_folder = True
+                    if season_number_match:
+                        season_number = season_number_match.group(1)
+                        episode_identifier = f"S{season_number}E{episode_number}"
+                        create_season_folder = True
+                    else:
+                        log_message(f"Unable to determine season for: {file}", level="WARNING")
                 else:
-                    show_name = episode_match.group(1).replace('.', ' ').strip()
-                    episode_identifier = "S01E01"
-                    create_extras_folder = True
+                    log_message(f"Unable to determine episode pattern for: {file}", level="WARNING")
 
             # Extract season number
             season_match = re.search(r'(?:S|Season)(\d+)', clean_folder_name, re.IGNORECASE)
             if season_match:
                 season_number = season_match.group(1)
             else:
-                season_match = re.search(r'([0-9]+)', episode_identifier)
-                season_number = season_match.group(1) if season_match else "01"
+                season_match = re.search(r'([0-9]+)', episode_identifier) if episode_identifier else None
+                if not season_match:
+                    log_message(f"Unable to determine season number for: {file}", level="WARNING")
+                season_number = season_match.group(1)
         else:
-            # For non-episode files, use the parent folder name as the show name
+            # For non-episode files, check if we can extract season information
             clean_folder_name = os.path.basename(root)
             show_name = clean_folder_name
 
@@ -145,11 +159,21 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             season_match = re.search(r'S(\d{2})|Season\s*(\d+)', clean_folder_name, re.IGNORECASE)
             if season_match:
                 season_number = season_match.group(1) or season_match.group(2)
+                if is_extra:
+                    create_extras_folder = True
+                else:
+                    # Check if we can determine an episode number
+                    episode_match = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
+                    if episode_match:
+                        episode_identifier = f"S{season_number}E{episode_match.group(1)}"
+                    else:
+                        log_message(f"Unable to determine episode number for: {file} in season {season_number}", level="WARNING")
             else:
-                season_number = "01"
-
-            create_extras_folder = True
-            episode_identifier = "S01E01"
+                # If no season can be determined, log warning and skip unless it's an extra
+                if is_extra:
+                    create_extras_folder = True
+                else:
+                    log_message(f"Unable to determine season and episode info for: {file}", level="WARNING")
 
     anime_episode_pattern = re.search(r'[-\s]E(\d+)\s', file)
     if anime_episode_pattern:
@@ -181,9 +205,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     api_key = get_api_key()
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
-        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
-        if isinstance(result, tuple) and len(result) == 3:
-            proper_show_name, show_name, is_anime_genre = result
+        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra)
+        if isinstance(result, tuple) and len(result) == 5:
+            proper_show_name, show_name, is_anime_genre, season_number, episode_number = result
+            episode_identifier = f"S{season_number}E{episode_number}"
         else:
             proper_show_name = result
         if "TMDb API error" in proper_show_name:

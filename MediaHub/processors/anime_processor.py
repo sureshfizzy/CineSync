@@ -31,7 +31,9 @@ def extract_anime_episode_info(filename):
 
     season_detection_patterns = [
         r'^(.+?)\s*S(\d+)\s*-\s*(\d+)$',
-        r'^(.+?)\s*Season\s*(\d+)[-_\s]*(?:-\s*)?(\d+)(?:\s|$)'
+        r'^(.+?)\s*Season\s*(\d+)\s*Episode\s*(\d+)',
+        r'^(.+?)\s*Season\s*(\d+)[-_\s]*Episode\s*(\d+)',
+        r'^(.+?)\s*Season\s*(\d+)[-_\s]*(?:-\s*)?(\d+)'
     ]
 
     for pattern in season_detection_patterns:
@@ -42,6 +44,7 @@ def extract_anime_episode_info(filename):
             episode_number = str(int(match.group(3))).zfill(2)
 
             show_name = re.sub(r'[._-]', ' ', show_name).strip()
+
             return {
                 'show_name': show_name,
                 'season_number': season_number,
@@ -52,7 +55,7 @@ def extract_anime_episode_info(filename):
     ordinal_season_patterns = [
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season[-_\s]*(?:-\s*)?(\d+)(?:\s|$)',
         r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+Season.*?[-_](\d+)(?:\s|$)',
-        r'^(.+?)\s*S(\d+)\s*(\d+)(?:\s|$)'
+        r'^(.+?)\s*S(\d+)(?:\s|$|E)'
     ]
 
     for pattern in ordinal_season_patterns:
@@ -60,15 +63,24 @@ def extract_anime_episode_info(filename):
         if match:
             show_name = match.group(1).strip()
             season_number = str(int(match.group(2))).zfill(2)
-            episode_number = str(int(match.group(3))).zfill(2)
 
-            if len(episode_number) <= 3:
+            # For the third pattern, we're only capturing season number, not episode
+            if len(match.groups()) == 2:
                 return {
                     'show_name': show_name,
                     'season_number': season_number,
-                    'episode_number': episode_number,
+                    'episode_number': None,
                     'episode_title': None
                 }
+            else:
+                episode_number = str(int(match.group(3))).zfill(2)
+                if len(episode_number) <= 3:
+                    return {
+                        'show_name': show_name,
+                        'season_number': season_number,
+                        'episode_number': episode_number,
+                        'episode_title': None
+                    }
 
     # Add new pattern for simple show name + episode number format
     simple_episode_patterns = [
@@ -84,9 +96,10 @@ def extract_anime_episode_info(filename):
             episode_number = str(int(match.group(2))).zfill(2)
 
             show_name = re.sub(r'[._-]', ' ', show_name).strip()
+
             return {
                 'show_name': show_name,
-                'season_number': '01',
+                'season_number': None,
                 'episode_number': episode_number,
                 'episode_title': None
             }
@@ -178,9 +191,9 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     is_anime_genre = False
 
     if api_key and not offline_mode:
-        search_result = search_tv_show(show_name, auto_select=auto_select)
+        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number)
         if isinstance(search_result, tuple):
-            proper_show_name, original_show_name, is_anime_genre = search_result
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number = search_result
         else:
             proper_show_name = original_show_name = search_result
 

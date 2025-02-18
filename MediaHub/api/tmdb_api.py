@@ -21,7 +21,7 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, season_number=None, episode_number=None, is_extra=None):
     global api_key
     if not check_api_key():
         return query
@@ -64,32 +64,28 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 response.raise_for_status()
                 show_data = response.json()
 
-            # Process show data
-            show_name = show_data['name']
-            first_air_date = show_data.get('first_air_date', '')
-            show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+            # Process show data with the potentially updated season/episode info
+            if show_data:
+                log_message("Show found by ID but missing season/episode info. Attempting to extract...", level="INFO")
+                show_name = show_data['name']
+                first_air_date = show_data.get('first_air_date', '')
+                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
 
-            # Get external IDs for the show
-            external_ids = get_external_ids(tmdb_id, 'tv')
-            genre_info = get_show_genres(tmdb_id)
-            is_anime_genre = genre_info['is_anime_genre']
+                # Get external IDs for the show
+                external_ids = get_external_ids(tmdb_id, 'tv')
+                genre_info = get_show_genres(tmdb_id)
+                is_anime_genre = genre_info['is_anime_genre']
+                proper_name = f"{show_name} ({show_year})"
 
-            # Format the proper name based on settings
-            if is_imdb_folder_id_enabled():
-                imdb_id = external_ids.get('imdb_id', '')
-                proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}} {{tmdb-{tmdb_id}}}"
-            elif is_tvdb_folder_id_enabled():
-                tvdb_id = external_ids.get('tvdb_id', '')
-                proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}} {{tmdb-{tmdb_id}}}"
-            else:
-                proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
+                log_message(f"Successfully retrieved show data using ID: {proper_name}", level="INFO")
 
-            log_message(f"Successfully retrieved show data using ID: {proper_name}", level="INFO")
-            return proper_name, show_name, is_anime_genre
+                return process_chosen_show(show_data, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
 
         except requests.exceptions.RequestException as e:
             log_message(f"Error fetching show data: {e}", level="ERROR")
             log_message(f"Falling back to search due to API error", level="INFO")
+
+            return proper_name, show_name, is_anime_genre
 
     cache_key = (query, year)
     if cache_key in _api_cache:
@@ -244,6 +240,9 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     if auto_select:
         chosen_show = results[0]
+        result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+        _api_cache[cache_key] = result[0]
+        return result
     else:
         while True:
             log_message(f"Multiple shows found for query '{query}':", level="INFO")
@@ -257,7 +256,9 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             if choice.lower() in ['1', '2', '3']:
                 chosen_show = results[int(choice) - 1]
-                break
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+                _api_cache[cache_key] = result[0]
+                return result
             elif choice.strip():
                 new_results = fetch_results(choice, year)
                 if new_results:
@@ -268,35 +269,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                     continue
             else:
                 chosen_show = results[0]
-                break
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+                _api_cache[cache_key] = result[0]
+                return result
 
-    if chosen_show:
-        show_name = chosen_show.get('name')
-        first_air_date = chosen_show.get('first_air_date')
-        show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-        tmdb_id = chosen_show.get('id')
-
-        external_ids = get_external_ids(tmdb_id, 'tv')
-        genre_info = get_show_genres(tmdb_id)
-        is_anime_genre = genre_info['is_anime_genre']
-
-        if is_imdb_folder_id_enabled():
-            imdb_id = external_ids.get('imdb_id', '')
-            log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="DEBUG")
-            proper_name = f"{show_name} ({show_year}) {{imdb-{imdb_id}}} {{tmdb-{tmdb_id}}}"
-        elif is_tvdb_folder_id_enabled():
-            tvdb_id = external_ids.get('tvdb_id', '')
-            log_message(f"TV Show: {show_name}, TVDB ID: {tvdb_id}", level="DEBUG")
-            proper_name = f"{show_name} ({show_year}) {{tvdb-{tvdb_id}}} {{tmdb-{tmdb_id}}}"
-        else:
-            proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
-
-        _api_cache[cache_key] = proper_name
-        return proper_name, show_name, is_anime_genre
-    else:
-        log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
-        _api_cache[cache_key] = f"{query}"
-        return f"{query}"
+    log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
+    _api_cache[cache_key] = f"{query}"
+    return f"{query}"
 
 def perform_fallback_tv_search(query, year=None):
     cleaned_query = remove_genre_names(query)
