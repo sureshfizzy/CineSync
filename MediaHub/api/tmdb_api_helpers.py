@@ -298,3 +298,80 @@ def calculate_score(result, query, year=None):
         score += popularity_score
 
     return score
+
+def get_show_seasons(tmdb_id):
+    """
+    Fetch all seasons for a given TV show using TMDB API
+    """
+    if not check_api_key():
+        return None
+
+    url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+    params = {'api_key': api_key}
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        show_data = response.json()
+        return show_data.get('seasons', [])
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error fetching season data: {e}", level="ERROR")
+        return None
+
+def select_season(seasons, auto_select=False):
+    """
+    Display and handle season selection, prioritizing standard seasons over Season 0
+    """
+    if not seasons:
+        return None
+
+    # Re-organize seasons to deprioritize Season 0 when appropriate
+    standard_seasons = []
+    special_seasons = []
+
+    for season in seasons:
+        season_number = season.get('season_number', 0)
+        if season_number == 0:
+            special_seasons.append(season)
+        else:
+            standard_seasons.append(season)
+
+    if auto_select and standard_seasons:
+        return standard_seasons[0].get('season_number')
+
+    # For display purposes, put regular seasons first, then Specials
+    display_seasons = standard_seasons + special_seasons
+
+    if not display_seasons:
+        return None
+
+    if auto_select:
+        return display_seasons[0].get('season_number', None)
+
+    while True:
+        log_message("Available seasons:", level="INFO")
+        for idx, season in enumerate(display_seasons, 1):
+            season_number = season.get('season_number', 0)
+            episode_count = season.get('episode_count', 0)
+            air_date = season.get('air_date', 'Unknown Date')
+
+            # Add note for Season 0
+            if season_number == 0:
+                log_message(f"{idx}: Season {season_number} - {episode_count} episodes (Air Date: {air_date}) [Contains special episodes]", level="INFO")
+            else:
+                log_message(f"{idx}: Season {season_number} - {episode_count} episodes (Air Date: {air_date})", level="INFO")
+
+        log_message("Options:", level="INFO")
+        log_message("- Enter 1-{} to select a season".format(len(display_seasons)), level="INFO")
+        log_message("- Press Enter to skip season selection", level="INFO")
+
+        choice = input("Enter your choice: ").strip()
+
+        if not choice:
+            return None
+        elif choice.isdigit() and 1 <= int(choice) <= len(display_seasons):
+            selected_season = display_seasons[int(choice) - 1]
+            season_number = selected_season.get('season_number', None)
+            return season_number
+        else:
+            log_message("Invalid selection. Please try again.", level="WARNING")

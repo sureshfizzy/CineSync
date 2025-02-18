@@ -21,7 +21,7 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, season_number=None, episode_number=None):
     global api_key
     if not check_api_key():
         return query
@@ -276,10 +276,91 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
         tmdb_id = chosen_show.get('id')
 
+        # Get external IDs and genre information
         external_ids = get_external_ids(tmdb_id, 'tv')
         genre_info = get_show_genres(tmdb_id)
         is_anime_genre = genre_info['is_anime_genre']
 
+        # Handle season and episode selection
+        new_season_number = None
+        new_episode_number = None
+
+        # First, check if we already have season_number and episode_number
+        if season_number is not None:
+            log_message(f"Using identified season number: {season_number}", level="INFO")
+            new_season_number = season_number
+
+        if episode_number is not None:
+            log_message(f"Using identified episode number: {episode_number}", level="INFO")
+            new_episode_number = episode_number
+
+        # If we don't have season_number but need to select it
+        if new_season_number is None and (not episode_match or (episode_match and not season_number)):
+            seasons = get_show_seasons(tmdb_id)
+            if seasons:
+                log_message(f"No season number identified, proceeding with season selection", level="INFO")
+                new_season_number = select_season(seasons, auto_select)
+
+                # If user selected a season, and we still need episode number
+                if new_season_number is not None and new_episode_number is None:
+                    log_message(f"Season {new_season_number} selected", level="INFO")
+
+                    # Fetch episodes for the selected season
+                    episodes_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{new_season_number}"
+                    episodes_params = {'api_key': api_key}
+
+                    try:
+                        episodes_response = requests.get(episodes_url, params=episodes_params)
+                        episodes_response.raise_for_status()
+                        season_data = episodes_response.json()
+                        episodes = season_data.get('episodes', [])
+
+                        if not auto_select and episodes:
+                            log_message("Available episodes:", level="INFO")
+
+                            # Display episodes with proper formatting
+                            for i in range(0, len(episodes), 4):
+                                episode_group = episodes[i:i+4]
+                                episode_info = []
+                                for ep in episode_group:
+                                    ep_num = ep.get('episode_number', 0)
+                                    ep_name = ep.get('name', 'Unknown')
+                                    episode_info.append(f"E{ep_num:02d}: {ep_name}")
+
+                                # Print episode group with proper alignment
+                                log_message(", ".join(episode_info), level="INFO")
+
+                            log_message("Options:", level="INFO")
+                            log_message(f"- Enter episode number (1-{len(episodes)})", level="INFO")
+                            log_message("- Press Enter to skip episode selection", level="INFO")
+
+                            ep_choice = input("Enter episode number: ").strip()
+
+                            if ep_choice and ep_choice.isdigit() and 1 <= int(ep_choice) <= len(episodes):
+                                new_episode_number = int(ep_choice)
+
+                                # Immediately fetch and display the episode name
+                                episode_info = get_episode_name(tmdb_id, new_season_number, new_episode_number)
+                                if episode_info:
+                                    log_message(f"Selected: {episode_info}", level="INFO")
+                                else:
+                                    log_message(f"Selected: S{new_season_number:02d}E{new_episode_number:02d}", level="INFO")
+                            else:
+                                log_message("No valid episode selected, continuing without episode specification", level="INFO")
+                        elif auto_select and episodes:
+                            # Auto-select first episode
+                            new_episode_number = 1
+                            log_message(f"Auto-selected episode 1 of season {new_season_number}", level="INFO")
+
+                            # Fetch and display episode name for auto-selected episode
+                            episode_info = get_episode_name(tmdb_id, new_season_number, new_episode_number)
+                            if episode_info:
+                                log_message(f"Auto-selected: {episode_info}", level="INFO")
+
+                    except requests.exceptions.RequestException as e:
+                        log_message(f"Error fetching episode data: {e}", level="ERROR")
+
+        # Build the proper name with optional season information
         if is_imdb_folder_id_enabled():
             imdb_id = external_ids.get('imdb_id', '')
             log_message(f"TV Show: {show_name}, IMDB ID: {imdb_id}", level="DEBUG")
@@ -292,7 +373,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
         _api_cache[cache_key] = proper_name
-        return proper_name, show_name, is_anime_genre
+        return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number
     else:
         log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
         _api_cache[cache_key] = f"{query}"
