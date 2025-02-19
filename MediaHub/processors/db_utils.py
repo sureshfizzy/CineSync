@@ -12,6 +12,9 @@ from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
 
+RED_COLOR= "\033[91m"
+RESET_COLOR= "\033[0m"
+
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
@@ -45,14 +48,25 @@ class ConnectionPool:
 
     def get_connection(self):
         with self.lock:
+            if not os.path.exists(self.db_file):
+                print(f"[ERROR] Database file {self.db_file} not found, creating a new one...")
+                os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+                open(self.db_file, 'a').close()  # Create an empty file
+                os.chmod(self.db_file, 0o666)  # Ensure proper permissions
+        
             if self.connections:
                 return self.connections.pop()
             else:
-                conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=20.0)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                conn.execute("PRAGMA cache_size=10000")
-                return conn
+                try:
+                    conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=20.0)
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                    conn.execute("PRAGMA cache_size=10000")
+                    return conn
+                except sqlite3.OperationalError as e:
+                    print(f"[ERROR] Failed to open database file: {e}")
+                    raise
+
 
     def return_connection(self, conn):
         with self.lock:
@@ -681,3 +695,5 @@ def optimize_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error optimizing database: {e}", level="ERROR")
         return False
+# Ensure the database is initialized on import
+initialize_db()
