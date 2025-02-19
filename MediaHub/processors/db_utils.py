@@ -12,9 +12,6 @@ from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
 
-RED_COLOR= "\033[91m"
-RESET_COLOR= "\033[0m"
-
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
