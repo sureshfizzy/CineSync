@@ -295,10 +295,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder)
         else:
             if is_anime_genre and is_anime_separation_enabled():
-                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
             else:
-                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
         # Use anime season number if available, otherwise use the default season handling
