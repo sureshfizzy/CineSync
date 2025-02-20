@@ -339,7 +339,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if anime_result and rename_enabled:
         dest_file = os.path.join(season_dest_path, new_name)
     else:
-        if episode_identifier and rename_enabled:
+        if episode_identifier and rename_enabled and not is_extra:
             tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
             if tmdb_id_match:
                 show_id = tmdb_id_match.group(1)
