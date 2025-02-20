@@ -25,14 +25,20 @@ def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
         dict: Dictionary containing extracted media information
     """
     def extract_from_sources(sources: list) -> dict:
-        """Helper function to extract media info from a list of sources"""
         info = {}
+
+        # Helper function to store values under both singular and plural forms
+        def store_value(base_key: str, value):
+            singular = base_key.rstrip('s')
+            plural = singular + 's'
+            info[singular] = value
+            info[plural] = value
 
         # Extract Video Codec
         for source in sources:
-            for codec in keywords["VideoCodecs"]:
+            for codec in keywords.get("VideoCodec", keywords.get("VideoCodecs", [])):
                 if re.search(codec.replace('.', r'\.'), source, re.IGNORECASE):
-                    info['VideoCodec'] = codec.replace('.', '')
+                    store_value("VideoCodec", codec.replace('.', ''))
                     break
             if 'VideoCodec' in info:
                 break
@@ -40,21 +46,21 @@ def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
         # Extract Audio Codecs
         audio_codecs = []
         for source in sources:
-            for codec in keywords["AudioCodecs"]:
+            for codec in keywords.get("AudioCodec", keywords.get("AudioCodecs", [])):
                 if re.search(codec.replace('.', r'\.'), source, re.IGNORECASE):
                     audio_codecs.append(codec)
         if audio_codecs:
-            info['AudioCodec'] = " ".join(audio_codecs)
+            store_value("AudioCodec", " ".join(audio_codecs))
 
         # Extract Audio Channels
         for source in sources:
             channels_match = re.search(r'(5\.1|7\.1|2\.0)', source, re.IGNORECASE)
             if channels_match:
-                info['AudioChannels'] = channels_match.group(0)
+                store_value("AudioChannel", channels_match.group(0))
                 break
 
         # Extract Languages
-        valid_languages = keywords["ValidLanguages"]
+        valid_languages = keywords.get("ValidLanguage", keywords.get("ValidLanguages", []))
         language_map = {
             long_name.upper(): short_code
             for long_name, short_code in zip(valid_languages[::3], valid_languages[1::3])
@@ -81,60 +87,61 @@ def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
                     filtered_languages.append(language_map.get(match.upper(), match.upper()))
 
             if filtered_languages:
-                info['Languages'] = sorted(set(filtered_languages))
+                store_value("Language", sorted(set(filtered_languages)))
                 break
 
         # Extract Dynamic Range
         for source in sources:
             dv_match = re.search(r'do?vi|dolby\.?vision', source, re.IGNORECASE)
             if dv_match:
-                info['DynamicRange'] = 'DV'
+                store_value("DynamicRange", 'DV')
                 break
 
         # Extract Movie Versions
         for source in sources:
-            for version in keywords["MovieVersions"]:
+            for version in keywords.get("MovieVersion", keywords.get("MovieVersions", [])):
                 if re.search(version, source, re.IGNORECASE):
-                    info['MovieVersions'] = version
+                    store_value("MovieVersion", version)
                     break
-            if 'MovieVersions' in info:
+            if 'MovieVersion' in info:
                 break
 
         # Extract Streaming Services
         for source in sources:
-            for service in keywords["StreamingServices"]:
+            for service in keywords.get("StreamingService", keywords.get("StreamingServices", [])):
                 if re.search(r'\b' + re.escape(service) + r'\b', source, re.IGNORECASE):
-                    info['StreamingServices'] = service
+                    store_value("StreamingService", service)
                     break
-            if 'StreamingServices' in info:
+            if 'StreamingService' in info:
                 break
 
         # Extract Resolution and Source
-        def normalize_source_name(source_name: str) -> str:
-            return source_name.replace('-', '').lower()
-
         for source in sources:
-            for resolution in keywords["Resolutions"]:
+            for resolution in keywords.get("Resolution", keywords.get("Resolutions", [])):
                 if re.search(resolution, source, re.IGNORECASE):
-                    info['Resolution'] = resolution.lower()
-                    for source_type in keywords.get("Sources", []):
+                    resolution_value = resolution.lower()
+                    for source_type in keywords.get("Source", keywords.get("Sources", [])):
                         normalized_source_type = normalize_source_name(source_type)
                         if normalized_source_type in normalize_source_name(source):
-                            info['Resolution'] = f"{source_type}-{info['Resolution']}"
+                            resolution_value = f"{source_type}-{resolution_value}"
                             break
+                    store_value("Resolution", resolution_value)
                     break
             if 'Resolution' in info:
                 break
 
         return info
 
-    # First try with filename and parent folder
+    def normalize_source_name(source_name: str) -> str:
+        return source_name.replace('-', '').lower()
+
+    # Extract from filename and parent folder first
     filename = os.path.basename(filepath)
     parent_folder = os.path.basename(os.path.dirname(filepath))
     primary_sources = [filename, parent_folder]
     media_info = extract_from_sources(primary_sources)
 
-    # If no or minimal information found and root is provided, try with root folder name
+    # Fallback to root folder if needed
     if root and (not media_info or len(media_info) <= 1):
         root_folder = os.path.basename(root)
         if root_folder:
@@ -151,26 +158,36 @@ def format_media_info(media_info: dict) -> str:
     """
     formatted_parts = []
 
-    if 'VideoCodec' in media_info:
-        formatted_parts.append(f"[{media_info['VideoCodec']}]")
+    # Helper function to get value checking both singular and plural forms
+    def get_value(base_key: str):
+        singular = base_key.rstrip('s')
+        plural = singular + 's'
+        return media_info.get(singular, media_info.get(plural))
 
+    # Handle Video Codec
+    video_codec = get_value('VideoCodec')
+    if video_codec:
+        formatted_parts.append(f"[{video_codec}]")
+
+    # Handle Audio information
     audio_parts = []
-    if 'AudioAtmos' in media_info:
-        audio_parts.append(media_info['AudioAtmos'])
-    elif 'AudioCodec' in media_info:
-        audio_parts.append(media_info['AudioCodec'])
-    if 'AudioChannels' in media_info:
-        audio_parts.append(media_info['AudioChannels'])
+    if get_value('AudioAtmo'):
+        audio_parts.append(get_value('AudioAtmo'))
+    elif get_value('AudioCodec'):
+        audio_parts.append(get_value('AudioCodec'))
+    if get_value('AudioChannel'):
+        audio_parts.append(get_value('AudioChannel'))
     if audio_parts:
         formatted_parts.append(f"[{' '.join(audio_parts)}]")
 
-    if 'Languages' in media_info:
-        formatted_parts.append(f"[{'+'.join(media_info['Languages'])}]")
+    # Handle Languages
+    languages = get_value('Language')
+    if languages:
+        formatted_parts.append(f"[{'+'.join(languages)}]")
 
-    if 'Resolution' in media_info:
-        resolution_part = media_info['Resolution']
-        if 'Source' in media_info:
-            resolution_part = f"{media_info['Source']}-{resolution_part}"
-        formatted_parts.append(f"[{resolution_part}]")
+    # Handle Resolution
+    resolution = get_value('Resolution')
+    if resolution:
+        formatted_parts.append(f"[{resolution}]")
 
     return "".join(formatted_parts)
