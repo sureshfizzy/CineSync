@@ -267,7 +267,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                     log_message(f"No results found for '{choice}'", level="WARNING")
                     continue
             else:
-                chosen_show = None
+                chosen_show = results[0]
                 break
 
     if chosen_show:
@@ -541,7 +541,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                     log_message(f"No results found for '{new_query}'", level="WARNING")
                     continue
             else:
-                chosen_movie = None
+                chosen_movie = results[0]
                 break
 
     if chosen_movie:
