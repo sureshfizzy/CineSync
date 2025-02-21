@@ -519,8 +519,6 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     new_season_number = None
     new_episode_number = None
 
-    print(season_number)
-    print(episode_number)
     # Log if this is an extra file
     if is_extra:
         log_message(f"Processing extra content file: {file}", level="INFO")

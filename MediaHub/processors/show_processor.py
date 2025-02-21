@@ -54,7 +54,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     if is_anime_scan()  and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
-                                        tmdb_folder_id_enabled, rename_enabled, auto_select)
+                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select)
 
         if not anime_result:
             log_message(f"Skipping from Anime Check: {file}", level="DEBUG")

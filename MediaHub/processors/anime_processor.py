@@ -148,7 +148,7 @@ def extract_anime_episode_info(filename):
 
     return None
 
-def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select):
+def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select):
     anime_info = extract_anime_episode_info(file)
     if not anime_info:
         return None
@@ -191,7 +191,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     is_anime_genre = False
 
     if api_key and not offline_mode:
-        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number)
+        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
         if isinstance(search_result, tuple):
             proper_show_name, original_show_name, is_anime_genre, season_number, episode_number = search_result
         else:
