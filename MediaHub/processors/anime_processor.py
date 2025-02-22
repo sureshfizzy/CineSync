@@ -148,15 +148,15 @@ def extract_anime_episode_info(filename):
 
     return None
 
-def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select):
+def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select, season_number, episode_number):
     anime_info = extract_anime_episode_info(file)
     if not anime_info:
         return None
 
     # Prepare variables
     show_name = anime_info['show_name']
-    episode_number = anime_info['episode_number']
-    season_number = anime_info['season_number']
+    season_number = season_number or anime_info['season_number']
+    episode_number = episode_number or anime_info['episode_number']
     episode_title = anime_info['episode_title']
 
     # Extract resolution from filename and parent folder

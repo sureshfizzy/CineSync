@@ -19,7 +19,7 @@ global api_key
 global api_warning_logged
 global offline_mode
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None):
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None):
     global offline_mode
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
@@ -37,13 +37,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Initialize variables
     show_name = ""
-    season_number = None
+    season_number = season_number if season_number is not None else None
     new_name = file
     year = None
     show_id = None
     episode_title = None
     episode_identifier = None
-    episode_number = None
+    episode_number = episode_number if season_number is not None else None
     proper_show_name = None
     anime_result = None
     create_season_folder = False
@@ -54,7 +54,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     if is_anime_scan()  and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
-                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select)
+                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number)
 
         if not anime_result:
             log_message(f"Skipping from Anime Check: {file}", level="DEBUG")
@@ -78,7 +78,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             episode_identifier = None
 
-    if not anime_result or episode_match:
+    if (not anime_result or episode_match) and (season_number is None or episode_number is None):
         if episode_match:
             # First, try to extract season number directly from the episode identifier
             season_from_identifier = re.search(r'S(\d{2})', file, re.IGNORECASE)

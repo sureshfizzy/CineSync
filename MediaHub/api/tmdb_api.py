@@ -21,7 +21,7 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, season_number=None, episode_number=None, is_extra=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None):
     global api_key
     if not check_api_key():
         return query

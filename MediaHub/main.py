@@ -152,6 +152,16 @@ def start_polling_monitor():
     finally:
         remove_lock_file()
 
+def parse_season_episode(season_episode):
+    """Parse season and episode numbers from the format SxxExx."""
+    if not season_episode:
+        return None, None
+
+    match = re.match(r'S(\d{1,2})E(\d{1,3})', season_episode.upper())
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None, None
+
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
@@ -163,6 +173,7 @@ def main(dest_dir):
     parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
     parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
     parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
+    parser.add_argument("--season-episode", type=str, help="Specify season and episode numbers in format SxxExx (e.g., S03E15)")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -183,6 +194,10 @@ def main(dest_dir):
                          help="Optimize database indexes and analyze tables")
 
     args = parser.parse_args()
+
+    # Parse season and episode numbers if provided
+    season_number, episode_number = parse_season_episode(args.season_episode)
+
 
     # Ensure --force-show and --force-movie aren't used together
     if args.force_show and args.force_movie:
@@ -273,11 +288,10 @@ def main(dest_dir):
         monitor_thread.daemon = False
         monitor_thread.start()
         time.sleep(2)
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie)
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number)
         monitor_thread.join()
     else:
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie)
-
+        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number)
 if __name__ == "__main__":
     setup_signal_handlers()
     src_dirs, dest_dir = get_directories()
