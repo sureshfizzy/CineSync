@@ -44,6 +44,7 @@ The CineSync Docker image is available on Docker Hub:
 
 ## Features
 
+- ** Real-Time Monitoring:** Instant refresh and updates on Jellyfin/Plex (https://github.com/sureshfizzy/CineSync/wiki#real-time-monitoringupdates-on-jellyfin)
 - **Library Organization:** Easily sort your library into seasons, regardless of file or folder structure.
 - **Faster Scan:** CineSync has been optimized for faster file and directory scanning. Improved directory checks, file handling, and multi-threaded processing (controlled by `MAX_PROCESSES`) help speed up the scan process, especially for large libraries.
 - **Symbolic Link Creation:** Create symbolic links to organize your library without moving or duplicating files.
@@ -83,6 +84,28 @@ CineSync now includes a fully integrated real-time monitoring feature that autom
 - **Customization:** You can easily customize the monitoring interval and other settings to better suit your specific needs and library requirements.
 
 CineSync’s real-time monitoring is now a core feature of the script and Docker images, allowing for seamless integration into your workflow. With this feature, users can effortlessly manage their media library and maintain a well-organized collection of files.
+
+# Service Provider: ElfHosted
+
+**ElfHosted** offers an easy, open-source, Kubernetes/GitOps-driven hosting solution for popular self-hosted apps. It is designed for simplicity with minimal setup, no ongoing maintenance, and tightly integrated, secure environments.
+
+With **ElfHosted**, you can enjoy a seamless experience for hosting your favorite apps without worrying about constant updates or technical upkeep. It's perfect for users seeking an efficient and reliable self-hosted solution with the added security of tested and optimized integrations.
+
+## Features
+- **Minimal setup**: Quick and easy setup for self-hosted apps.
+- **No maintenance**: Automated updates and maintenance handled for you.
+- **Tightly integrated and secure**: Tested and optimized integrations for popular apps.
+- **Kubernetes/GitOps-driven hosting**: Scalable, efficient hosting powered by Kubernetes and GitOps practices.
+
+## Trial and Pricing
+- **7-day free trial** with a **$1.00 sign-up fee**: Test out the platform with no commitment and start your journey with a low-cost sign-up.
+
+## Links
+- [ElfHosted Documentation](https://docs.elfhosted.com/)
+- [CineSync Product Page](https://store.elfhosted.com/product/cinesync/)
+- [Starter Streaming Bundles](https://store.elfhosted.com/product-category/streaming-bundles/starter/)
+
+Enjoy hassle-free, self-hosted app management with ElfHosted.
 
 ## Contributors
 
