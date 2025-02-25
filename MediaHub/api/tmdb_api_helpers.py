@@ -261,25 +261,34 @@ def calculate_score(result, query, year=None):
     float: Match score between 0 and 100
     """
     score = 0
-
     query = query.lower().strip()
-    title = result.get('name', '').lower().strip()
-    original_title = result.get('original_name', '').lower().strip()
 
-    first_air_date = result.get('first_air_date', '')
-    result_year = first_air_date.split('-')[0] if first_air_date else None
+    # Check if we're dealing with a movie or TV show result
+    if 'title' in result:
+        title = result.get('title', '').lower().strip()
+        original_title = result.get('original_title', '').lower().strip()
+        release_date = result.get('release_date', '')
+        result_year = release_date.split('-')[0] if release_date else None
+    else:
+        title = result.get('name', '').lower().strip()
+        original_title = result.get('original_name', '').lower().strip()
+        first_air_date = result.get('first_air_date', '')
+        result_year = first_air_date.split('-')[0] if first_air_date else None
 
-    # Title exact match (40 points)
-    if query == title or query == original_title:
-        score += 40
-    # Title contains query or vice versa (20 points)
-    elif query in title or title in query or query in original_title or original_title in query:
+    if query == title:
+        score += 50
+    elif query == original_title:
+        score += 50
+    elif query in title or title in query:
+        score += 20
+    elif query in original_title or original_title in query:
         score += 20
 
-    # Year match (30 points)
+    # Title similarity calculation
     title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 25
     score += title_similarity
 
+    # Year match scoring
     if year and result_year:
         if result_year == str(year):
             score += 30
@@ -289,6 +298,7 @@ def calculate_score(result, query, year=None):
     # Language and country bonus (15 points)
     if result.get('original_language') == 'en':
         score += 10
+
     if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
         score += 5
 
