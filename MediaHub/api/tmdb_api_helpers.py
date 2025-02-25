@@ -4,6 +4,7 @@ import requests
 import urllib.parse
 import logging
 import unicodedata
+import difflib
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
@@ -265,6 +266,9 @@ def calculate_score(result, query, year=None):
     title = result.get('name', '').lower().strip()
     original_title = result.get('original_name', '').lower().strip()
 
+    first_air_date = result.get('first_air_date', '')
+    result_year = first_air_date.split('-')[0] if first_air_date else None
+
     # Title exact match (40 points)
     if query == title or query == original_title:
         score += 40
@@ -273,21 +277,19 @@ def calculate_score(result, query, year=None):
         score += 20
 
     # Year match (30 points)
-    if year:
-        first_air_date = result.get('first_air_date', '')
-        if first_air_date:
-            result_year = first_air_date.split('-')[0]
-            if result_year == str(year):
-                score += 30
-            # Partial year match (within 1 year) (15 points)
-            elif abs(int(result_year) - int(year)) <= 1:
-                score += 15
+    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 25
+    score += title_similarity
+
+    if year and result_year:
+        if result_year == str(year):
+            score += 30
+        elif abs(int(result_year) - int(year)) <= 1:
+            score += 15
 
     # Language and country bonus (15 points)
     if result.get('original_language') == 'en':
         score += 10
-    if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ']
-                                          for country in result.get('origin_country')):
+    if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
         score += 5
 
     # Popularity bonus (up to 15 points)
@@ -296,6 +298,13 @@ def calculate_score(result, query, year=None):
         # Normalize popularity score (0-15 points)
         popularity_score = min(15, (popularity / 100) * 15)
         score += popularity_score
+
+    query_words = set(query.split())
+    title_words = set(title.split())
+    matching_words = query_words.intersection(title_words)
+    if matching_words:
+        word_match_score = min(10, (len(matching_words) / len(query_words)) * 10)
+        score += word_match_score
 
     return score
 
