@@ -349,7 +349,7 @@ def perform_search(params, url):
         return []
 
 @lru_cache(maxsize=None)
-def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None):
+def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None):
     global api_key
     if not check_api_key():
         return query
@@ -483,6 +483,18 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
         cleaned_dir_query, dir_year = clean_query(dir_based_query)
         results = fetch_results(cleaned_dir_query, year or dir_year)
+
+    if not results:
+        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
+        dir_based_query = os.path.basename(root)
+        title = advanced_clean_query(dir_based_query, max_words=4)
+        results = fetch_results(title, year)
+
+        # If no results found with max_words=4, try again with max_words=2
+        if not results:
+            log_message(f"No results found. Retrying with more aggressive cleaning", "DEBUG", "stdout")
+            title = advanced_clean_query(dir_based_query, max_words=2)
+            results = fetch_results(title, year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")

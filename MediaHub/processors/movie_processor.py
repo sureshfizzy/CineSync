@@ -100,7 +100,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
-        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
         year = result[3] if result[3] is not None else year
         if isinstance(result, tuple) and len(result) == 5:
             tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
