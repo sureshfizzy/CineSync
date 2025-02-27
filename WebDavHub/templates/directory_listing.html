@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1>Files in {{.CurrentPath}}</h1>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+            
+            <div class="breadcrumb">
+                <a href="/"><i class="fas fa-home"></i> Home</a>
+                
+                {{range .Breadcrumbs}}
+                    <span class="breadcrumb-separator">/</span>
+                    {{if .IsLink}}
+                        <a href="{{.Path}}">{{.Name}}</a>
+                    {{else}}
+                        <span>{{.Name}}</span>
+                    {{end}}
+                {{end}}
+            </div>
+        </header>
+        
+        <div class="file-list">
+            <div class="file-list-header">
+                <div>Name</div>
+                <div>Size</div>
+                <div>Modified</div>
+            </div>
+            
+            <div class="file-items-container">
+                {{if .ShowParent}}
+                <a href="{{.ParentPath}}" class="file-item file-dir">
+                    <div class="file-name">
+                        <div class="icon-container folder-icon">
+                            <i class="fas fa-folder-arrow-up"></i>
+                        </div>
+                        <span class="file-name-text">Parent Directory</span>
+                    </div>
+                    <div class="file-size">-</div>
+                    <div class="file-modified">-</div>
+                </a>
+                {{end}}
+                
+                {{range .Directories}}
+                <a href="{{.Path}}" class="file-item file-dir">
+                    <div class="file-name">
+                        <div class="icon-container folder-icon">
+                            <i class="fas fa-folder"></i>
+                        </div>
+                        <span class="file-name-text">{{.Name}}</span>
+                    </div>
+                    <div class="file-size">-</div>
+                    <div class="file-modified">{{.ModTime}}</div>
+                </a>
+                {{end}}
+                
+                {{range .Files}}
+                <a href="{{.Path}}" class="file-item">
+                    <div class="file-name">
+                        <div class="icon-container {{.IconClass}}">
+                            <i class="{{.Icon}}"></i>
+                        </div>
+                        <span class="file-name-text">{{.Name}}</span>
+                    </div>
+                    <div class="file-size">{{.Size}}</div>
+                    <div class="file-modified">{{.ModTime}}</div>
+                </a>
+                {{end}}
+            </div>
+        </div>
+        
+        <footer>
+            <p>CineSync - {{.Year}}</p>
+        </footer>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlElement = document.documentElement;
+            const moonIcon = '<i class="fas fa-moon"></i>';
+            const sunIcon = '<i class="fas fa-sun"></i>';
+            
+            // Check for saved theme preference or use device preference
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+                htmlElement.setAttribute('data-theme', 'dark');
+                themeToggle.innerHTML = sunIcon;
+            } else {
+                htmlElement.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = moonIcon;
+            }
+            
+            // Toggle theme on button click
+            themeToggle.addEventListener('click', function() {
+                if (htmlElement.getAttribute('data-theme') === 'dark') {
+                    htmlElement.setAttribute('data-theme', 'light');
+                    localStorage.setItem('theme', 'light');
+                    themeToggle.innerHTML = moonIcon;
+                } else {
+                    htmlElement.setAttribute('data-theme', 'dark');
+                    localStorage.setItem('theme', 'dark');
+                    themeToggle.innerHTML = sunIcon;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

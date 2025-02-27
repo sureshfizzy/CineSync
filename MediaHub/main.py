@@ -162,6 +162,29 @@ def parse_season_episode(season_episode):
         return int(match.group(1)), int(match.group(2))
     return None, None
 
+# CineSync WebDAV
+def start_webdav_server():
+    """Start WebDavHub server if enabled."""
+    if cinesync_webdav():
+        webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
+        webdav_script = os.path.join(webdav_dir, 'cinesync')
+
+        if os.path.exists(webdav_script):
+            log_message("Starting WebDavHub server...", level="INFO")
+
+            try:
+                # Change to the WebDavHub directory and execute the script
+                current_dir = os.getcwd()
+                os.chdir(webdav_dir)
+                webdav_process = subprocess.Popen(['./cinesync'])
+                os.chdir(current_dir)
+
+                log_message(f"WebDavHub server started with PID: {webdav_process.pid}", level="INFO")
+            except Exception as e:
+                log_message(f"Failed to start WebDavHub server: {e}", level="ERROR")
+        else:
+            log_message(f"WebDavHub executable not found at: {webdav_script}", level="ERROR")
+
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
@@ -280,6 +303,9 @@ def main(dest_dir):
     # Wait for mount before creating symlinks if needed
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
+
+    # Start WebDavHub if enabled
+    start_webdav_server()
 
     # Start RealTime-Monitoring in main thread if not disabled
     if not args.disable_monitor:
