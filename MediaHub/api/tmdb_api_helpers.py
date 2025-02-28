@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import requests
 import urllib.parse
@@ -524,7 +525,15 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     Returns:
         tuple: (proper_name, show_name, is_anime_genre, new_season_number, new_episode_number)
     """
-    show_name = chosen_show.get('name')
+    # Get the original show name
+    original_show_name = chosen_show.get('name')
+
+    # Helper function to format show name for the OS
+    if platform.system() == 'nt':
+        show_name = original_show_name.replace(':', ' -')
+    else:
+        show_name = original_show_name
+
     first_air_date = chosen_show.get('first_air_date')
     show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
     tmdb_id = chosen_show.get('id') if not tmdb_id else tmdb_id

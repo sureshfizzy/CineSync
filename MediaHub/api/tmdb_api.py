@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import requests
 import urllib.parse
@@ -354,6 +355,12 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     if not check_api_key():
         return query
 
+    # Helper function to format movie name for the OS
+    def format_movie_name(name):
+        if platform.system() == 'nt':
+            return name.replace(':', ' -')
+        return name
+
     # Handle direct ID searches first
     if tmdb_id or imdb_id:
         try:
@@ -390,7 +397,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 movie_data = response.json()
 
             # Process movie data
-            movie_name = movie_data['title']
+            original_movie_name = movie_data['title']
+            movie_name = format_movie_name(original_movie_name)
             release_date = movie_data.get('release_date', '')
             movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
 
@@ -536,7 +544,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 break
 
     if chosen_movie:
-        movie_name = chosen_movie.get('title')
+        original_movie_name = chosen_movie.get('title')
+        movie_name = format_movie_name(original_movie_name)
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
