@@ -82,7 +82,27 @@ def extract_anime_episode_info(filename):
                         'episode_title': None
                     }
 
-    # Add new pattern for simple show name + episode number format
+    # Pattern for versioned episode numbers (like 17v2)
+    versioned_episode_patterns = [
+        r'^(.+?)[-_\s]+(\d+)v\d+[-_\s]*(?:\s|$)',
+    ]
+
+    for pattern in versioned_episode_patterns:
+        match = re.match(pattern, clean_filename, re.IGNORECASE)
+        if match:
+            show_name = match.group(1).strip()
+            episode_number = str(int(match.group(2))).zfill(2)
+
+            show_name = re.sub(r'[._-]', ' ', show_name).strip()
+
+            return {
+                'show_name': show_name,
+                'season_number': None,
+                'episode_number': episode_number,
+                'episode_title': None
+            }
+
+    # Pattern for simple show name + episode number format
     simple_episode_patterns = [
         r'^(.+?)\s+(\d{1,3})(?:\s|$)',
         r'^(.+?)\s*-\s*(\d{1,3})(?:\s|$)',

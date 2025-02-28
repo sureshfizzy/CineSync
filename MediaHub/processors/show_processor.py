@@ -19,7 +19,7 @@ global api_key
 global api_warning_logged
 global offline_mode
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None):
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False):
     global offline_mode
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
@@ -52,7 +52,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     is_anime_genre = False
     season_folder = None
 
-    if is_anime_scan()  and is_anime_file(file):
+    if is_anime_show or is_anime_scan() and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
                                         tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number)
 
