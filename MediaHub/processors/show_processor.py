@@ -238,10 +238,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Replace the existing resolution folder determination logic with:
     resolution_folder = get_show_resolution_folder(file, resolution)
 
+    # Check if file is 4K/2160p
+    is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
+
     # Modified destination path determination
     if is_extra:
         if is_cinesync_layout_enabled():
-            if custom_show_layout():
+            if custom_show_layout() or custom_4kshow_layout():
                 if is_show_resolution_structure_enabled():
                     if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
@@ -257,6 +260,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             else:
                 if is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
+                elif is_4k:
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder, 'Extras')
                 else:
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
         elif is_source_structure_enabled():
@@ -273,13 +278,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             if is_anime_genre and is_anime_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+            elif is_4k:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', 'Extras', show_folder)
             else:
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
 
         season_dest_path = base_dest_path
     else:
         if is_cinesync_layout_enabled():
-            if custom_show_layout():
+            if custom_show_layout() or custom_4kshow_layout():
                 if is_show_resolution_structure_enabled():
                     if is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
@@ -293,6 +300,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
+                    elif is_4k:
+                        base_dest_path = os.path.join(dest_dir, custom_4kshow_layout(), show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, custom_4kshow_layout(), show_folder)
                     else:
                         base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, custom_show_layout(), show_folder)
@@ -308,6 +318,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     if is_anime_genre and is_anime_separation_enabled():
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
+                    elif is_4k:
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder)
                     else:
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
@@ -322,6 +335,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             if is_anime_genre and is_anime_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+            elif is_4k:
+                base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', 'Extras', show_folder)
             else:
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
