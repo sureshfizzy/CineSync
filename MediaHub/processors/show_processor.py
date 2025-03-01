@@ -19,7 +19,7 @@ global api_key
 global api_warning_logged
 global offline_mode
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False):
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False):
     global offline_mode
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
@@ -242,7 +242,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
 
     # Modified destination path determination
-    if is_extra:
+    if is_extra and not force_extra:
         if is_cinesync_layout_enabled():
             if custom_show_layout() or custom_4kshow_layout():
                 if is_show_resolution_structure_enabled():
@@ -371,7 +371,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         extras_dest_path = os.path.join(existing_show_folder_path, 'Extras')
 
     # Check if SKIP_EXTRAS_FOLDER is enabled and handle accordingly
-    if is_skip_extras_folder_enabled() and is_file_extra(file, src_file):
+    if is_skip_extras_folder_enabled() and is_file_extra(file, src_file) and not force_extra:
         log_message(f"Skipping extras file: {file} based on size and SKIP_EXTRAS_FOLDER setting", level="INFO")
         return None
 

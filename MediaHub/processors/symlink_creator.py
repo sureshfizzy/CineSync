@@ -26,7 +26,7 @@ log_imported_db = False
 db_initialized = False
 
 def process_file(args, processed_files_log, force=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number  = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra  = args
 
     if error_event.is_set():
         return
@@ -121,12 +121,12 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show or is_anime_show:
-        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show)
+        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
     else:
         dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
 
     # Check if the file should be considered an extra based on size
-    if skip_extras_folder and is_file_extra(file, src_file):
+    if skip_extras_folder and is_file_extra(file, src_file) and not force_extra:
         log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
         return
 
@@ -173,9 +173,9 @@ def process_file(args, processed_files_log, force=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False):
     global log_imported_db
-
+    print(force_extra)
     os.makedirs(dest_dir, exist_ok=True)
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
     rename_enabled = is_rename_enabled()
@@ -208,7 +208,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force))
                 else:
                     # Handle directory
@@ -228,14 +228,14 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             src_file = os.path.join(root, file)
 
                             # Check if the file is an extra based on the size
-                            if skip_extras_folder and is_file_extra(file, src_file):
+                            if skip_extras_folder and is_file_extra(file, src_file) and not force_extra:
                                 log_message(f"Skipping extras file: {file}", level="DEBUG")
                                 continue
 
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force))
 
             # Process completed tasks
@@ -270,7 +270,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
                     result = process_file(args, processed_files_log, force)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
@@ -302,7 +302,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
                             result = process_file(args, processed_files_log, force)
 
                             if result and isinstance(result, tuple) and len(result) == 3:
