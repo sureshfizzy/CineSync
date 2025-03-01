@@ -264,6 +264,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     new_name = file
     episode_name = None
+    mapped_season = season_number
+    mapped_episode = episode_number
 
     # Parse the original filename to get the correct episode number
     original_episode_match = re.search(r'S(\d{2})E(\d{2})', file)
@@ -281,7 +283,20 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     if rename_enabled and show_id:
         try:
             try:
-                episode_name = get_episode_name(show_id, int(season_number), int(actual_episode))
+                # Get the episode name and the mapped season/episode numbers
+                episode_result = get_episode_name(show_id, int(season_number), int(actual_episode))
+
+                if isinstance(episode_result, tuple) and len(episode_result) == 3:
+                    episode_name, mapped_season, mapped_episode = episode_result
+                    # Update season_number with the mapped season number
+                    if mapped_season is not None:
+                        season_number = str(mapped_season).zfill(2)
+                    # Update actual_episode with the mapped episode number
+                    if mapped_episode is not None:
+                        actual_episode = str(mapped_episode).zfill(2)
+                else:
+                    episode_name = episode_result
+
                 if episode_name and episode_name != episode_title:
                     new_name += f" - {episode_name}"
                 elif episode_title:

@@ -148,60 +148,156 @@ def get_show_genres(show_id):
 def get_episode_name(show_id, season_number, episode_number):
     """
     Fetch the episode name from TMDb API for the given show, season, and episode number.
-    Fallback to map absolute episode numbers if an invalid episode is specified.
+    For anime, use AniDB-style mapping for absolute episode numbers across seasons.
+    Returns:
+        tuple: (formatted_episode_name, mapped_season_number, mapped_episode_number)
     """
     api_key = get_api_key()
     if not api_key:
         log_message("TMDb API key not found in environment variables.", level="ERROR")
-        return None
+        return None, None, None
 
     try:
+        # First try direct episode lookup
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
         params = {'api_key': api_key}
         response = requests.get(url, params=params)
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
-        return f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
+        return f"S{season_number:02d}E{episode_number:02d} - {episode_name}", season_number, episode_number
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            log_message(f"Episode {episode_number} not found for season {season_number}. Falling back to season data.", level="DEBUG")
-            season_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}"
-            season_params = {'api_key': api_key}
+            log_message(f"Episode {episode_number} not found for season {season_number}. Using AniDB-style mapping.", level="DEBUG")
+
+            # Get all seasons data
+            show_url = f"https://api.themoviedb.org/3/tv/{show_id}"
+            show_params = {'api_key': api_key}
+
             try:
-                season_response = requests.get(season_url, params=season_params)
-                season_response.raise_for_status()
-                season_details = season_response.json()
-                episodes = season_details.get('episodes', [])
-                total_season_episodes = len(episodes)
+                show_response = requests.get(show_url, params=show_params)
+                show_response.raise_for_status()
+                show_data = show_response.json()
 
-                if total_season_episodes == 0:
-                    log_message("No episodes found for the specified season. Ensure the season number is correct.", level="ERROR")
-                    return None
+                # Get number of seasons
+                total_seasons = show_data.get('number_of_seasons', 0)
 
-                if int(episode_number) > total_season_episodes:
-                    mapped_episode_number = str((int(episode_number) % total_season_episodes) or total_season_episodes).zfill(2)
-                    log_message(
-                        f"Absolute episode {episode_number} exceeds total episodes ({total_season_episodes}) "
-                        f"for season {season_number}. Mapped to episode {mapped_episode_number}.",
-                        level="DEBUG"
-                    )
-                    mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{mapped_episode_number}"
-                    mapped_response = requests.get(mapped_url, params=params)
+                # Initialize variables to track episode counting
+                absolute_episode = int(episode_number)
+                current_season = 1
+                season_episode = 0
+
+                # Loop through seasons until we find where the absolute episode belongs
+                while current_season <= total_seasons:
+                    season_detail_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{current_season}"
+                    season_detail_response = requests.get(season_detail_url, params={'api_key': api_key})
+                    season_detail_response.raise_for_status()
+                    season_detail = season_detail_response.json()
+
+                    episode_count = len(season_detail.get('episodes', []))
+
+                    # If we're checking the first season and the original request was for season 1,
+                    # and the episode number is valid, we don't need to map
+                    if current_season == 1 and int(season_number) == 1 and absolute_episode <= episode_count:
+                        return (f"S01E{absolute_episode:02d} - {season_detail.get('episodes', [])[absolute_episode-1].get('name')}",
+                                1, absolute_episode)
+
+                    # If the absolute episode fits in this season
+                    if absolute_episode <= episode_count:
+                        season_episode = absolute_episode
+                        break
+
+                    # Otherwise, subtract this season's episodes and move to next season
+                    absolute_episode -= episode_count
+                    current_season += 1
+
+                # If we found a proper mapping
+                if current_season <= total_seasons:
+                    # Get the episode name for the mapped episode
+                    mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{current_season}/episode/{season_episode}"
+                    mapped_response = requests.get(mapped_url, params={'api_key': api_key})
                     mapped_response.raise_for_status()
                     mapped_episode_data = mapped_response.json()
                     mapped_episode_name = mapped_episode_data.get('name')
-                    return f"S{season_number:02d}E{mapped_episode_number} - {mapped_episode_name}"
+
+                    log_message(
+                        f"Absolute episode {episode_number} for S{season_number} mapped to S{current_season}E{season_episode} using AniDB-style mapping.",
+                        level="DEBUG"
+                    )
+                    return (f"S{current_season:02d}E{season_episode:02d} - {mapped_episode_name}",
+                            current_season, season_episode)
+                else:
+                    # If we exhausted all seasons and still didn't find the episode, fall back to modulo
+                    # But with a specific note that this is a less accurate fallback
+                    first_season_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/1"
+                    first_season_response = requests.get(first_season_url, params={'api_key': api_key})
+                    first_season_response.raise_for_status()
+                    first_season_detail = first_season_response.json()
+                    first_season_episodes = len(first_season_detail.get('episodes', []))
+
+                    log_message(
+                        f"Warning: Absolute episode {episode_number} exceeds all known episodes across {total_seasons} seasons. Using fallback mapping.",
+                        level="WARNING"
+                    )
+
+                    # Reinitialize our calculation with original episode number
+                    absolute_episode = int(episode_number)
+                    current_season = 1
+
+                    while current_season <= total_seasons:
+                        season_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{current_season}"
+                        season_response = requests.get(season_url, params={'api_key': api_key})
+                        if season_response.status_code == 200:
+                            season_detail = season_response.json()
+                            episode_count = len(season_detail.get('episodes', []))
+                            if absolute_episode <= episode_count:
+                                season_episode = absolute_episode
+                                break
+
+                            absolute_episode -= episode_count
+                            current_season += 1
+                        else:
+                            break
+
+                    # If we've gone through all seasons and still have episodes left, use the last season
+                    if current_season > total_seasons:
+                        current_season = total_seasons
+                        # Get the last season's episode count again
+                        last_season_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{current_season}"
+                        last_season_response = requests.get(last_season_url, params={'api_key': api_key})
+                        last_season_response.raise_for_status()
+                        last_season_detail = last_season_response.json()
+                        last_season_episodes = len(last_season_detail.get('episodes', []))
+
+                        # Map to an episode in the last season
+                        season_episode = (absolute_episode % last_season_episodes) or last_season_episodes
+
+                    # Get the episode name for the mapped episode
+                    mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{current_season}/episode/{season_episode}"
+                    mapped_response = requests.get(mapped_url, params={'api_key': api_key})
+                    mapped_response.raise_for_status()
+                    mapped_episode_data = mapped_response.json()
+                    mapped_episode_name = mapped_episode_data.get('name')
+
+                    log_message(
+                        f"Absolute episode {episode_number} for S{season_number} mapped to S{current_season}E{season_episode} using cross-season mapping.",
+                        level="DEBUG"
+                    )
+
+                    return (f"S{current_season:02d}E{season_episode:02d} - {mapped_episode_name}",
+                            current_season, season_episode)
+
             except requests.exceptions.RequestException as se:
                 log_message(f"Error fetching season data: {se}", level="ERROR")
-                return None
+                return None, None, None
         else:
             log_message(f"HTTP error occurred: {e}", level="ERROR")
-            return None
+            return None, None, None
+
     except requests.exceptions.RequestException as e:
         log_message(f"Error fetching episode data: {e}", level="ERROR")
-        return None
+        return None, None, None
 
 def get_movie_collection(movie_id=None, movie_title=None, year=None):
     api_key = get_api_key()

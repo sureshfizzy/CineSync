@@ -372,7 +372,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
                 if episode_number_match:
                     episode_number = episode_number_match.group(1)
-                    episode_name = get_episode_name(show_id, int(season_number), int(episode_number))
+                    episode_name, mapped_season, mapped_episode = get_episode_name(show_id, int(season_number), int(episode_number))
 
                     if episode_name:
                         base_name = f"{show_name} - {episode_name}".replace(' - -', ' -')
