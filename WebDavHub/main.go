@@ -10,6 +10,7 @@ import (
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/server"
+	"cinesync/pkg/auth"
 )
 
 func main() {
@@ -64,6 +65,15 @@ func main() {
 	logger.Info("WebDAV access available at the root path for WebDAV clients")
 	logger.Info("Serving content from: %s", rootInfo)
 	logger.Info("Dashboard available at http://%s for browsers", addr)
+
+        // In your main function, add this information after starting the server
+        if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
+	        credentials := auth.GetCredentials()
+		logger.Info("WebDAV authentication enabled (username: %s)", credentials.Username)
+	        logger.Info("To disable authentication, set WEBDAV_AUTH_ENABLED=false in your .env file")
+        } else {
+	        logger.Warn("WebDAV authentication is disabled")
+        }
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		logger.Fatal("Server error: %v", err)

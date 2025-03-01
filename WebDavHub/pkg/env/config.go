@@ -71,3 +71,16 @@ func GetInt(key string, defaultValue int) int {
 	logger.Debug("Using environment variable %s=%d", key, value)
 	return value
 }
+
+// IsBool returns whether the environment variable is set to "true" or uses the default
+func IsBool(key string, defaultValue bool) bool {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		logger.Debug("Environment variable %s not set, using default value: %t", key, defaultValue)
+		return defaultValue
+	}
+
+	enabled := value == "1" || value == "true" || value == "yes" || value == "y"
+	logger.Debug("Using environment variable %s=%s (parsed as %t)", key, value, enabled)
+	return enabled
+}

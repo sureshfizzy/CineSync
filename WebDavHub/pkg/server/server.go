@@ -11,6 +11,7 @@ import (
 	"cinesync/pkg/files"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/webdav"
+	"cinesync/pkg/auth"
 )
 
 // Server represents the CineSync server
@@ -55,61 +56,65 @@ func (s *Server) Initialize() error {
 		http.ServeFile(w, r, filepath.Join(staticDir, "favicon.ico"))
 	})
 
-	// Register the main handler which routes between dashboard, file browser, and WebDAV
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Check if request is from a WebDAV client
-		isWebDAVClient := webdav.IsWebDAVUserAgent(r.UserAgent())
+        // Create the main handler that will handle all paths
+        mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Check if request is from a WebDAV client
+        isWebDAVClient := webdav.IsWebDAVUserAgent(r.UserAgent())
 
-		// All non-GET methods are likely WebDAV operations
-		if r.Method != http.MethodGet || isWebDAVClient {
-			davHandler.ServeHTTP(w, r)
-			return
-		}
+        // All non-GET methods are likely WebDAV operations
+        if r.Method != http.MethodGet || isWebDAVClient {
+            davHandler.ServeHTTP(w, r)
+            return
+        }
 
-		// Handle dashboard at root path for browsers
-		if r.URL.Path == "/" {
-			// Get media folders for dashboard
-			mediaFolders, err := dashboard.GetMediaFolders(s.RootDir)
-			if err != nil {
-				logger.Error("Error getting media folders: %v", err)
-				http.Error(w, "Server error", http.StatusInternalServerError)
-				return
-			}
+        // Handle dashboard at root path for browsers
+        if r.URL.Path == "/" {
+            // Get media folders for dashboard
+            mediaFolders, err := dashboard.GetMediaFolders(s.RootDir)
+            if err != nil {
+                logger.Error("Error getting media folders: %v", err)
+                http.Error(w, "Server error", http.StatusInternalServerError)
+                return
+            }
 
-			if len(mediaFolders) == 1 {
-				http.Redirect(w, r, mediaFolders[0].Path, http.StatusFound)
-				return
-			}
+            if len(mediaFolders) == 1 {
+                http.Redirect(w, r, mediaFolders[0].Path, http.StatusFound)
+                return
+            }
 
-			data := dashboard.DashboardData{
-				Title:        "CineSync Dashboard",
-				MediaFolders: mediaFolders,
-				Year:         time.Now().Year(),
-				Version:      "v1.0.0",
-			}
+            data := dashboard.DashboardData{
+                Title:        "CineSync Dashboard",
+                MediaFolders: mediaFolders,
+                Year:         time.Now().Year(),
+                Version:      "v1.0.0",
+            }
 
-			err = dashboardTmpl.Execute(w, data)
-			if err != nil {
-				logger.Error("Error executing dashboard template: %v", err)
-				http.Error(w, "Template error", http.StatusInternalServerError)
-			}
-			return
-		}
+            err = dashboardTmpl.Execute(w, data)
+            if err != nil {
+                logger.Error("Error executing dashboard template: %v", err)
+                http.Error(w, "Template error", http.StatusInternalServerError)
+            }
+            return
+        }
 
-		// Handle file browsing for specific paths
-		if strings.HasPrefix(r.URL.Path, "/browse/") {
-			// Remove /browse/ prefix for the file handler
-			path := r.URL.Path[len("/browse/"):]
+        // Handle file browsing for specific paths
+        if strings.HasPrefix(r.URL.Path, "/browse/") {
+            // Remove /browse/ prefix for the file handler
+            path := r.URL.Path[len("/browse/"):]
 
-			// Reconstruct request URL for the file handling function
-			r.URL.Path = "/" + path
-			files.ServeFileOrDirectory(w, r, s.RootDir, tmpl)
-			return
-		}
+            // Reconstruct request URL for the file handling function
+            r.URL.Path = "/" + path
+            files.ServeFileOrDirectory(w, r, s.RootDir, tmpl)
+            return
+        }
 
-		// For any other GET requests from browsers, serve them as files
-		files.ServeFileOrDirectory(w, r, s.RootDir, tmpl)
-	})
+        // For any other GET requests from browsers, serve them as files
+        files.ServeFileOrDirectory(w, r, s.RootDir, tmpl)
+    })
 
-	return nil
+    // Wrap the main handler with authentication and register it
+    authenticatedHandler := auth.BasicAuth(mainHandler)
+    http.Handle("/", authenticatedHandler)
+
+    return nil
 }
