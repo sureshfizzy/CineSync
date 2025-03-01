@@ -529,7 +529,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     original_show_name = chosen_show.get('name')
 
     # Helper function to format show name for the OS
-    if platform.system() == 'nt':
+    if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
         show_name = original_show_name.replace(':', ' -')
     else:
         show_name = original_show_name

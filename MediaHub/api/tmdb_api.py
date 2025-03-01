@@ -357,7 +357,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
     # Helper function to format movie name for the OS
     def format_movie_name(name):
-        if platform.system() == 'nt':
+        if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
             return name.replace(':', ' -')
         return name
 
