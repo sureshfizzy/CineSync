@@ -27,8 +27,8 @@ ENV GOPATH=/go
 ENV PATH="${GOPATH}/bin:${PATH}"
 
 # Copy Go project files and build
-WORKDIR /app/WebDavHub
 COPY WebDavHub /app/WebDavHub
+WORKDIR /app/WebDavHub
 RUN go mod tidy && go build -o /app/WebDavHub/cinesync
 
 # ---- STAGE 2: Final Lightweight Image ----
