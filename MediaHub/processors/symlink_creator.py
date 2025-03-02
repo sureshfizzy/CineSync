@@ -87,7 +87,7 @@ def process_file(args, processed_files_log, force=False):
 
     if existing_symlink and not force:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
-        save_processed_file(src_file, existing_symlink)
+        save_processed_file(src_file, existing_symlink, tmdb_id)
         return
 
     # Show detection logic
@@ -120,9 +120,9 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show:
-        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number)
+        dest_file, tmdb_id, season_number = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number)
     else:
-        dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        dest_file, tmdb_id = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
 
     # Check if the file should be considered an extra based on size
     if skip_extras_folder and is_file_extra(file, src_file):
@@ -140,7 +140,7 @@ def process_file(args, processed_files_log, force=False):
         existing_src = os.readlink(dest_file)
         if existing_src == src_file:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-            save_processed_file(src_file, dest_file)
+            save_processed_file(src_file, dest_file, tmdb_id)
             return
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
@@ -155,7 +155,7 @@ def process_file(args, processed_files_log, force=False):
         os.symlink(src_file, dest_file)
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
-        save_processed_file(src_file, dest_file)
+        save_processed_file(src_file, dest_file, tmdb_id, season_number)
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)

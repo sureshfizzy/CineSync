@@ -206,8 +206,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
         result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra)
-        if isinstance(result, tuple) and len(result) == 5:
-            proper_show_name, show_name, is_anime_genre, season_number, episode_number = result
+        if isinstance(result, tuple) and len(result) == 6:
+            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
         else:
             proper_show_name = result
@@ -408,4 +408,4 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             dest_file = os.path.join(season_dest_path, file)
 
-    return dest_file
+    return dest_file, tmdb_id, season_number

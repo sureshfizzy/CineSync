@@ -50,7 +50,7 @@ class ConnectionPool:
                 os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
                 open(self.db_file, 'a').close()  # Create an empty file
                 os.chmod(self.db_file, 0o666)  # Ensure proper permissions
-        
+
             if self.connections:
                 return self.connections.pop()
             else:
@@ -128,7 +128,9 @@ def initialize_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
                 file_path TEXT PRIMARY KEY,
-                destination_path TEXT
+                destination_path TEXT,
+                tmdb_id TEXT,
+                season_number TEXT
             )
         """)
 
@@ -141,9 +143,23 @@ def initialize_db():
             cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
             log_message("Added destination_path column to processed_files table.", level="INFO")
 
+        # Check if the tmdb_id column exists
+        if "tmdb_id" not in columns:
+            # Add the tmdb_id column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
+            log_message("Added tmdb_id column to processed_files table.", level="INFO")
+
+        # Check if the season_number column exists
+        if "season_number" not in columns:
+            # Add the tmdb_id column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN season_number TEXT")
+            log_message("Added season column to processed_files table.", level="INFO")
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -204,15 +220,15 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path):
+def save_processed_file(conn, source_path, dest_path, tmdb_id=None, season_number=None):
     source_path = normalize_file_path(source_path)
     dest_path = normalize_file_path(dest_path)
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path)
-            VALUES (?, ?)
-        """, (source_path, dest_path))
+            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number)
+            VALUES (?, ?, ?, ?)
+        """, (source_path, dest_path, tmdb_id, season_number))
         conn.commit()
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
@@ -654,24 +670,27 @@ def search_database(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path
+            SELECT file_path, destination_path, tmdb_id, season_number
             FROM processed_files
-            WHERE file_path LIKE ? OR destination_path LIKE ?
-        """, (search_pattern, search_pattern))
-
+            WHERE file_path LIKE ?
+            OR destination_path LIKE ?
+            OR tmdb_id LIKE ?
+        """, (search_pattern, search_pattern, search_pattern))
         results = cursor.fetchall()
-
         if results:
             log_message("-" * 50, level="INFO")
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
-            for file_path, dest_path in results:
+            for row in results:
+                file_path, dest_path, tmdb_id, season_number = row
+                log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                if season_number is not None:
+                    log_message(f"Season Number: {season_number}", level="INFO")
                 log_message(f"Source: {file_path}", level="INFO")
                 log_message(f"Destination: {dest_path}", level="INFO")
                 log_message("-" * 50, level="INFO")
         else:
             log_message(f"No matches found for pattern '{pattern}'", level="INFO")
-
         return results
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error searching database: {e}", level="ERROR")

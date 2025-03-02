@@ -566,4 +566,4 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     else:
         proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
-    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number
+    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id
