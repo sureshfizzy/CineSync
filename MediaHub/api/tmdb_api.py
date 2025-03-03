@@ -241,7 +241,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     if auto_select:
         chosen_show = results[0]
         result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
-        _api_cache[cache_key] = result[0]
+        _api_cache[cache_key] = result
         return result
     else:
         while True:
@@ -257,7 +257,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             if choice.lower() in ['1', '2', '3']:
                 chosen_show = results[int(choice) - 1]
                 result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
-                _api_cache[cache_key] = result[0]
+                _api_cache[cache_key] = result
                 return result
             elif choice.strip():
                 new_results = fetch_results(choice, year)
@@ -270,7 +270,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             else:
                 chosen_show = results[0]
                 result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
-                _api_cache[cache_key] = result[0]
+                _api_cache[cache_key] = result
                 return result
 
     log_message(f"No valid selection made for query '{query}', skipping.", level="WARNING")
