@@ -259,13 +259,51 @@ def check_file_in_db(conn, file_path):
 @with_connection(main_pool)
 def delete_broken_symlinks(conn, file_path):
     file_path = normalize_file_path(file_path)
-    log_message(f"Attempting to remove file path from the database: {file_path}", level="DEBUG")
+
     try:
         cursor = conn.cursor()
+
+        # First, log the record we're trying to delete for debugging
+        cursor.execute("SELECT * FROM processed_files WHERE file_path = ?", (file_path,))
+        record = cursor.fetchone()
+        if record:
+            log_message(f"Found record to delete: {record}", level="DEBUG")
+        else:
+            # Try to find if the path exists as part of a longer path
+            cursor.execute("SELECT * FROM processed_files WHERE file_path LIKE ?", (f"%{file_path}%",))
+            partial_matches = cursor.fetchall()
+            if partial_matches:
+                log_message(f"Found partial matches: {partial_matches}", level="DEBUG")
+
+            # Check if there might be normalization issues
+            cursor.execute("SELECT file_path FROM processed_files")
+            all_paths = cursor.fetchall()
+            log_message(f"First 5 paths in database for comparison: {all_paths[:5]}", level="DEBUG")
+
+        # Proceed with deletion
         cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+        affected_rows = cursor.rowcount
         conn.commit()
+
         log_message(f"DELETE FROM processed_files WHERE file_path = {file_path}", level="DEBUG")
-        log_message(f"File path removed from the database: {file_path}", level="INFO")
+        log_message(f"File path removed from the database: {file_path}, affected rows: {affected_rows}", level="INFO")
+
+        # If no rows were affected, try with the destination_path
+        if affected_rows == 0:
+            log_message(f"No rows deleted using file_path, trying with destination_path", level="DEBUG")
+            cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
+            affected_rows = cursor.rowcount
+            conn.commit()
+            log_message(f"Deleted using destination_path: {affected_rows} rows affected", level="DEBUG")
+
+            # If we still have no affected rows, check if it's in the path portion of destination_path
+            if affected_rows == 0:
+                log_message(f"Checking if file_path is part of destination_path", level="DEBUG")
+                cursor.execute("DELETE FROM processed_files WHERE destination_path LIKE ?", (f"%{file_path}%",))
+                affected_rows = cursor.rowcount
+                conn.commit()
+                log_message(f"Deleted using partial destination_path match: {affected_rows} rows affected", level="DEBUG")
+
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error removing file path from database: {e}", level="ERROR")
         conn.rollback()
