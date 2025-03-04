@@ -167,7 +167,13 @@ def scan_directories(dirs_to_watch, current_files):
 
         try:
             dir_files = set(os.listdir(directory))
-            new_files[directory] = dir_files
+            files_dir = {}
+            for file in dir_files:
+                if os.path.isdir(os.path.join(directory, file)):
+                    files_dir[file] = os.listdir(os.path.join(directory, file))
+                else:
+                    files_dir[file] = []
+            new_files[directory] = files_dir
             log_message(f"Found {len(dir_files)} files in {directory}", level="DEBUG")
         except Exception as e:
             log_message(f"Failed to scan directory {directory}: {str(e)}", level="ERROR")
@@ -179,8 +185,15 @@ def process_changes(current_files, new_files, dest_dir):
     """Processes changes by detecting added or removed files and triggering actions."""
     for directory, files in new_files.items():
         old_files = current_files.get(directory, set())
-        added_files = files - old_files
-        removed_files = old_files - files
+        added_files = []
+        removed_files = []
+        if old_files != files:
+            for key in files:
+                if key not in old_files or files[key] != old_files[key]:
+                    added_files.append(key)
+            for key in old_files:
+                if key not in files:
+                    removed_files.append(key)
 
         if added_files:
             log_message(f"New files detected in {directory}: {added_files}", level="INFO")
@@ -234,7 +247,13 @@ def initial_scan(dirs_to_watch):
         if os.path.exists(directory):
             try:
                 files = set(os.listdir(directory))
-                current_files[directory] = files
+                files_dir = {}
+                for file in files:
+                    if os.path.isdir(os.path.join(directory, file)):
+                        files_dir[file] = os.listdir(os.path.join(directory, file))
+                    else:
+                        files_dir[file] = []
+                current_files[directory] = files_dir
                 log_message(f"Initial scan found {len(files)} files in {directory}", level="INFO")
             except Exception as e:
                 log_message(f"Error during initial scan of {directory}: {str(e)}", level="ERROR")
