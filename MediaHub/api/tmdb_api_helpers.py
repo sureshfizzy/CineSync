@@ -145,7 +145,7 @@ def get_show_genres(show_id):
         log_message(f"Error fetching TV show genres: {e}", level="ERROR")
         return None
 
-def get_episode_name(show_id, season_number, episode_number):
+def get_episode_name(show_id, season_number, episode_number, max_length=60):
     """
     Fetch the episode name from TMDb API for the given show, season, and episode number.
     For anime, use AniDB-style mapping for absolute episode numbers across seasons.
@@ -165,7 +165,13 @@ def get_episode_name(show_id, season_number, episode_number):
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
-        return f"S{season_number:02d}E{episode_number:02d} - {episode_name}", season_number, episode_number
+
+        # Trim long episode names
+        if len(episode_name) > max_length:
+            episode_name = episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+        formatted_name = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
+        return formatted_name, season_number, episode_number
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
