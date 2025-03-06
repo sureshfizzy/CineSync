@@ -737,6 +737,25 @@ def search_database(conn, pattern):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
+def search_database_silent(conn, pattern):
+    """Silent version of search_database that never logs results."""
+    try:
+        cursor = conn.cursor()
+        search_pattern = f"%{pattern}%"
+        cursor.execute("""
+            SELECT file_path, destination_path, tmdb_id, season_number
+            FROM processed_files
+            WHERE file_path LIKE ?
+            OR destination_path LIKE ?
+            OR tmdb_id LIKE ?
+        """, (search_pattern, search_pattern, search_pattern))
+        return cursor.fetchall()
+    except (sqlite3.Error, DatabaseError):
+        return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
 def optimize_database(conn):
     """Optimize database indexes and analyze tables."""
     try:
