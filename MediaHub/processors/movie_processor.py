@@ -142,7 +142,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
             if is_cinesync_layout_enabled():
-                if custom_movie_layout or custom_4kmovie_layout():
+                if custom_movie_layout() or custom_4kmovie_layout():
                     if is_movie_resolution_structure_enabled():
                         if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
