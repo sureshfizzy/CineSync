@@ -100,7 +100,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
-        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
         year = result[3] if result[3] is not None else year
         if isinstance(result, tuple) and len(result) == 5:
             tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
@@ -129,6 +129,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Resolution folder determination logic
     resolution_folder = get_movie_resolution_folder(file, resolution)
 
+    # Check if file is 4K/2160p for custom layout selection
+    is_4k = '2160' in file or '4k' in file.lower() or 'uhd' in file.lower()
+
     # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():
         if collection_info and is_movie_collection_enabled():
@@ -139,7 +142,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
             if is_cinesync_layout_enabled():
-                if custom_movie_layout():
+                if custom_movie_layout() or custom_4kmovie_layout():
                     if is_movie_resolution_structure_enabled():
                         if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
@@ -150,6 +153,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                         if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, movie_folder)
+                        elif is_4k:
+                            dest_path = os.path.join(dest_dir, custom_4kmovie_layout(), movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
                 else:
@@ -161,6 +166,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     else:
                         if is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
+                        elif is_4k:
+                            dest_path = os.path.join(dest_dir, 'CineSync', '4KMovies', movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
             else:

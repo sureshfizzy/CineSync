@@ -19,11 +19,13 @@ def fetch_json(url):
 
 def extract_year(query):
     match = re.search(r'\((\d{4})\)$', query.strip())
-    if match:
+    if match and int(match.group(1)) >= 1900:
         return int(match.group(1))
+
     match = re.search(r'(\d{4})$', query.strip())
-    if match:
+    if match and int(match.group(1)) >= 1900:
         return int(match.group(1))
+
     return None
 
 def extract_resolution(filename):
@@ -54,13 +56,13 @@ def extract_folder_year(folder_name):
     match = re.search(r'\((\d{4})\)', folder_name)
     if match:
         year = match.group(1)
-        if year not in resolutions:
+        if year not in resolutions and int(year) >= 1900:
             return int(year)
 
     match = re.search(r'\.(\d{4})\.', folder_name)
     if match:
         year = match.group(1)
-        if year not in resolutions:
+        if year not in resolutions and int(year) >= 1900:
             return int(year)
 
     return None
@@ -76,10 +78,8 @@ def extract_movie_name_and_year(filename):
     ]
 
     resolution_match = re.search(r'(2160p|1080p|720p|480p|2160|1080|720|480)', filename, re.IGNORECASE)
-    if resolution_match:
-        resolution = resolution_match.group(0)
+    resolution = resolution_match.group(0) if resolution_match else None
 
-    # Attempt to match each pattern
     for pattern in patterns:
         match = re.search(pattern, filename)
         if match:
@@ -87,10 +87,15 @@ def extract_movie_name_and_year(filename):
             name = re.sub(r'[\[\]]', '', name).strip()
             year = match.group(2)
 
-            if resolution_match and year == resolution_match.group(0).split('p')[0]:
+            if resolution and year == resolution.split('p')[0]:
                 year = None
 
-            return name, year
+            # Ensure the extracted year is 1900 or later
+            if year and int(year) >= 1900:
+                return name, year
+            else:
+                return name, None
+
     return None, None
 
 def extract_resolution_from_filename(filename):

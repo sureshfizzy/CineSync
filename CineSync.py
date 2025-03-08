@@ -18,8 +18,8 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.processors.db_utils import get_database_stats, vacuum_database, verify_database_integrity, export_database, import_database, search_database, optimize_database, reset_database
 
 # Script Metadata
-SCRIPT_VERSION = "2.2"
-SCRIPT_DATE = "2025-01-13"
+SCRIPT_VERSION = "2.3"
+SCRIPT_DATE = "2025-02-22"
 
 # Define variables
 SCRIPTS_FOLDER = "MediaHub"

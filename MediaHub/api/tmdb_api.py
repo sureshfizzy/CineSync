@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import requests
 import urllib.parse
@@ -363,10 +364,16 @@ def perform_search(params, url):
         return []
 
 @lru_cache(maxsize=None)
-def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None):
+def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None):
     global api_key
     if not check_api_key():
         return query
+
+    # Helper function to format movie name for the OS
+    def format_movie_name(name):
+        if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
+            return name.replace(':', ' -')
+        return name
 
     # Handle direct ID searches first
     if tmdb_id or imdb_id:
@@ -404,7 +411,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 movie_data = response.json()
 
             # Process movie data
-            movie_name = movie_data['title']
+            original_movie_name = movie_data['title']
+            movie_name = format_movie_name(original_movie_name)
             release_date = movie_data.get('release_date', '')
             movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
 
@@ -499,6 +507,18 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
+        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
+        dir_based_query = os.path.basename(root)
+        title = advanced_clean_query(dir_based_query, max_words=4)
+        results = fetch_results(title, year)
+
+        # If no results found with max_words=4, try again with max_words=2
+        if not results:
+            log_message(f"No results found. Retrying with more aggressive cleaning", "DEBUG", "stdout")
+            title = advanced_clean_query(dir_based_query, max_words=2)
+            results = fetch_results(title, year)
+
+    if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")
         _api_cache[cache_key] = f"{query}"
         return f"{query}"
@@ -538,7 +558,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 break
 
     if chosen_movie:
-        movie_name = chosen_movie.get('title')
+        original_movie_name = chosen_movie.get('title')
+        movie_name = format_movie_name(original_movie_name)
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
