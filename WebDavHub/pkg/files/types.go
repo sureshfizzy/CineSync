@@ -2,6 +2,7 @@ package files
 
 import (
 	"html/template"
+        "path/filepath"
 )
 
 // FileInfo contains information about a file/directory for rendering in template
@@ -35,5 +36,5 @@ type TemplateData struct {
 
 // PrepareTemplates loads and parses the required templates
 func PrepareTemplates(templatesDir string) (*template.Template, error) {
-	return template.ParseFiles(templatesDir + "/directory_listing.html")
+    return template.ParseFiles(filepath.Join(templatesDir, "directory_listing.html"))
 }
