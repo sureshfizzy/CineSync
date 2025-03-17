@@ -6,6 +6,8 @@ import platform
 import time
 import psutil
 import signal
+import socket
+import psutil
 
 # Append the parent directory to the system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -163,11 +165,45 @@ def parse_season_episode(season_episode):
     return None, None
 
 # CineSync WebDAV
+def is_port_in_use(port):
+    """Check if a port is already in use using multiple methods."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.bind(('0.0.0.0', port))
+            return False
+    except socket.error:
+        pass
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            result = s.connect_ex(('127.0.0.1', port))
+            if result == 0:
+                return True
+    except:
+        pass
+
+    try:
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.laddr.port == port and conn.status == 'LISTEN':
+                return True
+    except:
+        pass
+
+    return False
+
 def start_webdav_server():
     """Start WebDavHub server if enabled."""
     if cinesync_webdav():
         webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
         webdav_script = os.path.join(webdav_dir, 'cinesync')
+        webdav_port = int(os.getenv('WEBDAV_PORT'))
+
+        # Check if the WebDAV server is already running on the specified port
+        if is_port_in_use(webdav_port):
+            log_message(f"WebDavHub server is already running on port {webdav_port}", level="INFO")
+            return
 
         if os.path.exists(webdav_script):
             log_message("Starting WebDavHub server...", level="INFO")
@@ -305,11 +341,9 @@ def main(dest_dir):
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
 
-    # Start WebDavHub if enabled
-    start_webdav_server()
-
     # Start RealTime-Monitoring in main thread if not disabled
     if not args.disable_monitor:
+        start_webdav_server()
         log_message("Starting RealTime-Monitoring...", level="INFO")
         monitor_thread = threading.Thread(target=start_polling_monitor)
         monitor_thread.daemon = False
