@@ -217,10 +217,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                 else:
                     # Handle single file removal
-                    log_message(f"Processing single file removal: {removed_path}", level="INFO")
+                    log_message(f"Processing single file removal: {removed_path}", level="DEBUG")
 
                     # Query only file_index
-                    log_message("Querying file_index for the removed file", level="DEBUG")
                     cursor2.execute("SELECT path, target_path FROM file_index WHERE target_path = ?", (removed_path,))
                     file_index_results = cursor2.fetchall()
 
@@ -230,21 +229,13 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                         file_index_pattern_results = cursor2.fetchall()
                         file_index_results = file_index_pattern_results
 
-                    log_message(f"file_index query results: {len(file_index_results)}", level="DEBUG")
-
-                    # Process only file_index results
+                    # Process database-tracked symlinks
                     all_paths = set()
                     for symlink_path, target_path in file_index_results:
                         if symlink_path:
-                            # Verify if this is a valid symlink entry
                             if search_database_silent and callable(search_database_silent):
                                 is_valid = search_database_silent(symlink_path)
                                 if not is_valid:
-                                    # If not a valid symlink but has formatted name (contains " - "), keep it
-                                    if " - " in os.path.basename(symlink_path):
-                                        log_message(f"Keeping formatted symlink path: {symlink_path}", level="DEBUG")
-                                    else:
-                                        log_message(f"Skipping non-symlink entry: {symlink_path}", level="DEBUG")
                                         continue
 
                             cursor1.execute("""
@@ -259,11 +250,126 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                             all_paths.add((target_path, symlink_path, tmdb_id, season_number))
                             log_message(f"Found in file_index: target={target_path}, symlink={symlink_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="DEBUG")
 
-                    log_message(f"Total symlink paths to process: {len(all_paths)}", level="INFO")
-
+                    # If no symlinks found in database, check if destination file exists and should be removed
                     if not all_paths:
-                        log_message(f"No symlinks found for file: {removed_path}", level="WARNING")
 
+                        cursor1.execute("SELECT destination_path FROM processed_files WHERE file_path = ?", (removed_path,))
+                        processed_file_result = cursor1.fetchone()
+
+                        if processed_file_result and processed_file_result[0]:
+                            possible_dest_path = processed_file_result[0]
+                            log_message(f"Found destination in processed_files: {possible_dest_path}", level="DEBUG")
+                        else:
+                            # If not in processed_files, use search_database_silent if available
+                            if search_database_silent and callable(search_database_silent):
+                                try:
+                                    # Call search_database_silent with the correct parameters
+                                    search_results = search_database_silent(removed_path)
+
+                                    possible_dest_paths = []
+                                    for result in search_results:
+                                        if len(result) >= 2 and result[1]:
+                                            possible_dest_paths.append(result[1])
+
+                                    if possible_dest_paths:
+                                        for possible_dest_path in possible_dest_paths:
+                                            if os.path.lexists(possible_dest_path):
+                                                break
+                                        else:
+                                            # If no valid path found, use the first one
+                                            possible_dest_path = possible_dest_paths[0]
+                                            log_message(f"Using first destination path: {possible_dest_path}", level="DEBUG")
+                                    else:
+                                        log_message(f"No destination paths found in search results", level="DEBUG")
+                                        possible_dest_path = None
+                                except Exception as e:
+                                    log_message(f"Error using Database search: {e}", level="ERROR")
+                                    possible_dest_path = None
+                            else:
+                                log_message("Searching Database function not available", level="WARNING")
+                                possible_dest_path = None
+
+                        # If we found a possible destination, try to delete it if it's a broken symlink
+                        if possible_dest_path:
+                            try:
+                                if os.path.lexists(possible_dest_path):
+                                    if os.path.islink(possible_dest_path):
+                                        # It's a symlink - check if it's broken
+                                        target = os.readlink(possible_dest_path)
+                                        if not os.path.exists(target) or target == removed_path:
+                                            os.remove(possible_dest_path)
+                                            symlinks_deleted = True
+                                            log_message(f"Deleted broken symlink: {possible_dest_path}", level="INFO")
+                                            cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
+                                            cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
+                                            _cleanup_empty_dirs(os.path.dirname(possible_dest_path))
+                                        else:
+                                            log_message(f"Symlink exists but target still exists: {target}", level="INFO")
+                                    else:
+                                        log_message(f"Destination path exists but is not a symlink: {possible_dest_path}", level="INFO")
+                                else:
+                                    log_message(f"Destination file does not exist: {possible_dest_path}", level="INFO")
+                            except Exception as e:
+                                log_message(f"Error checking destination path: {e}", level="ERROR")
+                        else:
+                            # If no destination found from database queries, try to find it in the filesystem
+                            log_message(f"No destination path found in databases, searching filesystem", level="DEBUG")
+
+                            # Extract the base name of the file to search for in the destination directory
+                            file_basename = os.path.basename(removed_path)
+                            log_message(f"Searching for symlinks with basename: {file_basename}", level="DEBUG")
+
+                            # Search for symlinks in the destination directory
+                            symlinks_found = False
+                            for root, _, files in os.walk(dest_dir):
+                                for file in files:
+                                    if file_basename in file or file_basename.replace(" ", ".") in file:
+                                        file_path = os.path.join(root, file)
+                                        log_message(f"Found potential match: {file_path}", level="DEBUG")
+
+                                        if os.path.islink(file_path):
+                                            try:
+                                                target = os.readlink(file_path)
+                                                if target == removed_path or (not os.path.exists(target) and removed_path in target):
+                                                    log_message(f"Found broken symlink pointing to removed file: {file_path}", level="INFO")
+                                                    os.remove(file_path)
+                                                    symlinks_deleted = True
+                                                    symlinks_found = True
+                                                    log_message(f"Deleted broken symlink: {file_path}", level="INFO")
+                                                    cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
+                                                    cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))
+                                                    _cleanup_empty_dirs(os.path.dirname(file_path))
+                                            except OSError as e:
+                                                log_message(f"Error reading symlink {file_path}: {e}", level="ERROR")
+
+                            if not symlinks_found:
+                                log_message(f"No symlinks found for {file_basename}", level="WARNING")
+
+                                # Search for the destination path in the processed_files table of DB_FILE
+                                cursor1.execute("""
+                                    SELECT destination_path, tmdb_id, season_number
+                                    FROM processed_files
+                                    WHERE file_path LIKE ?
+                                """, (f"%{file_basename}",))
+                                db_results = cursor1.fetchall()
+
+                                if db_results:
+                                    log_message(f"Found {len(db_results)} possible matches in processed_files", level="INFO")
+                                    for dest_path, tmdb_id, season_number in db_results:
+                                        log_message(f"Checking possible destination: {dest_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
+                                        if os.path.lexists(dest_path):
+                                            if os.path.islink(dest_path):
+                                                target = os.readlink(dest_path)
+                                                if not os.path.exists(target):
+                                                    log_message(f"Found broken symlink: {dest_path}", level="INFO")
+                                                    os.remove(dest_path)
+                                                    symlinks_deleted = True
+                                                    log_message(f"Deleted broken symlink: {dest_path}", level="INFO")
+                                                    cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
+                                                    cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
+                                                    _cleanup_empty_dirs(os.path.dirname(dest_path))
+
+                    # Process database-tracked symlinks
                     for item in all_paths:
                         source_path, symlink_path = item[0], item[1]
                         tmdb_id = item[2] if len(item) > 2 else None
@@ -272,8 +378,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                         if symlink_path is None or not symlink_path:
                             log_message("Skipping None/empty symlink path", level="WARNING")
                             continue
-
-                        log_message(f"Processing symlink: {symlink_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
 
                         # Check if the symlink exists by using proper shell-compatible path
                         safe_path = symlink_path

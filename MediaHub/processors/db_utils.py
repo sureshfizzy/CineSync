@@ -254,60 +254,6 @@ def check_file_in_db(conn, file_path):
         conn.rollback()
         return False
 
-@throttle
-@retry_on_db_lock
-@with_connection(main_pool)
-def delete_broken_symlinks(conn, file_path):
-    file_path = normalize_file_path(file_path)
-
-    try:
-        cursor = conn.cursor()
-
-        # First, log the record we're trying to delete for debugging
-        cursor.execute("SELECT * FROM processed_files WHERE file_path = ?", (file_path,))
-        record = cursor.fetchone()
-        if record:
-            log_message(f"Found record to delete: {record}", level="DEBUG")
-        else:
-            # Try to find if the path exists as part of a longer path
-            cursor.execute("SELECT * FROM processed_files WHERE file_path LIKE ?", (f"%{file_path}%",))
-            partial_matches = cursor.fetchall()
-            if partial_matches:
-                log_message(f"Found partial matches: {partial_matches}", level="DEBUG")
-
-            # Check if there might be normalization issues
-            cursor.execute("SELECT file_path FROM processed_files")
-            all_paths = cursor.fetchall()
-            log_message(f"First 5 paths in database for comparison: {all_paths[:5]}", level="DEBUG")
-
-        # Proceed with deletion
-        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
-        affected_rows = cursor.rowcount
-        conn.commit()
-
-        log_message(f"DELETE FROM processed_files WHERE file_path = {file_path}", level="DEBUG")
-        log_message(f"File path removed from the database: {file_path}, affected rows: {affected_rows}", level="INFO")
-
-        # If no rows were affected, try with the destination_path
-        if affected_rows == 0:
-            log_message(f"No rows deleted using file_path, trying with destination_path", level="DEBUG")
-            cursor.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
-            affected_rows = cursor.rowcount
-            conn.commit()
-            log_message(f"Deleted using destination_path: {affected_rows} rows affected", level="DEBUG")
-
-            # If we still have no affected rows, check if it's in the path portion of destination_path
-            if affected_rows == 0:
-                log_message(f"Checking if file_path is part of destination_path", level="DEBUG")
-                cursor.execute("DELETE FROM processed_files WHERE destination_path LIKE ?", (f"%{file_path}%",))
-                affected_rows = cursor.rowcount
-                conn.commit()
-                log_message(f"Deleted using partial destination_path match: {affected_rows} rows affected", level="DEBUG")
-
-    except (sqlite3.Error, DatabaseError) as e:
-        log_message(f"Error removing file path from database: {e}", level="ERROR")
-        conn.rollback()
-
 def normalize_file_path(file_path):
     return os.path.normpath(file_path)
 
@@ -340,40 +286,43 @@ def process_file_batch(batch, file_set, destination_folder):
 def display_missing_files(conn, destination_folder):
     start_time = time.time()
     log_message("Starting display_missing_files function.", level="INFO")
-
     destination_folder = os.path.normpath(destination_folder)
-
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT file_path, destination_path FROM processed_files")
-
         missing_files = []
+
         for source_path, dest_path in cursor.fetchall():
             if not os.path.exists(dest_path):
                 # Check if the file has been renamed
                 dir_path = os.path.dirname(dest_path)
+                renamed = False
+
                 if os.path.exists(dir_path):
                     for filename in os.listdir(dir_path):
                         potential_new_path = os.path.join(dir_path, filename)
-                        if os.path.islink(potential_new_path) and os.readlink(potential_new_path) == source_path:
-                            # Found the renamed file
-                            log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
-                            update_renamed_file(dest_path, potential_new_path)
-                            break
-                    else:
-                        missing_files.append((source_path, dest_path))
-                        log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
-                else:
+
+                        # Only process if it's a different path than the original
+                        if potential_new_path != dest_path and os.path.islink(potential_new_path):
+                            try:
+                                # Check if the symlink points to the same source
+                                link_target = os.readlink(potential_new_path)
+                                if link_target == source_path:
+                                    # Found the renamed file
+                                    log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
+                                    update_renamed_file(dest_path, potential_new_path)
+                                    renamed = True
+                                    break
+                            except (OSError, IOError) as e:
+                                log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+                                continue
+
+                if not renamed:
                     missing_files.append((source_path, dest_path))
                     log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
 
-        # Delete missing files from the database
-        cursor.executemany("DELETE FROM processed_files WHERE file_path = ?", [(f[0],) for f in missing_files])
-        conn.commit()
-
         total_duration = time.time() - start_time
         log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
-
         return missing_files
 
     except (sqlite3.Error, DatabaseError) as e:
