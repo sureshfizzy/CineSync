@@ -18,9 +18,9 @@
         "USA", "United States", "Canada", "CA", "Mexico", "MX", "United Kingdom", "UK", "GB", "Australia", "AU",
         "India", "IN", "Germany", "DE", "France", "FR", "Italy", "IT", "Spain", "ES", "Russia", "RU", "China", "CN",
         "Japan", "JP", "South Korea", "KR", "Brazil", "BR", "Argentina", "AR", "South Africa", "ZA", "Egypt", "EG",
-        "Turkey", "TR", "Netherlands", "NL", "Belgium", "BE", "Sweden", "SE", "Norway", "NO", "Denmark", "DK", "Finland",
-        "FI", "Poland", "PL", "Greece", "GR", "Portugal", "PT", "Switzerland", "CH", "New Zealand",
-        "NZ", "Ireland", "IE", "Israel", "IL", "Saudi Arabia", "SA", "United Arab Emirates", "AE", "Singapore", "SG",
+        "Turkey", "TR", "Netherlands", "NL", "Belgium", "BE", "Denmark", "DK", "Finland", "FI", "Poland", "PL",
+        "Greece", "GR", "Portugal", "PT", "Switzerland", "CH", "New Zealand", "NZ", "Ireland", "IE", "Israel", "IL",
+        "Saudi Arabia", "SA", "United Arab Emirates", "AE", "Singapore", "SG",
         "Malaysia", "MY", "Thailand", "TH", "Vietnam", "VN", "Indonesia", "ID", "Philippines", "PH", "Pakistan", "PK",
         "Bangladesh", "BD", "Nepal", "NP", "Sri Lanka", "LK", "Chile", "CL", "Colombia", "CO", "Peru", "PE", "Venezuela",
         "VE", "Paraguay", "PY", "Bolivia", "BO", "Uruguay", "UY", "Taiwan", "TW", "Hong Kong", "HK", "Macau", "MO",
@@ -31,7 +31,7 @@
         "BY", "Lithuania", "LT", "Latvia", "LV", "Estonia", "EE", "Czech Republic", "CZ", "Slovakia", "SK", "Hungary",
         "HU", "Slovenia", "SI", "Croatia", "HR", "Serbia", "RS", "Bosnia and Herzegovina", "BA", "Montenegro", "ME",
         "Kosovo", "XK", "North Macedonia", "MK", "Albania", "AL", "Moldova", "MD", "Cyprus", "CY", "Luxembourg", "LU",
-        "Malta", "MT", "San Marino", "SM", "Andorra", "AD", "Liechtenstein", "LI", "Vatican City", "VA"
+        "Malta", "MT", "San Marino", "SM",
     ],
     "skip_patterns": [
         "^FC2-PPV-\\d+",
