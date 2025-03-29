@@ -108,6 +108,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 elif re.match(r'[0-9]+x[0-9]+', episode_identifier, re.IGNORECASE):
                     show_name = episode_match.group(1).replace('.', ' ').strip()
                     season_number = re.search(r'([0-9]+)x', episode_identifier).group(1)
+                    episode_number = re.search(r'x([0-9]+)', episode_identifier).group(1)
                     episode_identifier = f"S{season_number}E{episode_identifier.split('x')[1]}"
                     create_season_folder = True
                 elif re.match(r'S\d{2}[0-9]+', episode_identifier, re.IGNORECASE):
@@ -146,10 +147,24 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             if season_match:
                 season_number = season_match.group(1)
             else:
-                season_match = re.search(r'([0-9]+)', episode_identifier) if episode_identifier else None
-                if not season_match:
-                    log_message(f"Unable to determine season number for: {file}", level="WARNING")
-                season_number = season_match.group(1)
+                if episode_identifier and not re.match(r'^E\d+', episode_identifier, re.IGNORECASE):
+                    season_match = re.search(r'([0-9]+)', episode_identifier)
+                    if season_match:
+                        season_number = season_match.group(1)
+                    else:
+                        log_message(f"Unable to determine season number for: {file}", level="WARNING")
+                        season_number = "01"
+                else:
+                    e_match = re.search(r'E(\d+)', file, re.IGNORECASE)
+                    if e_match:
+                        episode_number = e_match.group(1).zfill(2)
+                        season_number = "01"
+                        episode_identifier = f"S{season_number}E{episode_number}"
+                        log_message(f"Detected 'E{episode_number}' pattern with no season specified. Defaulting to Season 01.", level="DEBUG")
+                    else:
+                        log_message(f"Unable to determine season number for: {file}", level="WARNING")
+                        season_number = "01"
+
         else:
             # For non-episode files, check if we can extract season information
             clean_folder_name = os.path.basename(root)
