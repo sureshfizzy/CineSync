@@ -31,7 +31,7 @@
         "BY", "Lithuania", "LT", "Latvia", "LV", "Estonia", "EE", "Czech Republic", "CZ", "Slovakia", "SK", "Hungary",
         "HU", "Slovenia", "SI", "Croatia", "HR", "Serbia", "RS", "Bosnia and Herzegovina", "BA", "Montenegro", "ME",
         "Kosovo", "XK", "North Macedonia", "MK", "Albania", "AL", "Moldova", "MD", "Cyprus", "CY", "Luxembourg", "LU",
-        "Malta", "MT", "San Marino", "SM",
+        "Malta", "MT", "San Marino", "SM"
     ],
     "skip_patterns": [
         "^FC2-PPV-\\d+",
