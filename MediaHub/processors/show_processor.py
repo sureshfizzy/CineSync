@@ -105,11 +105,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 elif re.match(r'S\d{2}[eE]\d{2}', episode_identifier, re.IGNORECASE):
                     show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', clean_folder_name).replace('-', ' ').replace('.', ' ').strip()
                     create_season_folder = True
-                elif re.match(r'[0-9]+x[0-9]+', episode_identifier, re.IGNORECASE):
+                elif re.match(r'[0-9]+[xX][0-9]+', episode_identifier, re.IGNORECASE):
                     show_name = episode_match.group(1).replace('.', ' ').strip()
-                    season_number = re.search(r'([0-9]+)x', episode_identifier).group(1)
-                    episode_number = re.search(r'x([0-9]+)', episode_identifier).group(1)
-                    episode_identifier = f"S{season_number}E{episode_identifier.split('x')[1]}"
+                    season_number = re.search(r'([0-9]+)[xX]', episode_identifier).group(1)
+                    episode_number = re.search(r'[xX]([0-9]+)', episode_identifier).group(1)
+                    episode_identifier = f"S{season_number.zfill(2)}E{episode_number.zfill(2)}"
                     create_season_folder = True
                 elif re.match(r'S\d{2}[0-9]+', episode_identifier, re.IGNORECASE):
                     show_name = episode_match.group(1).replace('.', ' ').strip()
