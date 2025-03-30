@@ -95,6 +95,15 @@ def process_file(args, processed_files_log, force=False):
     is_anime_show = False
     episode_match = None
 
+
+    # Skip hash filenames unless they have valid media patterns
+    hash_pattern = re.compile(r'^[a-f0-9]{32}(\.[^.]+$|\[.+?\]\.)', re.IGNORECASE)
+    is_hash_name = hash_pattern.search(file) is not None
+
+    if is_hash_name and not tmdb_id and not imdb_id:
+        log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
+        return
+
     if force_show:
         is_show = True
         log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
