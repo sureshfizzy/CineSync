@@ -22,7 +22,7 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None):
     global api_key
     if not check_api_key():
         return query
@@ -241,7 +241,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     if auto_select:
         chosen_show = results[0]
-        result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+        result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
         if isinstance(query, tuple):
             query_str = query[0] if query else ""
         else:
@@ -264,7 +264,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             if choice.lower() in ['1', '2', '3']:
                 chosen_show = results[int(choice) - 1]
-                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
                 _api_cache[cache_key] = result
                 return result
             elif choice.strip():
@@ -277,7 +277,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                     continue
             else:
                 chosen_show = results[0]
-                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
                 if isinstance(query, tuple):
                     query_str = query[0] if query else ""
                 else:

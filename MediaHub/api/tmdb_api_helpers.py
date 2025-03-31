@@ -711,7 +711,7 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
     log_message("No valid episode selected, continuing without episode specification", level="INFO")
     return None
 
-def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=None, episode_number=None, episode_match=None, is_extra=None, file=None):
+def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=None, episode_number=None, episode_match=None, is_extra=None, file=None, force_extra=None):
     """
     Process a chosen TV show and extract relevant information.
     Args:
@@ -748,14 +748,13 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     new_season_number = None
     new_episode_number = None
 
-    # Log if this is an extra file
-    if is_extra:
+    if force_extra:
+        is_extra=False
+    elif is_extra:
         log_message(f"Processing extra content file: {file}", level="INFO")
-        log_message("Extra content detected - will be placed in Extras folder", level="INFO")
-        log_message("Note: Season/Episode numbers will be ignored for extra content", level="INFO")
 
-    # First, check if we already have season_number and episode_number
-    if season_number is not None:
+    # Check if we already have season_number and episode_number
+    if season_number is not None and not is_extra:
         try:
             new_season_number = int(season_number)
             log_message(f"Using identified season number: {new_season_number}", level="DEBUG")
@@ -786,7 +785,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
                 log_message(f"AniDB-style mapping failed, proceeding with season selection", level="WARNING")
 
     # If we don't have season_number but need to select it
-    if new_season_number is None and (not episode_match or (episode_match and not season_number)):
+    if new_season_number is None and not is_extra and (not episode_match or (episode_match and not season_number)):
         seasons = get_show_seasons(tmdb_id)
         if seasons:
             log_message(f"No season number identified, proceeding with season selection", level="INFO")
