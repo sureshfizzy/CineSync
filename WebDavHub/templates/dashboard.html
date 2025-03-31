@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+
+    <!-- Prevent flash of unstyled content -->
+    <script>
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+    </script>
+
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1>CineSync Dashboard</h1>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+            
+            <div class="breadcrumb">
+                <a href="/"><i class="fas fa-home"></i> Home</a>
+                <span class="breadcrumb-separator">/</span>
+                <span>Dashboard</span>
+            </div>
+        </header>
+        
+        <div class="dashboard-welcome">
+            <h2>Welcome to CineSync</h2>
+            <p>Your personal media organization system. Browse your collections below.</p>
+        </div>
+        
+        <div class="media-grid">
+            {{range .MediaFolders}}
+            <a href="{{.Path}}" class="media-card">
+                <div class="media-card-icon">
+                    <i class="{{.Icon}}"></i>
+                </div>
+                <div class="media-card-content">
+                    <h3>{{.Name}}</h3>
+                    <p class="media-card-description">{{.Description}}</p>
+                    <div class="media-card-stats">
+                        <div class="stat">
+                            <i class="fas fa-file"></i>
+                            <span>{{.ItemCount}} items</span>
+                        </div>
+                        <div class="stat">
+                            <i class="fas fa-hdd"></i>
+                            <span>{{.TotalSize}}</span>
+                        </div>
+                        <div class="stat">
+                            <i class="fas fa-clock"></i>
+                            <span>Updated: {{.LastUpdated}}</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+            {{else}}
+            <div class="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <p>No media folders found</p>
+                <p class="empty-state-hint">Add folders to your media directory to get started</p>
+            </div>
+            {{end}}
+        </div>
+        
+        <footer>
+            <p>CineSync {{.Version}} - {{.Year}}</p>
+        </footer>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlElement = document.documentElement;
+            const moonIcon = '<i class="fas fa-moon"></i>';
+            const sunIcon = '<i class="fas fa-sun"></i>';
+            
+            // Check for saved theme preference or use device preference
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+                htmlElement.setAttribute('data-theme', 'dark');
+                themeToggle.innerHTML = sunIcon;
+            } else {
+                htmlElement.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = moonIcon;
+            }
+            
+            // Toggle theme on button click
+            themeToggle.addEventListener('click', function() {
+                if (htmlElement.getAttribute('data-theme') === 'dark') {
+                    htmlElement.setAttribute('data-theme', 'light');
+                    localStorage.setItem('theme', 'light');
+                    themeToggle.innerHTML = moonIcon;
+                } else {
+                    htmlElement.setAttribute('data-theme', 'dark');
+                    localStorage.setItem('theme', 'dark');
+                    themeToggle.innerHTML = sunIcon;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

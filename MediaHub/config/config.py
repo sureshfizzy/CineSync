@@ -76,9 +76,6 @@ def is_movie_collection_enabled():
 def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
 
-def get_extras_max_size_mb():
-    return int(os.getenv('EXTRAS_MAX_SIZE_MB', '100'))
-
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
 
@@ -127,6 +124,9 @@ def get_rename_tags():
 
 def plex_update():
     return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
+
+def cinesync_webdav():
+    return os.getenv('CINESYNC_WEBDAV', 'false').lower() == 'true'
 
 def plex_token():
     token = os.getenv('PLEX_TOKEN', None)

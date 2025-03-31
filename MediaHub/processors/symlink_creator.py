@@ -13,7 +13,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
@@ -87,13 +87,22 @@ def process_file(args, processed_files_log, force=False):
 
     if existing_symlink and not force:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
-        save_processed_file(src_file, existing_symlink)
+        save_processed_file(src_file, existing_symlink, tmdb_id)
         return
 
     # Show detection logic
     is_show = False
     is_anime_show = False
     episode_match = None
+
+
+    # Skip hash filenames unless they have valid media patterns
+    hash_pattern = re.compile(r'^[a-f0-9]{32}(\.[^.]+$|\[.+?\]\.)', re.IGNORECASE)
+    is_hash_name = hash_pattern.search(file) is not None
+
+    if is_hash_name and not tmdb_id and not imdb_id:
+        log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
+        return
 
     if force_show:
         is_show = True
@@ -121,14 +130,9 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show or is_anime_show:
-        dest_file = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
+        dest_file, tmdb_id, season_number = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
     else:
-        dest_file = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
-
-    # Check if the file should be considered an extra based on size
-    if skip_extras_folder and is_file_extra(file, src_file) and not force_extra:
-        log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
-        return
+        dest_file, tmdb_id = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -141,7 +145,7 @@ def process_file(args, processed_files_log, force=False):
         existing_src = os.readlink(dest_file)
         if existing_src == src_file:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-            save_processed_file(src_file, dest_file)
+            save_processed_file(src_file, dest_file, tmdb_id)
             return
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
@@ -156,7 +160,7 @@ def process_file(args, processed_files_log, force=False):
         os.symlink(src_file, dest_file)
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
-        save_processed_file(src_file, dest_file)
+        save_processed_file(src_file, dest_file, tmdb_id, season_number)
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)
@@ -175,7 +179,7 @@ def process_file(args, processed_files_log, force=False):
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False):
     global log_imported_db
-    print(force_extra)
+
     os.makedirs(dest_dir, exist_ok=True)
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
     rename_enabled = is_rename_enabled()

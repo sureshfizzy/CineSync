@@ -10,10 +10,11 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
+from MediaHub.processors.symlink_utils import *
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -40,27 +41,36 @@ def run_symlink_cleanup(dest_dir):
 
                     # Check if the symlink target exists
                     if not os.path.exists(target):
-                        log_message(f"Deleting broken symlink: {file_path}", level="INFO")
-                        os.remove(file_path)
+                        log_message(f"Broken symlink found: {file_path} -> {target}", level="INFO")
                         symlinks_deleted = True
 
-                        # Remove from database if present
+                        # First check if the file is in the database
                         if check_file_in_db(file_path):
-                            log_message(f"Removing {file_path} from database.", level="INFO")
-                            with sqlite3.connect(DB_FILE) as conn:
-                                cursor = conn.cursor()
-                                cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
-                                conn.commit()
+                            # Try to get the actual destination using search_database if available
+                            actual_target = None
+                            try:
+                                if 'search_database_quiet' in globals() and callable(globals()['search_database_quiet']):
+                                    search_results = search_database(file_path)
+                                    if search_results and len(search_results) > 0:
+                                        actual_target = search_results[0][0] if search_results[0][0] else target
+                                else:
+                                    log_message("Using original target path", level="DEBUG")
+                            except Exception as search_error:
+                                log_message(f"Error searching database: {str(search_error)}", level="ERROR")
 
-                        # Recursively delete empty parent directories
-                        dir_path = os.path.dirname(file_path)
-                        while os.path.isdir(dir_path) and not os.listdir(dir_path):
-                            log_message(f"Deleting empty folder: {dir_path}", level="INFO")
-                            os.rmdir(dir_path)
-                            dir_path = os.path.dirname(dir_path)
+                            # Use actual target if found, otherwise use the original target
+                            removed_path = actual_target if actual_target else target
+                            delete_broken_symlinks(dest_dir, removed_path)
+                        else:
+                            log_message(f"Symlink not found in database, deleting directly: {file_path}", level="DEBUG")
+                            try:
+                                os.remove(file_path)
+                                log_message(f"Manually deleted broken symlink: {file_path}", level="INFO")
+                            except Exception as rm_error:
+                                log_message(f"Error removing symlink: {str(rm_error)}", level="ERROR")
                 except Exception as e:
                     log_message(f"Error processing symlink {file_path}: {str(e)}", level="ERROR")
-                    traceback.print_exc()
+                    print(f"Exception details: {traceback.format_exc()}")
 
     if symlinks_deleted:
         log_message("Broken symlinks deleted successfully.", level="INFO")

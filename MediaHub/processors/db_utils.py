@@ -50,7 +50,7 @@ class ConnectionPool:
                 os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
                 open(self.db_file, 'a').close()  # Create an empty file
                 os.chmod(self.db_file, 0o666)  # Ensure proper permissions
-        
+
             if self.connections:
                 return self.connections.pop()
             else:
@@ -128,7 +128,9 @@ def initialize_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
                 file_path TEXT PRIMARY KEY,
-                destination_path TEXT
+                destination_path TEXT,
+                tmdb_id TEXT,
+                season_number TEXT
             )
         """)
 
@@ -141,9 +143,23 @@ def initialize_db():
             cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
             log_message("Added destination_path column to processed_files table.", level="INFO")
 
+        # Check if the tmdb_id column exists
+        if "tmdb_id" not in columns:
+            # Add the tmdb_id column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
+            log_message("Added tmdb_id column to processed_files table.", level="INFO")
+
+        # Check if the season_number column exists
+        if "season_number" not in columns:
+            # Add the tmdb_id column
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN season_number TEXT")
+            log_message("Added season column to processed_files table.", level="INFO")
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -204,15 +220,15 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path):
+def save_processed_file(conn, source_path, dest_path, tmdb_id=None, season_number=None):
     source_path = normalize_file_path(source_path)
     dest_path = normalize_file_path(dest_path)
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path)
-            VALUES (?, ?)
-        """, (source_path, dest_path))
+            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number)
+            VALUES (?, ?, ?, ?)
+        """, (source_path, dest_path, tmdb_id, season_number))
         conn.commit()
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
@@ -237,22 +253,6 @@ def check_file_in_db(conn, file_path):
         log_message(f"Error in check_file_in_db: {e}", level="ERROR")
         conn.rollback()
         return False
-
-@throttle
-@retry_on_db_lock
-@with_connection(main_pool)
-def delete_broken_symlinks(conn, file_path):
-    file_path = normalize_file_path(file_path)
-    log_message(f"Attempting to remove file path from the database: {file_path}", level="DEBUG")
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
-        conn.commit()
-        log_message(f"DELETE FROM processed_files WHERE file_path = {file_path}", level="DEBUG")
-        log_message(f"File path removed from the database: {file_path}", level="INFO")
-    except (sqlite3.Error, DatabaseError) as e:
-        log_message(f"Error removing file path from database: {e}", level="ERROR")
-        conn.rollback()
 
 def normalize_file_path(file_path):
     return os.path.normpath(file_path)
@@ -286,40 +286,43 @@ def process_file_batch(batch, file_set, destination_folder):
 def display_missing_files(conn, destination_folder):
     start_time = time.time()
     log_message("Starting display_missing_files function.", level="INFO")
-
     destination_folder = os.path.normpath(destination_folder)
-
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT file_path, destination_path FROM processed_files")
-
         missing_files = []
+
         for source_path, dest_path in cursor.fetchall():
             if not os.path.exists(dest_path):
                 # Check if the file has been renamed
                 dir_path = os.path.dirname(dest_path)
+                renamed = False
+
                 if os.path.exists(dir_path):
                     for filename in os.listdir(dir_path):
                         potential_new_path = os.path.join(dir_path, filename)
-                        if os.path.islink(potential_new_path) and os.readlink(potential_new_path) == source_path:
-                            # Found the renamed file
-                            log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
-                            update_renamed_file(dest_path, potential_new_path)
-                            break
-                    else:
-                        missing_files.append((source_path, dest_path))
-                        log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
-                else:
+
+                        # Only process if it's a different path than the original
+                        if potential_new_path != dest_path and os.path.islink(potential_new_path):
+                            try:
+                                # Check if the symlink points to the same source
+                                link_target = os.readlink(potential_new_path)
+                                if link_target == source_path:
+                                    # Found the renamed file
+                                    log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
+                                    update_renamed_file(dest_path, potential_new_path)
+                                    renamed = True
+                                    break
+                            except (OSError, IOError) as e:
+                                log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+                                continue
+
+                if not renamed:
                     missing_files.append((source_path, dest_path))
                     log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
 
-        # Delete missing files from the database
-        cursor.executemany("DELETE FROM processed_files WHERE file_path = ?", [(f[0],) for f in missing_files])
-        conn.commit()
-
         total_duration = time.time() - start_time
         log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
-
         return missing_files
 
     except (sqlite3.Error, DatabaseError) as e:
@@ -654,27 +657,49 @@ def search_database(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path
+            SELECT file_path, destination_path, tmdb_id, season_number
             FROM processed_files
-            WHERE file_path LIKE ? OR destination_path LIKE ?
-        """, (search_pattern, search_pattern))
-
+            WHERE file_path LIKE ?
+            OR destination_path LIKE ?
+            OR tmdb_id LIKE ?
+        """, (search_pattern, search_pattern, search_pattern))
         results = cursor.fetchall()
-
         if results:
             log_message("-" * 50, level="INFO")
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
-            for file_path, dest_path in results:
+            for row in results:
+                file_path, dest_path, tmdb_id, season_number = row
+                log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                if season_number is not None:
+                    log_message(f"Season Number: {season_number}", level="INFO")
                 log_message(f"Source: {file_path}", level="INFO")
                 log_message(f"Destination: {dest_path}", level="INFO")
                 log_message("-" * 50, level="INFO")
         else:
             log_message(f"No matches found for pattern '{pattern}'", level="INFO")
-
         return results
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error searching database: {e}", level="ERROR")
+        return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def search_database_silent(conn, pattern):
+    """Silent version of search_database that never logs results."""
+    try:
+        cursor = conn.cursor()
+        search_pattern = f"%{pattern}%"
+        cursor.execute("""
+            SELECT file_path, destination_path, tmdb_id, season_number
+            FROM processed_files
+            WHERE file_path LIKE ?
+            OR destination_path LIKE ?
+            OR tmdb_id LIKE ?
+        """, (search_pattern, search_pattern, search_pattern))
+        return cursor.fetchall()
+    except (sqlite3.Error, DatabaseError):
         return []
 
 @throttle

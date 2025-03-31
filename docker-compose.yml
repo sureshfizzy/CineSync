@@ -6,6 +6,8 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
+    ports:
+      - "8082:8082"
     volumes:
       - /home:/home  # Mount home directory to provide access to home files
       - /mnt:/mnt  # Mount /mnt for access to external storage

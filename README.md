@@ -21,6 +21,26 @@ CineSync is a Python-based library management system designed to efficiently org
 
 CineSync works by creating symbolic links from the source directory to the destination directory and organizing them according to the user's preferences. This allows users to maintain a well-structured library without physically moving or duplicating the original files.
 
+# CineSync WebDAV
+
+CineSync now includes its own **WebDAV server**, allowing you to directly access your organized library in **Infuse, Vidhub, or any WebDAV-compatible media player**.
+
+<p align="center">
+  <img src="Screenshots/CineSync-WebDav.png" alt="WebDAV">
+</p>
+
+## Features
+
+- **Direct Integration with Infuse/Vidhub**: Stream your media library without additional configurations.
+- **Organized File Names & Structures**: Files and folders are structured exactly as managed by CineSync.
+- **No Additional Software Required**: Built-in WebDAV functionality eliminates the need for extra tools or mounts.
+- **Secure & Efficient Access**: Provides a stable WebDAV endpoint with **optional authentication support**.
+- **Fully Configurable**: Enable or disable WebDAV support through environment variables.
+
+With **CineSync WebDAV**, your **media library is instantly available** across multiple devices without additional setups, making your experience smooth and hassle-free.
+
+For WebDAV configuration, visit the [WebDAV Wiki](https://github.com/sureshfizzy/CineSync/wiki/WebDav).
+
 ## Getting Started
 
 For detailed instructions on installation, configuration, and usage, please visit our Wiki:
@@ -30,6 +50,7 @@ For detailed instructions on installation, configuration, and usage, please visi
 - [Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration)
 - [Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage)
 - [Docker Volumes](https://github.com/sureshfizzy/CineSync/wiki/Volumes)
+- [WebDav](https://github.com/sureshfizzy/CineSync/wiki/WebDav)
 
 ## Docker Hub Repository
 
@@ -44,7 +65,7 @@ The CineSync Docker image is available on Docker Hub:
 
 ## Features
 
-- ** Real-Time Monitoring:** Instant refresh and updates on Jellyfin/Plex (https://github.com/sureshfizzy/CineSync/wiki#real-time-monitoringupdates-on-jellyfin)
+- **Real-Time Monitoring:** Instant refresh and updates on Jellyfin/Plex (https://github.com/sureshfizzy/CineSync/wiki#real-time-monitoringupdates-on-jellyfin)
 - **Library Organization:** Easily sort your library into seasons, regardless of file or folder structure.
 - **Faster Scan:** CineSync has been optimized for faster file and directory scanning. Improved directory checks, file handling, and multi-threaded processing (controlled by `MAX_PROCESSES`) help speed up the scan process, especially for large libraries.
 - **Symbolic Link Creation:** Create symbolic links to organize your library without moving or duplicating files.

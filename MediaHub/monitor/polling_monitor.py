@@ -10,7 +10,7 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(base_dir)
 
 # Local imports from MediaHub
-from MediaHub.processors.db_utils import initialize_db, load_processed_files, save_processed_file, delete_broken_symlinks, check_file_in_db
+from MediaHub.processors.db_utils import *
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
 
@@ -155,9 +155,22 @@ def check_rclone_mount():
             mount_state = False
         return False
 
-def scan_directories(dirs_to_watch, current_files):
-    """Scans directories for new or removed files."""
+def scan_directories(dirs_to_watch, current_files, last_mod_times=None):
+    """
+    Scans directories for new or removed files and tracks directory modifications.
+    Args:
+        dirs_to_watch (list): Directories to monitor
+        current_files (dict): Current known files in directories
+        last_mod_times (dict, optional): Last known modification times for directories
+    Returns:
+        tuple: (new_files, modified_dirs, updated_last_mod_times)
+    """
+    if last_mod_times is None:
+        last_mod_times = {}
+
     new_files = {}
+    modified_dirs = {}
+
     for directory in dirs_to_watch:
         log_message(f"Scanning directory: {directory}", level="DEBUG")
 
@@ -166,17 +179,76 @@ def scan_directories(dirs_to_watch, current_files):
             continue
 
         try:
-            dir_files = set(os.listdir(directory))
-            new_files[directory] = dir_files
-            log_message(f"Found {len(dir_files)} files in {directory}", level="DEBUG")
+            dir_entries = os.listdir(directory)
+            new_files[directory] = set(dir_entries)
+
+            for entry in dir_entries:
+                full_path = os.path.join(directory, entry)
+
+                if os.path.isdir(full_path):
+                    try:
+                        dir_stat = os.stat(full_path)
+                        current_mod_time = dir_stat.st_mtime
+
+                        mod_key = full_path
+
+                        if mod_key in last_mod_times:
+                            if current_mod_time > last_mod_times[mod_key]:
+                                log_message(f"Top-level Subdirectory Modified: {full_path}", level="DEBUG")
+                                modified_dirs[full_path] = {
+                                    'old_mod_time': last_mod_times[mod_key],
+                                    'new_mod_time': current_mod_time
+                                }
+
+                        last_mod_times[mod_key] = current_mod_time
+
+                    except Exception as e:
+                        log_message(f"Error checking subdirectory {full_path}: {str(e)}", level="ERROR")
+
         except Exception as e:
             log_message(f"Failed to scan directory {directory}: {str(e)}", level="ERROR")
             continue
 
-    return new_files
+    return new_files, modified_dirs, last_mod_times
 
-def process_changes(current_files, new_files, dest_dir):
-    """Processes changes by detecting added or removed files and triggering actions."""
+def process_changes(current_files, new_files, dest_dir, modified_dirs=None):
+    """
+    Updated process_changes to create symlinks for added files.
+    """
+    src_dirs, _ = get_directories()
+
+    if modified_dirs:
+        for mod_dir, mod_details in modified_dirs.items():
+            try:
+                current_dir_files = set(os.listdir(mod_dir))
+
+                db_results = search_database_silent(mod_dir)
+
+                db_file_names = set(os.path.basename(result[0]) for result in db_results)
+
+                # Find added and removed files
+                added_files = current_dir_files - db_file_names
+                removed_files = db_file_names - current_dir_files
+
+                # Process added files
+                if added_files:
+                    for added_file in added_files:
+                        file_path = os.path.join(mod_dir, added_file)
+                        log_message(f"Processing new file: {file_path}", level="INFO")
+                        try:
+                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+                        except Exception as e:
+                            log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
+
+                if removed_files:
+                    for removed_file in removed_files:
+                        removed_file_path = os.path.join(mod_dir, removed_file)
+                        log_message(f"Checking for broken symlink for removed file: {removed_file_path}", level="INFO")
+                        delete_broken_symlinks(dest_dir, removed_file_path)
+
+            except Exception as e:
+                log_message(f"Error processing modified directory {mod_dir}: {str(e)}", level="ERROR")
+
     for directory, files in new_files.items():
         old_files = current_files.get(directory, set())
         added_files = files - old_files
@@ -185,7 +257,7 @@ def process_changes(current_files, new_files, dest_dir):
         if added_files:
             log_message(f"New files detected in {directory}: {added_files}", level="INFO")
             for file in added_files:
-                if file != 'version.txt':  # Skip processing version.txt file
+                if file != 'version.txt':
                     full_path = os.path.join(directory, file)
                     log_message(f"Processing new file: {full_path}", level="INFO")
                     process_file(full_path)
@@ -265,6 +337,7 @@ def main():
     sleep_time = int(os.getenv('SLEEP_TIME', 60))
 
     current_files = {}
+    last_mod_times = {}
     while True:
         try:
             # Check if rclone mount is available (if enabled)
@@ -282,8 +355,8 @@ def main():
 
             # Normal directory monitoring
             log_message("Performing regular directory scan", level="DEBUG")
-            new_files = scan_directories(src_dirs, current_files)
-            process_changes(current_files, new_files, dest_dir)
+            new_files, modified_dirs, last_mod_times = scan_directories(src_dirs, current_files, last_mod_times)
+            process_changes(current_files, new_files, dest_dir, modified_dirs)
             current_files = new_files
 
             log_message(f"Sleeping for {sleep_time} seconds", level="DEBUG")

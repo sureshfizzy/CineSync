@@ -295,4 +295,4 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         new_name = file
 
     dest_file = os.path.join(dest_path, new_name)
-    return dest_file
+    return dest_file, tmdb_id
