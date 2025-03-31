@@ -432,4 +432,4 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             dest_file = os.path.join(season_dest_path, file)
 
-    return dest_file, tmdb_id, season_number
+    return dest_file, tmdb_id, season_number, is_extra

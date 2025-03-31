@@ -130,7 +130,12 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show or is_anime_show:
-        dest_file, tmdb_id, season_number = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
+        dest_file, tmdb_id, season_number, is_extra = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
+
+        # Skip symlink creation for extras unless skipped from env or force_extra is enabled
+        if is_extra and not force_extra and is_skip_extras_folder_enabled():
+            log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
+            return
     else:
         dest_file, tmdb_id = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
 
@@ -231,11 +236,6 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
                             src_file = os.path.join(root, file)
 
-                            # Check if the file is an extra based on the size
-                            if skip_extras_folder and is_file_extra(file, src_file) and not force_extra:
-                                log_message(f"Skipping extras file: {file}", level="DEBUG")
-                                continue
-
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
@@ -297,11 +297,6 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 return
 
                             src_file = os.path.join(root, file)
-
-                            # Check if the file is an extra based on the size
-                            if skip_extras_folder and is_file_extra(file, src_file):
-                                log_message(f"Skipping extras file: {file}", level="DEBUG")
-                                continue
 
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
