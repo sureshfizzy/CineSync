@@ -13,7 +13,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_file_extra
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
@@ -133,11 +133,6 @@ def process_file(args, processed_files_log, force=False):
         dest_file, tmdb_id, season_number = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
     else:
         dest_file, tmdb_id = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
-
-    # Check if the file should be considered an extra based on size
-    if skip_extras_folder and is_file_extra(file, src_file) and not force_extra:
-        log_message(f"Skipping extras file: {file} based on size", level="DEBUG")
-        return
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")

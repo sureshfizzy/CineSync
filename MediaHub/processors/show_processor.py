@@ -33,7 +33,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     clean_folder_name, _ = clean_query(parent_folder_name)
 
-    is_extra = is_file_extra(file, src_file)
+    # Flag for ambiguous files that should be treated as extras
+    is_extra = False
 
     # Initialize variables
     show_name = ""
@@ -174,21 +175,18 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             season_match = re.search(r'S(\d{2})|Season\s*(\d+)', clean_folder_name, re.IGNORECASE)
             if season_match:
                 season_number = season_match.group(1) or season_match.group(2)
-                if is_extra:
-                    create_extras_folder = True
+                episode_match = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
+                if episode_match:
+                    episode_identifier = f"S{season_number}E{episode_match.group(1)}"
                 else:
-                    # Check if we can determine an episode number
-                    episode_match = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
-                    if episode_match:
-                        episode_identifier = f"S{season_number}E{episode_match.group(1)}"
-                    else:
-                        log_message(f"Unable to determine episode number for: {file} in season {season_number}", level="WARNING")
+                    log_message(f"Unable to determine episode number for: {file} in season {season_number}", level="DEBUG")
+                    log_message(f"Placing File in Extras folder: {file}", level="DEBUG")
+                    create_extras_folder = True
+                    is_extra = True
             else:
-                # If no season can be determined, log warning and skip unless it's an extra
-                if is_extra:
-                    create_extras_folder = True
-                else:
-                    log_message(f"Unable to determine season and episode info for: {file}", level="WARNING")
+                log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
+                create_extras_folder = True
+                is_extra = True
 
     anime_episode_pattern = re.search(r'[-\s]E(\d+)\s', file)
     if anime_episode_pattern:
@@ -384,11 +382,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     existing_show_folder_path = find_show_folder_in_resolution_folders()
     if existing_show_folder_path:
         extras_dest_path = os.path.join(existing_show_folder_path, 'Extras')
-
-    # Check if SKIP_EXTRAS_FOLDER is enabled and handle accordingly
-    if is_skip_extras_folder_enabled() and is_file_extra(file, src_file) and not force_extra:
-        log_message(f"Skipping extras file: {file} based on size and SKIP_EXTRAS_FOLDER setting", level="INFO")
-        return None
 
     # Extract media information and Rename files
     media_info = extract_media_info(file, keywords, root)
