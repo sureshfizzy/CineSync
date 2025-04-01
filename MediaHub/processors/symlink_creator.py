@@ -13,7 +13,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_junk_file
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
@@ -127,6 +127,11 @@ def process_file(args, processed_files_log, force=False):
         elif anime_episode_pattern.search(file) or anime_patterns.search(file):
             is_anime_show = True
             log_message(f"Processing as show based on anime pattern: {src_file}", level="DEBUG")
+
+    # Check if the file should be considered an junk based on size
+    if is_junk_file(file, src_file):
+        log_message(f"Skipping Junk files: {file} based on size", level="DEBUG")
+        return
 
     # Determine whether to process as show or movie
     if is_show or is_anime_show:

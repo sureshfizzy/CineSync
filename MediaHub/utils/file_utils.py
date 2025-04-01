@@ -289,6 +289,27 @@ def get_anime_patterns(keywords_file='keywords.json'):
     combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)
     return re.compile(combined_pattern, re.IGNORECASE)
 
+def is_junk_file(file, file_path):
+     """
+     Determine if the file is an junk based on size.
+     Skip .srt & .strm files regardless of size.
+     """
+     if os.path.islink(file_path):
+         return False
+
+     # Ignore .srt and .strm files completely
+     if file.lower().endswith(('.srt', '.strm')):
+         return False
+
+     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+     junk_max_size_mb = get_junk_max_size_mb()
+
+     if file_size_mb <= junk_max_size_mb:
+         return True
+     else:
+         return False
+
 def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple[str, Optional[int]]:
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
