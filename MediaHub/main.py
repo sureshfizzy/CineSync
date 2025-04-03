@@ -24,7 +24,12 @@ db_initialized = False
 
 POLLING_MONITOR_PATH = os.path.join(os.path.dirname(__file__), 'monitor', 'polling_monitor.py')
 LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
+MONITOR_PID_FILE = '/tmp/monitor_pid.txt' if platform.system() != 'Windows' else 'C:\\temp\\monitor_pid.txt'
 LOCK_TIMEOUT = 3600
+
+# Set up global variables to track processes
+background_processes = []
+terminate_flag = threading.Event()
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -121,23 +126,109 @@ def check_lock_file():
 def remove_lock_file():
     """Remove the lock file."""
     if os.path.exists(LOCK_FILE):
-        os.remove(LOCK_FILE)
+        try:
+            os.remove(LOCK_FILE)
+            log_message("Lock file removed successfully.", level="DEBUG")
+        except Exception as e:
+            log_message(f"Error removing lock file: {e}", level="ERROR")
+
+    if os.path.exists(MONITOR_PID_FILE):
+        try:
+            os.remove(MONITOR_PID_FILE)
+        except Exception as e:
+            log_message(f"Error removing monitor PID file: {e}", level="ERROR")
+
+def terminate_subprocesses():
+    """Terminate all subprocesses started by this script."""
+    global background_processes
+    log_message("Terminating all background processes...", level="INFO")
+
+    # First, check monitor pid file
+    if os.path.exists(MONITOR_PID_FILE):
+        try:
+            with open(MONITOR_PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+
+            if psutil.pid_exists(pid):
+                proc = psutil.Process(pid)
+                try:
+                    log_message(f"Terminating monitor process with PID {pid}", level="INFO")
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                    try:
+                        log_message(f"Force killing monitor process with PID {pid}", level="WARNING")
+                        proc.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+        except Exception as e:
+            log_message(f"Error terminating monitor process: {e}", level="ERROR")
+
+    # Handle tracked processes
+    for process in background_processes:
+        try:
+            if process.poll() is None:
+                log_message(f"Terminating process with PID {process.pid}", level="INFO")
+                if platform.system() == 'Windows':
+                    # On Windows, use taskkill to force terminate the process tree
+                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+        except Exception as e:
+            log_message(f"Error terminating process: {e}", level="ERROR")
+
+    # Try to terminate child processes using psutil
+    try:
+        current_process = psutil.Process(os.getpid())
+        children = current_process.children(recursive=True)
+
+        # First try to terminate gracefully
+        for child in children:
+            try:
+                log_message(f"Terminating child process {child.pid}", level="INFO")
+                child.terminate()
+            except psutil.NoSuchProcess:
+                continue
+
+        gone, still_alive = psutil.wait_procs(children, timeout=3)
+
+        for child in still_alive:
+            try:
+                log_message(f"Force killing child process {child.pid}", level="WARNING")
+                child.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except Exception as e:
+        log_message(f"Error while terminating child processes: {str(e)}", level="ERROR")
 
 def handle_exit(signum, frame):
-    """Handle script termination and clean up the lock file."""
+    """Handle script termination and clean up."""
+    log_message("Received shutdown signal, exiting gracefully", level="INFO")
     log_message("Terminating process and cleaning up lock file.", level="INFO")
+
+    terminate_flag.set()
+    terminate_subprocesses()
     remove_lock_file()
-    exit(0)
+    os._exit(0)
 
 def setup_signal_handlers():
     """Setup signal handlers for Linux and Windows."""
+    # Register handlers for both Windows and Unix signals
+    signal.signal(signal.SIGINT, handle_exit)
     if platform.system() == 'Windows':
         signal.signal(signal.SIGBREAK, handle_exit)
     else:
-        signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
 
 def start_polling_monitor():
+    """Start the polling monitor as a subprocess and track its PID."""
+    global background_processes
+
     if check_lock_file():
         return
 
@@ -146,10 +237,22 @@ def start_polling_monitor():
     log_message("Processing complete. Setting up directory monitoring.", level="INFO")
 
     try:
-        # Use python or python3 depending on the platform
         python_command = 'python' if platform.system() == 'Windows' else 'python3'
-        subprocess.run([python_command, POLLING_MONITOR_PATH], check=True)
-    except subprocess.CalledProcessError as e:
+        process = subprocess.Popen([python_command, POLLING_MONITOR_PATH])
+        background_processes.append(process)
+
+        with open(MONITOR_PID_FILE, 'w') as f:
+            f.write(str(process.pid))
+
+        log_message(f"Started polling monitor with PID {process.pid}", level="INFO")
+
+        while not terminate_flag.is_set():
+            if process.poll() is not None:
+                log_message(f"Polling monitor exited with code {process.returncode}", level="INFO")
+                break
+            time.sleep(1)
+
+    except Exception as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
     finally:
         remove_lock_file()
@@ -195,6 +298,8 @@ def is_port_in_use(port):
 
 def start_webdav_server():
     """Start WebDavHub server if enabled."""
+    global background_processes
+
     if cinesync_webdav():
         webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
         webdav_script = os.path.join(webdav_dir, 'cinesync')
@@ -213,6 +318,7 @@ def start_webdav_server():
                 current_dir = os.getcwd()
                 os.chdir(webdav_dir)
                 webdav_process = subprocess.Popen(['./cinesync'])
+                background_processes.append(webdav_process)
                 os.chdir(current_dir)
 
                 log_message(f"WebDavHub server started with PID: {webdav_process.pid}", level="INFO")
@@ -340,20 +446,48 @@ def main(dest_dir):
     # Wait for mount before creating symlinks if needed
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
+    try:
+        # Start RealTime-Monitoring in main thread if not disabled
+        if not args.disable_monitor:
+            start_webdav_server()
+            log_message("Starting RealTime-Monitoring...", level="INFO")
+            monitor_thread = threading.Thread(target=start_polling_monitor)
+            monitor_thread.daemon = False
+            monitor_thread.start()
+            time.sleep(2)
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
+            monitor_thread.join()
+        else:
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
+    except KeyboardInterrupt:
+        log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
+        terminate_flag.set()
+        terminate_subprocesses()
+        remove_lock_file()
+        sys.exit(0)
 
-    # Start RealTime-Monitoring in main thread if not disabled
-    if not args.disable_monitor:
-        start_webdav_server()
-        log_message("Starting RealTime-Monitoring...", level="INFO")
-        monitor_thread = threading.Thread(target=start_polling_monitor)
-        monitor_thread.daemon = False
-        monitor_thread.start()
-        time.sleep(2)
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
-        monitor_thread.join()
-    else:
-        create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
 if __name__ == "__main__":
+    # Make sure temp directory exists on Windows
+    ensure_windows_temp_directory()
+
+    # Set up signal handlers before anything else
     setup_signal_handlers()
+
+    # Get directories and start main process
     src_dirs, dest_dir = get_directories()
-    main(dest_dir)
+
+    try:
+        main(dest_dir)
+    except KeyboardInterrupt:
+        log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
+        terminate_flag.set()
+        terminate_subprocesses()
+        remove_lock_file()
+        sys.exit(0)
+    except Exception as e:
+        log_message(f"Unhandled exception: {str(e)}", level="ERROR")
+        log_message(traceback.format_exc(), level="DEBUG")
+        terminate_flag.set()
+        terminate_subprocesses()
+        remove_lock_file()
+        sys.exit(1)
