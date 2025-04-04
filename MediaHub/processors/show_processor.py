@@ -131,7 +131,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     extracted_filename = episode_match.string
                     show_name = re.sub(r'^\[.*?\]\s*', '', extracted_filename).replace('.', ' ').strip()
                     episode_number = re.search(r'Ep\.?\s*(\d+)', episode_identifier, re.IGNORECASE).group(1)
-                    season_number_match = re.search(r'S(\d{2})', parent_folder_name, re.IGNORECASE)
+                    season_number_match = re.search(r'S(\d{1,2})', parent_folder_name, re.IGNORECASE)
                     season_number = season_number.group(1) if season_number else "01"
                     episode_identifier = f"S{season_number}E{episode_number}"
                     if season_number_match:
