@@ -103,8 +103,28 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             return None
 
         params = {'api_key': api_key, 'query': query}
+
+        # Include year in primary search if available
+        if year:
+            params['first_air_date_year'] = year
+            full_url = f"{url}?{urllib.parse.urlencode(params)}"
+            log_message(f"Primary search URL with year: {full_url}", "DEBUG", "stdout")
+            response = perform_search(params, url)
+
+            if response:
+                scored_results = []
+                for result in response:
+                    score = calculate_score(result, query, year)
+                    if score >= 40:
+                        scored_results.append((score, result))
+
+                scored_results.sort(reverse=True, key=lambda x: x[0])
+                if scored_results:
+                    return [r[1] for r in scored_results]
+
+        params = {'api_key': api_key, 'query': query}
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"Primary search URL: {full_url}", "DEBUG", "stdout")
+        log_message(f"Secondary search URL (without year): {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
 
         if response:
@@ -117,24 +137,6 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             scored_results.sort(reverse=True, key=lambda x: x[0])
             if scored_results:
                 return [r[1] for r in scored_results]
-
-        if year:
-            params['first_air_date_year'] = year
-            full_url_with_year = f"{url}?{urllib.parse.urlencode(params)}"
-            log_message(f"Secondary search URL (with year): {full_url_with_year}", "DEBUG", "stdout")
-            response = perform_search(params, url)
-
-            if response:
-                scored_results = []
-                for result in response:
-                    score = calculate_score(result, query, year)
-                    if score >= 40:
-                        scored_results.append((score, result))
-
-                scored_results.sort(reverse=True, key=lambda x: x[0])
-
-                if scored_results:
-                    return [r[1] for r in scored_results]
 
         return response
 
