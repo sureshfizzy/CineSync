@@ -302,7 +302,10 @@ def start_webdav_server():
 
     if cinesync_webdav():
         webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
-        webdav_script = os.path.join(webdav_dir, 'cinesync')
+        if platform.system() == 'Windows':
+            webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
+        else:
+            webdav_script = os.path.join(webdav_dir, 'cinesync')
         webdav_port = int(os.getenv('WEBDAV_PORT'))
 
         # Check if the WebDAV server is already running on the specified port
@@ -317,7 +320,7 @@ def start_webdav_server():
                 # Change to the WebDavHub directory and execute the script
                 current_dir = os.getcwd()
                 os.chdir(webdav_dir)
-                webdav_process = subprocess.Popen(['./cinesync'])
+                webdav_process = subprocess.Popen(["./" + os.path.basename(webdav_script)])
                 background_processes.append(webdav_process)
                 os.chdir(current_dir)
 
