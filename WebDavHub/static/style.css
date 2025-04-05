@@ -44,6 +44,7 @@ body {
 }
 
 .container {
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
@@ -67,20 +68,23 @@ header h1 {
   color: var(--text-color);
   font-size: 1.8rem;
   font-weight: 700;
+  word-break: break-word;
 }
 
 .theme-toggle {
   background: transparent;
   border: none;
   cursor: pointer;
-  width: 40px;
-  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-color);
   transition: background-color var(--transition-speed);
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .theme-toggle:hover {
@@ -94,10 +98,13 @@ header h1 {
   gap: 8px;
   font-size: 0.95rem;
   color: var(--text-secondary);
-  padding: 8px 12px;
+  padding: 10px 12px;
   background-color: var(--card-background);
   border-radius: 8px;
   box-shadow: var(--card-shadow);
+  overflow-x: auto;
+  white-space: nowrap;
+  margin-bottom: 16px;
 }
 
 .breadcrumb a {
@@ -124,8 +131,8 @@ header h1 {
 
 .file-list-header {
   display: grid;
-  grid-template-columns: 3fr 1fr 2fr;
-  padding: 16px 20px;
+  grid-template-columns: minmax(0, 3fr) minmax(70px, 1fr) minmax(90px, 1.5fr);
+  padding: 16px 16px;
   background-color: var(--card-background);
   color: var(--text-secondary);
   font-weight: 600;
@@ -142,12 +149,12 @@ header h1 {
 
 .file-item {
   display: grid;
-  grid-template-columns: 3fr 1fr 2fr;
-  padding: 14px 20px;
-  text-decoration: none;
+  grid-template-columns: minmax(0, 3fr) minmax(70px, 1fr) minmax(90px, 1.5fr);
+  padding: 12px 16px;
   color: var(--text-color);
   transition: background-color var(--transition-speed);
   border-bottom: 1px solid var(--border-color);
+  align-items: center;
 }
 
 .file-item:last-child {
@@ -166,8 +173,18 @@ header h1 {
   display: flex;
   align-items: center;
   overflow: hidden;
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.file-name-text {
   text-overflow: ellipsis;
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.file-name:hover {
+  color: var(--primary-color);
 }
 
 .file-icon {
@@ -176,6 +193,7 @@ header h1 {
   align-items: center;
   justify-content: center;
   width: 24px;
+  flex-shrink: 0;
 }
 
 .file-dir .file-name-text {
@@ -184,6 +202,8 @@ header h1 {
 
 .file-size, .file-modified {
   color: var(--text-secondary);
+  text-align: left;
+  white-space: nowrap;
 }
 
 footer {
@@ -197,11 +217,13 @@ footer {
 .icon-container {
   width: 32px;
   height: 32px;
+  min-width: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
   margin-right: 12px;
+  flex-shrink: 0;
 }
 
 .folder-icon {
@@ -246,29 +268,88 @@ footer {
 
 /* Responsive design */
 @media (max-width: 768px) {
-  .file-list-header, .file-item {
-    grid-template-columns: 2fr 1fr 1fr;
-  }
-  
-  .file-size, .file-modified {
-    font-size: 0.9rem;
-  }
-  
   .container {
-    padding: 12px;
+    padding: 16px;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .breadcrumb {
+    padding: 8px 10px;
+    font-size: 0.9rem;
   }
 }
 
 @media (max-width: 480px) {
+  .container {
+    padding: 12px;
+  }
+
+  header h1 {
+    font-size: 1.3rem;
+  }
+
+  .file-list-header, .file-item {
+    grid-template-columns: minmax(0, 3fr) minmax(60px, 0.8fr) minmax(80px, 0.7fr);
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .icon-container {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    margin-right: 8px;
+  }
+
+  .file-size, .file-modified {
+    font-size: 0.85rem;
+  }
+
+  .file-name-text {
+    font-size: 0.95rem;
+  }
+
+  .theme-toggle {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .breadcrumb {
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 360px) {
+  .container {
+    padding: 8px;
+  }
+
+  .file-list-header, .file-item {
+    grid-template-columns: minmax(0, 3fr) minmax(50px, 0.7fr);
+    padding: 10px;
+  }
+
   .file-modified {
     display: none;
   }
-  
-  .file-list-header, .file-item {
-    grid-template-columns: 3fr 1fr;
+
+  .icon-container {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    margin-right: 6px;
   }
-  
+
+  .file-size {
+    font-size: 0.8rem;
+  }
+
   header h1 {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
   }
 }
