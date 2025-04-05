@@ -141,7 +141,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     else:
                         log_message(f"Unable to determine season for: {file}", level="WARNING")
                 else:
-                    log_message(f"Unable to determine episode pattern for: {file}", level="WARNING")
+                    log_message(f"Unable to determine episode pattern for: {file}, using fallback search", level="DEBUG")
 
             # Extract season number
             season_match = re.search(r'(?:S|Season)(\d+)', clean_folder_name, re.IGNORECASE)
@@ -172,11 +172,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             show_name = clean_folder_name
 
             # Try to extract season number from the parent folder name
-            season_match = re.search(r'S(\d{2})|Season\s*(\d+)', clean_folder_name, re.IGNORECASE)
+            season_match = re.search(r'(?:S(\d{2})|Season\s*(\d+)|(\d{2})x\d{2})', file, re.IGNORECASE)
             if season_match:
-                season_number = season_match.group(1) or season_match.group(2)
-                episode_match = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
+                season_number = season_match.group(1) or season_match.group(2) or season_match.group(3)
+                episode_match = re.search(r'(?:[Ss]?\d{1,2}[xX](\d{2})|[Ee](\d{2}))', file)
                 if episode_match:
+                    episode = episode_match.group(1) or episode_match.group(2)
+                    episode_number=episode
                     episode_identifier = f"S{season_number}E{episode_match.group(1)}"
                 else:
                     log_message(f"Unable to determine episode number for: {file} in season {season_number}", level="DEBUG")
