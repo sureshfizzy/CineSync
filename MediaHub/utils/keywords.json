@@ -12,7 +12,7 @@
         "EP1", "EP2", "Episodic", "4K-UHD", "Blu-Ray", "Lossless Audio", "Multi-language", "HEVC-10bit", "x264",
         "Yify", "NTSC", "PAL", "Avi", "RAR", "Torrent", "Magnet Link", "AC3 5.1", "English Dub", "Multi-Dub",
         "Dual-Dub", "HD-Quality", "High-Quality", "LQ", "SD-Quality", "Source Code", "Pre-Release", "Group",
-        "Subtitle Pack", "Screener", "CamRip"
+        "Subtitle Pack", "Screener", "CamRip", "MULTI"
     ],
     "countries": [
         "USA", "United States", "Canada", "CA", "Mexico", "MX", "United Kingdom", "UK", "GB", "Australia", "AU",
