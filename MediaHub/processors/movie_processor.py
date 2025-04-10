@@ -58,7 +58,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     # Check if folder should be skipped
     if should_skip_file(parent_folder_name):
-        return None
+        return None, None
 
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
     if not movie_name:
@@ -66,7 +66,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         movie_name, year = clean_query_movie(parent_folder_name)
         if not movie_name:
             log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
-            return
+            return None, None
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
@@ -79,6 +79,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     if api_key and is_movie_collection_enabled():
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        # Check if result is None (API connection issues)
+        if result is None:
+            log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
                 tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
@@ -101,9 +105,14 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             proper_movie_name = f"{movie_name} ({year})"
     elif api_key:
         result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
-        year = result[3] if result[3] is not None else year
-        if isinstance(result, tuple) and len(result) == 5:
+        # Check if result is None (API connection issues)
+        if result is None:
+            log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            return None, None
+
+        elif isinstance(result, tuple) and len(result) == 5:
             tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+            year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"

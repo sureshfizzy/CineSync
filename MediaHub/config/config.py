@@ -27,14 +27,6 @@ def get_api_key():
             api_warning_logged = True
         return None
 
-    # Validate API key
-    if not is_valid_api_key(api_key):
-        if not api_warning_logged:
-            log_message("Invalid TMDb API key. TMDb functionality may not work as expected. Running in offline mode.", level="WARNING")
-            offline_mode = True
-            api_warning_logged = True
-        return None
-
     return api_key
 
 def is_valid_api_key(api_key):

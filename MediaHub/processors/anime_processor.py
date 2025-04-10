@@ -213,7 +213,11 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     if api_key and not offline_mode:
         search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
-        if isinstance(search_result, tuple):
+        # Check if result is None (API connection issues)
+        if search_result is None:
+            log_message(f"API returned None for show: {show_name} ({year}). Skipping Anime show processing.", level="WARNING")
+            return None
+        elif isinstance(search_result, tuple):
             proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
         else:
             proper_show_name = original_show_name = search_result

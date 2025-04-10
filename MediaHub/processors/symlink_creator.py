@@ -135,14 +135,25 @@ def process_file(args, processed_files_log, force=False):
 
     # Determine whether to process as show or movie
     if is_show or is_anime_show:
-        dest_file, tmdb_id, season_number, is_extra = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
+        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
+        # Check if result is None or the first item (dest_file) is None
+        if result is None or result[0] is None:
+            log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            return
+        dest_file, tmdb_id, season_number, is_extra = result
 
         # Skip symlink creation for extras unless skipped from env or force_extra is enabled
         if is_extra and not force_extra and is_skip_extras_folder_enabled():
             log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
             return
     else:
-        dest_file, tmdb_id = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
+
+        # Check if result is None or the first item (dest_file) is None
+        if result is None or result[0] is None:
+            log_message(f"Movie processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            return
+        dest_file, tmdb_id = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")

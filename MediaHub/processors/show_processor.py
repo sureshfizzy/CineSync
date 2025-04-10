@@ -57,6 +57,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
                                         tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number)
 
+        if anime_result is None:
+            log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
+            return None
+
         if not anime_result:
             log_message(f"Skipping from Anime Check: {file}", level="DEBUG")
             anime_result = {}
@@ -221,7 +225,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     proper_show_name = show_folder
     if api_key and not offline_mode and not anime_result:
         result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra)
-        if isinstance(result, tuple) and len(result) == 6:
+        # Check if result is None (API connection issues)
+        if result is None:
+            log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
+            return None, None, None, None
+        elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
         else:

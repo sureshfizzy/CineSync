@@ -22,10 +22,12 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
+@api_retry(max_retries=3, delay=5)
 def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None):
     global api_key
     if not check_api_key():
-        return query
+        log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
+        return None
 
     # Handle direct ID searches first
     if tmdb_id or imdb_id or tvdb_id:
@@ -366,10 +368,12 @@ def perform_search(params, url):
         return []
 
 @lru_cache(maxsize=None)
+@api_retry(max_retries=3, delay=5)
 def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None):
     global api_key
     if not check_api_key():
-        return query
+        log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
+        return None
 
     # Helper function to format movie name for the OS
     def format_movie_name(name):
@@ -400,7 +404,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
                 if not results:
                     log_message(f"No movie found for IMDb ID: {imdb_id}", level="WARNING")
-                    return query
+                    return None
 
                 movie_data = results[0]
                 tmdb_id = movie_data['id']
@@ -440,7 +444,11 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
     cache_key = (query, year)
     if cache_key in _api_cache:
-        return _api_cache[cache_key]
+        cached_result = _api_cache[cache_key]
+        if cached_result == query:
+            log_message(f"Previous API lookup for '{query}' failed. Attempting again.", level="INFO")
+        else:
+            return cached_result
 
     url = "https://api.themoviedb.org/3/search/movie"
 
@@ -510,7 +518,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
     if not results:
         log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
-        dir_based_query = os.path.basename(root)
+        dir_based_query = os.path.basename(root) if root else query
         title = advanced_clean_query(dir_based_query, max_words=4)
         results = fetch_results(title, year)
 
@@ -578,7 +586,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         else:
             proper_name = f"{movie_name} ({movie_year})"
 
-        _api_cache[cache_key] = proper_name
+        _api_cache[cache_key] = (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre)
         return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
 
     log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
