@@ -10,11 +10,6 @@ from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_movie_collection
 
-# Global variables to track API key state
-global api_key
-global api_warning_logged
-global offline_mode
-
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
@@ -51,7 +46,6 @@ def should_skip_file(filename):
     return False
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None):
-    global offline_mode
 
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
@@ -73,11 +67,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     movie_name, none = clean_query(movie_name)
 
     collection_info = None
-    api_key = get_api_key()
     proper_name = movie_name
     is_anime_genre = False
 
-    if api_key and is_movie_collection_enabled():
+    if is_movie_collection_enabled():
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
         # Check if result is None (API connection issues)
         if result is None:
@@ -103,7 +96,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 collection_info = get_movie_collection(movie_title=movie_name, year=year)
         else:
             proper_movie_name = f"{movie_name} ({year})"
-    elif api_key:
+    else:
         result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
         # Check if result is None (API connection issues)
         if result is None:
@@ -126,8 +119,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
         else:
             proper_movie_name = f"{proper_name} ({year})"
-    else:
-        proper_movie_name = f"{movie_name} ({year})"
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')

@@ -14,13 +14,7 @@ from MediaHub.api.tmdb_api_helpers import get_episode_name
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-# Global variables to track API key state
-global api_key
-global api_warning_logged
-global offline_mode
-
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False):
-    global offline_mode
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
         parent_folder_name = os.path.basename(src_file)
@@ -220,10 +214,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         show_folder = anime_result.get('show_name', '')
         proper_show_name = show_folder
 
-    # Check if API is available and not in offline mode
-    api_key = get_api_key()
     proper_show_name = show_folder
-    if api_key and not offline_mode and not anime_result:
+    if not anime_result:
         result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra)
         # Check if result is None (API connection issues)
         if result is None:

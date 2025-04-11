@@ -7,7 +7,6 @@ from MediaHub.api.api_key_manager import get_api_key
 
 api_key = None
 api_warning_logged = False
-offline_mode = False
 
 # Load .env file
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')

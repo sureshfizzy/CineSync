@@ -204,27 +204,25 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     show_name = re.sub(r'[._]', ' ', show_name).strip()
 
     # Fetch proper show name and ID from TMDb
-    api_key = get_api_key()
     year = None
     proper_show_name = show_name
     original_show_name = show_name
     show_id = None
     is_anime_genre = False
 
-    if api_key and not offline_mode:
-        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
-        # Check if result is None (API connection issues)
-        if search_result is None:
-            log_message(f"API returned None for show: {show_name} ({year}). Skipping Anime show processing.", level="WARNING")
-            return None
-        elif isinstance(search_result, tuple):
-            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
-        else:
-            proper_show_name = original_show_name = search_result
+    search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
+    # Check if result is None (API connection issues)
+    if search_result is None:
+        log_message(f"API returned None for show: {show_name} ({year}). Skipping Anime show processing.", level="WARNING")
+        return None
+    elif isinstance(search_result, tuple):
+        proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
+    else:
+        proper_show_name = original_show_name = search_result
 
-        tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
-        if tmdb_id_match:
-            show_id = tmdb_id_match.group(1)
+    tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
+    if tmdb_id_match:
+        show_id = tmdb_id_match.group(1)
 
     if is_tmdb_folder_id_enabled():
         show_name = proper_show_name
@@ -232,40 +230,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         show_name = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
     else:
         show_name = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
-
-    if not season_number and show_id and api_key:
-        try:
-            seasons_url = f"https://api.themoviedb.org/3/tv/{show_id}?api_key={api_key}"
-            show_data = fetch_json(seasons_url)
-            seasons = show_data.get('seasons', [])
-
-            for season in seasons:
-                season_number = season.get('season_number')
-                episodes_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}?api_key={api_key}"
-                episodes_data = fetch_json(episodes_url)
-                episodes = episodes_data.get('episodes', [])
-
-                for episode in episodes:
-                    if int(episode['episode_number']) == int(episode_number):
-                        break
-                else:
-                    continue
-                break
-        except Exception as e:
-            log_message(f"Error fetching season/episode data from TMDb: {e}", level="ERROR")
-
-    if not season_number:
-        season_number = "01"
-
-    if show_id and api_key:
-        try:
-            show_details_url = f"https://api.themoviedb.org/3/tv/{show_id}?api_key={api_key}"
-            show_details = fetch_json(show_details_url)
-            first_air_date = show_details.get('first_air_date', '')
-            if first_air_date:
-                year = first_air_date.split('-')[0]
-        except Exception as e:
-            log_message(f"Error fetching show year from TMDb: {e}", level="ERROR")
 
     new_name = file
     episode_name = None
