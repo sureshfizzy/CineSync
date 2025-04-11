@@ -11,8 +11,9 @@ from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+from MediaHub.api.api_key_manager import get_api_key, check_api_key
 
 _api_cache = {}
 
@@ -22,88 +23,6 @@ api_warning_logged = False
 
 # Disable urllib3 debug logging
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-def check_api_key():
-    """
-    Checks if the API key is valid and connection to TMDB is working
-    Returns True if API key is valid and connection is working, False otherwise
-    """
-    global api_key, api_warning_logged
-
-    api_key = get_api_key()
-
-    if not api_key:
-        if not api_warning_logged:
-            log_message("No TMDB API key found in environment variables or .env file. Running in offline mode.", level="WARNING")
-            api_warning_logged = True
-        return False
-
-    # Test the API key with a simple request
-    try:
-        test_url = f"https://api.themoviedb.org/3/configuration?api_key={api_key}"
-        response = requests.get(test_url, timeout=5)
-        response.raise_for_status()
-
-        # Reset the warning flag if the API key is now working
-        if api_warning_logged:
-            log_message("TMDB API connection restored", level="INFO")
-            api_warning_logged = False
-
-        return True
-
-    except requests.exceptions.RequestException as e:
-        if not api_warning_logged:
-            if isinstance(e, requests.exceptions.ConnectionError):
-                log_message("Unable to connect to TMDB API.", level="ERROR")
-            elif isinstance(e, requests.exceptions.Timeout):
-                log_message("TMDB API connection timed out. Service may be slow or unavailable.", level="ERROR")
-            elif isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 401:
-                log_message("Invalid TMDB API key. Please check your API key and try again.", level="ERROR")
-            else:
-                log_message(f"TMDB API error: {str(e)}", level="ERROR")
-
-            api_warning_logged = True
-
-        return False
-
-def api_retry(max_retries=3, delay=3):
-    """
-    Decorator to retry API calls with a specified delay
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            retries = 0
-            last_exception = None
-
-            while retries < max_retries:
-                try:
-                    result = func(*args, **kwargs)
-
-                    if result is None or (isinstance(result, str) and result == args[0]):
-                        if retries < max_retries - 1:
-                            retries += 1
-                            log_message(f"Attempt {retries}/{max_retries} failed. Retrying in {delay} seconds...", level="WARNING")
-                            time.sleep(delay)
-                            continue
-                        else:
-                            log_message(f"All {max_retries} retry attempts failed. Returning None.", level="ERROR")
-                            return None
-                    return result
-
-                except requests.exceptions.RequestException as e:
-                    last_exception = e
-                    retries += 1
-                    if retries < max_retries:
-                        log_message(f"API request failed with error: {str(e)}. Retry attempt {retries}/{max_retries} in {delay} seconds...", level="WARNING")
-                        time.sleep(delay)
-                    else:
-                        log_message(f"All {max_retries} retry attempts failed with error: {str(e)}. Returning None.", level="ERROR")
-                        return None
-
-            return None
-        return wrapper
-    return decorator
 
 def get_external_ids(item_id, media_type):
     url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"

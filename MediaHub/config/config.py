@@ -3,6 +3,7 @@ import sys
 import requests
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.api.api_key_manager import get_api_key
 
 api_key = None
 api_warning_logged = False
@@ -11,36 +12,6 @@ offline_mode = False
 # Load .env file
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path)
-
-def get_api_key():
-    global api_key, api_warning_logged, offline_mode
-
-    if api_key is not None:
-        return api_key
-
-    api_key = os.getenv('TMDB_API_KEY')
-
-    if not api_key or api_key == 'your_tmdb_api_key_here':
-        if not api_warning_logged:
-            log_message("TMDb API key not found or is a placeholder. TMDb functionality is not enabled. Running in offline mode.", level="WARNING")
-            offline_mode = True
-            api_warning_logged = True
-        return None
-
-    return api_key
-
-def is_valid_api_key(api_key):
-    test_url = 'https://api.themoviedb.org/3/configuration?api_key=' + api_key
-    try:
-        response = requests.get(test_url)
-        if response.status_code == 200:
-            return True
-        else:
-            log_message(f"API key validation failed with status code: {response.status_code}", level="WARNING")
-            return False
-    except requests.RequestException as e:
-        log_message(f"API key validation error: {str(e)}", level="WARNING")
-        return False
 
 def get_directories():
     src_dirs = os.getenv('SOURCE_DIR')

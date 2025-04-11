@@ -11,6 +11,8 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
 from MediaHub.api.tmdb_api_helpers import *
+from MediaHub.api.api_utils import api_retry
+from MediaHub.api.api_key_manager import get_api_key, check_api_key
 
 _api_cache = {}
 
