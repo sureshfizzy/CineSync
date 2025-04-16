@@ -80,7 +80,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     if (not anime_result or episode_match) and (season_number is None or episode_number is None):
         if episode_match:
             # First, try to extract season number directly from the episode identifier
-            season_from_identifier = re.search(r'S(\d{2})', file, re.IGNORECASE)
+            season_from_identifier = re.search(r'S(\d{2})|\(S(\d+)\)', file, re.IGNORECASE)
             if season_from_identifier:
                 season_number = season_from_identifier.group(1)
                 episode_num = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
@@ -187,6 +187,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
                 create_extras_folder = True
                 is_extra = True
+
+    # Check if this is an ending/opening credit file
+    if re.search(r'NC(?:ED|OP)\s*\d+', file, re.IGNORECASE):
+        log_message(f"Detected credit sequence file: {file}", level="INFO")
+        create_extras_folder = True
+        is_extra = True
 
     anime_episode_pattern = re.search(r'[-\s]E(\d+)\s', file)
     if anime_episode_pattern:
