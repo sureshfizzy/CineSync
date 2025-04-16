@@ -24,7 +24,7 @@ api_warning_logged = False
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 @lru_cache(maxsize=None)
-@api_retry(max_retries=3, delay=5)
+@api_retry(max_retries=3, base_delay=5, max_delay=60)
 def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None):
     global api_key
     if not check_api_key():
@@ -370,7 +370,7 @@ def perform_search(params, url):
         return []
 
 @lru_cache(maxsize=None)
-@api_retry(max_retries=3, delay=5)
+@api_retry(max_retries=3, base_delay=5, max_delay=60)
 def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None):
     global api_key
     if not check_api_key():

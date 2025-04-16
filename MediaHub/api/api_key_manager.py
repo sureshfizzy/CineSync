@@ -24,7 +24,7 @@ def get_api_key():
 
     return api_key
 
-@api_retry(max_retries=3, delay=5)
+@api_retry(max_retries=3, base_delay=5, max_delay=60)
 def is_valid_api_key(api_key):
     test_url = 'https://api.themoviedb.org/3/configuration?api_key=' + api_key
     try:
