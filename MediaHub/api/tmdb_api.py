@@ -495,16 +495,6 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         log_message("Performing additional fallback search without query.", "DEBUG", "stdout")
         results = search_fallback(query, year)
 
-    if not results and year:
-        fallback_url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={year}"
-        log_message(f"Fallback search URL: {fallback_url}", "DEBUG", "stdout")
-        try:
-            response = requests.get(fallback_url)
-            response.raise_for_status()
-            results = response.json().get('results', [])
-        except requests.exceptions.RequestException as e:
-            log_message(f"Error during fallback search: {e}", level="ERROR")
-
     if not results:
         log_message(f"Attempting Search with Cleaned Name", "DEBUG", "stdout")
         cleaned_title, year_from_query = clean_query(query)
