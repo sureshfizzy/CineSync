@@ -8,11 +8,12 @@ import unicodedata
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
+from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
+from MediaHub.api.language_iso_codes import get_iso_code
 
 _api_cache = {}
 
@@ -22,6 +23,10 @@ api_warning_logged = False
 
 # Disable urllib3 debug logging
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+# Get API Language
+preferred_language = tmdb_api_language()
+language_iso = get_iso_code(preferred_language)
 
 @lru_cache(maxsize=None)
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
@@ -37,7 +42,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             if tmdb_id:
                 log_message(f"Using provided TMDB ID: {tmdb_id}", level="INFO")
                 url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
-                params = {'api_key': api_key}
+                params = {'api_key': api_key, 'language': language_iso}
                 response = requests.get(url, params=params)
                 response.raise_for_status()
                 show_data = response.json()
@@ -45,11 +50,11 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             elif imdb_id or tvdb_id:
                 external_id_type = 'imdb_id' if imdb_id else 'tvdb_id'
                 external_id = imdb_id if imdb_id else str(tvdb_id)
-
                 url = f"https://api.themoviedb.org/3/find/{external_id}"
                 params = {
                     'api_key': api_key,
-                    'external_source': 'imdb_id' if imdb_id else 'tvdb_id'
+                    'external_source': 'imdb_id' if imdb_id else 'tvdb_id',
+                    'language': language_iso
                 }
                 response = requests.get(url, params=params)
                 response.raise_for_status()
@@ -64,7 +69,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
                 # Get full show details
                 url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
-                params = {'api_key': api_key}
+                params = {'api_key': api_key, 'language': language_iso}
                 response = requests.get(url, params=params)
                 response.raise_for_status()
                 show_data = response.json()
@@ -106,7 +111,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             log_message(f"Skipping API search for single-letter query: '{query}'", "DEBUG", "stdout")
             return None
 
-        params = {'api_key': api_key, 'query': query}
+        params = {'api_key': api_key, 'query': query, 'language': language_iso}
 
         # Include year in primary search if available
         if year:
@@ -126,7 +131,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 if scored_results:
                     return [r[1] for r in scored_results]
 
-        params = {'api_key': api_key, 'query': query}
+        params = {'api_key': api_key, 'query': query, 'language': language_iso}
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         log_message(f"Secondary search URL (without year): {full_url}", "DEBUG", "stdout")
         response = perform_search(params, url)
@@ -389,7 +394,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             if tmdb_id:
                 log_message(f"Using provided TMDB ID: {tmdb_id}", level="INFO")
                 url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                params = {'api_key': api_key}
+                params = {'api_key': api_key, 'language': language_iso}
                 response = requests.get(url, params=params)
                 response.raise_for_status()
                 movie_data = response.json()
@@ -398,7 +403,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 url = f"https://api.themoviedb.org/3/find/{imdb_id}"
                 params = {
                     'api_key': api_key,
-                    'external_source': 'imdb_id'
+                    'external_source': 'imdb_id',
+                    'language': language_iso
                 }
                 response = requests.get(url, params=params)
                 response.raise_for_status()
@@ -413,7 +419,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
                 # Get full movie details
                 url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                params = {'api_key': api_key}
+                params = {'api_key': api_key, 'language': language_iso}
                 response = requests.get(url, params=params)
                 response.raise_for_status()
                 movie_data = response.json()
@@ -444,7 +450,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             log_message(f"Error fetching movie data: {e}", level="ERROR")
             log_message(f"Falling back to search due to API error", level="INFO")
 
-    cache_key = (query, year)
+    cache_key = (query, year, language_iso)
     if cache_key in _api_cache:
         cached_result = _api_cache[cache_key]
         if cached_result == query:
@@ -455,7 +461,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     url = "https://api.themoviedb.org/3/search/movie"
 
     def fetch_results(query, year=None):
-        params = {'api_key': api_key, 'query': query}
+        params = {'api_key': api_key, 'query': query, 'language': language_iso}
         if year:
             params['primary_release_year'] = year
 

@@ -122,6 +122,9 @@ def is_anime_separation_enabled():
     """Check if anime content should be separated into different folders"""
     return os.getenv('ANIME_SEPARATION', 'false').lower() == 'true'
 
+def tmdb_api_language():
+    return os.getenv('LANGUAGE', 'ENGLISH').lower()
+
 def get_movie_resolution_folder(file, resolution):
     """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""
 

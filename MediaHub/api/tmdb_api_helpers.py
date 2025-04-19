@@ -11,9 +11,10 @@ from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
+from MediaHub.api.language_iso_codes import get_iso_code
 
 _api_cache = {}
 
@@ -24,9 +25,13 @@ api_warning_logged = False
 # Disable urllib3 debug logging
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+# Get API Language
+preferred_language = tmdb_api_language()
+language_iso = get_iso_code(preferred_language)
+
 def get_external_ids(item_id, media_type):
     url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
-    params = {'api_key': api_key}
+    params = {'api_key': api_key, 'language': language_iso}
 
     try:
         response = requests.get(url, params=params)
@@ -50,7 +55,7 @@ def get_movie_genres(movie_id):
         return None
 
     url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {'api_key': api_key}
+    params = {'api_key': api_key, 'language': language_iso}
 
     try:
         response = requests.get(url, params=params)
@@ -96,7 +101,7 @@ def get_show_genres(show_id):
         return None
 
     url = f"https://api.themoviedb.org/3/tv/{show_id}"
-    params = {'api_key': api_key}
+    params = {'api_key': api_key,'language': language_iso}
 
     try:
         # Get show details including genres
@@ -162,7 +167,7 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
     try:
         # First try direct episode lookup
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
-        params = {'api_key': api_key}
+        params = {'api_key': api_key, 'language': language_iso}
         response = requests.get(url, params=params)
         response.raise_for_status()
         episode_data = response.json()
