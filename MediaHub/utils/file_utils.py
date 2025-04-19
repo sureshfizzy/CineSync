@@ -316,6 +316,15 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
         return "", None
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
+    original_query = query
+    website_patterns = [
+        r'^(?:www\.|WWW\.)?\w+\.(?:com|org|net|CO|COM|ORG|NET)(?:\s*-\s*|\s+|\.\s*|\.$)',
+        r'^(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\.[\w\-]+(?:\s*-\s*|\s+|\.$)',
+        r'^(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+(?:\s*-\s*|\s+|\.$)'
+    ]
+
+    for pattern in website_patterns:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
 
     # Load configurable keywords to remove
     remove_keywords = load_keywords(keywords_file)
@@ -325,7 +334,9 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
 
     query = re.sub(r'^\[[^\]]+\]', '', query)
     query = re.sub(r'-[\w\.]+-?$', '', query)
-    query = re.sub(r'^(?:www\.)?\w+\.(?:com|org|net)(?:\s*-\s*|\s+)', '', query)
+
+    query = re.sub(r'\[(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\]', '', query, flags=re.IGNORECASE)
+    query = re.sub(r'\((?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\)', '', query, flags=re.IGNORECASE)
 
     query = re.sub(r'\[[^\]]*(?:Audio|字幕|双语|音轨)[^\]]*\]', '', query)
 
