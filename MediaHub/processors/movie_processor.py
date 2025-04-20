@@ -10,6 +10,7 @@ from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_movie_collection
 from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
+from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
@@ -219,45 +220,124 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     enhanced_movie_folder = f"{proper_movie_name} [{' '.join(details)}]".strip()
 
-    if is_rename_enabled() and get_rename_tags():
-        media_info = extract_media_info(file, keywords)
-        details = []
+    if is_rename_enabled():
+        use_media_parser = mediainfo_parser()
+
+        # Get media info
+        if use_media_parser:
+            media_info = get_ffprobe_media_info(os.path.join(root, file))
+            tags_to_use = get_mediainfo_tags()
+        else:
+            # Fall back to filename-based media info extraction
+            media_info = extract_media_info(file, keywords)
+            tags_to_use = get_rename_tags()
+
+        # Remove ID tag from the movie name and extract ID tag if needed
+        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
         id_tag = ''
 
-        # Extract ID tag only if TMDB or IMDB is in RENAME_TAGS
-        rename_tags = get_rename_tags()
-        if 'TMDB' in rename_tags:
-            id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
-            id_tag = id_tag_match.group(0) if id_tag_match else ''
-        elif 'IMDB' in rename_tags:
-            id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
-            id_tag = id_tag_match.group(0) if id_tag_match else ''
+        # Handle ID tags with RENAME_TAGS only (not for MEDIAINFO_TAGS)
+        if not use_media_parser:
+            if 'TMDB' in tags_to_use:
+                id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
+                id_tag = id_tag_match.group(0) if id_tag_match else ''
+            elif 'IMDB' in tags_to_use:
+                id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
+                id_tag = id_tag_match.group(0) if id_tag_match else ''
 
-        # Remove ID tag from the movie name
-        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+        # Extract media details with appropriate format based on which tags we're using
+        details_str = ''
 
-        # Extract media details
-        details = []
-        for tag in rename_tags:
-            tag = tag.strip()
-            if tag not in ['TMDB', 'IMDB'] and tag in media_info:
-                value = media_info[tag]
-                if isinstance(value, list):
-                    formatted_value = '+'.join([str(language).upper() for language in value])
-                    details.append(f"[{formatted_value}]")
+        if use_media_parser:
+            tag_strings = []
+            quality_info = ""
+            custom_formats = media_info.get('Custom Formats', '')
+            other_tags = []
+
+            # First, extract specific categories we want to handle separately
+            for tag in tags_to_use:
+                tag = tag.strip()
+                clean_tag = tag.replace('{', '').replace('}', '').strip()
+
+                if clean_tag == 'Quality Full' and 'Quality Full' in media_info:
+                    quality_info = media_info['Quality Full']
+                elif clean_tag == 'Quality Title' and 'Quality Title' in media_info:
+                    quality_info = media_info['Quality Title']
+                elif clean_tag == 'Custom Formats' and 'Custom Formats' in media_info:
+                    custom_formats = media_info['Custom Formats']
+                elif clean_tag in media_info:
+                    value = media_info[clean_tag]
+                    if isinstance(value, list):
+                        formatted_value = '+'.join([str(item).upper() for item in value])
+                        other_tags.append(formatted_value)
+                    else:
+                        other_tags.append(value)
                 else:
-                    details.append(f"[{value}]")
+                    parts = clean_tag.split()
+                    if len(parts) > 1 and parts[0] in media_info:
+                        compound_key = clean_tag
+                        value = media_info.get(compound_key, '')
+                        if value:
+                            other_tags.append(value)
 
-        details_str = ''.join(details)
+            # Build the details string with proper ordering - other tags first, then custom formats, then quality
+            details_parts = []
 
-        # Construct new filename only if there are details or an ID tag
-        if id_tag or details_str:
+            # Add regular media info
+            if other_tags:
+                details_parts.extend(other_tags)
+
+            combined_info = []
+
+            # Normalize and filter custom formats
+            if custom_formats:
+                if isinstance(custom_formats, str):
+                    formats = custom_formats.split()
+                elif isinstance(custom_formats, list):
+                    formats = []
+                    for fmt in custom_formats:
+                        formats.extend(fmt.split())
+            else:
+                formats = []
+
+            if len(formats) > 1:
+                formats = [fmt for fmt in formats if fmt.lower() != 'bluray']
+
+            combined_info.extend(formats)
+
+            if quality_info:
+                combined_info.append(quality_info)
+
+            if combined_info:
+                combined_str = '-'.join(combined_info)
+                details_parts.append(combined_str)
+
+            details_str = ' '.join(details_parts)
+            enhanced_movie_folder = f"{clean_movie_name} {details_str}".strip()
+
+        else:
+            tag_strings = []
+            for tag in tags_to_use:
+                tag = tag.strip()
+                if tag not in ['TMDB', 'IMDB'] and tag in media_info:
+                    value = media_info[tag]
+                    if isinstance(value, list):
+                        formatted_value = '+'.join([str(language).upper() for language in value])
+                        tag_strings.append(f"[{formatted_value}]")
+                    else:
+                        tag_strings.append(f"[{value}]")
+
+            details_str = ''.join(tag_strings)
+
+            # Construct new filename only if there are details or an ID tag
             if id_tag and details_str:
                 enhanced_movie_folder = f"{clean_movie_name} {id_tag} - {details_str}".strip()
             elif id_tag:
                 enhanced_movie_folder = f"{clean_movie_name} {id_tag}".strip()
-            else:
+            elif details_str:
                 enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
+            else:
+                enhanced_movie_folder = clean_movie_name
 
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:

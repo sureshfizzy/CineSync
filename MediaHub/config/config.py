@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import requests
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
@@ -83,9 +84,33 @@ def custom_anime_show_layout():
     token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', None)
     return token
 
+def get_mediainfo_tags():
+    """Get mediainfo tags from environment variable and properly clean them"""
+    tags_env = os.getenv('MEDIAINFO_TAGS', '')
+    if not tags_env:
+        return []
+
+    tags = re.findall(r'\{([^{}]+)\}', tags_env)
+    return [tag.strip() for tag in tags]
+
 def get_rename_tags():
-    tags = os.getenv('RENAME_TAGS', '').split(',')
-    return [tag.strip() for tag in tags if tag.strip()]
+    """Get rename tags from environment variable and properly clean them"""
+    tags_env = os.getenv('RENAME_TAGS', '')
+    if not tags_env:
+        return []
+
+    tags = []
+    for tag in tags_env.split(','):
+        tag = tag.strip()
+        if (tag.startswith('`') and tag.endswith('`')) or \
+           (tag.startswith('"') and tag.endswith('"')) or \
+           (tag.startswith("'") and tag.endswith("'")):
+            tag = tag[1:-1]
+        tag = tag.replace('[', '').replace(']', '')
+        if tag:
+            tags.append(tag)
+
+    return tags
 
 def plex_update():
     return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
@@ -124,6 +149,10 @@ def is_anime_separation_enabled():
 
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()
+
+def mediainfo_parser():
+    """Check if MEDIA PARSER is enabled in configuration"""
+    return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
 def get_movie_resolution_folder(file, resolution):
     """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""
