@@ -303,35 +303,33 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     _api_cache[cache_key] = f"{query}"
     return f"{query}"
 
+@api_retry(max_retries=3, base_delay=5, max_delay=60)
 def perform_fallback_tv_search(query, year=None):
     cleaned_query = remove_genre_names(query)
     search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
 
-    try:
-        response = requests.get(search_url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        tv_show_link = soup.find('a', class_='result')
+    response = requests.get(search_url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+    tv_show_link = soup.find('a', class_='result')
 
-        if tv_show_link:
-            tv_show_id = re.search(r'/tv/(\d+)', tv_show_link['href'])
-            if tv_show_id:
-                tmdb_id = tv_show_id.group(1)
+    if tv_show_link:
+        tv_show_id = re.search(r'/tv/(\d+)', tv_show_link['href'])
+        if tv_show_id:
+            tmdb_id = tv_show_id.group(1)
 
-                # Fetch TV show details using the TV show ID
-                details_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
-                params = {'api_key': api_key}
-                details_response = requests.get(details_url, params=params)
-                details_response.raise_for_status()
-                tv_show_details = details_response.json()
+            # Fetch TV show details using the TV show ID
+            details_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+            params = {'api_key': api_key}
+            details_response = requests.get(details_url, params=params)
+            details_response.raise_for_status()
+            tv_show_details = details_response.json()
 
-                if tv_show_details:
-                    show_name = tv_show_details.get('name')
-                    first_air_date = tv_show_details.get('first_air_date')
-                    show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-                    return [{'id': tmdb_id, 'name': show_name, 'first_air_date': first_air_date}]
-    except requests.RequestException as e:
-        log_message(f"Error during web-based fallback search: {e}", level="ERROR")
+            if tv_show_details:
+                show_name = tv_show_details.get('name')
+                first_air_date = tv_show_details.get('first_air_date')
+                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+                return [{'id': tmdb_id, 'name': show_name, 'first_air_date': first_air_date}]
 
     return []
 
@@ -613,32 +611,30 @@ def process_chosen_movie(chosen_movie):
     else:
         return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
 
+@api_retry(max_retries=3, base_delay=5, max_delay=60)
 def perform_fallback_search(query, year=None):
     cleaned_query = remove_genre_names(query)
     search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
 
-    try:
-        response = requests.get(search_url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        movie_link = soup.find('a', class_='result')
+    response = requests.get(search_url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+    movie_link = soup.find('a', class_='result')
 
-        if movie_link:
-            movie_id = re.search(r'/movie/(\d+)', movie_link['href'])
-            if movie_id:
-                tmdb_id = movie_id.group(1)
+    if movie_link:
+        movie_id = re.search(r'/movie/(\d+)', movie_link['href'])
+        if movie_id:
+            tmdb_id = movie_id.group(1)
 
-                details_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                params = {'api_key': api_key}
-                details_response = requests.get(details_url, params=params)
-                details_response.raise_for_status()
-                movie_details = details_response.json()
+            details_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+            params = {'api_key': api_key}
+            details_response = requests.get(details_url, params=params)
+            details_response.raise_for_status()
+            movie_details = details_response.json()
 
-                if movie_details:
-                    movie_name = movie_details.get('title')
-                    release_date = movie_details.get('release_date')
-                    return [{'id': tmdb_id, 'title': movie_name, 'release_date': release_date}]
-    except requests.RequestException as e:
-        log_message(f"Error during web-based fallback search: {e}", level="ERROR")
+            if movie_details:
+                movie_name = movie_details.get('title')
+                release_date = movie_details.get('release_date')
+                return [{'id': tmdb_id, 'title': movie_name, 'release_date': release_date}]
 
     return []
