@@ -118,12 +118,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     show_name = episode_match.group(1).replace('.', ' ').strip()
                     episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
                     create_season_folder = True
-                elif re.search(r'Season\s*(\d{2})\s*Episode\s*(\d{2})', file, re.IGNORECASE):
-                    season_episode_match = re.search(r'Season\s*(\d{2})\s*Episode\s*(\d{2})', file, re.IGNORECASE)
-                    season_number = season_episode_match.group(1)
-                    episode_number = season_episode_match.group(2)
+                elif re.search(r'(?:Season|season)\s*(\d{1,2})[\s,]*(?:Episode|episode)\s*(\d{1,2})', file, re.IGNORECASE):
+                    season_episode_match = re.search(r'(?:Season|season)\s*(\d{1,2})[\s,]*(?:Episode|episode)\s*(\d{1,2})', file, re.IGNORECASE)
+                    season_number = season_episode_match.group(1).zfill(2)
+                    episode_number = season_episode_match.group(2).zfill(2)
                     episode_identifier = f"S{season_number}E{episode_number}"
-                    show_name = re.sub(r'\s*Season\s*\d{2}\s*Episode\s*\d{2}.*$', '', clean_folder_name).strip()
+                    show_name = re.sub(r'\s*(?:Season|season)\s*\d{1,2}[\s,]*(?:Episode|episode)\s*\d{1,2}.*$', '', clean_folder_name).strip()
                     create_season_folder = True
                 elif re.match(r'Ep\.?\s*\d+', episode_identifier, re.IGNORECASE):
                     extracted_filename = episode_match.string
