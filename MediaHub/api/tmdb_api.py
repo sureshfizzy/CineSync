@@ -509,7 +509,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             results = fetch_results(cleaned_title, year or year_from_query)
 
     if not results and actual_dir:
-        dir_based_query = os.path.basename(actual_dir)
+        dir_based_query = os.path.basename(root)
         log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
         cleaned_dir_query, dir_year = clean_query(dir_based_query)
         results = fetch_results(cleaned_dir_query, year or dir_year)
