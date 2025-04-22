@@ -90,9 +90,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Function to fetch the real path using readlink
+    async function getRealPath(path) {
+        try {
+            const response = await fetch('/api/readlink', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ path: path })
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const data = await response.json();
+            return {
+                realPath: data.realPath,
+                absPath: data.absPath || path
+            };
+        } catch (error) {
+            console.error('Error fetching real path:', error);
+            return {
+                realPath: path,
+                absPath: path
+            };
+        }
+    }
+
     // View details click handler
     document.querySelectorAll('.view-details').forEach(item => {
-        item.addEventListener('click', function(e) {
+        item.addEventListener('click', async function(e) {
             e.preventDefault();
             e.stopPropagation();
 
@@ -102,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const size = this.getAttribute('data-size');
             const modified = this.getAttribute('data-modified');
             const path = this.getAttribute('data-path');
-            const currentPath = document.querySelector('h1').textContent.replace('Files in ', '');
+            const pathInfo = await getRealPath(path);
 
             // Populate the modal with details
             document.getElementById('detail-name').textContent = name;
@@ -110,10 +139,28 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('detail-size').textContent = size;
             document.getElementById('detail-modified').textContent = modified;
             document.getElementById('detail-path').textContent = path;
-            document.getElementById('detail-full-path').textContent = '/mnt/temp/CineSync' + path;
+
+            // Show loading state for the full path
+            document.getElementById('detail-full-path').textContent = 'Loading full path...';
+
+            // Hide or show source path based on type
+            const sourcePathRows = document.querySelectorAll('.source-path-row');
+            if (type === 'directory') {
+                sourcePathRows.forEach(row => row.style.display = 'none');
+            } else {
+                sourcePathRows.forEach(row => row.style.display = '');
+                document.getElementById('detail-source-path').textContent = 'Loading source path...';
+            }
 
             // Show the modal
             detailsModal.classList.add('show');
+
+            document.getElementById('detail-full-path').textContent = pathInfo.absPath;
+
+            // Only update source path if it's a file
+            if (type !== 'directory') {
+                document.getElementById('detail-source-path').textContent = pathInfo.realPath;
+            }
 
             // Close the dropdown
             closeAllDropdowns();
