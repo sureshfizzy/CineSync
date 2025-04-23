@@ -29,6 +29,24 @@ def extract_anime_episode_info(filename):
     clean_filename = os.path.splitext(clean_filename)[0]
     clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
 
+    # Check for special anime pattern S##S## (Season + Special)
+    special_pattern = r'^(.+?)\s*-\s*S(\d+)S(\d+)(?:\s|$)'
+    match = re.match(special_pattern, clean_filename, re.IGNORECASE)
+    if match:
+        show_name = match.group(1).strip()
+        season_number = str(int(match.group(2))).zfill(2)
+        special_number = str(int(match.group(3))).zfill(2)
+
+        show_name = re.sub(r'[._-]', ' ', show_name).strip()
+        log_message(f"Identfied Special Episode for show: {show_name}, Season: {season_number}, Special: {special_number}.", level="DEBUG")
+        return {
+            'show_name': show_name,
+            'season_number': season_number,
+            'episode_number': special_number,
+            'episode_title': None,
+            'is_extra': True,
+        }
+
     season_detection_patterns = [
         r'^(.+?)\s*S(\d+)\s*-\s*(\d+)$',
         r'^(.+?)\s*Season\s*(\d+)\s*Episode\s*(\d+)',
@@ -179,6 +197,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     season_number = season_number or anime_info['season_number']
     episode_number = episode_number or anime_info['episode_number']
     episode_title = anime_info['episode_title']
+    is_extra = anime_info.get('is_extra', False)
 
     # Extract resolution from filename and parent folder
     file_resolution = extract_resolution(file)
@@ -210,7 +229,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     show_id = None
     is_anime_genre = False
 
-    search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id)
+    search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, is_extra=is_extra, file=file)
     # Check if result is None (API connection issues)
     if search_result is None:
         log_message(f"API returned None for show: {show_name} ({year}). Skipping Anime show processing.", level="WARNING")
@@ -324,5 +343,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'episode_number': actual_episode,
         'resolution': resolution,
         'media_info': media_info,
-        'is_anime_genre': is_anime_genre
+        'is_anime_genre': is_anime_genre,
+        'is_extra': is_extra,
     }

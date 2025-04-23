@@ -29,7 +29,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Flag for ambiguous files that should be treated as extras
     is_extra = False
-
     # Initialize variables
     show_name = ""
     season_number = season_number if season_number is not None else None
@@ -69,6 +68,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         episode_number = anime_result.get('episode_number')
         resolution = anime_result.get('resolution')
         is_anime_genre = anime_result.get('is_anime_genre')
+        is_extra = anime_result.get('is_extra')
 
         episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
         if episode_match:

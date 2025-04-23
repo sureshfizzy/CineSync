@@ -754,7 +754,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Invalid season number provided: {season_number}", level="ERROR")
             new_season_number = None
 
-    if episode_number is not None:
+    if episode_number is not None and not is_extra:
         try:
             new_episode_number = int(episode_number)
             log_message(f"Using identified episode number: {new_episode_number}", level="DEBUG")
