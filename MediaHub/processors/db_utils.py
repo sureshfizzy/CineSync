@@ -20,7 +20,8 @@ if not dotenv_path:
 
 load_dotenv(dotenv_path)
 
-DB_DIR = "db"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_DIR = os.path.join(BASE_DIR, "db")
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
 MAX_RECORDS = 100000

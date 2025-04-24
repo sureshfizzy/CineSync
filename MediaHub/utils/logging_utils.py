@@ -21,7 +21,9 @@ LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_LEVEL = LOG_LEVELS.get(LOG_LEVEL.upper(), 20)
 
 # Set up logs directory
-LOG_DIR = "logs"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
