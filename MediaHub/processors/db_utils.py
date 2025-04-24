@@ -130,36 +130,37 @@ def initialize_db():
                 file_path TEXT PRIMARY KEY,
                 destination_path TEXT,
                 tmdb_id TEXT,
-                season_number TEXT
+                season_number TEXT,
+                reason TEXT
             )
         """)
 
-        # Check if the destination_path column exists
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
 
+        # Add column if it doesn't exist
         if "destination_path" not in columns:
-            # Add the destination_path column
             cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
             log_message("Added destination_path column to processed_files table.", level="INFO")
 
-        # Check if the tmdb_id column exists
         if "tmdb_id" not in columns:
-            # Add the tmdb_id column
             cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
             log_message("Added tmdb_id column to processed_files table.", level="INFO")
 
-        # Check if the season_number column exists
         if "season_number" not in columns:
-            # Add the tmdb_id column
             cursor.execute("ALTER TABLE processed_files ADD COLUMN season_number TEXT")
             log_message("Added season column to processed_files table.", level="INFO")
+
+        if "reason" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN reason TEXT")
+            log_message("Added reason column to processed_files table.", level="INFO")
 
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -220,15 +221,16 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path, tmdb_id=None, season_number=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None):
     source_path = normalize_file_path(source_path)
-    dest_path = normalize_file_path(dest_path)
+    if dest_path:
+        dest_path = normalize_file_path(dest_path)
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number)
-            VALUES (?, ?, ?, ?)
-        """, (source_path, dest_path, tmdb_id, season_number))
+            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason)
+            VALUES (?, ?, ?, ?, ?)
+        """, (source_path, dest_path, tmdb_id, season_number, reason))
         conn.commit()
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
@@ -657,7 +659,7 @@ def search_database(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number
+            SELECT file_path, destination_path, tmdb_id, season_number, reason
             FROM processed_files
             WHERE file_path LIKE ?
             OR destination_path LIKE ?
@@ -669,12 +671,14 @@ def search_database(conn, pattern):
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
             for row in results:
-                file_path, dest_path, tmdb_id, season_number = row
+                file_path, dest_path, tmdb_id, season_number, reason = row
                 log_message(f"TMDB ID: {tmdb_id}", level="INFO")
                 if season_number is not None:
                     log_message(f"Season Number: {season_number}", level="INFO")
                 log_message(f"Source: {file_path}", level="INFO")
-                log_message(f"Destination: {dest_path}", level="INFO")
+                log_message(f"Destination: {dest_path if dest_path else 'None'}", level="INFO")
+                if reason:
+                    log_message(f"Skip Reason: {reason}", level="INFO")
                 log_message("-" * 50, level="INFO")
         else:
             log_message(f"No matches found for pattern '{pattern}'", level="INFO")
@@ -692,7 +696,7 @@ def search_database_silent(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number
+            SELECT file_path, destination_path, tmdb_id, season_number, reason
             FROM processed_files
             WHERE file_path LIKE ?
             OR destination_path LIKE ?
@@ -701,6 +705,21 @@ def search_database_silent(conn, pattern):
         return cursor.fetchall()
     except (sqlite3.Error, DatabaseError):
         return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_skip_reason(conn, source_path):
+    source_path = normalize_file_path(source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT reason FROM processed_files WHERE file_path = ?", (source_path,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_skip_reason: {e}", level="ERROR")
+        conn.rollback()
+        return None
 
 @throttle
 @retry_on_db_lock
@@ -717,5 +736,5 @@ def optimize_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error optimizing database: {e}", level="ERROR")
         return False
-# Ensure the database is initialized on import
+
 initialize_db()

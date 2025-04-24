@@ -37,6 +37,8 @@ def process_file(args, processed_files_log, force=False):
     # Skip if not a known file type
     if not get_known_types(file):
         log_message(f"Skipping unsupported file type: {file}", level="INFO")
+        reason = "Unsupported file type"
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
     skip_extras_folder = is_skip_extras_folder_enabled()
@@ -81,6 +83,11 @@ def process_file(args, processed_files_log, force=False):
             log_message(f"File already processed. Source: {src_file}, Existing destination: {existing_dest_path}", level="INFO")
             return
 
+    else:
+        skip_reason = get_skip_reason(src_file)
+        if skip_reason:
+            return
+
     # Check if a symlink already exists
     existing_symlink = next((full_dest_file for full_dest_file in dest_index
                              if os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file), None)
@@ -102,6 +109,8 @@ def process_file(args, processed_files_log, force=False):
 
     if is_hash_name and not tmdb_id and not imdb_id:
         log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
+        reason = "Missing media identifiers on hash file"
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
     if force_show:
@@ -131,6 +140,8 @@ def process_file(args, processed_files_log, force=False):
     # Check if the file should be considered an junk based on size
     if is_junk_file(file, src_file):
         log_message(f"Skipping Junk files: {file} based on size", level="DEBUG")
+        reason = "File size below minimum threshold"
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
     # Determine whether to process as show or movie
@@ -145,6 +156,8 @@ def process_file(args, processed_files_log, force=False):
         # Skip symlink creation for extras unless skipped from env or force_extra is enabled
         if is_extra and not force_extra and is_skip_extras_folder_enabled():
             log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
+            reason = "Extra/Special Content"
+            save_processed_file(src_file, None, tmdb_id, season_number, reason)
             return
     else:
         result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
@@ -157,6 +170,8 @@ def process_file(args, processed_files_log, force=False):
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
+        reason = "Missing destination path"
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
     os.makedirs(os.path.dirname(dest_file), exist_ok=True)
