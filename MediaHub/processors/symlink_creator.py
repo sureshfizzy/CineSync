@@ -26,7 +26,7 @@ log_imported_db = False
 db_initialized = False
 
 def process_file(args, processed_files_log, force=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra  = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip = args
 
     if error_event.is_set():
         return
@@ -34,10 +34,10 @@ def process_file(args, processed_files_log, force=False):
     # Normalize path
     src_file = os.path.normpath(src_file)
 
-    # Skip if not a known file type
-    if not get_known_types(file):
-        log_message(f"Skipping unsupported file type: {file}", level="INFO")
-        reason = "Unsupported file type"
+    # Check for unsupported file type or skip flag
+    if not get_known_types(file) or skip:
+        reason = "Unsupported file type" if not get_known_types(file) else "Skipped by user"
+        log_message(f"Skipping file: {file} ({reason})", level="INFO")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
@@ -84,9 +84,10 @@ def process_file(args, processed_files_log, force=False):
             return
 
     else:
-        skip_reason = get_skip_reason(src_file)
-        if skip_reason:
-            return
+        if not force:
+            skip_reason = get_skip_reason(src_file)
+            if skip_reason:
+                return
 
     # Check if a symlink already exists
     existing_symlink = next((full_dest_file for full_dest_file in dest_index
@@ -213,7 +214,7 @@ def process_file(args, processed_files_log, force=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False):
     global log_imported_db
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -248,7 +249,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force))
                 else:
                     # Handle directory
@@ -270,7 +271,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force))
 
             # Process completed tasks
@@ -305,7 +306,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
                     result = process_file(args, processed_files_log, force)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
@@ -332,7 +333,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
                             result = process_file(args, processed_files_log, force)
 
                             if result and isinstance(result, tuple) and len(result) == 3:
