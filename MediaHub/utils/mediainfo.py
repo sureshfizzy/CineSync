@@ -2,14 +2,17 @@ import re
 import os
 import json
 
-def load_keywords(filepath: str) -> dict:
-    """
-    Loads codec and pattern keywords from a JSON file.
-    """
-    with open(filepath, 'r') as file:
-        return json.load(file)
+def load_keywords(file_name: str, key: str = None) -> dict:
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
+    with open(file_path, 'r') as file:
+        data = json.load(file)
 
-keywords = load_keywords(os.path.join(os.getcwd(), 'MediaHub', 'utils', 'mediainfo.json'))
+    if key:
+        return data.get(key, {})
+    return data
+
+keywords_file = 'mediainfo.json'
+keywords = load_keywords(keywords_file)
 
 def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
     """
