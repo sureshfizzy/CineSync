@@ -34,9 +34,37 @@ def process_file(args, processed_files_log, force=False):
     # Normalize path
     src_file = os.path.normpath(src_file)
 
-    # Check for unsupported file type or skip flag
-    if not get_known_types(file) or skip:
-        reason = "Unsupported file type" if not get_known_types(file) else "Skipped by user"
+    # Handle skip flag
+    if skip:
+        force = True
+
+        existing_symlink_path = get_existing_symlink_info(src_file)
+        if existing_symlink_path:
+            log_message(f"Skip mode: Found existing symlink at {existing_symlink_path}", level="INFO")
+            try:
+                os.remove(existing_symlink_path)
+                log_message(f"Skip mode: Removed existing symlink for {file}", level="INFO")
+
+                parent_dir = os.path.dirname(existing_symlink_path)
+                parent_parent_dir = os.path.dirname(parent_dir)
+
+                if os.path.exists(parent_dir) and not os.listdir(parent_dir):
+                    log_message(f"Deleting empty directory: {parent_dir}", level="INFO")
+                    os.rmdir(parent_dir)
+
+                    if os.path.exists(parent_parent_dir) and not os.listdir(parent_parent_dir):
+                        log_message(f"Deleting empty directory: {parent_parent_dir}", level="INFO")
+                        os.rmdir(parent_parent_dir)
+            except OSError as e:
+                log_message(f"Error during skip cleanup: {e}", level="WARNING")
+
+        reason = "Skipped by user"
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
+        return
+
+    # Check for unsupported file type
+    if not get_known_types(file):
+        reason = "Unsupported file type"
         log_message(f"Skipping file: {file} ({reason})", level="INFO")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
@@ -216,6 +244,11 @@ def process_file(args, processed_files_log, force=False):
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False):
     global log_imported_db
+
+    # If skip is true, automatically set force to true for proper cleanup
+    if skip:
+        force = True
+        log_message("Skip flag detected - automatically enabling force mode for proper cleanup", level="INFO")
 
     os.makedirs(dest_dir, exist_ok=True)
     tmdb_folder_id_enabled = is_tmdb_folder_id_enabled()
