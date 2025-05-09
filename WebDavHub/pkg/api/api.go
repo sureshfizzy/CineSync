@@ -196,3 +196,16 @@ func HandleAuthTest(w http.ResponseWriter, r *http.Request) {
 	// If we reach here, the authentication middleware has already validated the credentials
 	w.WriteHeader(http.StatusOK)
 }
+
+func HandleAuthEnabled(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	enabled := true
+	if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
+		enabled = false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
+}

@@ -10,7 +10,11 @@ import FileBrowser from './components/FileBrowser';
 import { CircularProgress, Box } from '@mui/material';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, authEnabled } = useAuth();
+  if (!authEnabled) {
+    // If auth is disabled, always allow access
+    return <>{children}</>;
+  }
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -22,10 +26,23 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'light' | 'dark' }) {
+  const { authEnabled, isAuthenticated } = useAuth();
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        {/* Always define /login, but redirect if auth is disabled or already authenticated */}
+        <Route
+          path="/login"
+          element={
+            !authEnabled ? (
+              <Navigate to="/dashboard" replace />
+            ) : isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <Login toggleTheme={toggleTheme} mode={mode} />
+            )
+          }
+        />
         <Route
           path="/"
           element={

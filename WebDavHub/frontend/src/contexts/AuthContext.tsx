@@ -7,6 +7,7 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  authEnabled: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -14,38 +15,55 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authEnabled, setAuthEnabled] = useState(true);
 
-  // On mount, check for stored credentials
+  // On mount, check if auth is enabled and for stored credentials
   useEffect(() => {
-    const stored = localStorage.getItem('cineSyncAuth');
-    if (stored) {
+    const checkAuthEnabled = async () => {
       try {
-        const { username, password } = JSON.parse(stored);
-        if (username && password) {
-          axios.defaults.auth = { username, password };
-          // Verify credentials are still valid
-          axios.get('/api/auth/test')
-            .then(() => {
-              setIsAuthenticated(true);
-            })
-            .catch(() => {
-              // If credentials are invalid, clear them
-              localStorage.removeItem('cineSyncAuth');
-              delete axios.defaults.auth;
-              setIsAuthenticated(false);
-            })
-            .finally(() => {
-              setLoading(false);
-            });
-        } else {
+        const resp = await axios.get('/api/auth/enabled');
+        if (resp.data && resp.data.enabled === false) {
+          setAuthEnabled(false);
+          setIsAuthenticated(true);
           setLoading(false);
+          return;
+        } else {
+          setAuthEnabled(true);
         }
       } catch {
+        setAuthEnabled(true); // fallback: require auth if endpoint fails
+      }
+
+      // If auth is enabled, check for stored credentials
+      const stored = localStorage.getItem('cineSyncAuth');
+      if (stored) {
+        try {
+          const { username, password } = JSON.parse(stored);
+          if (username && password) {
+            axios.defaults.auth = { username, password };
+            axios.get('/api/auth/test')
+              .then(() => {
+                setIsAuthenticated(true);
+              })
+              .catch(() => {
+                localStorage.removeItem('cineSyncAuth');
+                delete axios.defaults.auth;
+                setIsAuthenticated(false);
+              })
+              .finally(() => {
+                setLoading(false);
+              });
+          } else {
+            setLoading(false);
+          }
+        } catch {
+          setLoading(false);
+        }
+      } else {
         setLoading(false);
       }
-    } else {
-      setLoading(false);
-    }
+    };
+    checkAuthEnabled();
   }, []);
 
   const login = async (username: string, password: string) => {
@@ -72,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, login, logout, authEnabled }}>
       {children}
     </AuthContext.Provider>
   );
