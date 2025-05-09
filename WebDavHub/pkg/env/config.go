@@ -50,7 +50,6 @@ func GetString(key string, defaultValue string) string {
 		return defaultValue
 	}
 
-	logger.Debug("Using environment variable %s=%s", key, value)
 	return value
 }
 
@@ -68,7 +67,6 @@ func GetInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 
-	logger.Debug("Using environment variable %s=%d", key, value)
 	return value
 }
 
@@ -81,6 +79,5 @@ func IsBool(key string, defaultValue bool) bool {
 	}
 
 	enabled := value == "1" || value == "true" || value == "yes" || value == "y"
-	logger.Debug("Using environment variable %s=%s (parsed as %t)", key, value, enabled)
 	return enabled
 }
