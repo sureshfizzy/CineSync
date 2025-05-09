@@ -3,17 +3,80 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"cinesync/pkg/api"
+	"cinesync/pkg/auth"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/server"
-	"cinesync/pkg/auth"
+	"cinesync/pkg/webdav"
+
+	"github.com/joho/godotenv"
 )
 
+func startNpmServer() error {
+	// Change to the frontend directory
+	if err := os.Chdir("frontend"); err != nil {
+		return fmt.Errorf("failed to change to frontend directory: %v", err)
+	}
+
+	// First, ensure dependencies are installed
+	logger.Info("Installing frontend dependencies...")
+	installCmd := exec.Command("npm", "install")
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+	if err := installCmd.Run(); err != nil {
+		return fmt.Errorf("failed to install dependencies: %v", err)
+	}
+
+	// Start npm dev server
+	logger.Info("Starting frontend development server...")
+	cmd := exec.Command("npm", "run", "dev")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Start the command in a new process
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start npm server: %v", err)
+	}
+
+	// Change back to the original directory
+	if err := os.Chdir(".."); err != nil {
+		return fmt.Errorf("failed to change back to original directory: %v", err)
+	}
+
+	// Wait for the development server to be ready
+	logger.Info("Waiting for frontend server to be ready...")
+	for i := 0; i < 30; i++ {
+		resp, err := http.Get("http://localhost:5173")
+		if err == nil {
+			resp.Body.Close()
+			logger.Info("Frontend server is ready!")
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+
+	return fmt.Errorf("frontend server failed to start within 30 seconds")
+}
+
 func main() {
+	// Load .env from one directory above
+	dotenvPath := filepath.Join("..", ".env")
+	_ = godotenv.Load(dotenvPath)
+
+	rootDir := os.Getenv("DESTINATION_DIR")
+	if rootDir == "" {
+		log.Fatal("DESTINATION_DIR not set in .env")
+	}
+
 	logger.Init()
 	env.LoadEnv()
 
@@ -25,8 +88,8 @@ func main() {
 
 	// Define command-line flags with fallbacks from .env or hardcoded defaults
 	dir := flag.String("dir", env.GetString("DESTINATION_DIR", "."), "Directory to serve over WebDAV")
-	port := flag.Int("port", env.GetInt("WEBDAV_PORT", 8082), "Port to run the WebDAV server on")
-	ip := flag.String("ip", env.GetString("WEBDAV_IP", "0.0.0.0"), "IP address to bind the server to")
+	port := flag.Int("port", env.GetInt("CINESYNC_API_PORT", 8082), "Port to run the CineSync API server on")
+	ip := flag.String("ip", env.GetString("CINESYNC_IP", "0.0.0.0"), "IP address to bind the server to")
 	flag.Parse()
 
 	logger.Debug("Starting with configuration: dir=%s, port=%d, ip=%s", *dir, *port, *ip)
@@ -36,22 +99,42 @@ func main() {
 		logger.Fatal("Directory %s does not exist", *dir)
 	}
 
-	// Check if CineSync folder exists and use it as the effective root if found
+	// Always use DESTINATION_DIR as the effective root
 	effectiveRootDir := *dir
-	cineSyncPath := filepath.Join(*dir, "CineSync")
-	if _, err := os.Stat(cineSyncPath); err == nil {
-		logger.Info("CineSync folder found, using it as the effective root directory")
-		effectiveRootDir = cineSyncPath
-	}
 
 	// Create required directories
 	ensureDirectoryExists("./static")
 	ensureDirectoryExists("./templates")
 
 	// Initialize the server
-	s := server.NewServer(effectiveRootDir)
-	if err := s.Initialize(); err != nil {
+	srv := server.NewServer(effectiveRootDir)
+	if err := srv.Initialize(); err != nil {
 		logger.Fatal("Failed to initialize server: %v", err)
+	}
+
+	// Set the root directory for file operations
+	api.SetRootDir(effectiveRootDir)
+
+	// Create a new mux for API routes
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/files/", api.HandleFiles)
+	apiMux.HandleFunc("/api/stats", api.HandleStats)
+	apiMux.HandleFunc("/api/auth/test", api.HandleAuthTest)
+
+	// Use the new WebDAV handler from pkg/webdav
+	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			auth.BasicAuth(apiMux).ServeHTTP(w, r)
+			return
+		}
+		auth.BasicAuth(webdavHandler).ServeHTTP(w, r)
+	})
+
+	// Start npm development server
+	if err := startNpmServer(); err != nil {
+		logger.Error("Failed to start npm server: %v", err)
+		logger.Info("Continuing with backend server only...")
 	}
 
 	// Start server
@@ -66,18 +149,17 @@ func main() {
 	logger.Info("Serving content from: %s", rootInfo)
 	logger.Info("Dashboard available at http://%s for browsers", addr)
 
-        // In your main function, add this information after starting the server
-        if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
-	        credentials := auth.GetCredentials()
+	// In your main function, add this information after starting the server
+	if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
+		credentials := auth.GetCredentials()
 		logger.Info("WebDAV authentication enabled (username: %s)", credentials.Username)
-	        logger.Info("To disable authentication, set WEBDAV_AUTH_ENABLED=false in your .env file")
-        } else {
-	        logger.Warn("WebDAV authentication is disabled")
-        }
-
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		logger.Fatal("Server error: %v", err)
+		logger.Info("To disable authentication, set WEBDAV_AUTH_ENABLED=false in your .env file")
+	} else {
+		logger.Warn("WebDAV authentication is disabled")
 	}
+
+	fmt.Printf("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
 // ensureDirectoryExists creates a directory if it doesn't exist

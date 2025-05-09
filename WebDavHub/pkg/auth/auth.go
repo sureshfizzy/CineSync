@@ -2,7 +2,9 @@ package auth
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
@@ -38,13 +40,24 @@ func BasicAuth(next http.Handler) http.Handler {
 
 		// Check if credentials are provided and match
 		if !ok || subtle.ConstantTimeCompare([]byte(username), []byte(credentials.Username)) != 1 ||
-		   subtle.ConstantTimeCompare([]byte(password), []byte(credentials.Password)) != 1 {
+			subtle.ConstantTimeCompare([]byte(password), []byte(credentials.Password)) != 1 {
 
+			// For API routes, return JSON response
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Invalid credentials",
+				})
+				logger.Warn("Failed API authentication attempt from %s", r.RemoteAddr)
+				return
+			}
+
+			// For WebDAV routes, use standard basic auth
 			w.Header().Set("WWW-Authenticate", `Basic realm="CineSync WebDAV"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("Unauthorized"))
-
-			logger.Warn("Failed authentication attempt from %s", r.RemoteAddr)
+			logger.Warn("Failed WebDAV authentication attempt from %s", r.RemoteAddr)
 			return
 		}
 
