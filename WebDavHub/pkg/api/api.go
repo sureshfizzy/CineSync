@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"golang.org/x/sys/windows"
 )
 
 var rootDir string
@@ -133,30 +131,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
-}
-
-func getDiskUsage(path string) (total, used int64, err error) {
-	// For Windows, we'll use a simpler approach
-	// Get the drive letter from the path
-	drive := filepath.VolumeName(path)
-	if drive == "" {
-		return 0, 0, fmt.Errorf("invalid path: %s", path)
-	}
-
-	// Get disk usage using Windows API
-	var freeBytesAvailable, totalBytes, totalFreeBytes uint64
-	err = windows.GetDiskFreeSpaceEx(
-		windows.StringToUTF16Ptr(drive),
-		&freeBytesAvailable,
-		&totalBytes,
-		&totalFreeBytes,
-	)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	// Convert uint64 to int64 for consistency with the rest of the API
-	return int64(totalBytes), int64(totalBytes - freeBytesAvailable), nil
 }
 
 func HandleStats(w http.ResponseWriter, r *http.Request) {

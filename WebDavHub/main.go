@@ -102,10 +102,6 @@ func main() {
 	// Always use DESTINATION_DIR as the effective root
 	effectiveRootDir := *dir
 
-	// Create required directories
-	ensureDirectoryExists("./static")
-	ensureDirectoryExists("./templates")
-
 	// Initialize the server
 	srv := server.NewServer(effectiveRootDir)
 	if err := srv.Initialize(); err != nil {
@@ -160,14 +156,4 @@ func main() {
 
 	fmt.Printf("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
 	log.Fatal(http.ListenAndServe(addr, nil))
-}
-
-// ensureDirectoryExists creates a directory if it doesn't exist
-func ensureDirectoryExists(path string) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		logger.Info("Directory does not exist, creating it: %s", path)
-		if err := os.Mkdir(path, 0755); err != nil {
-			logger.Warn("Could not create directory: %v", err)
-		}
-	}
 }
