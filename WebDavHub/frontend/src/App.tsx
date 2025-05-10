@@ -7,7 +7,9 @@ import Layout from './components/Layout';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import FileBrowser from './components/FileBrowser';
-import { CircularProgress, Box, Typography } from '@mui/material';
+import { CircularProgress, Box, Typography, Button } from '@mui/material';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Dashboard as DashboardIcon } from '@mui/icons-material';
 
 // Loading component
 function LoadingScreen() {
@@ -23,6 +25,7 @@ function NotFound() {
   const { isAuthenticated, authEnabled } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
     if (!isAuthenticated && authEnabled) {
@@ -30,24 +33,202 @@ function NotFound() {
         navigate('/login', { state: { from: location }, replace: true });
       }, 5000);
 
-      return () => clearTimeout(timer);
+      // Countdown timer
+      const countdownInterval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        clearTimeout(timer);
+        clearInterval(countdownInterval);
+      };
     }
   }, [isAuthenticated, authEnabled, navigate, location]);
 
+  const handleDashboardClick = () => {
+    navigate('/dashboard');
+  };
+
   if (!isAuthenticated && authEnabled) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <Typography variant="h4" sx={{ mb: 2 }}>Access Denied</Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>You need to be logged in to access this page.</Typography>
-        <Typography variant="body2" color="text.secondary">Redirecting to login page in 5 seconds...</Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 100%)',
+          p: 3
+        }}
+      >
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Typography
+            variant="h3"
+            sx={{
+              mb: 2,
+              background: 'linear-gradient(45deg, #FF6B6B, #4ECDC4)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              fontWeight: 700
+            }}
+          >
+            Access Denied
+          </Typography>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+        >
+          <Typography
+            variant="h6"
+            color="text.secondary"
+            sx={{ mb: 1, textAlign: 'center' }}
+          >
+            You need to be logged in to access this page.
+          </Typography>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+        >
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{ mb: 3, textAlign: 'center' }}
+          >
+            Redirecting to login page in{' '}
+            <motion.span
+              key={countdown}
+              initial={{ scale: 1.2 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                display: 'inline-block',
+                fontWeight: 600,
+                color: '#FF6B6B'
+              }}
+            >
+              {countdown}
+            </motion.span>
+            {' '}seconds...
+          </Typography>
+        </motion.div>
+
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.6, duration: 0.5 }}
+        >
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            onClick={() => navigate('/login', { state: { from: location }, replace: true })}
+            sx={{
+              borderRadius: 2,
+              px: 4,
+              py: 1.5,
+              textTransform: 'none',
+              fontSize: '1.1rem',
+              boxShadow: '0 4px 14px 0 rgba(0,118,255,0.39)',
+              '&:hover': {
+                boxShadow: '0 6px 20px 0 rgba(0,118,255,0.23)',
+              }
+            }}
+          >
+            Go to Login
+          </Button>
+        </motion.div>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <Typography variant="h4" sx={{ mb: 2 }}>404 - Page Not Found</Typography>
-      <Typography variant="body1" color="text.secondary">The page you're looking for doesn't exist.</Typography>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 100%)',
+        p: 3
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Typography
+          variant="h3"
+          sx={{
+            mb: 2,
+            background: 'linear-gradient(45deg, #FF6B6B, #4ECDC4)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontWeight: 700
+          }}
+        >
+          404 - Page Not Found
+        </Typography>
+      </motion.div>
+
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.5 }}
+      >
+        <Typography
+          variant="h6"
+          color="text.secondary"
+          sx={{ mb: 3, textAlign: 'center' }}
+        >
+          The page you're looking for doesn't exist.
+        </Typography>
+      </motion.div>
+
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.4, duration: 0.5 }}
+      >
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          startIcon={<DashboardIcon />}
+          onClick={handleDashboardClick}
+          sx={{
+            borderRadius: 2,
+            px: 4,
+            py: 1.5,
+            textTransform: 'none',
+            fontSize: '1.1rem',
+            boxShadow: '0 4px 14px 0 rgba(0,118,255,0.39)',
+            '&:hover': {
+              boxShadow: '0 6px 20px 0 rgba(0,118,255,0.23)',
+            }
+          }}
+        >
+          Back to Dashboard
+        </Button>
+      </motion.div>
     </Box>
   );
 }
