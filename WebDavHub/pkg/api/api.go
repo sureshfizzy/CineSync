@@ -12,6 +12,7 @@ import (
 )
 
 var rootDir string
+var lastStats Stats
 
 // SetRootDir sets the root directory for file operations
 func SetRootDir(dir string) {
@@ -135,6 +136,17 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(files)
 }
 
+func statsChanged(a, b Stats) bool {
+	return a.TotalFiles != b.TotalFiles ||
+		a.TotalFolders != b.TotalFolders ||
+		a.TotalSize != b.TotalSize ||
+		a.LastSync != b.LastSync ||
+		a.WebDAVStatus != b.WebDAVStatus ||
+		a.StorageUsed != b.StorageUsed ||
+		a.IP != b.IP ||
+		a.Port != b.Port
+}
+
 func HandleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -174,8 +186,6 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[STATS] API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
-
 	ip := os.Getenv("CINESYNC_IP")
 	if ip == "" {
 		ip = "0.0.0.0"
@@ -198,6 +208,10 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		StorageUsed:  formatFileSize(totalSize),
 		IP:           ip,
 		Port:         port,
+	}
+	if statsChanged(stats, lastStats) {
+		log.Printf("[STATS] API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
+		lastStats = stats
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
