@@ -22,6 +22,7 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import logo from '../assets/logo.png';
 
 const MotionPaper = motion(Paper);
 
@@ -107,6 +108,7 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
             >
+              <img src={logo} alt="CineSync Logo" style={{ display: 'block', margin: '0 auto 20px auto', maxWidth: '160px', width: '100%', height: 'auto' }} />
               <Typography
                 component="h1"
                 variant="h4"

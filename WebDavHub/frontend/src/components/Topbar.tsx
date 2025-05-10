@@ -8,6 +8,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import logo from '../assets/logo.png';
 
 interface TopbarProps {
   toggleTheme: () => void;

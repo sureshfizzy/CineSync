@@ -11,6 +11,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import logo from '../assets/logo.png';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -59,6 +60,7 @@ export default function Login() {
             color: theme.palette.text.primary,
           }}
         >
+          <img src={logo} alt="CineSync Logo" style={{ width: '220px', marginBottom: 16 }} />
           <Typography component="h1" variant="h4" sx={{ mb: 3 }}>
             CineSync
           </Typography>
