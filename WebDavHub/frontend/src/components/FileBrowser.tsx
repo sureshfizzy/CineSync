@@ -40,6 +40,7 @@ import {
   Info as InfoIcon,
   Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
@@ -49,6 +50,10 @@ interface FileItem {
   type: 'file' | 'directory';
   size?: string;
   modified?: string;
+  path?: string;
+  webdavPath?: string;
+  sourcePath?: string;
+  fullPath?: string;
 }
 
 function getFileIcon(name: string, type: string) {
@@ -78,6 +83,7 @@ export default function FileBrowser() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [menuFile, setMenuFile] = useState<FileItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsData, setDetailsData] = useState<FileItem | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -125,7 +131,26 @@ export default function FileBrowser() {
     setMenuFile(null);
   };
 
-  const handleViewDetails = () => {
+  const handleViewDetails = async () => {
+    if (!menuFile) return;
+    const webdavPath = `/Movies${currentPath}/${menuFile.name}`;
+    const relPath = `${currentPath}/${menuFile.name}`;
+    let realPath = '';
+    let absPath = '';
+    try {
+      const res = await axios.post('/api/readlink', { path: relPath });
+      realPath = res.data.realPath || '';
+      absPath = res.data.absPath || '';
+    } catch (e) {
+      realPath = '';
+      absPath = '';
+    }
+    setDetailsData({
+      ...menuFile,
+      webdavPath,
+      fullPath: absPath,
+      sourcePath: realPath,
+    });
     setDetailsOpen(true);
     handleMenuClose();
   };
@@ -325,24 +350,64 @@ export default function FileBrowser() {
         <MenuItem onClick={handleDelete} sx={{ color: theme.palette.error.main }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
 
-      <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="xs" fullWidth>
-        <DialogTitle>Details</DialogTitle>
-        <DialogContent dividers>
-          {menuFile && (
+      <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            fontSize: '1.3rem',
+            background: theme.palette.background.paper,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            borderTopLeftRadius: 12,
+            borderTopRightRadius: 12,
+            p: 2.5,
+            pr: 5
+          }}
+        >
+          Details
+          <IconButton
+            aria-label="close"
+            onClick={handleDetailsClose}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: theme.palette.grey[500],
+            }}
+            size="large"
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          dividers={true}
+          sx={{
+            background: theme.palette.background.default,
+            p: 3,
+            borderBottomLeftRadius: 12,
+            borderBottomRightRadius: 12,
+            minWidth: 350,
+            maxWidth: 600,
+          }}
+        >
+          {detailsData && (
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                {getFileIcon(menuFile.name, menuFile.type)}
-                <Typography sx={{ ml: 2, fontWeight: 600, fontSize: '1.1rem' }}>{menuFile.name}</Typography>
+                {getFileIcon(detailsData.name, detailsData.type)}
+                <Typography sx={{ ml: 2, fontWeight: 700, fontSize: '1.15rem', wordBreak: 'break-all', whiteSpace: 'normal' }}>{detailsData.name}</Typography>
               </Box>
-              <Typography variant="body2"><b>Type:</b> {menuFile.type === 'directory' ? 'Folder' : 'File'}</Typography>
-              <Typography variant="body2"><b>Size:</b> {menuFile.type === 'directory' ? '--' : menuFile.size || '--'}</Typography>
-              <Typography variant="body2"><b>Modified:</b> {formatDate(menuFile.modified)}</Typography>
+              <Divider sx={{ mb: 2 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                <Typography variant="body2"><b>Type:</b> {detailsData.type === 'directory' ? 'Directory' : 'File'}</Typography>
+                <Typography variant="body2"><b>Size:</b> {detailsData.type === 'directory' ? '--' : detailsData.size || '--'}</Typography>
+                <Typography variant="body2"><b>Modified:</b> {formatDate(detailsData.modified)}</Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}><b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>{detailsData.webdavPath || '--'}</span></Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}><b>Full Path:</b> <span style={{ fontFamily: 'monospace' }}>{detailsData.fullPath || '--'}</span></Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}><b>Source Path:</b> <span style={{ fontFamily: 'monospace' }}>{detailsData.sourcePath || '--'}</span></Typography>
+              </Box>
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDetailsClose} variant="contained">Close</Button>
-        </DialogActions>
       </Dialog>
     </Box>
   );

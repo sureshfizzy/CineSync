@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -37,6 +38,16 @@ type Stats struct {
 	StorageUsed  string `json:"storageUsed"`
 	IP           string `json:"ip"`
 	Port         string `json:"port"`
+}
+
+type ReadlinkRequest struct {
+	Path string `json:"path"`
+}
+
+type ReadlinkResponse struct {
+	RealPath string `json:"realPath"`
+	AbsPath  string `json:"absPath"`
+	Error    string `json:"error,omitempty"`
 }
 
 func formatFileSize(size int64) string {
@@ -238,4 +249,44 @@ func HandleAuthEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
+}
+
+func executeReadlink(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", err
+	}
+	return abs, nil
+}
+
+func HandleReadlink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req ReadlinkRequest
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	absPath := filepath.Join(rootDir, req.Path)
+	realPath, err := executeReadlink(absPath)
+	resp := ReadlinkResponse{
+		RealPath: realPath,
+		AbsPath:  absPath,
+	}
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
