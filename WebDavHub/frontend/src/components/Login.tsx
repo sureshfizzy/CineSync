@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -26,6 +26,12 @@ import logo from '../assets/logo.png';
 
 const MotionPaper = motion(Paper);
 
+interface LocationState {
+  from?: {
+    pathname: string;
+  };
+}
+
 export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'light' | 'dark' }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +39,11 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+
+  // Get the return URL from location state or default to dashboard
+  const from = (location.state as LocationState)?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +52,8 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
 
     try {
       await login(username, password);
-      navigate('/dashboard');
+      // Navigate to the return URL or dashboard
+      navigate(from, { replace: true });
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 401) {

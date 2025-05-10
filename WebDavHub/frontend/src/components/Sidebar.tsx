@@ -12,7 +12,7 @@ import axios from 'axios';
 
 const navItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-  { text: 'Browse', icon: <FolderIcon />, path: '/files' },
+  { text: 'Browse', icon: <FolderIcon />, path: '/browse' },
   { text: 'Favorites', icon: <StarIcon />, path: '/favorites' },
 ];
 
