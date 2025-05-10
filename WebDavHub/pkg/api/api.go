@@ -34,6 +34,8 @@ type Stats struct {
 	LastSync     string `json:"lastSync"`
 	WebDAVStatus string `json:"webdavStatus"`
 	StorageUsed  string `json:"storageUsed"`
+	IP           string `json:"ip"`
+	Port         string `json:"port"`
 }
 
 func formatFileSize(size int64) string {
@@ -174,15 +176,29 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[STATS] API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
 
+	ip := os.Getenv("CINESYNC_IP")
+	if ip == "" {
+		ip = "0.0.0.0"
+	}
+	port := os.Getenv("CINESYNC_API_PORT")
+	if port == "" {
+		port = "8082"
+	}
+	webdavEnabled := os.Getenv("CINESYNC_WEBDAV")
+	webdavStatus := "Inactive"
+	if webdavEnabled == "true" || webdavEnabled == "1" {
+		webdavStatus = "Active"
+	}
 	stats := Stats{
 		TotalFiles:   totalFiles,
 		TotalFolders: totalFolders,
 		TotalSize:    formatFileSize(totalSize),
 		LastSync:     lastSync.Format(time.RFC3339),
-		WebDAVStatus: "Active",
+		WebDAVStatus: webdavStatus,
 		StorageUsed:  formatFileSize(totalSize),
+		IP:           ip,
+		Port:         port,
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
