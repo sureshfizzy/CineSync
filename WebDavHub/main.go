@@ -27,13 +27,18 @@ func startNpmServer() error {
 		return fmt.Errorf("failed to change to frontend directory: %v", err)
 	}
 
-	// First, ensure dependencies are installed
-	logger.Info("Installing frontend dependencies...")
-	installCmd := exec.Command("npm", "install")
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
-	if err := installCmd.Run(); err != nil {
-		return fmt.Errorf("failed to install dependencies: %v", err)
+	// Check if node_modules exists
+	if _, err := os.Stat("node_modules"); os.IsNotExist(err) {
+		// Only install dependencies if node_modules doesn't exist
+		logger.Info("Installing frontend dependencies...")
+		installCmd := exec.Command("npm", "install")
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		if err := installCmd.Run(); err != nil {
+			return fmt.Errorf("failed to install dependencies: %v", err)
+		}
+	} else {
+		logger.Info("Frontend dependencies already installed, skipping npm install")
 	}
 
 	// Start npm dev server
