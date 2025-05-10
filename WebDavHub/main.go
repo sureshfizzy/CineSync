@@ -52,10 +52,13 @@ func startNpmServer() error {
 		return fmt.Errorf("failed to change back to original directory: %v", err)
 	}
 
+	// Get UI port from environment variable or use default
+	uiPort := env.GetString("CINESYNC_UI_PORT", "5173")
+
 	// Wait for the development server to be ready
 	logger.Info("Waiting for frontend server to be ready...")
 	for i := 0; i < 30; i++ {
-		resp, err := http.Get("http://localhost:5173")
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%s", uiPort))
 		if err == nil {
 			resp.Body.Close()
 			logger.Info("Frontend server is ready!")
