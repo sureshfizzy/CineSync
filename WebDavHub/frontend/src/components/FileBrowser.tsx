@@ -44,6 +44,8 @@ import {
   Close as CloseIcon,
   Edit as EditIcon,
   Search as SearchIcon,
+  Download as DownloadIcon,
+  PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
@@ -169,7 +171,47 @@ export default function FileBrowser() {
   const handleDetailsClose = () => setDetailsOpen(false);
 
   const handleOpen = () => {
-    // Implement open logic if needed
+    if (!menuFile || menuFile.type === 'directory') {
+      handleMenuClose();
+      return;
+    }
+    // Build the file path
+    const relPath = `${currentPath}/${menuFile.name}`;
+    // Guess file type
+    const ext = menuFile.name.split('.').pop()?.toLowerCase();
+    const canPreview = [
+      'mp4', 'webm', 'ogg', 'mp3', 'wav', 'm4a', // video/audio
+      'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', // images
+      'pdf', 'txt', 'md', 'rtf' // docs
+    ].includes(ext || '');
+    const url = `/api/files${relPath}`;
+    if (canPreview) {
+      window.open(url, '_blank', 'noopener');
+    } else {
+      // fallback: download
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', menuFile.name);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    handleMenuClose();
+  };
+
+  const handleDownload = () => {
+    if (!menuFile || menuFile.type === 'directory') {
+      handleMenuClose();
+      return;
+    }
+    const relPath = `${currentPath}/${menuFile.name}`;
+    const url = `/api/files${relPath}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', menuFile.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     handleMenuClose();
   };
 
@@ -481,12 +523,39 @@ export default function FileBrowser() {
         </Box>
       )}
 
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        <MenuItem onClick={handleOpen}><OpenInNewIcon fontSize="small" sx={{ mr: 1 }} />Open</MenuItem>
-        <MenuItem onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
-        <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: 6,
+            minWidth: 180,
+            bgcolor: theme.palette.background.paper,
+            color: theme.palette.text.primary,
+            mt: 1,
+            p: 0.5,
+          }
+        }}
+        MenuListProps={{
+          sx: {
+            p: 0,
+          }
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        {menuFile?.type === 'file' && (
+          <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleOpen}><PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />Play</MenuItem>
+        )}
+        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
+        {menuFile?.type === 'file' && (
+          <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
+        )}
+        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
         <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={handleDeleteClick} sx={{ color: theme.palette.error.main }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
+        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, color: theme.palette.error.main, '&:hover': { bgcolor: theme.palette.action.selected, color: theme.palette.error.dark } }} onClick={handleDeleteClick}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
 
       <Dialog open={deleteConfirmOpen} onClose={handleDeleteConfirmClose} maxWidth="sm" fullWidth
