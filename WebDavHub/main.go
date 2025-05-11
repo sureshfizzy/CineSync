@@ -130,15 +130,22 @@ func main() {
 	apiMux.HandleFunc("/api/readlink", api.HandleReadlink)
 	apiMux.HandleFunc("/api/delete", api.HandleDelete)
 	apiMux.HandleFunc("/api/rename", api.HandleRename)
+	apiMux.HandleFunc("/api/me", auth.HandleMe)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			auth.BasicAuth(apiMux).ServeHTTP(w, r)
+			// Public endpoints
+			if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/enabled" {
+				apiMux.ServeHTTP(w, r)
+				return
+			}
+			// Protected endpoints
+			auth.JWTMiddleware(apiMux).ServeHTTP(w, r)
 			return
 		}
-		auth.BasicAuth(webdavHandler).ServeHTTP(w, r)
+		webdavHandler.ServeHTTP(w, r)
 	})
 
 	// Start npm development server

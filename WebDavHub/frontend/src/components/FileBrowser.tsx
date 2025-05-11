@@ -170,7 +170,7 @@ export default function FileBrowser() {
   };
   const handleDetailsClose = () => setDetailsOpen(false);
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
     if (!menuFile || menuFile.type === 'directory') {
       handleMenuClose();
       return;
@@ -185,33 +185,53 @@ export default function FileBrowser() {
       'pdf', 'txt', 'md', 'rtf' // docs
     ].includes(ext || '');
     const url = `/api/files${relPath}`;
-    if (canPreview) {
-      window.open(url, '_blank', 'noopener');
-    } else {
-      // fallback: download
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', menuFile.name);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+    try {
+      const response = await axios.get(url, {
+        responseType: 'blob',
+      });
+      const blob = response.data;
+      const blobUrl = window.URL.createObjectURL(blob);
+      if (canPreview) {
+        window.open(blobUrl, '_blank', 'noopener');
+      } else {
+        // fallback: download
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.setAttribute('download', menuFile.name);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch (err) {
+      setError('Failed to open file');
+      console.error('Error opening file:', err);
     }
     handleMenuClose();
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!menuFile || menuFile.type === 'directory') {
       handleMenuClose();
       return;
     }
     const relPath = `${currentPath}/${menuFile.name}`;
     const url = `/api/files${relPath}`;
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', menuFile.name);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    try {
+      const response = await axios.get(url, {
+        responseType: 'blob',
+      });
+      const blob = response.data;
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', menuFile.name);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      setError('Failed to download file');
+      console.error('Error downloading file:', err);
+    }
     handleMenuClose();
   };
 

@@ -8,7 +8,13 @@ import (
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"os"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
+
+var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 // Credentials stores the authentication information
 type Credentials struct {
@@ -47,135 +53,120 @@ func validateCredentials(username, password string) bool {
 		subtle.ConstantTimeCompare([]byte(password), []byte(credentials.Password)) == 1
 }
 
-// BasicAuth middleware for HTTP Basic Authentication
-func BasicAuth(next http.Handler) http.Handler {
+// JWTClaims defines the structure for JWT claims
+type JWTClaims struct {
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+// GenerateJWT generates a JWT for a given username
+func GenerateJWT(username string) (string, error) {
+	claims := JWTClaims{
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+// JWTMiddleware protects endpoints with JWT auth
+func JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if authentication is enabled
-		if !env.IsBool("WEBDAV_AUTH_ENABLED", true) {
+		// Allow public endpoints
+		if isAuthEndpoint(r.URL.Path) || strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
-
-		// Skip authentication for auth-related endpoints
-		if isAuthEndpoint(r.URL.Path) {
-			next.ServeHTTP(w, r)
+		header := r.Header.Get("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
 			return
 		}
-
-		// Get username and password from request
-		username, password, ok := r.BasicAuth()
-
-		// Log authentication attempt
-		logger.Debug("Authentication attempt from %s for path %s", r.RemoteAddr, r.URL.Path)
-
-		// Check if credentials are provided and match
-		if !ok {
-			logger.Warn("Authentication failed: No credentials provided from %s", r.RemoteAddr)
-			sendUnauthorizedResponse(w, r)
+		tokenStr := strings.TrimPrefix(header, "Bearer ")
+		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
-
-		if !validateCredentials(username, password) {
-			logger.Warn("Authentication failed: Invalid credentials for user '%s' from %s", username, r.RemoteAddr)
-			sendUnauthorizedResponse(w, r)
-			return
-		}
-
-		// Add authentication headers to response
-		w.Header().Set("X-Authenticated-User", username)
-
-		logger.Debug("Successful authentication for user: %s on path %s", username, r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
 }
 
-// sendUnauthorizedResponse sends an appropriate unauthorized response based on the request type
-func sendUnauthorizedResponse(w http.ResponseWriter, r *http.Request) {
-	// For API routes, return JSON response
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Invalid credentials",
-		})
-		return
-	}
-
-	// For WebDAV routes, use standard basic auth
-	w.Header().Set("WWW-Authenticate", `Basic realm="CineSync WebDAV"`)
-	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte("Unauthorized"))
-}
-
-// HandleLogin handles the login endpoint
+// HandleLogin handles the login endpoint (JWT version)
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		logger.Warn("Invalid method %s for login endpoint from %s", r.Method, r.RemoteAddr)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	username, password, ok := r.BasicAuth()
-	if !ok {
-		logger.Warn("Login failed: No credentials provided from %s", r.RemoteAddr)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Missing credentials",
-		})
+	var creds Credentials
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		logger.Warn("Invalid request body: %v", err)
 		return
 	}
-
-	if !validateCredentials(username, password) {
-		logger.Warn("Login failed: Invalid credentials for user '%s' from %s", username, r.RemoteAddr)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Invalid credentials",
-		})
+	if !validateCredentials(creds.Username, creds.Password) {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		logger.Warn("Failed login attempt for user '%s'", creds.Username)
 		return
 	}
-
-	logger.Info("Successful login for user '%s' from %s", username, r.RemoteAddr)
+	token, err := GenerateJWT(creds.Username)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		logger.Warn("Failed to generate token for user '%s': %v", creds.Username, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Login successful",
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+	logger.Info("Successful login for user '%s'", creds.Username)
+}
+
+// HandleAuthCheck checks if the JWT is valid
+func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	valid := false
+	if strings.HasPrefix(header, "Bearer ") {
+		tokenStr := strings.TrimPrefix(header, "Bearer ")
+		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+		if err == nil && token.Valid {
+			valid = true
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"isAuthenticated": valid,
+		"authEnabled":     true,
 	})
 }
 
-// HandleAuthCheck handles the consolidated auth check endpoint
-func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		logger.Warn("Invalid method %s for auth check endpoint from %s", r.Method, r.RemoteAddr)
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// HandleMe returns the current user's info from the JWT
+func HandleMe(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
 		return
 	}
-
-	// Check if auth is enabled
-	authEnabled := env.IsBool("WEBDAV_AUTH_ENABLED", true)
-	if !authEnabled {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"isAuthenticated": true,
-			"authEnabled":     false,
-		})
+	tokenStr := strings.TrimPrefix(header, "Bearer ")
+	token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
 	}
-
-	// Check credentials if provided
-	username, password, ok := r.BasicAuth()
-	isAuthenticated := false
-
-	if ok && validateCredentials(username, password) {
-		isAuthenticated = true
-		logger.Debug("Auth check successful for user '%s' from %s", username, r.RemoteAddr)
-	} else if ok {
-		logger.Warn("Auth check failed: Invalid credentials for user '%s' from %s", username, r.RemoteAddr)
+	claims, ok := token.Claims.(*JWTClaims)
+	if !ok {
+		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
+		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"isAuthenticated": isAuthenticated,
-		"authEnabled":     true,
+		"username": claims.Username,
 	})
 }

@@ -20,7 +20,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -61,7 +61,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
             </IconButton>
           </Tooltip>
           {!isMobile && (
-            <Typography variant="body2" sx={{ ml: 1, fontWeight: 600, color: 'text.primary' }}>admin</Typography>
+            <Typography variant="body2" sx={{ ml: 1, fontWeight: 600, color: 'text.primary' }}>{user?.username || ''}</Typography>
           )}
           <Tooltip title="Logout">
             <IconButton size={isMobile ? "small" : "large"} sx={{ ml: 1 }} onClick={handleLogout} color="error">
