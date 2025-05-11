@@ -296,7 +296,18 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
 }
 
 function App() {
-  const [mode, setMode] = useState<'light' | 'dark'>('dark');
+  // Read theme from localStorage or default to 'dark'
+  const getInitialMode = () => {
+    const saved = localStorage.getItem('themeMode');
+    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+  };
+  const [mode, setMode] = useState<'light' | 'dark'>(getInitialMode);
+
+  // Save theme to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('themeMode', mode);
+  }, [mode]);
+
   const theme = useMemo(
     () =>
       createTheme({

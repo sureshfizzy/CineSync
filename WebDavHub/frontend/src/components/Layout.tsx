@@ -25,7 +25,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       {/* Topbar always at the top, full width */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 1201 }}>
         <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />

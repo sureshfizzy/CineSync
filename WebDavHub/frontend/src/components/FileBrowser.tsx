@@ -84,7 +84,6 @@ export default function FileBrowser() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState<'list' | 'grid'>('list');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [menuFile, setMenuFile] = useState<FileItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -100,6 +99,18 @@ export default function FileBrowser() {
   const [search, setSearch] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Read view mode from localStorage or default to 'poster'
+  const getInitialView = () => {
+    const saved = localStorage.getItem('fileViewMode');
+    return saved === 'poster' || saved === 'list' ? saved : 'poster';
+  };
+  const [view, setView] = useState<'poster' | 'list'>(getInitialView);
+
+  // Save view mode to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('fileViewMode', view);
+  }, [view]);
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -387,8 +398,8 @@ export default function FileBrowser() {
           {breadcrumbs}
         </Breadcrumbs>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title="Poster view"><IconButton onClick={() => setView('poster')} color={view === 'poster' ? 'primary' : 'default'}><GridViewIcon /></IconButton></Tooltip>
           <Tooltip title="List view"><IconButton onClick={() => setView('list')} color={view === 'list' ? 'primary' : 'default'}><ViewListIcon /></IconButton></Tooltip>
-          <Tooltip title="Grid view"><IconButton onClick={() => setView('grid')} color={view === 'grid' ? 'primary' : 'default'}><GridViewIcon /></IconButton></Tooltip>
           {!isMobile && (
             <Box sx={{ minWidth: 220, maxWidth: 320, ml: 2 }}>
               <TextField
@@ -435,7 +446,112 @@ export default function FileBrowser() {
         </Box>
       )}
 
-      {view === 'list' ? (
+      {view === 'poster' ? (
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: { 
+            xs: 'repeat(2, 1fr)', 
+            sm: 'repeat(3, 1fr)', 
+            md: 'repeat(4, 1fr)', 
+            lg: 'repeat(5, 1fr)' 
+          }, 
+          gap: 3,
+          p: 1
+        }}>
+          {filteredFiles.length === 0 ? (
+            <Box sx={{ gridColumn: '1/-1', textAlign: 'center', py: 6 }}>
+              <Typography color="text.secondary">
+                {search ? 'No files or folders match your search.' : 'This folder is empty.'}
+              </Typography>
+            </Box>
+          ) : (
+            filteredFiles.map((file) => (
+              <Paper 
+                key={file.name} 
+                sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  cursor: file.type === 'directory' ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease-in-out',
+                  boxShadow: 2,
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  position: 'relative',
+                  '&:hover': { 
+                    transform: 'translateY(-4px)',
+                    boxShadow: 6,
+                    background: theme.palette.action.selected 
+                  }
+                }} 
+                onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}
+              >
+                <Box sx={{ 
+                  width: '100%', 
+                  aspectRatio: '3/4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: theme.palette.background.default,
+                  p: 2
+                }}>
+                  {getFileIcon(file.name, file.type)}
+                </Box>
+                <Box sx={{ 
+                  width: '100%', 
+                  p: 2, 
+                  background: theme.palette.background.paper,
+                  borderTop: `1px solid ${theme.palette.divider}`
+                }}>
+                  <Typography 
+                    sx={{ 
+                      fontWeight: 500, 
+                      textAlign: 'center', 
+                      fontSize: { xs: '0.9rem', sm: '1rem' }, 
+                      wordBreak: 'break-all',
+                      mb: 0.5,
+                      lineHeight: 1.2,
+                      maxHeight: '2.4em',
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical'
+                    }}
+                  >
+                    {file.name}
+                  </Typography>
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary" 
+                    sx={{ 
+                      display: 'block',
+                      textAlign: 'center',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    {file.type === 'directory' ? 'Folder' : file.size}
+                  </Typography>
+                  <IconButton 
+                    size="small" 
+                    sx={{ 
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: 'rgba(0, 0, 0, 0.1)',
+                      '&:hover': {
+                        background: 'rgba(0, 0, 0, 0.2)'
+                      }
+                    }} 
+                    onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Paper>
+            ))
+          )}
+        </Box>
+      ) : (
         <TableContainer component={Paper} sx={{
           width: '100%',
           maxWidth: '100vw',
@@ -519,28 +635,6 @@ export default function FileBrowser() {
             </TableBody>
           </Table>
         </TableContainer>
-      ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: '1fr 1fr 1fr 1fr' }, gap: 2 }}>
-          {filteredFiles.length === 0 ? (
-            <Box sx={{ gridColumn: '1/-1', textAlign: 'center', py: 6 }}>
-              <Typography color="text.secondary">
-                {search ? 'No files or folders match your search.' : 'This folder is empty.'}
-              </Typography>
-            </Box>
-          ) : (
-            filteredFiles.map((file) => (
-              <Paper key={file.name} sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: file.type === 'directory' ? 'pointer' : 'default', transition: 'box-shadow 0.2s', boxShadow: 1, '&:hover': { boxShadow: 4, background: theme.palette.action.selected } }} onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}>
-                {getFileIcon(file.name, file.type)}
-                <Typography sx={{ mt: 1, fontWeight: 500, textAlign: 'center', fontSize: { xs: '0.95rem', sm: '1.05rem' }, wordBreak: 'break-all' }}>{file.name}</Typography>
-                <Typography variant="caption" color="text.secondary">{file.type === 'directory' ? '--' : file.size}</Typography>
-                <Typography variant="caption" color="text.secondary">{formatDate(file.modified)}</Typography>
-                <IconButton size="small" sx={{ mt: 1 }} onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}>
-                  <MoreVertIcon />
-                </IconButton>
-              </Paper>
-            ))
-          )}
-        </Box>
       )}
 
       <Menu
