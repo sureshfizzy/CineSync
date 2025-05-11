@@ -147,7 +147,7 @@ export default function FileBrowser() {
 
   const handleViewDetails = async () => {
     if (!menuFile) return;
-    const webdavPath = `/Movies${currentPath}/${menuFile.name}`;
+    const webdavPath = `Home${currentPath}/${menuFile.name}`;
     const relPath = `${currentPath}/${menuFile.name}`;
     let realPath = '';
     let absPath = '';
