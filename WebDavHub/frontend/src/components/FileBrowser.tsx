@@ -43,6 +43,7 @@ import {
   OpenInNew as OpenInNewIcon,
   Close as CloseIcon,
   Edit as EditIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
@@ -94,6 +95,7 @@ export default function FileBrowser() {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [fileToRename, setFileToRename] = useState<FileItem | null>(null);
+  const [search, setSearch] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -281,6 +283,10 @@ export default function FileBrowser() {
     }
   };
 
+  const filteredFiles = search.trim()
+    ? files.filter(f => f.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : files;
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -321,9 +327,51 @@ export default function FileBrowser() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Tooltip title="List view"><IconButton onClick={() => setView('list')} color={view === 'list' ? 'primary' : 'default'}><ViewListIcon /></IconButton></Tooltip>
           <Tooltip title="Grid view"><IconButton onClick={() => setView('grid')} color={view === 'grid' ? 'primary' : 'default'}><GridViewIcon /></IconButton></Tooltip>
+          {!isMobile && (
+            <Box sx={{ minWidth: 220, maxWidth: 320, ml: 2 }}>
+              <TextField
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search files and folders..."
+                size="small"
+                variant="outlined"
+                fullWidth
+                InputProps={{
+                  startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
+                  endAdornment: search && (
+                    <IconButton size="small" onClick={() => setSearch('')}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  ),
+                  sx: { borderRadius: 2, background: theme.palette.background.paper }
+                }}
+              />
+            </Box>
+          )}
           <Tooltip title="Refresh"><Button variant="contained" startIcon={<RefreshIcon />} onClick={handleRefresh} sx={{ ml: 1, minWidth: isMobile ? 36 : 100, px: isMobile ? 1 : 2 }}>{!isMobile && 'Refresh'}</Button></Tooltip>
         </Box>
       </Box>
+      {isMobile && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, maxWidth: 400 }}>
+          <TextField
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search files and folders..."
+            size="small"
+            variant="outlined"
+            fullWidth
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
+              endAdornment: search && (
+                <IconButton size="small" onClick={() => setSearch('')}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              ),
+              sx: { borderRadius: 2, background: theme.palette.background.paper }
+            }}
+          />
+        </Box>
+      )}
 
       {view === 'list' ? (
         <TableContainer component={Paper} sx={{
@@ -358,16 +406,16 @@ export default function FileBrowser() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {files.length === 0 ? (
+              {filteredFiles.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isMobile ? 3 : 4} align="center">
                     <Typography color="text.secondary" sx={{ py: 4 }}>
-                      This folder is empty.
+                      {search ? 'No files or folders match your search.' : 'This folder is empty.'}
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                files.map((file) => (
+                filteredFiles.map((file) => (
                   <TableRow
                     key={file.name}
                     hover
@@ -411,14 +459,14 @@ export default function FileBrowser() {
         </TableContainer>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: '1fr 1fr 1fr 1fr' }, gap: 2 }}>
-          {files.length === 0 ? (
+          {filteredFiles.length === 0 ? (
             <Box sx={{ gridColumn: '1/-1', textAlign: 'center', py: 6 }}>
               <Typography color="text.secondary">
-                This folder is empty.
+                {search ? 'No files or folders match your search.' : 'This folder is empty.'}
               </Typography>
             </Box>
           ) : (
-            files.map((file) => (
+            filteredFiles.map((file) => (
               <Paper key={file.name} sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: file.type === 'directory' ? 'pointer' : 'default', transition: 'box-shadow 0.2s', boxShadow: 1, '&:hover': { boxShadow: 4, background: theme.palette.action.selected } }} onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}>
                 {getFileIcon(file.name, file.type)}
                 <Typography sx={{ mt: 1, fontWeight: 500, textAlign: 'center', fontSize: { xs: '0.95rem', sm: '1.05rem' }, wordBreak: 'break-all' }}>{file.name}</Typography>

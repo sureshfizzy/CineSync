@@ -49,22 +49,6 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
           </Typography>
         </Box>
 
-        {!isMobile && (
-          <Box sx={{ 
-            flex: 1, 
-            mx: 4, 
-            maxWidth: 400, 
-            display: 'flex', 
-            alignItems: 'center', 
-            bgcolor: 'background.default', 
-            borderRadius: 2, 
-            px: 2 
-          }}>
-            <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
-            <InputBase placeholder="Search files and folders..." sx={{ flex: 1, color: 'text.primary' }} />
-          </Box>
-        )}
-
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <IconButton size={isMobile ? "small" : "large"} onClick={toggleTheme} sx={{ color: 'text.secondary' }}>
