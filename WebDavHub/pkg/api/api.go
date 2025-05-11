@@ -1,10 +1,10 @@
 package api
 
 import (
+	"cinesync/pkg/logger"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -113,7 +113,7 @@ func getFileIcon(name string, isDir bool) string {
 }
 
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[REQUEST] %s %s", r.Method, r.URL.Path)
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -127,10 +127,10 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dir := filepath.Join(rootDir, path)
-	log.Printf("[NAVIGATE] Listing directory: %s (API path: %s)", dir, path)
+	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		log.Printf("[ERROR] Failed to read directory: %s - %v", dir, err)
+		logger.Warn("Failed to read directory: %s - %v", dir, err)
 		http.Error(w, "Failed to read directory", http.StatusInternalServerError)
 		return
 	}
@@ -153,10 +153,10 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 		if entry.IsDir() {
 			fileInfo.Type = "directory"
-			log.Printf("[NAVIGATE] Found directory: %s", filePath)
+			logger.Info("Found directory: %s", filePath)
 		} else {
 			fileInfo.Size = formatFileSize(info.Size())
-			log.Printf("[SERVE] Found file: %s (Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
+			logger.Info("Found file: %s (Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
 		}
 
 		files = append(files, fileInfo)
@@ -191,12 +191,12 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	// Get disk usage information
 	_, _, err := getDiskUsage(rootDir)
 	if err != nil {
-		log.Printf("Failed to get disk stats: %v", err)
+		logger.Warn("Failed to get disk stats: %v", err)
 	}
 
 	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Printf("[ERROR] Skipping path due to error: %s - %v", path, err)
+			logger.Warn("Skipping path due to error: %s - %v", path, err)
 			return nil // Skip this file/dir but continue
 		}
 		if info.IsDir() {
@@ -240,7 +240,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		Port:         port,
 	}
 	if statsChanged(stats, lastStats) {
-		log.Printf("[STATS] API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
+		logger.Info("API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
 		lastStats = stats
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -312,37 +312,37 @@ func HandleReadlink(w http.ResponseWriter, r *http.Request) {
 
 // HandleDelete deletes a file or directory at the given relative path
 func HandleDelete(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[DELETE] Request: %s %s", r.Method, r.URL.Path)
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
-		log.Printf("[DELETE] Invalid method: %s", r.Method)
+		logger.Warn("Invalid method: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("[DELETE] Error: failed to read request body: %v", err)
+		logger.Warn("Error: failed to read request body: %v", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
 
 	var req DeleteRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		log.Printf("[DELETE] Error: invalid request body: %v", err)
+		logger.Warn("Error: invalid request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if req.Path == "" {
-		log.Printf("[DELETE] Error: empty path provided")
+		logger.Warn("Error: empty path provided")
 		http.Error(w, "Path is required", http.StatusBadRequest)
 		return
 	}
 
 	cleanPath := filepath.Clean(req.Path)
 	if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
-		log.Printf("[DELETE] Error: invalid path: %s", cleanPath)
+		logger.Warn("Error: invalid path: %s", cleanPath)
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -351,75 +351,75 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		log.Printf("[DELETE] Error: failed to get absolute path: %v", err)
+		logger.Warn("Error: failed to get absolute path: %v", err)
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
-		log.Printf("[DELETE] Error: failed to get absolute root path: %v", err)
+		logger.Warn("Error: failed to get absolute root path: %v", err)
 		http.Error(w, "Server configuration error", http.StatusInternalServerError)
 		return
 	}
 
 	if !strings.HasPrefix(absPath, absRoot) {
-		log.Printf("[DELETE] Error: path outside root directory: %s", absPath)
+		logger.Warn("Error: path outside root directory: %s", absPath)
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log.Printf("[DELETE] Error: file or directory not found: %s", path)
+		logger.Warn("Error: file or directory not found: %s", path)
 		http.Error(w, "File or directory not found", http.StatusNotFound)
 		return
 	}
 
 	err = os.RemoveAll(path)
 	if err != nil {
-		log.Printf("[DELETE] Error: failed to delete %s: %v", path, err)
+		logger.Warn("Error: failed to delete %s: %v", path, err)
 		http.Error(w, "Failed to delete file or directory", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[DELETE] Success: deleted %s", path)
+	logger.Info("Success: deleted %s", path)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(DeleteResponse{Success: true})
 }
 
 // HandleRename renames a file or directory at the given relative path
 func HandleRename(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[RENAME] Request: %s %s", r.Method, r.URL.Path)
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 
 	if r.Method != http.MethodPost {
-		log.Printf("[RENAME] Invalid method: %s", r.Method)
+		logger.Warn("Invalid method: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("[RENAME] Error: failed to read request body: %v", err)
+		logger.Warn("Error: failed to read request body: %v", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
 
 	var req RenameRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		log.Printf("[RENAME] Error: invalid request body: %v", err)
+		logger.Warn("Error: invalid request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if req.OldPath == "" || req.NewName == "" {
-		log.Printf("[RENAME] Error: missing oldPath or newName")
+		logger.Warn("Error: missing oldPath or newName")
 		http.Error(w, "oldPath and newName are required", http.StatusBadRequest)
 		return
 	}
 
 	cleanOldPath := filepath.Clean(req.OldPath)
 	if cleanOldPath == "." || cleanOldPath == ".." || strings.HasPrefix(cleanOldPath, "..") {
-		log.Printf("[RENAME] Error: invalid oldPath: %s", cleanOldPath)
+		logger.Warn("Error: invalid oldPath: %s", cleanOldPath)
 		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
 		return
 	}
@@ -429,42 +429,42 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 
 	absOld, err := filepath.Abs(oldFullPath)
 	if err != nil {
-		log.Printf("[RENAME] Error: failed to get absolute old path: %v", err)
+		logger.Warn("Error: failed to get absolute old path: %v", err)
 		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
 		return
 	}
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
-		log.Printf("[RENAME] Error: failed to get absolute root path: %v", err)
+		logger.Warn("Error: failed to get absolute root path: %v", err)
 		http.Error(w, "Server configuration error", http.StatusInternalServerError)
 		return
 	}
 	if !strings.HasPrefix(absOld, absRoot) {
-		log.Printf("[RENAME] Error: oldPath outside root directory: %s", absOld)
+		logger.Warn("Error: oldPath outside root directory: %s", absOld)
 		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
 		return
 	}
 
 	if _, err := os.Stat(oldFullPath); os.IsNotExist(err) {
-		log.Printf("[RENAME] Error: file or directory not found: %s", oldFullPath)
+		logger.Warn("Error: file or directory not found: %s", oldFullPath)
 		http.Error(w, "File or directory not found", http.StatusNotFound)
 		return
 	}
 
 	if _, err := os.Stat(newFullPath); err == nil {
-		log.Printf("[RENAME] Error: target already exists: %s", newFullPath)
+		logger.Warn("Error: target already exists: %s", newFullPath)
 		http.Error(w, "Target already exists", http.StatusConflict)
 		return
 	}
 
 	err = os.Rename(oldFullPath, newFullPath)
 	if err != nil {
-		log.Printf("[RENAME] Error: failed to rename %s to %s: %v", oldFullPath, newFullPath, err)
+		logger.Warn("Error: failed to rename %s to %s: %v", oldFullPath, newFullPath, err)
 		http.Error(w, "Failed to rename file or directory", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[RENAME] Success: renamed %s to %s", oldFullPath, newFullPath)
+	logger.Info("Success: renamed %s to %s", oldFullPath, newFullPath)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(RenameResponse{Success: true})
 }

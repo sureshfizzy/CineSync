@@ -175,6 +175,6 @@ func main() {
 		logger.Warn("WebDAV authentication is disabled")
 	}
 
-	fmt.Printf("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
+	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
