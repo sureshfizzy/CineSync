@@ -129,6 +129,7 @@ func main() {
 	apiMux.HandleFunc("/api/auth/check", auth.HandleAuthCheck)
 	apiMux.HandleFunc("/api/readlink", api.HandleReadlink)
 	apiMux.HandleFunc("/api/delete", api.HandleDelete)
+	apiMux.HandleFunc("/api/rename", api.HandleRename)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

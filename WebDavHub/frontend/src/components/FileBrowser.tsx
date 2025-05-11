@@ -25,6 +25,7 @@ import {
   DialogContent,
   DialogActions,
   Divider,
+  TextField,
 } from '@mui/material';
 import {
   FolderOpen as FolderOpenIcon,
@@ -41,6 +42,7 @@ import {
   Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon,
   Close as CloseIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
@@ -87,6 +89,11 @@ export default function FileBrowser() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [fileToRename, setFileToRename] = useState<FileItem | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -208,6 +215,45 @@ export default function FileBrowser() {
     setDeleteConfirmOpen(false);
     setDeleteError(null);
     setFileToDelete(null);
+  };
+
+  const handleRenameClick = () => {
+    setRenameError(null);
+    setRenameValue(menuFile?.name || '');
+    setFileToRename(menuFile);
+    setRenameDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleRenameDialogClose = () => {
+    setRenameDialogOpen(false);
+    setRenameError(null);
+    setRenameValue('');
+    setFileToRename(null);
+    setRenameLoading(false);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!fileToRename || !renameValue.trim() || renameValue === fileToRename.name) return;
+    setRenameLoading(true);
+    setRenameError(null);
+    const relPath = `${currentPath}/${fileToRename.name}`;
+    try {
+      await axios.post('/api/rename', {
+        oldPath: relPath,
+        newName: renameValue.trim(),
+      });
+      await fetchFiles(currentPath);
+      handleRenameDialogClose();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        setRenameError(error.response?.data || error.message);
+      } else {
+        setRenameError('Failed to rename file');
+      }
+    } finally {
+      setRenameLoading(false);
+    }
   };
 
   const pathParts = currentPath.split('/').filter(Boolean);
@@ -390,6 +436,7 @@ export default function FileBrowser() {
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
         <MenuItem onClick={handleOpen}><OpenInNewIcon fontSize="small" sx={{ mr: 1 }} />Open</MenuItem>
         <MenuItem onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
+        <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleDeleteClick} sx={{ color: theme.palette.error.main }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
@@ -513,6 +560,43 @@ export default function FileBrowser() {
             </Box>
           )}
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose} maxWidth="xs" fullWidth TransitionProps={{ appear: true }}
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: theme.palette.primary.main, background: theme.palette.background.paper, borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
+          Rename {fileToRename?.type === 'directory' ? 'Folder' : 'File'}
+        </DialogTitle>
+        <DialogContent sx={{ background: theme.palette.background.default, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
+          <Box component="form" onSubmit={e => { e.preventDefault(); handleRenameSubmit(); }}>
+            <Typography sx={{ mb: 2, color: theme.palette.text.primary }}>
+              Enter a new name for <b>{fileToRename?.name}</b>:
+            </Typography>
+            <TextField
+              autoFocus
+              fullWidth
+              variant="outlined"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              disabled={renameLoading}
+              inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
+              sx={{ mb: 2, background: theme.palette.background.paper, borderRadius: 2 }}
+              color="primary"
+            />
+            {renameError && <Typography color="error" sx={{ mb: 1 }}>{renameError}</Typography>}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ background: theme.palette.background.paper, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
+          <Button onClick={handleRenameDialogClose} disabled={renameLoading} color="inherit">Cancel</Button>
+          <Button
+            onClick={handleRenameSubmit}
+            variant="contained"
+            color="primary"
+            disabled={renameLoading || !renameValue.trim() || renameValue === fileToRename?.name}
+          >
+            {renameLoading ? <CircularProgress size={22} color="inherit" /> : 'Rename'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

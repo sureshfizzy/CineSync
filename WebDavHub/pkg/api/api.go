@@ -59,6 +59,16 @@ type DeleteResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type RenameRequest struct {
+	OldPath string `json:"oldPath"`
+	NewName string `json:"newName"`
+}
+
+type RenameResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 func formatFileSize(size int64) string {
 	const unit = 1024
 	if size < unit {
@@ -375,4 +385,86 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[DELETE] Success: deleted %s", path)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+}
+
+// HandleRename renames a file or directory at the given relative path
+func HandleRename(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[RENAME] Request: %s %s", r.Method, r.URL.Path)
+
+	if r.Method != http.MethodPost {
+		log.Printf("[RENAME] Invalid method: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[RENAME] Error: failed to read request body: %v", err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var req RenameRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		log.Printf("[RENAME] Error: invalid request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.OldPath == "" || req.NewName == "" {
+		log.Printf("[RENAME] Error: missing oldPath or newName")
+		http.Error(w, "oldPath and newName are required", http.StatusBadRequest)
+		return
+	}
+
+	cleanOldPath := filepath.Clean(req.OldPath)
+	if cleanOldPath == "." || cleanOldPath == ".." || strings.HasPrefix(cleanOldPath, "..") {
+		log.Printf("[RENAME] Error: invalid oldPath: %s", cleanOldPath)
+		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
+		return
+	}
+
+	oldFullPath := filepath.Join(rootDir, cleanOldPath)
+	newFullPath := filepath.Join(filepath.Dir(oldFullPath), req.NewName)
+
+	absOld, err := filepath.Abs(oldFullPath)
+	if err != nil {
+		log.Printf("[RENAME] Error: failed to get absolute old path: %v", err)
+		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
+		return
+	}
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		log.Printf("[RENAME] Error: failed to get absolute root path: %v", err)
+		http.Error(w, "Server configuration error", http.StatusInternalServerError)
+		return
+	}
+	if !strings.HasPrefix(absOld, absRoot) {
+		log.Printf("[RENAME] Error: oldPath outside root directory: %s", absOld)
+		http.Error(w, "Invalid oldPath", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := os.Stat(oldFullPath); os.IsNotExist(err) {
+		log.Printf("[RENAME] Error: file or directory not found: %s", oldFullPath)
+		http.Error(w, "File or directory not found", http.StatusNotFound)
+		return
+	}
+
+	if _, err := os.Stat(newFullPath); err == nil {
+		log.Printf("[RENAME] Error: target already exists: %s", newFullPath)
+		http.Error(w, "Target already exists", http.StatusConflict)
+		return
+	}
+
+	err = os.Rename(oldFullPath, newFullPath)
+	if err != nil {
+		log.Printf("[RENAME] Error: failed to rename %s to %s: %v", oldFullPath, newFullPath, err)
+		http.Error(w, "Failed to rename file or directory", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[RENAME] Success: renamed %s to %s", oldFullPath, newFullPath)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(RenameResponse{Success: true})
 }
