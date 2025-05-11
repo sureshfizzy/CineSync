@@ -84,6 +84,9 @@ export default function FileBrowser() {
   const [menuFile, setMenuFile] = useState<FileItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsData, setDetailsData] = useState<FileItem | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -161,9 +164,50 @@ export default function FileBrowser() {
     handleMenuClose();
   };
 
-  const handleDelete = () => {
-    // Implement delete logic if needed
+  const handleDelete = async () => {
+    if (!fileToDelete) return;
+    setDeleteError(null);
+    const relPath = `${currentPath}/${fileToDelete.name}`;
+    let absPath = '';
+    try {
+      const res = await axios.post('/api/readlink', { path: relPath });
+      absPath = res.data.absPath || '';
+    } catch (e) {
+      setDeleteError('Failed to get file path');
+      return;
+    }
+
+    if (!absPath) {
+      setDeleteError('Could not determine file path');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/api/delete', { path: relPath });
+      await fetchFiles(currentPath);
+      handleMenuClose();
+      setDeleteConfirmOpen(false);
+      setFileToDelete(null);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        setDeleteError(error.response?.data || error.message);
+      } else {
+        setDeleteError('Failed to delete file');
+      }
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setDeleteError(null);
+    setFileToDelete(menuFile);
+    setDeleteConfirmOpen(true);
     handleMenuClose();
+  };
+
+  const handleDeleteConfirmClose = () => {
+    setDeleteConfirmOpen(false);
+    setDeleteError(null);
+    setFileToDelete(null);
   };
 
   const pathParts = currentPath.split('/').filter(Boolean);
@@ -347,8 +391,69 @@ export default function FileBrowser() {
         <MenuItem onClick={handleOpen}><OpenInNewIcon fontSize="small" sx={{ mr: 1 }} />Open</MenuItem>
         <MenuItem onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
         <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={handleDelete} sx={{ color: theme.palette.error.main }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
+        <MenuItem onClick={handleDeleteClick} sx={{ color: theme.palette.error.main }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
+
+      <Dialog open={deleteConfirmOpen} onClose={handleDeleteConfirmClose} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            fontSize: '1.3rem',
+            background: theme.palette.background.paper,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            borderTopLeftRadius: 12,
+            borderTopRightRadius: 12,
+            p: 2.5,
+            pr: 5
+          }}
+        >
+          Confirm Delete
+          <IconButton
+            aria-label="close"
+            onClick={handleDeleteConfirmClose}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: theme.palette.grey[500],
+            }}
+            size="large"
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            background: theme.palette.background.default,
+            p: 3,
+            borderBottomLeftRadius: 12,
+            borderBottomRightRadius: 12,
+          }}
+        >
+          <Typography>
+            Are you sure you want to delete {fileToDelete?.name} ? This action cannot be undone.
+          </Typography>
+          {deleteError && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {deleteError}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, background: theme.palette.background.paper }}>
+          <Button onClick={handleDeleteConfirmClose} sx={{ mr: 1 }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            variant="contained"
+            color="error"
+            disabled={!!deleteError}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="sm" fullWidth
         PaperProps={{ sx: { borderRadius: 3 } }}>

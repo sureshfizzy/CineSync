@@ -50,6 +50,15 @@ type ReadlinkResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
+type DeleteRequest struct {
+	Path string `json:"path"`
+}
+
+type DeleteResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 func formatFileSize(size int64) string {
 	const unit = 1024
 	if size < unit {
@@ -289,4 +298,81 @@ func HandleReadlink(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// HandleDelete deletes a file or directory at the given relative path
+func HandleDelete(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[DELETE] Request: %s %s", r.Method, r.URL.Path)
+
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		log.Printf("[DELETE] Invalid method: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("[DELETE] Error: failed to read request body: %v", err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var req DeleteRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		log.Printf("[DELETE] Error: invalid request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Path == "" {
+		log.Printf("[DELETE] Error: empty path provided")
+		http.Error(w, "Path is required", http.StatusBadRequest)
+		return
+	}
+
+	cleanPath := filepath.Clean(req.Path)
+	if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
+		log.Printf("[DELETE] Error: invalid path: %s", cleanPath)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	path := filepath.Join(rootDir, cleanPath)
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		log.Printf("[DELETE] Error: failed to get absolute path: %v", err)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		log.Printf("[DELETE] Error: failed to get absolute root path: %v", err)
+		http.Error(w, "Server configuration error", http.StatusInternalServerError)
+		return
+	}
+
+	if !strings.HasPrefix(absPath, absRoot) {
+		log.Printf("[DELETE] Error: path outside root directory: %s", absPath)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Printf("[DELETE] Error: file or directory not found: %s", path)
+		http.Error(w, "File or directory not found", http.StatusNotFound)
+		return
+	}
+
+	err = os.RemoveAll(path)
+	if err != nil {
+		log.Printf("[DELETE] Error: failed to delete %s: %v", path, err)
+		http.Error(w, "Failed to delete file or directory", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[DELETE] Success: deleted %s", path)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(DeleteResponse{Success: true})
 }
