@@ -154,8 +154,16 @@ function getFileIcon(name: string, type: string) {
 }
 
 function joinPaths(...parts: string[]): string {
-  // Joins path segments with a single slash, removes duplicate slashes
-  return '/' + parts.map(p => p.replace(/^\/+|\/+$/g, '')).filter(Boolean).join('/') + '/';
+  // Remove empty parts and normalize slashes
+  const normalizedParts = parts
+    .map(part => part.replace(/^\/+|\/+$/g, '')) // Remove leading/trailing slashes
+    .filter(Boolean); // Remove empty parts
+  
+  // Handle root path case
+  if (normalizedParts.length === 0) return '/';
+  
+  // Join with single slashes and ensure leading/trailing slash
+  return '/' + normalizedParts.join('/') + '/';
 }
 
 // Add this new component for mobile breadcrumbs
@@ -365,22 +373,33 @@ export default function FileBrowser() {
   }, [currentPath]);
 
   const handlePathClick = (path: string) => {
-    // Remove leading and trailing slashes for the URL
-    const url = path.replace(/^\/+|\/+$/g, '');
-    navigate(`/files/${url}`);
+    // Normalize the path and remove trailing slash for the URL
+    const normalizedPath = joinPaths(path);
+    const urlPath = normalizedPath.replace(/\/$/, '');
+    navigate(`/files${urlPath}`);
   };
 
   const handleUpClick = () => {
     const parts = currentPath.split('/').filter(Boolean);
     if (parts.length === 0) return;
-    const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
+    const parentPath = joinPaths(...parts.slice(0, -1));
     handlePathClick(parentPath);
+  };
+
+  const handleFileClick = (file: FileItem) => {
+    if (file.type === 'directory') {
+      const newPath = joinPaths(currentPath, file.name);
+      handlePathClick(newPath);
+    } else {
+      handleOpen();
+    }
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, file: FileItem) => {
     setAnchorEl(event.currentTarget);
     setMenuFile(file);
   };
+
   const handleMenuClose = () => {
     setAnchorEl(null);
     setMenuFile(null);
@@ -388,8 +407,9 @@ export default function FileBrowser() {
 
   const handleViewDetails = async () => {
     if (!menuFile) return;
-    const webdavPath = `Home${currentPath}/${menuFile.name}`;
-    const relPath = `${currentPath}/${menuFile.name}`;
+    const normalizedPath = joinPaths(currentPath);
+    const webdavPath = joinPaths('Home', normalizedPath, menuFile.name);
+    const relPath = joinPaths(normalizedPath, menuFile.name);
     let realPath = '';
     let absPath = '';
     try {
@@ -409,6 +429,7 @@ export default function FileBrowser() {
     setDetailsOpen(true);
     handleMenuClose();
   };
+
   const handleDetailsClose = () => setDetailsOpen(false);
 
   const handleOpen = async () => {
@@ -416,8 +437,8 @@ export default function FileBrowser() {
       handleMenuClose();
       return;
     }
-    // Build the file path
-    const relPath = `${currentPath}/${menuFile.name}`;
+    // Build the file path using normalized paths
+    const relPath = joinPaths(currentPath, menuFile.name).replace(/\/$/, '');
     // Encode the path properly
     const encodedPath = encodeURIComponent(relPath.replace(/^\/+/, ''));
     // Guess file type
@@ -482,7 +503,7 @@ export default function FileBrowser() {
       handleMenuClose();
       return;
     }
-    const relPath = `${currentPath}/${menuFile.name}`;
+    const relPath = joinPaths(currentPath, menuFile.name).replace(/\/$/, '');
     const url = `/api/files${relPath}`;
     try {
       const response = await axios.get(url, {
@@ -506,7 +527,7 @@ export default function FileBrowser() {
   const handleDelete = async () => {
     if (!fileToDelete) return;
     setDeleteError(null);
-    const relPath = `${currentPath}/${fileToDelete.name}`;
+    const relPath = joinPaths(currentPath, fileToDelete.name).replace(/\/$/, '');
     let absPath = '';
     try {
       const res = await axios.post('/api/readlink', { path: relPath });
@@ -569,7 +590,7 @@ export default function FileBrowser() {
     if (!fileToRename || !renameValue.trim() || renameValue === fileToRename.name) return;
     setRenameLoading(true);
     setRenameError(null);
-    const relPath = `${currentPath}/${fileToRename.name}`;
+    const relPath = joinPaths(currentPath, fileToRename.name).replace(/\/$/, '');
     try {
       await axios.post('/api/rename', {
         oldPath: relPath,
@@ -864,14 +885,14 @@ export default function FileBrowser() {
       )}
 
       {view === 'poster' ? (
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: 'repeat(2, 1fr)',
-            sm: 'repeat(3, 1fr)',
-            md: 'repeat(4, 1fr)',
-            lg: 'repeat(5, 1fr)'
-          },
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: { 
+            xs: 'repeat(2, 1fr)', 
+            sm: 'repeat(3, 1fr)', 
+            md: 'repeat(4, 1fr)', 
+            lg: 'repeat(5, 1fr)' 
+          }, 
           gap: 3,
           p: 1
         }}>
@@ -896,44 +917,52 @@ export default function FileBrowser() {
               );
               const loaded = imgLoadedMap[file.name] || false;
               return (
-                <Paper
-                  key={file.name}
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    cursor: file.type === 'directory' ? 'pointer' : 'default',
-                    transition: 'all 0.2s ease-in-out',
-                    boxShadow: 2,
-                    borderRadius: 3,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: 6,
-                      background: theme.palette.action.selected
-                    }
-                  }}
+              <Paper 
+                key={file.name} 
+                sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  cursor: file.type === 'directory' ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease-in-out',
+                  boxShadow: 2,
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  position: 'relative',
+                  '&:hover': { 
+                    transform: 'translateY(-4px)',
+                    boxShadow: 6,
+                    background: theme.palette.action.selected 
+                  }
+                }} 
                   onClick={() => {
                     if (file.type === 'directory' && !isSeasonFolder && showPoster) {
                       const isTvShow = file.hasSeasonFolders;
                       const tmdbId = tmdb?.id;
-                      navigate(`/media/${encodeURIComponent(file.name)}`, { state: { mediaType: isTvShow ? 'tv' : 'movie', tmdbId } });
+                      const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
+                      navigate(`/media/${encodeURIComponent(file.name)}`, { 
+                        state: { 
+                          mediaType: isTvShow ? 'tv' : 'movie', 
+                          tmdbId,
+                          hasSeasonFolders: file.hasSeasonFolders,
+                          currentPath: fullPath
+                        } 
+                      });
                     } else if (file.type === 'directory') {
                       handlePathClick(joinPaths(currentPath, file.name));
                     }
                   }}
-                >
-                  <Box sx={{
-                    width: '100%',
-                    aspectRatio: '3/4',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: theme.palette.background.default,
+              >
+                <Box sx={{ 
+                  width: '100%', 
+                  aspectRatio: '3/4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: theme.palette.background.default,
                     p: 2,
                     position: 'relative',
-                  }}>
+                }}>
                     {isLoadingPoster ? (
                       <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ borderRadius: 2 }} />
                     ) : showPoster ? (
@@ -953,58 +982,58 @@ export default function FileBrowser() {
                     ) : (
                       getFileIcon(file.name, file.type)
                     )}
-                  </Box>
-                  <Box sx={{
-                    width: '100%',
-                    p: 2,
-                    background: theme.palette.background.paper,
-                    borderTop: `1px solid ${theme.palette.divider}`
-                  }}>
-                    <Typography
-                      sx={{
-                        fontWeight: 500,
-                        textAlign: 'center',
-                        fontSize: { xs: '0.9rem', sm: '1rem' },
-                        wordBreak: 'break-all',
-                        mb: 0.5,
-                        lineHeight: 1.2,
-                        maxHeight: '2.4em',
-                        overflow: 'hidden',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical'
-                      }}
-                    >
+                </Box>
+                <Box sx={{ 
+                  width: '100%', 
+                  p: 2, 
+                  background: theme.palette.background.paper,
+                  borderTop: `1px solid ${theme.palette.divider}`
+                }}>
+                  <Typography 
+                    sx={{ 
+                      fontWeight: 500, 
+                      textAlign: 'center', 
+                      fontSize: { xs: '0.9rem', sm: '1rem' }, 
+                      wordBreak: 'break-all',
+                      mb: 0.5,
+                      lineHeight: 1.2,
+                      maxHeight: '2.4em',
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical'
+                    }}
+                  >
                       {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        display: 'block',
-                        textAlign: 'center',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      {file.type === 'directory' ? 'Folder' : file.size}
-                    </Typography>
-                    <IconButton
-                      size="small"
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        background: 'rgba(0, 0, 0, 0.1)',
-                        '&:hover': {
-                          background: 'rgba(0, 0, 0, 0.2)'
-                        }
-                      }}
-                      onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
-                    >
-                      <MoreVertIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Paper>
+                  </Typography>
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary" 
+                    sx={{ 
+                      display: 'block',
+                      textAlign: 'center',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    {file.type === 'directory' ? 'Folder' : file.size}
+                  </Typography>
+                  <IconButton 
+                    size="small" 
+                    sx={{ 
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: 'rgba(0, 0, 0, 0.1)',
+                      '&:hover': {
+                        background: 'rgba(0, 0, 0, 0.2)'
+                      }
+                    }} 
+                    onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Paper>
               );
             })
           )}
@@ -1174,7 +1203,7 @@ export default function FileBrowser() {
       </Menu>
 
       <Dialog open={deleteConfirmOpen} onClose={handleDeleteConfirmClose} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}>
+        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
         <DialogTitle
           sx={{
             fontWeight: 700,
@@ -1235,7 +1264,7 @@ export default function FileBrowser() {
       </Dialog>
 
       <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}>
+        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
         <DialogTitle
           sx={{
             fontWeight: 700,
@@ -1295,7 +1324,7 @@ export default function FileBrowser() {
       </Dialog>
 
       <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose} maxWidth="xs" fullWidth TransitionProps={{ appear: true }}
-        PaperProps={{ sx: { borderRadius: 3 } }}>
+        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
         <DialogTitle sx={{ fontWeight: 700, color: theme.palette.primary.main, background: theme.palette.background.paper, borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
           Rename {fileToRename?.type === 'directory' ? 'Folder' : 'File'}
         </DialogTitle>

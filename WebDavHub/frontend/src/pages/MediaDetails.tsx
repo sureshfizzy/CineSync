@@ -1,35 +1,38 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Chip, Avatar, Grid, Skeleton, Paper, IconButton, useTheme } from '@mui/material';
+import { Box, Typography, Chip, Avatar, Grid, Skeleton, Paper, IconButton, useTheme, Tabs, Tab } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAuth } from '../contexts/AuthContext';
+import MediaPathInfo from '../components/MediaPathInfo';
+import MovieInfo from '../components/MovieInfo';
+import TVShowInfo from '../components/TVShowInfo';
+import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 
-interface MediaDetailsData {
-  id: number;
-  title: string;
-  overview: string;
-  poster_path: string | null;
-  backdrop_path: string | null;
-  release_date?: string;
-  first_air_date?: string;
-  runtime?: number;
-  episode_run_time?: number[];
-  genres?: { id: number; name: string }[];
-  tagline?: string;
-  vote_average?: number;
-  vote_count?: number;
-  status?: string;
-  original_language?: string;
-  production_countries?: { name: string }[];
-  budget?: number;
-  revenue?: number;
-  credits?: {
-    cast: { id: number; name: string; character: string; profile_path: string | null }[];
-    crew: { id: number; name: string; job: string }[];
-  };
-  keywords?: { name: string }[];
-  media_type?: string;
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`media-tabpanel-${index}`}
+      aria-labelledby={`media-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ py: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
 }
 
 function getPosterUrl(path: string | null, size = 'w500') {
@@ -49,8 +52,15 @@ export default function MediaDetails() {
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
   const theme = useTheme();
-  const mediaType = location.state?.mediaType || 'movie';
+  const hasSeasonFolders = location.state?.hasSeasonFolders || false;
+  const mediaType = hasSeasonFolders ? 'tv' : 'movie';
   const tmdbId = location.state?.tmdbId;
+  const currentPath = location.state?.currentPath || '';
+  const [tabValue, setTabValue] = useState(0);
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -97,30 +107,8 @@ export default function MediaDetails() {
     return <Box sx={{ p: 4 }}><Typography color="error">{error || 'Not found'}</Typography></Box>;
   }
 
-  const releaseYear = (data.release_date || data.first_air_date || '').slice(0, 4);
-  const runtime = data.runtime || (data.episode_run_time && data.episode_run_time[0]);
-  const director = data.credits?.crew.find(c => c.job === 'Director');
-  const writers = data.credits?.crew.filter(c => c.job === 'Screenplay' || c.job === 'Writer');
-  const cast = data.credits?.cast.slice(0, 8) || [];
-  const genres = data.genres || [];
-  let keywordsArr: { name: string }[] = [];
-  if (data.keywords) {
-    if (Array.isArray(data.keywords)) {
-      keywordsArr = data.keywords;
-    } else if (
-      typeof data.keywords === 'object' &&
-      data.keywords !== null &&
-      'results' in data.keywords &&
-      Array.isArray((data.keywords as any).results)
-    ) {
-      keywordsArr = (data.keywords as any).results;
-    }
-  }
-  const tags = keywordsArr.map(k => k.name);
-  const country = data.production_countries?.[0]?.name;
-
   return (
-    <Box sx={{ width: '100%', minHeight: '100%', bgcolor: 'background.default', color: 'text.primary', position: 'relative', display: 'flex', justifyContent: 'center' }}>
+    <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default', position: 'relative' }}>
       {/* Improved Backdrop: edge-to-edge, with gradient overlay */}
       {data.backdrop_path && (
         <Box sx={{
@@ -177,53 +165,23 @@ export default function MediaDetails() {
         flexDirection: 'column',
       }}>
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          {/* Poster and details in a row */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 4 }, alignItems: { xs: 'center', md: 'flex-start' } }}>
-            <Paper elevation={4} sx={{ overflow: 'hidden', borderRadius: 3, minWidth: 240, maxWidth: 320, width: { xs: '60vw', md: 260 }, flexShrink: 0 }}>
-              <img
-                src={getPosterUrl(data.poster_path)}
-                alt={data.title}
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-            </Paper>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1 }}>
-                {data.title} {releaseYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({releaseYear})</span>}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
-                {genres.map(g => <Chip key={g.id} label={g.name} color="primary" variant="outlined" />)}
-                {runtime && <Chip label={`${runtime} min`} color="secondary" variant="outlined" />}
-                {data.status && <Chip label={data.status} color="default" variant="outlined" />}
-                {country && <Chip label={country} color="default" variant="outlined" />}
-              </Box>
-              {data.tagline && <Typography variant="h5" color="text.secondary" fontStyle="italic" gutterBottom sx={{ mb: 1 }}>{data.tagline}</Typography>}
-              <Typography variant="body1" sx={{ mb: 2 }}>{data.overview}</Typography>
-              <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', mb: 1 }}>
-                {director && <Typography><b>Director:</b> {director.name}</Typography>}
-                {writers && writers.length > 0 && <Typography><b>Screenplay:</b> {writers.map(w => w.name).join(', ')}</Typography>}
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                {tags.map(tag => <Chip key={tag} label={tag} size="small" variant="outlined" />)}
-              </Box>
-            </Box>
-          </Box>
-          {/* Cast row below poster/details */}
-          <Box sx={{ mt: 4 }}>
-            <Typography variant="h6" fontWeight={600} gutterBottom>Cast</Typography>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', overflowX: 'auto', pb: 1 }}>
-              {cast.map(actor => (
-                <Box key={actor.id} sx={{ textAlign: 'center', width: 100 }}>
-                  <Avatar
-                    src={getPosterUrl(actor.profile_path, 'w185')}
-                    alt={actor.name}
-                    sx={{ width: 80, height: 80, mx: 'auto', mb: 1 }}
-                  />
-                  <Typography variant="body2" fontWeight={600}>{actor.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{actor.character}</Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
+          {mediaType === 'tv' ? (
+            <TVShowInfo 
+              data={data} 
+              getPosterUrl={getPosterUrl}
+              folderName={folderName || ''}
+              currentPath={currentPath}
+              mediaType={mediaType as 'movie' | 'tv'}
+            />
+          ) : (
+            <MovieInfo 
+              data={data} 
+              getPosterUrl={getPosterUrl}
+              folderName={folderName || ''}
+              currentPath={currentPath}
+              mediaType={mediaType as 'movie' | 'tv'}
+            />
+          )}
         </Box>
       </Box>
     </Box>
