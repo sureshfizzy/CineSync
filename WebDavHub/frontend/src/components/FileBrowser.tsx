@@ -38,7 +38,6 @@ import {
   MoreVert as MoreVertIcon,
   ViewList as ViewListIcon,
   GridView as GridViewIcon,
-  Info as InfoIcon,
   Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon,
   Close as CloseIcon,
@@ -50,6 +49,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
 import { useLayoutContext } from './Layout';
+import VideoPlayerDialog from './VideoPlayerDialog';
 
 interface FileItem {
   name: string;
@@ -291,6 +291,10 @@ export default function FileBrowser() {
   const [search, setSearch] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [videoMimeType, setVideoMimeType] = useState('');
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -364,24 +368,38 @@ export default function FileBrowser() {
     }
     // Build the file path
     const relPath = `${currentPath}/${menuFile.name}`;
+    // Encode the path properly
+    const encodedPath = encodeURIComponent(relPath.replace(/^\/+/, ''));
     // Guess file type
     const ext = menuFile.name.split('.').pop()?.toLowerCase();
-    const canPreview = [
-      'mp4', 'webm', 'ogg', 'mp3', 'wav', 'm4a', // video/audio
+    const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm'].includes(ext || '');
+    const isPreviewable = [
       'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', // images
       'pdf', 'txt', 'md', 'rtf' // docs
     ].includes(ext || '');
-    const url = `/api/files${relPath}`;
+    
     try {
-      const response = await axios.get(url, {
-        responseType: 'blob',
-      });
-      const blob = response.data;
-      const blobUrl = window.URL.createObjectURL(blob);
-      if (canPreview) {
+      if (isVideo) {
+        // For video files, use the streaming endpoint
+        const streamUrl = `/api/stream/${encodedPath}`;
+        setVideoUrl(streamUrl);
+        setVideoTitle(menuFile.name);
+        setVideoMimeType(getMimeType(ext || ''));
+        setVideoPlayerOpen(true);
+      } else if (isPreviewable) {
+        const response = await axios.get(`/api/files/${encodedPath}`, {
+          responseType: 'blob',
+        });
+        const blob = response.data;
+        const blobUrl = window.URL.createObjectURL(blob);
         window.open(blobUrl, '_blank', 'noopener');
       } else {
         // fallback: download
+        const response = await axios.get(`/api/files/${encodedPath}`, {
+          responseType: 'blob',
+        });
+        const blob = response.data;
+        const blobUrl = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = blobUrl;
         link.setAttribute('download', menuFile.name);
@@ -394,6 +412,19 @@ export default function FileBrowser() {
       console.error('Error opening file:', err);
     }
     handleMenuClose();
+  };
+
+  const getMimeType = (ext: string): string => {
+    const mimeTypes: { [key: string]: string } = {
+      'mp4': 'video/mp4',
+      'mkv': 'video/x-matroska',
+      'avi': 'video/x-msvideo',
+      'mov': 'video/quicktime',
+      'wmv': 'video/x-ms-wmv',
+      'flv': 'video/x-flv',
+      'webm': 'video/webm',
+    };
+    return mimeTypes[ext] || '';
   };
 
   const handleDownload = async () => {
@@ -915,7 +946,6 @@ export default function FileBrowser() {
         {menuFile?.type === 'file' && (
           <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleOpen}><PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />Play</MenuItem>
         )}
-        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
         {menuFile?.type === 'file' && (
           <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
         )}
@@ -1081,6 +1111,14 @@ export default function FileBrowser() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <VideoPlayerDialog
+        open={videoPlayerOpen}
+        onClose={() => setVideoPlayerOpen(false)}
+        url={videoUrl}
+        title={videoTitle}
+        mimeType={videoMimeType}
+      />
     </Box>
   );
 } 

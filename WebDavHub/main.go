@@ -122,6 +122,7 @@ func main() {
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/files/", api.HandleFiles)
+	apiMux.HandleFunc("/api/stream/", api.HandleStream)
 	apiMux.HandleFunc("/api/stats", api.HandleStats)
 	apiMux.HandleFunc("/api/auth/test", api.HandleAuthTest)
 	apiMux.HandleFunc("/api/auth/enabled", api.HandleAuthEnabled)
@@ -145,6 +146,7 @@ func main() {
 			auth.JWTMiddleware(apiMux).ServeHTTP(w, r)
 			return
 		}
+		// WebDAV handler for non-API paths
 		webdavHandler.ServeHTTP(w, r)
 	})
 
@@ -176,5 +178,6 @@ func main() {
 	}
 
 	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
+
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

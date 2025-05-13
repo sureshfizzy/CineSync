@@ -80,16 +80,28 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
 		header := r.Header.Get("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		tokenStr := ""
+		if strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+			logger.Debug("JWT found in Authorization header")
+		} else if token := r.URL.Query().Get("token"); token != "" {
+			tokenStr = token
+			logger.Debug("JWT found in query parameter")
+		}
+
+		if tokenStr == "" {
+			logger.Warn("Missing or invalid token for path: %s", r.URL.Path)
+			http.Error(w, "Missing or invalid Authorization header or token parameter", http.StatusUnauthorized)
 			return
 		}
-		tokenStr := strings.TrimPrefix(header, "Bearer ")
+
 		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 			return jwtSecret, nil
 		})
 		if err != nil || !token.Valid {
+			logger.Warn("Invalid or expired token for path %s: %v", r.URL.Path, err)
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}

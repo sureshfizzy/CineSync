@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -467,4 +468,141 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Success: renamed %s to %s", oldFullPath, newFullPath)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(RenameResponse{Success: true})
+}
+
+func HandleStream(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/stream/")
+	filePath := filepath.Join(rootDir, path)
+	logger.Info("Starting video stream for: %s", filePath)
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		logger.Error("Failed to open file for streaming: %v", err)
+		http.Error(w, "Failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	// Get file info
+	fileInfo, err := file.Stat()
+	if err != nil {
+		logger.Error("Failed to get file info: %v", err)
+		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
+		return
+	}
+	logger.Info("File size: %s", formatFileSize(fileInfo.Size()))
+
+	// Set content type based on file extension
+	contentType := "video/mp4" // default
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp4":
+		contentType = "video/mp4"
+	case ".webm":
+		contentType = "video/webm"
+	case ".mkv":
+		contentType = "video/x-matroska"
+	case ".avi":
+		contentType = "video/x-msvideo"
+	case ".mov":
+		contentType = "video/quicktime"
+	case ".wmv":
+		contentType = "video/x-ms-wmv"
+	case ".flv":
+		contentType = "video/x-flv"
+	}
+	logger.Info("Content-Type: %s", contentType)
+
+	// Get the size of the file
+	fileSize := fileInfo.Size()
+
+	// Default chunk size (2MB for initial chunk, 8MB for subsequent chunks)
+	initialChunkSize := int64(2 * 1024 * 1024)    // 2MB
+	defaultChunkSize := int64(8 * 1024 * 1024)    // 8MB
+
+	// Get the range header
+	rangeHeader := r.Header.Get("Range")
+	if rangeHeader == "" {
+		// If no range header, return the first chunk
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", fileSize))
+		// Return 206 Partial Content status to indicate more content is available
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", initialChunkSize-1, fileSize))
+		w.WriteHeader(http.StatusPartialContent)
+
+		// Copy the initial chunk
+		if _, err := io.CopyN(w, file, initialChunkSize); err != nil && err != io.EOF {
+			logger.Error("Failed to copy initial chunk: %v", err)
+			return
+		}
+		return
+	}
+
+	// Parse the range header
+	var start, end int64
+	if _, err := fmt.Sscanf(rangeHeader, "bytes=%d-%d", &start, &end); err != nil {
+		if _, err := fmt.Sscanf(rangeHeader, "bytes=%d-", &start); err != nil {
+			logger.Error("Failed to parse range header: %v", err)
+			http.Error(w, "Invalid range header", http.StatusBadRequest)
+			return
+		}
+		// If this is the initial request (start = 0), use smaller chunk
+		if start == 0 {
+			end = initialChunkSize - 1
+		} else {
+			end = start + defaultChunkSize - 1
+		}
+	}
+
+	// Validate range
+	if start >= fileSize {
+		logger.Error("Invalid range: start position %d exceeds file size %d", start, fileSize)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
+		http.Error(w, "Invalid range", http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+	if end >= fileSize {
+		end = fileSize - 1
+	}
+
+	// Set headers for partial content
+	contentLength := end - start + 1
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", contentLength))
+	w.Header().Set("Content-Type", contentType)
+	// Add cache control headers for better performance
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	w.WriteHeader(http.StatusPartialContent)
+
+	// Seek to start position
+	if _, err := file.Seek(start, 0); err != nil {
+		logger.Error("Failed to seek file: %v", err)
+		http.Error(w, "Failed to seek file", http.StatusInternalServerError)
+		return
+	}
+
+	// Use a reasonably sized buffer for copying
+	buffer := make([]byte, 32*1024) // 32KB buffer
+	written := int64(0)
+	for written < contentLength {
+		n, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			logger.Error("Error reading file: %v", err)
+			return
+		}
+		if n == 0 {
+			break
+		}
+		remaining := contentLength - written
+		if int64(n) > remaining {
+			n = int(remaining)
+		}
+		if _, err := w.Write(buffer[:n]); err != nil {
+			logger.Error("Error writing to response: %v", err)
+			return
+		}
+		written += int64(n)
+	}
 }

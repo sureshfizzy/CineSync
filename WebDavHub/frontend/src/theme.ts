@@ -73,13 +73,24 @@ const shadows = [
   '0px 12px 24px rgba(0,0,0,0.16)',
   '0px 16px 32px rgba(0,0,0,0.20)',
   '0px 20px 40px rgba(0,0,0,0.24)',
-  // Additional shadow levels for more depth options
   '0px 24px 48px rgba(0,0,0,0.28)',
   '0px 28px 56px rgba(0,0,0,0.32)',
   '0px 32px 64px rgba(0,0,0,0.36)',
   '0px 36px 72px rgba(0,0,0,0.40)',
-  // Fill remaining required shadow levels
-  ...Array(13).fill('none'),
+  '0px 40px 80px rgba(0,0,0,0.44)',
+  '0px 44px 88px rgba(0,0,0,0.48)',
+  '0px 48px 96px rgba(0,0,0,0.52)',
+  '0px 52px 104px rgba(0,0,0,0.56)',
+  '0px 56px 112px rgba(0,0,0,0.60)',
+  '0px 60px 120px rgba(0,0,0,0.64)',
+  '0px 64px 128px rgba(0,0,0,0.68)',
+  '0px 68px 136px rgba(0,0,0,0.72)',
+  '0px 72px 144px rgba(0,0,0,0.76)',
+  '0px 76px 152px rgba(0,0,0,0.80)',
+  '0px 80px 160px rgba(0,0,0,0.84)',
+  '0px 84px 168px rgba(0,0,0,0.88)',
+  '0px 88px 176px rgba(0,0,0,0.92)',
+  '0px 92px 184px rgba(0,0,0,0.96)',
 ];
 
 // Enhanced typography system
