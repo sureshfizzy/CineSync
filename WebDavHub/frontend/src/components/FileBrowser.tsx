@@ -38,6 +38,7 @@ import {
   MoreVert as MoreVertIcon,
   ViewList as ViewListIcon,
   GridView as GridViewIcon,
+  Info as InfoIcon,
   Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon,
   Close as CloseIcon,
@@ -1163,6 +1164,7 @@ export default function FileBrowser() {
         {menuFile?.type === 'file' && (
           <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleOpen}><PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />Play</MenuItem>
         )}
+        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
         {menuFile?.type === 'file' && (
           <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
         )}
