@@ -52,6 +52,7 @@ import { useLayoutContext } from './Layout';
 import VideoPlayerDialog from './VideoPlayerDialog';
 import { searchTmdb, getTmdbPosterUrl, TmdbResult } from './tmdbApi';
 import Skeleton from '@mui/material/Skeleton';
+import { useAuth } from '../contexts/AuthContext';
 
 interface FileItem {
   name: string;
@@ -313,6 +314,7 @@ export default function FileBrowser() {
   const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
   const tmdbActive = useRef(0);
   const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0); // force rerender/queue check
+  const { isAuthenticated } = useAuth();
 
   // Helper to enqueue a TMDb lookup
   const enqueueTmdbLookup = useCallback((name: string, title: string, year: string | undefined, mediaType: 'movie' | 'tv' | undefined) => {
@@ -911,7 +913,15 @@ export default function FileBrowser() {
                       background: theme.palette.action.selected
                     }
                   }}
-                  onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}
+                  onClick={() => {
+                    if (file.type === 'directory' && !isSeasonFolder && showPoster) {
+                      const isTvShow = file.hasSeasonFolders;
+                      const tmdbId = tmdb?.id;
+                      navigate(`/media/${encodeURIComponent(file.name)}`, { state: { mediaType: isTvShow ? 'tv' : 'movie', tmdbId } });
+                    } else if (file.type === 'directory') {
+                      handlePathClick(joinPaths(currentPath, file.name));
+                    }
+                  }}
                 >
                   <Box sx={{
                     width: '100%',

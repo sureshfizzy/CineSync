@@ -11,6 +11,7 @@ import { CircularProgress, Box, Typography, Button } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { getTheme } from './theme';
+import MediaDetails from './pages/MediaDetails';
 
 // Loading component
 function LoadingScreen() {
@@ -288,6 +289,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
+        <Route path="media/:folderName" element={<MediaDetails />} />
       </Route>
 
       {/* Catch all route - 404 */}
