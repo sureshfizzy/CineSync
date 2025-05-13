@@ -1,5 +1,5 @@
 import { Box, useMediaQuery, useTheme, IconButton, Drawer } from '@mui/material';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useOutletContext } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useState } from 'react';
 import Sidebar from './Sidebar';
@@ -10,10 +10,44 @@ interface LayoutProps {
   mode: 'light' | 'dark';
 }
 
+type ContextType = {
+  view: 'list' | 'poster';
+  setView: (view: 'list' | 'poster') => void;
+  handleRefresh: () => void;
+};
+
+export function useLayoutContext() {
+  return useOutletContext<ContextType>();
+}
+
 export default function Layout({ toggleTheme, mode }: LayoutProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  
+  // Get initial view from localStorage or default to 'poster'
+  const getInitialView = () => {
+    const saved = localStorage.getItem('fileViewMode');
+    return saved === 'poster' || saved === 'list' ? saved as 'poster' | 'list' : 'poster';
+  };
+  const [view, setView] = useState<'list' | 'poster'>(getInitialView);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Save view mode to localStorage whenever it changes
+  const handleViewChange = (newView: 'list' | 'poster') => {
+    setView(newView);
+    localStorage.setItem('fileViewMode', newView);
+    if (isMobile) {
+      setMobileOpen(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+    if (isMobile) {
+      setMobileOpen(false);
+    }
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -22,6 +56,12 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   // Close sidebar drawer after navigation (mobile only)
   const handleSidebarNavigate = () => {
     setMobileOpen(false);
+  };
+
+  const contextValue: ContextType = {
+    view,
+    setView: handleViewChange,
+    handleRefresh,
   };
 
   return (
@@ -51,7 +91,12 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               },
             }}
           >
-            <Sidebar onNavigate={handleSidebarNavigate} />
+            <Sidebar 
+              onNavigate={handleSidebarNavigate} 
+              currentView={view}
+              onViewChange={handleViewChange}
+              onRefresh={handleRefresh}
+            />
           </Drawer>
         ) : (
           <Box
@@ -66,11 +111,15 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               zIndex: 1200,
             }}
           >
-            <Sidebar />
+            <Sidebar 
+              currentView={view}
+              onViewChange={handleViewChange}
+              onRefresh={handleRefresh}
+            />
           </Box>
         )}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, bgcolor: 'background.default', p: { xs: 2, sm: 3, md: 4 } }}>
-          <Outlet />
+          <Outlet context={contextValue} />
         </Box>
       </Box>
     </Box>

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
@@ -10,6 +10,7 @@ import FileBrowser from './components/FileBrowser';
 import { CircularProgress, Box, Typography, Button } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
+import { getTheme } from './theme';
 
 // Loading component
 function LoadingScreen() {
@@ -308,15 +309,7 @@ function App() {
     localStorage.setItem('themeMode', mode);
   }, [mode]);
 
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode,
-        },
-      }),
-    [mode],
-  );
+  const theme = useMemo(() => getTheme(mode), [mode]);
 
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));

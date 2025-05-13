@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, Divider, Chip, useTheme, useMediaQuery } from '@mui/material';
+import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, Divider, Chip, useTheme, useMediaQuery, IconButton } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
@@ -7,6 +7,9 @@ import HistoryIcon from '@mui/icons-material/History';
 import DeleteIcon from '@mui/icons-material/Delete';
 import WifiIcon from '@mui/icons-material/Wifi';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import GridViewIcon from '@mui/icons-material/GridView';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { NavLink } from 'react-router-dom';
 import axios from 'axios';
 
@@ -18,9 +21,12 @@ const navItems = [
 
 interface SidebarProps {
   onNavigate?: () => void;
+  onViewChange?: (view: 'list' | 'poster') => void;
+  currentView?: 'list' | 'poster';
+  onRefresh?: () => void;
 }
 
-export default function Sidebar({ onNavigate }: SidebarProps) {
+export default function Sidebar({ onNavigate, onViewChange, currentView, onRefresh }: SidebarProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const isMobileOrTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -47,8 +53,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       borderRight: `1px solid ${theme.palette.divider}`,
       pt: { xs: '64px', md: 0 }
     }}>
-      <Divider />
-      <List sx={{ flex: 1, pt: { xs: 2, md: 0 } }}>
+      <List sx={{ flex: 1, pt: { xs: 2, md: 2 } }}>
         {navItems.map((item) => (
           <NavLink
             key={item.text}
@@ -56,6 +61,8 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
             style={{
               textDecoration: 'none',
               color: 'inherit',
+              display: 'block',
+              margin: '4px 8px',
             }}
             className={({ isActive }) => isActive ? 'active-nav' : ''}
             onClick={onNavigate}
@@ -63,9 +70,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
             <ListItem 
               button
               sx={{ 
-                borderRadius: 2, 
-                mx: 1, 
-                my: 0.5,
+                borderRadius: 2,
                 '&:hover': {
                   bgcolor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                 },
@@ -73,14 +78,85 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
                   bgcolor: theme.palette.action.selected,
                   fontWeight: 700,
                 },
+                transition: 'background-color 0.2s',
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.text.primary }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
             </ListItem>
           </NavLink>
         ))}
       </List>
+
+      {isMobileOrTablet && (
+        <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 2, px: 1 }}>VIEW OPTIONS</Typography>
+          <List sx={{ p: 0 }}>
+            <ListItem 
+              button 
+              onClick={() => onViewChange?.('poster')}
+              selected={currentView === 'poster'}
+              sx={{ 
+                borderRadius: 2,
+                mb: 1,
+                '&.Mui-selected': {
+                  bgcolor: theme.palette.primary.main + '20',
+                  color: theme.palette.primary.main,
+                  '& .MuiListItemIcon-root': {
+                    color: theme.palette.primary.main,
+                  }
+                },
+                transition: 'background-color 0.2s',
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <GridViewIcon />
+              </ListItemIcon>
+              <ListItemText primary="Poster View" />
+            </ListItem>
+            <ListItem 
+              button 
+              onClick={() => onViewChange?.('list')}
+              selected={currentView === 'list'}
+              sx={{ 
+                borderRadius: 2,
+                mb: 1,
+                '&.Mui-selected': {
+                  bgcolor: theme.palette.primary.main + '20',
+                  color: theme.palette.primary.main,
+                  '& .MuiListItemIcon-root': {
+                    color: theme.palette.primary.main,
+                  }
+                },
+                transition: 'background-color 0.2s',
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <ViewListIcon />
+              </ListItemIcon>
+              <ListItemText primary="List View" />
+            </ListItem>
+            <ListItem 
+              button 
+              onClick={onRefresh}
+              sx={{ 
+                borderRadius: 2,
+                color: theme.palette.primary.main,
+                '& .MuiListItemIcon-root': {
+                  color: theme.palette.primary.main,
+                },
+                transition: 'background-color 0.2s',
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <RefreshIcon />
+              </ListItemIcon>
+              <ListItemText primary="Refresh" />
+            </ListItem>
+          </List>
+        </Box>
+      )}
+
       <Box sx={{ p: 2 }}>
         <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 1 }}>WEBDAV STATUS</Typography>
         <Box sx={{ 

@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
+import { useLayoutContext } from './Layout';
 
 interface FileItem {
   name: string;
@@ -59,6 +60,82 @@ interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
+}
+
+interface MobileListItemProps {
+  file: FileItem;
+  onItemClick: () => void;
+  onMenuClick: (event: React.MouseEvent<HTMLElement>) => void;
+  formatDate: (date?: string) => string;
+}
+
+function MobileListItem({ file, onItemClick, onMenuClick, formatDate }: MobileListItemProps) {
+  return (
+    <Box
+      onClick={onItemClick}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        p: 1.5,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        cursor: file.type === 'directory' ? 'pointer' : 'default',
+        '&:active': {
+          bgcolor: 'action.selected',
+        },
+        bgcolor: 'background.paper',
+        '&:hover': {
+          bgcolor: 'action.hover',
+        },
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
+        <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+          {getFileIcon(file.name, file.type)}
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography
+            variant="body1"
+            sx={{
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {file.name}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
+          </Typography>
+        </Box>
+      </Box>
+      <IconButton 
+        size="small" 
+        onClick={onMenuClick}
+        sx={{ 
+          ml: 1,
+          color: 'text.secondary',
+          '&:hover': {
+            color: 'text.primary',
+            bgcolor: 'action.selected',
+          },
+        }}
+      >
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+    </Box>
+  );
 }
 
 function getFileIcon(name: string, type: string) {
@@ -75,9 +152,124 @@ function joinPaths(...parts: string[]): string {
   return '/' + parts.map(p => p.replace(/^\/+|\/+$/g, '')).filter(Boolean).join('/') + '/';
 }
 
+// Add this new component for mobile breadcrumbs
+function MobileBreadcrumbs({ currentPath, onPathClick }: { 
+  currentPath: string;
+  onPathClick: (path: string) => void;
+}) {
+  const pathParts = currentPath.split('/').filter(Boolean);
+  const showBackOnly = pathParts.length > 2;
+
+  if (showBackOnly) {
+    // Show only current folder with back button
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center',
+        minWidth: 0,
+        width: '100%'
+      }}>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() => {
+            const parentPath = '/' + pathParts.slice(0, -1).join('/') + '/';
+            onPathClick(parentPath);
+          }}
+          sx={{ 
+            textDecoration: 'none',
+            color: 'primary.main',
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: 0,
+            mr: 1
+          }}
+        >
+          <UpIcon sx={{ fontSize: 20 }} />
+          {pathParts[pathParts.length - 2]}
+        </Link>
+        <Typography
+          sx={{
+            fontWeight: 500,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            minWidth: 0
+          }}
+        >
+          {pathParts[pathParts.length - 1]}
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Show full breadcrumbs for shorter paths
+  return (
+    <Breadcrumbs
+      sx={{
+        minWidth: 0,
+        width: '100%',
+        '& .MuiBreadcrumbs-ol': {
+          flexWrap: 'nowrap',
+          width: '100%',
+        },
+        '& .MuiBreadcrumbs-li': {
+          minWidth: 0,
+        }
+      }}
+    >
+      <Link
+        component="button"
+        variant="body1"
+        onClick={() => onPathClick('/')}
+        sx={{ 
+          textDecoration: 'none',
+          fontSize: '1rem',
+          fontWeight: 500,
+          whiteSpace: 'nowrap'
+        }}
+      >
+        Home
+      </Link>
+      {pathParts.map((part, index) => {
+        const path = '/' + pathParts.slice(0, index + 1).join('/') + '/';
+        return (
+          <Typography
+            key={path}
+            component="button"
+            onClick={() => onPathClick(path)}
+            sx={{
+              border: 'none',
+              background: 'none',
+              padding: 0,
+              fontSize: '1rem',
+              fontWeight: index === pathParts.length - 1 ? 500 : 400,
+              color: index === pathParts.length - 1 ? 'text.primary' : 'primary.main',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+              maxWidth: '120px',
+              textAlign: 'left',
+              '&:hover': {
+                textDecoration: index === pathParts.length - 1 ? 'none' : 'underline'
+              }
+            }}
+          >
+            {part}
+          </Typography>
+        );
+      })}
+    </Breadcrumbs>
+  );
+}
+
 export default function FileBrowser() {
   const navigate = useNavigate();
   const params = useParams();
+  const { view, setView, handleRefresh } = useLayoutContext();
   // Get the wildcard path from the URL (e.g., /files/path/to/folder)
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
@@ -99,18 +291,6 @@ export default function FileBrowser() {
   const [search, setSearch] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  // Read view mode from localStorage or default to 'poster'
-  const getInitialView = () => {
-    const saved = localStorage.getItem('fileViewMode');
-    return saved === 'poster' || saved === 'list' ? saved : 'poster';
-  };
-  const [view, setView] = useState<'poster' | 'list'>(getInitialView);
-
-  // Save view mode to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('fileViewMode', view);
-  }, [view]);
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -141,10 +321,6 @@ export default function FileBrowser() {
     if (parts.length === 0) return;
     const parentPath = '/' + parts.slice(0, -1).join('/') + '/';
     handlePathClick(parentPath);
-  };
-
-  const handleRefresh = () => {
-    fetchFiles(currentPath);
   };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, file: FileItem) => {
@@ -379,51 +555,84 @@ export default function FileBrowser() {
   return (
     <Box sx={{ flexGrow: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Tooltip title="Up">
-          <span>
-            <IconButton onClick={handleUpClick} disabled={currentPath === '/'}>
-              <UpIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Breadcrumbs sx={{ flexGrow: 1, ml: 2, fontSize: { xs: '1rem', sm: '1.1rem' } }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={() => handlePathClick('/')}
-            sx={{ textDecoration: 'none', fontSize: { xs: '1rem', sm: '1.1rem' } }}
-          >
-            Home
-          </Link>
-          {breadcrumbs}
-        </Breadcrumbs>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Tooltip title="Poster view"><IconButton onClick={() => setView('poster')} color={view === 'poster' ? 'primary' : 'default'}><GridViewIcon /></IconButton></Tooltip>
-          <Tooltip title="List view"><IconButton onClick={() => setView('list')} color={view === 'list' ? 'primary' : 'default'}><ViewListIcon /></IconButton></Tooltip>
-          {!isMobile && (
-            <Box sx={{ minWidth: 220, maxWidth: 320, ml: 2 }}>
-              <TextField
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search files and folders..."
-                size="small"
-                variant="outlined"
-                fullWidth
-                InputProps={{
-                  startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
-                  endAdornment: search && (
-                    <IconButton size="small" onClick={() => setSearch('')}>
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  ),
-                  sx: { borderRadius: 2, background: theme.palette.background.paper }
-                }}
-              />
+        {isMobile ? (
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            width: '100%',
+            minWidth: 0,
+            px: 1
+          }}>
+            <MobileBreadcrumbs currentPath={currentPath} onPathClick={handlePathClick} />
+          </Box>
+        ) : (
+          <>
+            <Tooltip title="Up">
+              <span>
+                <IconButton onClick={handleUpClick} disabled={currentPath === '/'}>
+                  <UpIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Breadcrumbs sx={{ flexGrow: 1, ml: 2 }}>
+              <Link
+                component="button"
+                variant="body1"
+                onClick={() => handlePathClick('/')}
+                sx={{ textDecoration: 'none', fontSize: '1.1rem' }}
+              >
+                Home
+              </Link>
+              {breadcrumbs}
+            </Breadcrumbs>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ minWidth: 220, maxWidth: 320 }}>
+                <TextField
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search files and folders..."
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
+                    endAdornment: search && (
+                      <IconButton size="small" onClick={() => setSearch('')}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    ),
+                    sx: { borderRadius: 2, background: theme.palette.background.paper }
+                  }}
+                />
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Poster view">
+                  <IconButton 
+                    onClick={() => setView('poster')} 
+                    color={view === 'poster' ? 'primary' : 'default'}
+                  >
+                    <GridViewIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="List view">
+                  <IconButton 
+                    onClick={() => setView('list')} 
+                    color={view === 'list' ? 'primary' : 'default'}
+                  >
+                    <ViewListIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Refresh">
+                  <IconButton onClick={handleRefresh} color="primary">
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
-          )}
-          <Tooltip title="Refresh"><Button variant="contained" startIcon={<RefreshIcon />} onClick={handleRefresh} sx={{ ml: 1, minWidth: isMobile ? 36 : 100, px: isMobile ? 1 : 2 }}>{!isMobile && 'Refresh'}</Button></Tooltip>
-        </Box>
+          </>
+        )}
       </Box>
+
       {isMobile && (
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, maxWidth: 400 }}>
           <TextField
@@ -552,89 +761,132 @@ export default function FileBrowser() {
           )}
         </Box>
       ) : (
-        <TableContainer component={Paper} sx={{
-          width: '100%',
-          maxWidth: '100vw',
-          overflowX: 'auto',
-          boxShadow: 3,
-          borderRadius: { xs: 1, sm: 3 },
-          p: { xs: 0, sm: 0 },
-        }}>
-          <Table size={isMobile ? 'small' : 'medium'} sx={{
-            tableLayout: 'auto',
-            minWidth: 0,
-            width: '100%',
-            '& td, & th': {
-              px: { xs: 1, sm: 2 },
-              py: { xs: 0.5, sm: 1.5 },
-              fontSize: { xs: '0.95rem', sm: '1.05rem' },
-              wordBreak: 'break-word',
-              whiteSpace: 'nowrap',
-              textOverflow: 'ellipsis',
-              overflow: 'hidden',
-              maxWidth: { xs: 120, sm: 'none' },
-            },
-          }}>
-            <TableHead>
-              <TableRow sx={{ background: theme.palette.action.hover }}>
-                <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Size</TableCell>
-                {!isMobile && <TableCell sx={{ fontWeight: 700 }}>Modified</TableCell>}
-                <TableCell align="right" sx={{ width: 48 }}></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+        <>
+          {isMobile ? (
+            <Paper 
+              elevation={2}
+              sx={{ 
+                width: '100%',
+                overflow: 'hidden',
+                borderRadius: 2,
+                bgcolor: 'background.default'
+              }}
+            >
               {filteredFiles.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isMobile ? 3 : 4} align="center">
-                    <Typography color="text.secondary" sx={{ py: 4 }}>
-                      {search ? 'No files or folders match your search.' : 'This folder is empty.'}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography color="text.secondary">
+                    {search ? 'No files or folders match your search.' : 'This folder is empty.'}
+                  </Typography>
+                </Box>
               ) : (
                 filteredFiles.map((file) => (
-                  <TableRow
+                  <MobileListItem
                     key={file.name}
-                    hover
-                    onClick={() => {
+                    file={file}
+                    formatDate={formatDate}
+                    onItemClick={() => {
                       if (file.type === 'directory') {
                         handlePathClick(joinPaths(currentPath, file.name));
                       }
                     }}
-                    sx={{ cursor: file.type === 'directory' ? 'pointer' : 'default', transition: 'background 0.2s', '&:hover': { background: theme.palette.action.selected } }}
-                  >
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {getFileIcon(file.name, file.type)}
-                        <Typography 
-                          sx={{ 
-                            ml: 1, 
-                            fontWeight: 500, 
-                            fontSize: { xs: '1rem', sm: '1.1rem' }, 
-                            wordBreak: 'break-all', 
-                            whiteSpace: 'normal',
-                            lineHeight: 1.2,
-                            maxWidth: { xs: 120, sm: 320 },
-                          }}
-                        >
-                          {file.name}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>{file.type === 'directory' ? '--' : file.size}</TableCell>
-                    {!isMobile && <TableCell>{formatDate(file.modified)}</TableCell>}
-                    <TableCell align="right">
-                      <IconButton size="small" onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}>
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
+                    onMenuClick={(e) => {
+                      e.stopPropagation();
+                      handleMenuOpen(e, file);
+                    }}
+                  />
                 ))
               )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} sx={{
+              width: '100%',
+              maxWidth: '100vw',
+              overflowX: 'auto',
+              boxShadow: 3,
+              borderRadius: 3,
+            }}>
+              <Table sx={{
+                tableLayout: 'fixed',
+                '& td, & th': {
+                  px: 2,
+                  py: 1.5,
+                  '&:first-of-type': { width: '50%' },
+                  '&:nth-of-type(2)': { width: '15%' },
+                  '&:nth-of-type(3)': { width: '25%' },
+                  '&:last-child': { width: '10%' },
+                },
+              }}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Size</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Modified</TableCell>
+                    <TableCell align="right"></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredFiles.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center">
+                        <Typography color="text.secondary" sx={{ py: 4 }}>
+                          {search ? 'No files or folders match your search.' : 'This folder is empty.'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredFiles.map((file) => (
+                      <TableRow
+                        key={file.name}
+                        hover
+                        onClick={() => {
+                          if (file.type === 'directory') {
+                            handlePathClick(joinPaths(currentPath, file.name));
+                          }
+                        }}
+                        sx={{ 
+                          cursor: file.type === 'directory' ? 'pointer' : 'default',
+                          transition: 'background-color 0.2s',
+                          '&:hover': { bgcolor: 'action.hover' }
+                        }}
+                      >
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                            <Box sx={{ mr: 2, display: 'flex' }}>
+                              {getFileIcon(file.name, file.type)}
+                            </Box>
+                            <Typography
+                              sx={{
+                                fontWeight: 500,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {file.name}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>{file.type === 'directory' ? '--' : file.size}</TableCell>
+                        <TableCell>{formatDate(file.modified)}</TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            size="small"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleMenuOpen(e, file);
+                            }}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
       )}
 
       <Menu
