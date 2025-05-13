@@ -10,6 +10,8 @@ dotenv.config({ path: envPath });
 const uiPort = process.env.CINESYNC_UI_PORT ? parseInt(process.env.CINESYNC_UI_PORT, 10) : 5173;
 const apiPort = process.env.CINESYNC_API_PORT ? parseInt(process.env.CINESYNC_API_PORT, 10) : 8082;
 const host = process.env.CINESYNC_IP || true;
+const tmdbApiKey = process.env.TMDB_API_KEY;
+const allowedExtensions = process.env.ALLOWED_EXTENSIONS;
 
 export default defineConfig({
   plugins: [react()],
@@ -23,5 +25,9 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  define: {
+    'import.meta.env.VITE_TMDB_API_KEY': JSON.stringify(tmdbApiKey),
+    'import.meta.env.VITE_ALLOWED_EXTENSIONS': JSON.stringify(allowedExtensions),
   },
 }); 

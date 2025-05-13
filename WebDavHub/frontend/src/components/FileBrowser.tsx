@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -50,6 +50,8 @@ import { format, parseISO } from 'date-fns';
 import axios from 'axios';
 import { useLayoutContext } from './Layout';
 import VideoPlayerDialog from './VideoPlayerDialog';
+import { searchTmdb, getTmdbPosterUrl, TmdbResult } from './tmdbApi';
+import Skeleton from '@mui/material/Skeleton';
 
 interface FileItem {
   name: string;
@@ -60,6 +62,8 @@ interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
+  isSeasonFolder?: boolean;
+  hasSeasonFolders?: boolean;
 }
 
 interface MobileListItemProps {
@@ -266,6 +270,8 @@ function MobileBreadcrumbs({ currentPath, onPathClick }: {
   );
 }
 
+const TMDB_CONCURRENCY_LIMIT = 4;
+
 export default function FileBrowser() {
   const navigate = useNavigate();
   const params = useParams();
@@ -295,6 +301,47 @@ export default function FileBrowser() {
   const [videoUrl, setVideoUrl] = useState('');
   const [videoTitle, setVideoTitle] = useState('');
   const [videoMimeType, setVideoMimeType] = useState('');
+  const [tmdbData, setTmdbData] = useState<{ [key: string]: TmdbResult | null }>({});
+  const tmdbFetchRef = useRef<{ [key: string]: boolean }>({});
+  const allowedExtensions = (import.meta.env.VITE_ALLOWED_EXTENSIONS as string | undefined)?.split(',').map(ext => ext.trim().toLowerCase()).filter(Boolean) || [];
+  const [folderHasAllowed, setFolderHasAllowed] = useState<{ [folder: string]: boolean }>({});
+  const folderFetchRef = useRef<{ [folder: string]: boolean }>({});
+  const [tvShowHasAllowed, setTvShowHasAllowed] = useState<{ [folder: string]: boolean }>({});
+  const tvShowFetchRef = useRef<{ [folder: string]: boolean }>({});
+  const [imgLoadedMap, setImgLoadedMap] = useState<{ [key: string]: boolean }>({});
+  // TMDb lookup queue state
+  const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
+  const tmdbActive = useRef(0);
+  const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0); // force rerender/queue check
+
+  // Helper to enqueue a TMDb lookup
+  const enqueueTmdbLookup = useCallback((name: string, title: string, year: string | undefined, mediaType: 'movie' | 'tv' | undefined) => {
+    tmdbQueue.current.push({ name, title, year, mediaType });
+    setTmdbQueueVersion(v => v + 1); // trigger queue processing
+  }, []);
+
+  // TMDb queue processor
+  useEffect(() => {
+    if (tmdbActive.current >= TMDB_CONCURRENCY_LIMIT) return;
+    if (tmdbQueue.current.length === 0) return;
+
+    while (tmdbActive.current < TMDB_CONCURRENCY_LIMIT && tmdbQueue.current.length > 0) {
+      const { name, title, year, mediaType } = tmdbQueue.current.shift()!;
+      tmdbActive.current++;
+      searchTmdb(title, year, mediaType).then(result => {
+        setTmdbData(prev => ({ ...prev, [name]: result }));
+      }).finally(() => {
+        tmdbActive.current--;
+        setTmdbQueueVersion(v => v + 1); // trigger next in queue
+      });
+    }
+  }, [tmdbQueueVersion]);
+
+  // Helper to check if a folder contains at least one allowed file
+  function folderHasAllowedFile(folderName: string): boolean {
+    // Find all files in the current folder
+    return files.some(f => f.type === 'file' && f.name && f.name.startsWith(folderName) && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext)));
+  }
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -567,6 +614,133 @@ export default function FileBrowser() {
     ? files.filter(f => f.name.toLowerCase().includes(search.trim().toLowerCase()))
     : files;
 
+  // Helper to parse title/year from folder name
+  function parseTitleYearFromFolder(folderName: string): { title: string; year?: string } {
+    // Try to extract year (e.g. Movie.Title.2023)
+    const match = folderName.match(/(.+?)[. _\-\(\[]?(\d{4})[. _\-\)\]]?/);
+    if (match) {
+      return { title: match[1].replace(/[._-]/g, ' ').trim(), year: match[2] };
+    }
+    return { title: folderName.replace(/[._-]/g, ' ').trim() };
+  }
+
+  // For each folder in poster view, fetch its contents and check for allowed files
+  useEffect(() => {
+    if (view !== 'poster') return;
+    filteredFiles.forEach(file => {
+      if (
+        file.type === 'directory' &&
+        folderHasAllowed[file.name] === undefined &&
+        !folderFetchRef.current[file.name]
+      ) {
+        folderFetchRef.current[file.name] = true;
+        const folderApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
+        console.log(`[TMDB] Fetching contents for folder: ${folderApiPath}`);
+        axios.get(`/api/files${folderApiPath}`)
+          .then(res => {
+            const hasAllowed = (res.data || []).some((f: any) =>
+              f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
+            );
+            setFolderHasAllowed(prev => ({ ...prev, [file.name]: hasAllowed }));
+            if (hasAllowed) {
+              console.log(`[TMDB] Folder '${file.name}' contains allowed files, will trigger TMDb search.`);
+            } else {
+              console.log(`[TMDB] Folder '${file.name}' does not contain allowed files.`);
+            }
+          })
+          .catch(err => {
+            setFolderHasAllowed(prev => ({ ...prev, [file.name]: false }));
+            console.error(`[TMDB] Error fetching folder contents for '${file.name}':`, err);
+          });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFiles, view, currentPath, allowedExtensions]);
+
+  // For folders with hasSeasonFolders, check all season subfolders for allowed files
+  useEffect(() => {
+    if (view !== 'poster') return;
+    filteredFiles.forEach(file => {
+      if (
+        file.type === 'directory' &&
+        file.hasSeasonFolders &&
+        tvShowHasAllowed[file.name] === undefined &&
+        !tvShowFetchRef.current[file.name]
+      ) {
+        tvShowFetchRef.current[file.name] = true;
+        // Fetch the contents of the parent folder to get season subfolders
+        const parentApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
+        console.log(`[TMDB] [TV] Fetching season folders for: ${parentApiPath}`);
+        axios.get(`/api/files${parentApiPath}`)
+          .then(res => {
+            const seasonFolders = (res.data || []).filter((f: any) => f.type === 'directory' && f.isSeasonFolder);
+            if (seasonFolders.length === 0) {
+              setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
+              console.log(`[TMDB] [TV] No season folders found in '${file.name}'.`);
+              return;
+            }
+            // For each season folder, fetch its contents and check for allowed files
+            let found = false;
+            let checked = 0;
+            seasonFolders.forEach((season: any) => {
+              const seasonApiPath = `${parentApiPath}/${season.name}`;
+              console.log(`[TMDB] [TV] Fetching contents for season: ${seasonApiPath}`);
+              axios.get(`/api/files${seasonApiPath}`)
+                .then(seasonRes => {
+                  const hasAllowed = (seasonRes.data || []).some((f: any) =>
+                    f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
+                  );
+                  if (hasAllowed) {
+                    found = true;
+                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: true }));
+                    console.log(`[TMDB] [TV] Found allowed file in '${season.name}' for show '${file.name}'.`);
+                  }
+                  checked++;
+                  if (checked === seasonFolders.length && !found) {
+                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
+                    console.log(`[TMDB] [TV] No allowed files found in any season for show '${file.name}'.`);
+                  }
+                })
+                .catch(err => {
+                  checked++;
+                  if (checked === seasonFolders.length && !found) {
+                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
+                  }
+                  console.error(`[TMDB] [TV] Error fetching season contents for '${season.name}' in show '${file.name}':`, err);
+                });
+            });
+          })
+          .catch(err => {
+            setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
+            console.error(`[TMDB] [TV] Error fetching season folders for '${file.name}':`, err);
+          });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFiles, view, currentPath, allowedExtensions]);
+
+  // Instead of calling searchTmdb directly, enqueue lookups
+  useEffect(() => {
+    if (view !== 'poster') return;
+    filteredFiles.forEach(file => {
+      const isTvShow = file.hasSeasonFolders;
+      const isSeasonFolder = file.isSeasonFolder;
+      if (
+        file.type === 'directory' &&
+        !isSeasonFolder &&
+        (
+          (isTvShow && tvShowHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name]) ||
+          (!isTvShow && folderHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name])
+        )
+      ) {
+        const { title, year } = parseTitleYearFromFolder(file.name);
+        tmdbFetchRef.current[file.name] = true;
+        enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFiles, view, folderHasAllowed, tvShowHasAllowed]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -687,14 +861,14 @@ export default function FileBrowser() {
       )}
 
       {view === 'poster' ? (
-        <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: { 
-            xs: 'repeat(2, 1fr)', 
-            sm: 'repeat(3, 1fr)', 
-            md: 'repeat(4, 1fr)', 
-            lg: 'repeat(5, 1fr)' 
-          }, 
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(2, 1fr)',
+            sm: 'repeat(3, 1fr)',
+            md: 'repeat(4, 1fr)',
+            lg: 'repeat(5, 1fr)'
+          },
           gap: 3,
           p: 1
         }}>
@@ -705,90 +879,123 @@ export default function FileBrowser() {
               </Typography>
             </Box>
           ) : (
-            filteredFiles.map((file) => (
-              <Paper 
-                key={file.name} 
-                sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  cursor: file.type === 'directory' ? 'pointer' : 'default',
-                  transition: 'all 0.2s ease-in-out',
-                  boxShadow: 2,
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  position: 'relative',
-                  '&:hover': { 
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                    background: theme.palette.action.selected 
-                  }
-                }} 
-                onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}
-              >
-                <Box sx={{ 
-                  width: '100%', 
-                  aspectRatio: '3/4',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: theme.palette.background.default,
-                  p: 2
-                }}>
-                  {getFileIcon(file.name, file.type)}
-                </Box>
-                <Box sx={{ 
-                  width: '100%', 
-                  p: 2, 
-                  background: theme.palette.background.paper,
-                  borderTop: `1px solid ${theme.palette.divider}`
-                }}>
-                  <Typography 
-                    sx={{ 
-                      fontWeight: 500, 
-                      textAlign: 'center', 
-                      fontSize: { xs: '0.9rem', sm: '1rem' }, 
-                      wordBreak: 'break-all',
-                      mb: 0.5,
-                      lineHeight: 1.2,
-                      maxHeight: '2.4em',
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical'
-                    }}
-                  >
-                    {file.name}
-                  </Typography>
-                  <Typography 
-                    variant="caption" 
-                    color="text.secondary" 
-                    sx={{ 
-                      display: 'block',
-                      textAlign: 'center',
-                      fontSize: '0.8rem'
-                    }}
-                  >
-                    {file.type === 'directory' ? 'Folder' : file.size}
-                  </Typography>
-                  <IconButton 
-                    size="small" 
-                    sx={{ 
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      background: 'rgba(0, 0, 0, 0.1)',
-                      '&:hover': {
-                        background: 'rgba(0, 0, 0, 0.2)'
-                      }
-                    }} 
-                    onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
-                  >
-                    <MoreVertIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </Paper>
-            ))
+            filteredFiles.map((file) => {
+              const tmdb = tmdbData[file.name];
+              const isTvShow = file.hasSeasonFolders;
+              const isSeasonFolder = file.isSeasonFolder;
+              const showPoster = file.type === 'directory' && !isSeasonFolder && (
+                (isTvShow && tvShowHasAllowed[file.name] && tmdb && tmdb.poster_path) ||
+                (!isTvShow && folderHasAllowed[file.name] && tmdb && tmdb.poster_path)
+              );
+              const isLoadingPoster = file.type === 'directory' && !isSeasonFolder && (
+                (isTvShow && tvShowHasAllowed[file.name] && !tmdb) ||
+                (!isTvShow && folderHasAllowed[file.name] && !tmdb)
+              );
+              const loaded = imgLoadedMap[file.name] || false;
+              return (
+                <Paper
+                  key={file.name}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    cursor: file.type === 'directory' ? 'pointer' : 'default',
+                    transition: 'all 0.2s ease-in-out',
+                    boxShadow: 2,
+                    borderRadius: 3,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                      background: theme.palette.action.selected
+                    }
+                  }}
+                  onClick={() => file.type === 'directory' && handlePathClick(joinPaths(currentPath, file.name))}
+                >
+                  <Box sx={{
+                    width: '100%',
+                    aspectRatio: '3/4',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: theme.palette.background.default,
+                    p: 2,
+                    position: 'relative',
+                  }}>
+                    {isLoadingPoster ? (
+                      <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ borderRadius: 2 }} />
+                    ) : showPoster ? (
+                      <img
+                        src={getTmdbPosterUrl(tmdb.poster_path) || ''}
+                        alt={tmdb.title || file.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: 8,
+                          opacity: loaded ? 1 : 0,
+                          transition: 'opacity 0.5s ease',
+                        }}
+                        onLoad={() => setImgLoadedMap(prev => ({ ...prev, [file.name]: true }))}
+                      />
+                    ) : (
+                      getFileIcon(file.name, file.type)
+                    )}
+                  </Box>
+                  <Box sx={{
+                    width: '100%',
+                    p: 2,
+                    background: theme.palette.background.paper,
+                    borderTop: `1px solid ${theme.palette.divider}`
+                  }}>
+                    <Typography
+                      sx={{
+                        fontWeight: 500,
+                        textAlign: 'center',
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        wordBreak: 'break-all',
+                        mb: 0.5,
+                        lineHeight: 1.2,
+                        maxHeight: '2.4em',
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}
+                    >
+                      {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        display: 'block',
+                        textAlign: 'center',
+                        fontSize: '0.8rem'
+                      }}
+                    >
+                      {file.type === 'directory' ? 'Folder' : file.size}
+                    </Typography>
+                    <IconButton
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        background: 'rgba(0, 0, 0, 0.1)',
+                        '&:hover': {
+                          background: 'rgba(0, 0, 0, 0.2)'
+                        }
+                      }}
+                      onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Paper>
+              );
+            })
           )}
         </Box>
       ) : (

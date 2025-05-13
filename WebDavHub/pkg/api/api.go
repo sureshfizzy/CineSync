@@ -28,6 +28,8 @@ type FileInfo struct {
 	Modified string `json:"modified,omitempty"`
 	Path     string `json:"path,omitempty"`
 	Icon     string `json:"icon,omitempty"`
+	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
+	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
 }
 
 type Stats struct {
@@ -137,6 +139,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	files := make([]FileInfo, 0)
+	seasonFolderCount := 0
+	fileCount := 0
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
@@ -154,17 +158,68 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 		if entry.IsDir() {
 			fileInfo.Type = "directory"
+			if isSeasonFolder(entry.Name()) {
+				fileInfo.IsSeasonFolder = true
+				seasonFolderCount++
+			}
+
+			subDirPath := filepath.Join(dir, entry.Name())
+			subEntries, err := os.ReadDir(subDirPath)
+			if err == nil && len(subEntries) > 0 {
+				seasonCount := 0
+				fileCountInSub := 0
+				for _, subEntry := range subEntries {
+					if subEntry.IsDir() && isSeasonFolder(subEntry.Name()) {
+						seasonCount++
+					} else if !subEntry.IsDir() {
+						fileCountInSub++
+					}
+				}
+				if seasonCount > 0 && seasonCount == len(subEntries) && fileCountInSub == 0 {
+					fileInfo.HasSeasonFolders = true
+					logger.Info("[API] Detected TV show root: %s (all %d children are season folders)", filePath, seasonCount)
+				}
+			}
+
 			logger.Info("Found directory: %s", filePath)
 		} else {
 			fileInfo.Size = formatFileSize(info.Size())
+			fileCount++
 			logger.Info("Found file: %s (Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
 		}
 
 		files = append(files, fileInfo)
 	}
+	// If all directories are season folders and there are no files, mark parent as hasSeasonFolders
+	if seasonFolderCount > 0 && seasonFolderCount == len(entries)-fileCount && fileCount == 0 {
+		for i := range files {
+			if files[i].Type == "directory" && files[i].IsSeasonFolder {
+				files[i].HasSeasonFolders = false // child
+			}
+		}
 
+		w.Header().Set("X-Has-Season-Folders", "true")
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
+}
+
+func isSeasonFolder(name string) bool {
+	nameLower := strings.ToLower(name)
+	return strings.HasPrefix(nameLower, "season ") && len(nameLower) > 7 && isNumeric(nameLower[7:])
+}
+
+func isNumeric(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func statsChanged(a, b Stats) bool {
