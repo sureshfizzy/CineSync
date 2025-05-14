@@ -1,0 +1,310 @@
+import React, { useState } from 'react';
+import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import InfoIcon from '@mui/icons-material/InfoOutlined';
+import DownloadIcon from '@mui/icons-material/Download';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import axios from 'axios';
+import VideoPlayerDialog from './VideoPlayerDialog';
+
+interface FileItem {
+  name: string;
+  type: 'file' | 'directory';
+  size?: string;
+  modified?: string;
+  path?: string;
+  webdavPath?: string;
+  sourcePath?: string;
+  fullPath?: string;
+  isSeasonFolder?: boolean;
+  hasSeasonFolders?: boolean;
+}
+
+interface FileActionMenuProps {
+  file: FileItem;
+  currentPath: string;
+  onViewDetails: (file: FileItem, details: any) => void;
+  onRename: (file: FileItem) => void;
+  onError: (msg: string) => void;
+  onDeleted?: () => void;
+}
+
+function joinPaths(...parts: string[]): string {
+  return parts.join('/').replace(/\/+/g, '/').replace(/\/\//g, '/');
+}
+
+const getMimeType = (ext: string): string => {
+  const mimeTypes: { [key: string]: string } = {
+    'mp4': 'video/mp4',
+    'mkv': 'video/x-matroska',
+    'avi': 'video/x-msvideo',
+    'mov': 'video/quicktime',
+    'wmv': 'video/x-ms-wmv',
+    'flv': 'video/x-flv',
+    'webm': 'video/webm',
+  };
+  return mimeTypes[ext] || '';
+};
+
+const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted }) => {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [videoMimeType, setVideoMimeType] = useState<string | undefined>(undefined);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleViewDetails = async () => {
+    const normalizedPath = joinPaths(currentPath);
+    const relPath = joinPaths(normalizedPath, file.name);
+    let realPath = '';
+    let absPath = '';
+    try {
+      const res = await axios.post('/api/readlink', { path: relPath });
+      realPath = res.data.realPath || '';
+      absPath = res.data.absPath || '';
+    } catch (e) {
+      realPath = '';
+      absPath = '';
+    }
+    onViewDetails(file, { webdavPath: joinPaths('Home', normalizedPath, file.name), fullPath: absPath, sourcePath: realPath });
+    handleMenuClose();
+  };
+
+  const handleOpen = async () => {
+    if (file.type === 'directory') {
+      handleMenuClose();
+      return;
+    }
+    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    const encodedPath = encodeURIComponent(relPath.replace(/^\/+/,''));
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm'].includes(ext);
+    try {
+      if (isVideo) {
+        const streamUrl = `/api/stream/${encodedPath}`;
+        setVideoUrl(streamUrl);
+        setVideoTitle(file.name);
+        setVideoMimeType(getMimeType(ext));
+        setVideoPlayerOpen(true);
+      } else {
+        // fallback: download
+        const url = `/api/files${relPath}`;
+        const response = await axios.get(url, { responseType: 'blob' });
+        const blob = response.data;
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.setAttribute('download', file.name);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch (err) {
+      onError('Failed to open file');
+    }
+    handleMenuClose();
+  };
+
+  const handleDownload = async () => {
+    if (file.type === 'directory') {
+      handleMenuClose();
+      return;
+    }
+    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    const url = `/api/files${relPath}`;
+    try {
+      const response = await axios.get(url, { responseType: 'blob' });
+      const blob = response.data;
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', file.name);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      onError('Failed to download file');
+    }
+    handleMenuClose();
+  };
+
+  const handleRenameClick = () => {
+    setRenameError(null);
+    setRenameValue(file.name);
+    setRenameDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleRenameDialogClose = () => {
+    setRenameDialogOpen(false);
+    setRenameError(null);
+    setRenameValue('');
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameValue.trim() || renameValue === file.name) return;
+    setRenameLoading(true);
+    setRenameError(null);
+    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    try {
+      await axios.post('/api/rename', {
+        oldPath: relPath,
+        newName: renameValue.trim(),
+      });
+      setRenameDialogOpen(false);
+      setRenameLoading(false);
+      if (onRename) onRename(file);
+    } catch (error: any) {
+      setRenameError(error.response?.data || error.message || 'Failed to rename file');
+      setRenameLoading(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setDeleteError(null);
+    setDeleteDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleDeleteConfirmClose = () => {
+    setDeleteDialogOpen(false);
+    setDeleteError(null);
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    let absPath = '';
+    try {
+      const res = await axios.post('/api/readlink', { path: relPath });
+      absPath = res.data.absPath || '';
+    } catch (e) {
+      setDeleteError('Failed to get file path');
+      setDeleting(false);
+      return;
+    }
+    if (!absPath) {
+      setDeleteError('Could not determine file path');
+      setDeleting(false);
+      return;
+    }
+    try {
+      await axios.post('/api/delete', { path: relPath });
+      setDeleteDialogOpen(false);
+      setDeleting(false);
+      if (onDeleted) onDeleted();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        setDeleteError(error.response?.data || error.message);
+      } else {
+        setDeleteError('Failed to delete file');
+      }
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <IconButton onClick={handleMenuOpen} size="small">
+        <MoreVertIcon />
+      </IconButton>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleMenuClose}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: 6,
+            minWidth: 180,
+            mt: 1,
+            p: 0.5,
+          }
+        }}
+        MenuListProps={{ sx: { p: 0 } }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        {file.type === 'file' && (
+          <MenuItem onClick={handleOpen}><PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />Play</MenuItem>
+        )}
+        <MenuItem onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
+        {file.type === 'file' && (
+          <MenuItem onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
+        )}
+        <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
+      </Menu>
+      <VideoPlayerDialog
+        open={videoPlayerOpen}
+        onClose={() => setVideoPlayerOpen(false)}
+        url={videoUrl}
+        title={videoTitle}
+        mimeType={videoMimeType}
+      />
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteConfirmClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete <b>{file.name}</b>? This action cannot be undone.</Typography>
+          {deleteError && <Typography color="error" sx={{ mt: 2 }}>{deleteError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteConfirmClose} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename File</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>Enter a new name for <b>{file.name}</b>:</Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            variant="outlined"
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            disabled={renameLoading}
+            inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
+            sx={{ mb: 2, background: 'background.paper', borderRadius: 2 }}
+            color="primary"
+          />
+          {renameError && <Typography color="error" sx={{ mb: 1 }}>{renameError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleRenameDialogClose} disabled={renameLoading} color="inherit">Cancel</Button>
+          <Button
+            onClick={handleRenameSubmit}
+            variant="contained"
+            color="primary"
+            disabled={renameLoading || !renameValue.trim() || renameValue === file.name}
+          >
+            {renameLoading ? 'Renaming...' : 'Rename'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default FileActionMenu; 

@@ -40,5 +40,20 @@ export interface MediaDetailsData {
     overview: string;
     poster_path: string;
     season_number: number;
+    episodes?: {
+      air_date: string;
+      episode_number: number;
+      id: number;
+      name: string;
+      overview: string;
+      production_code: string;
+      season_number: number;
+      still_path: string;
+      vote_average: number;
+      vote_count: number;
+      runtime?: number;
+      crew?: { id: number; name: string; job: string; profile_path: string | null }[];
+      guest_stars?: { id: number; name: string; character: string; profile_path: string | null }[];
+    }[];
   }[];
 } 

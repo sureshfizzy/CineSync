@@ -11,6 +11,7 @@ import (
 	"cinesync/pkg/logger"
 	"encoding/json"
 	"fmt"
+	"strconv"
 )
 
 var tmdbRateLimit = 40
@@ -135,6 +136,8 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	mediaType := r.URL.Query().Get("mediaType") // optional: "movie" or "tv"
 	query := r.URL.Query().Get("query")
+	seasonNumber := r.URL.Query().Get("season")
+	episodeNumbers := r.URL.Query().Get("episodes") // comma-separated list of episode numbers
 
 	if id != "" {
 		// Fetch details directly by ID
@@ -155,6 +158,62 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "Failed to read TMDb response", http.StatusInternalServerError)
 			return
+		}
+
+		// If TV, fetch episodes for each season or specific episodes
+		if mediaType == "tv" {
+			var details map[string]interface{}
+			if err := json.Unmarshal(body, &details); err == nil {
+				if seasons, ok := details["seasons"].([]interface{}); ok {
+					for _, s := range seasons {
+						season, ok := s.(map[string]interface{})
+						if !ok { continue }
+						sn, ok := season["season_number"].(float64)
+						if !ok { continue }
+
+						// If season number is specified, only fetch that season
+						if seasonNumber != "" && fmt.Sprintf("%d", int(sn)) != seasonNumber {
+							continue
+						}
+
+						seasonUrl := "https://api.themoviedb.org/3/tv/" + id + "/season/" + fmt.Sprintf("%d", int(sn)) + "?api_key=" + url.QueryEscape(tmdbApiKey)
+						seasonResp, err := http.Get(seasonUrl)
+						if err == nil && seasonResp.StatusCode == 200 {
+							seasonBody, _ := io.ReadAll(seasonResp.Body)
+							seasonResp.Body.Close()
+							var seasonDetails map[string]interface{}
+							if err := json.Unmarshal(seasonBody, &seasonDetails); err == nil {
+								if episodes, ok := seasonDetails["episodes"].([]interface{}); ok {
+									// If specific episodes are requested, filter them
+									if episodeNumbers != "" {
+										requestedEps := make(map[int]bool)
+										for _, epStr := range strings.Split(episodeNumbers, ",") {
+											if epNum, err := strconv.Atoi(strings.TrimSpace(epStr)); err == nil {
+												requestedEps[epNum] = true
+											}
+										}
+										filteredEpisodes := make([]interface{}, 0)
+										for _, ep := range episodes {
+											if epMap, ok := ep.(map[string]interface{}); ok {
+												if epNum, ok := epMap["episode_number"].(float64); ok {
+													if requestedEps[int(epNum)] {
+														filteredEpisodes = append(filteredEpisodes, ep)
+													}
+												}
+											}
+										}
+										season["episodes"] = filteredEpisodes
+									} else {
+										season["episodes"] = episodes
+									}
+								}
+							}
+						}
+					}
+				}
+				// re-marshal
+				body, _ = json.Marshal(details)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(body)
@@ -220,6 +279,35 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Failed to read TMDb response", http.StatusInternalServerError)
 		return
+	}
+
+	// If TV, fetch episodes for each season
+	if searchType == "tv" {
+		var details map[string]interface{}
+		if err := json.Unmarshal(body, &details); err == nil {
+			if seasons, ok := details["seasons"].([]interface{}); ok {
+				for _, s := range seasons {
+					season, ok := s.(map[string]interface{})
+					if !ok { continue }
+					sn, ok := season["season_number"].(float64)
+					if !ok { continue }
+					seasonUrl := "https://api.themoviedb.org/3/tv/" + id + "/season/" + fmt.Sprintf("%d", int(sn)) + "?api_key=" + url.QueryEscape(tmdbApiKey)
+					seasonResp, err := http.Get(seasonUrl)
+					if err == nil && seasonResp.StatusCode == 200 {
+						seasonBody, _ := io.ReadAll(seasonResp.Body)
+						seasonResp.Body.Close()
+						var seasonDetails map[string]interface{}
+						if err := json.Unmarshal(seasonBody, &seasonDetails); err == nil {
+							if episodes, ok := seasonDetails["episodes"]; ok {
+								season["episodes"] = episodes
+							}
+						}
+					}
+				}
+				// re-marshal
+				body, _ = json.Marshal(details)
+			}
+		}
 	}
 
 	tmdbDetailsCache.mu.Lock()

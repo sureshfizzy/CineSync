@@ -50,10 +50,10 @@ import {
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
 import { useLayoutContext } from './Layout';
-import VideoPlayerDialog from './VideoPlayerDialog';
 import { searchTmdb, getTmdbPosterUrl, TmdbResult } from './tmdbApi';
 import Skeleton from '@mui/material/Skeleton';
 import { useAuth } from '../contexts/AuthContext';
+import FileActionMenu from './FileActionMenu';
 
 interface FileItem {
   name: string;
@@ -292,25 +292,11 @@ export default function FileBrowser() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [menuFile, setMenuFile] = useState<FileItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsData, setDetailsData] = useState<FileItem | null>(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const [renameLoading, setRenameLoading] = useState(false);
-  const [renameError, setRenameError] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [fileToRename, setFileToRename] = useState<FileItem | null>(null);
   const [search, setSearch] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
-  const [videoUrl, setVideoUrl] = useState('');
-  const [videoTitle, setVideoTitle] = useState('');
-  const [videoMimeType, setVideoMimeType] = useState('');
   const [tmdbData, setTmdbData] = useState<{ [key: string]: TmdbResult | null }>({});
   const tmdbFetchRef = useRef<{ [key: string]: boolean }>({});
   const allowedExtensions = (import.meta.env.VITE_ALLOWED_EXTENSIONS as string | undefined)?.split(',').map(ext => ext.trim().toLowerCase()).filter(Boolean) || [];
@@ -395,69 +381,30 @@ export default function FileBrowser() {
     }
   };
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, file: FileItem) => {
-    setAnchorEl(event.currentTarget);
-    setMenuFile(file);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setMenuFile(null);
-  };
-
-  const handleViewDetails = async () => {
-    if (!menuFile) return;
-    const normalizedPath = joinPaths(currentPath);
-    const webdavPath = joinPaths('Home', normalizedPath, menuFile.name);
-    const relPath = joinPaths(normalizedPath, menuFile.name);
-    let realPath = '';
-    let absPath = '';
-    try {
-      const res = await axios.post('/api/readlink', { path: relPath });
-      realPath = res.data.realPath || '';
-      absPath = res.data.absPath || '';
-    } catch (e) {
-      realPath = '';
-      absPath = '';
-    }
-    setDetailsData({
-      ...menuFile,
-      webdavPath,
-      fullPath: absPath,
-      sourcePath: realPath,
-    });
+  const handleViewDetails = (file: FileItem, details: any) => {
+    setDetailsData({ ...file, ...details });
     setDetailsOpen(true);
-    handleMenuClose();
   };
 
   const handleDetailsClose = () => setDetailsOpen(false);
 
   const handleOpen = async () => {
-    if (!menuFile || menuFile.type === 'directory') {
-      handleMenuClose();
+    if (!detailsData || detailsData.type === 'directory') {
+      handleDetailsClose();
       return;
     }
     // Build the file path using normalized paths
-    const relPath = joinPaths(currentPath, menuFile.name).replace(/\/$/, '');
+    const relPath = joinPaths(currentPath, detailsData.name).replace(/\/$/, '');
     // Encode the path properly
     const encodedPath = encodeURIComponent(relPath.replace(/^\/+/, ''));
     // Guess file type
-    const ext = menuFile.name.split('.').pop()?.toLowerCase();
-    const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm'].includes(ext || '');
+    const ext = detailsData.name.split('.').pop()?.toLowerCase();
     const isPreviewable = [
       'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', // images
       'pdf', 'txt', 'md', 'rtf' // docs
     ].includes(ext || '');
-    
     try {
-      if (isVideo) {
-        // For video files, use the streaming endpoint
-        const streamUrl = `/api/stream/${encodedPath}`;
-        setVideoUrl(streamUrl);
-        setVideoTitle(menuFile.name);
-        setVideoMimeType(getMimeType(ext || ''));
-        setVideoPlayerOpen(true);
-      } else if (isPreviewable) {
+      if (isPreviewable) {
         const response = await axios.get(`/api/files/${encodedPath}`, {
           responseType: 'blob',
         });
@@ -473,7 +420,7 @@ export default function FileBrowser() {
         const blobUrl = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.setAttribute('download', menuFile.name);
+        link.setAttribute('download', detailsData.name);
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -482,7 +429,7 @@ export default function FileBrowser() {
       setError('Failed to open file');
       console.error('Error opening file:', err);
     }
-    handleMenuClose();
+    handleDetailsClose();
   };
 
   const getMimeType = (ext: string): string => {
@@ -499,11 +446,11 @@ export default function FileBrowser() {
   };
 
   const handleDownload = async () => {
-    if (!menuFile || menuFile.type === 'directory') {
-      handleMenuClose();
+    if (!detailsData || detailsData.type === 'directory') {
+      handleDetailsClose();
       return;
     }
-    const relPath = joinPaths(currentPath, menuFile.name).replace(/\/$/, '');
+    const relPath = joinPaths(currentPath, detailsData.name).replace(/\/$/, '');
     const url = `/api/files${relPath}`;
     try {
       const response = await axios.get(url, {
@@ -513,7 +460,7 @@ export default function FileBrowser() {
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.setAttribute('download', menuFile.name);
+      link.setAttribute('download', detailsData.name);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -521,92 +468,7 @@ export default function FileBrowser() {
       setError('Failed to download file');
       console.error('Error downloading file:', err);
     }
-    handleMenuClose();
-  };
-
-  const handleDelete = async () => {
-    if (!fileToDelete) return;
-    setDeleteError(null);
-    const relPath = joinPaths(currentPath, fileToDelete.name).replace(/\/$/, '');
-    let absPath = '';
-    try {
-      const res = await axios.post('/api/readlink', { path: relPath });
-      absPath = res.data.absPath || '';
-    } catch (e) {
-      setDeleteError('Failed to get file path');
-      return;
-    }
-
-    if (!absPath) {
-      setDeleteError('Could not determine file path');
-      return;
-    }
-
-    try {
-      const response = await axios.post('/api/delete', { path: relPath });
-      await fetchFiles(currentPath);
-      handleMenuClose();
-      setDeleteConfirmOpen(false);
-      setFileToDelete(null);
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        setDeleteError(error.response?.data || error.message);
-      } else {
-        setDeleteError('Failed to delete file');
-      }
-    }
-  };
-
-  const handleDeleteClick = () => {
-    setDeleteError(null);
-    setFileToDelete(menuFile);
-    setDeleteConfirmOpen(true);
-    handleMenuClose();
-  };
-
-  const handleDeleteConfirmClose = () => {
-    setDeleteConfirmOpen(false);
-    setDeleteError(null);
-    setFileToDelete(null);
-  };
-
-  const handleRenameClick = () => {
-    setRenameError(null);
-    setRenameValue(menuFile?.name || '');
-    setFileToRename(menuFile);
-    setRenameDialogOpen(true);
-    handleMenuClose();
-  };
-
-  const handleRenameDialogClose = () => {
-    setRenameDialogOpen(false);
-    setRenameError(null);
-    setRenameValue('');
-    setFileToRename(null);
-    setRenameLoading(false);
-  };
-
-  const handleRenameSubmit = async () => {
-    if (!fileToRename || !renameValue.trim() || renameValue === fileToRename.name) return;
-    setRenameLoading(true);
-    setRenameError(null);
-    const relPath = joinPaths(currentPath, fileToRename.name).replace(/\/$/, '');
-    try {
-      await axios.post('/api/rename', {
-        oldPath: relPath,
-        newName: renameValue.trim(),
-      });
-      await fetchFiles(currentPath);
-      handleRenameDialogClose();
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        setRenameError(error.response?.data || error.message);
-      } else {
-        setRenameError('Failed to rename file');
-      }
-    } finally {
-      setRenameLoading(false);
-    }
+    handleDetailsClose();
   };
 
   const pathParts = currentPath.split('/').filter(Boolean);
@@ -934,9 +796,10 @@ export default function FileBrowser() {
                     boxShadow: 6,
                     background: theme.palette.action.selected 
                   }
-                }} 
-                  onClick={() => {
-                    if (file.type === 'directory' && !isSeasonFolder && showPoster) {
+                }}
+                onClick={() => {
+                  if (file.type === 'directory' && !isSeasonFolder) {
+                    if (showPoster) {
                       const isTvShow = file.hasSeasonFolders;
                       const tmdbId = tmdb?.id;
                       const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
@@ -948,10 +811,13 @@ export default function FileBrowser() {
                           currentPath: fullPath
                         } 
                       });
-                    } else if (file.type === 'directory') {
+                    } else {
                       handlePathClick(joinPaths(currentPath, file.name));
                     }
-                  }}
+                  } else if (file.type === 'directory' && isSeasonFolder) {
+                    handlePathClick(joinPaths(currentPath, file.name));
+                  }
+                }}
               >
                 <Box sx={{ 
                   width: '100%', 
@@ -1006,32 +872,6 @@ export default function FileBrowser() {
                   >
                       {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
                   </Typography>
-                  <Typography 
-                    variant="caption" 
-                    color="text.secondary" 
-                    sx={{ 
-                      display: 'block',
-                      textAlign: 'center',
-                      fontSize: '0.8rem'
-                    }}
-                  >
-                    {file.type === 'directory' ? 'Folder' : file.size}
-                  </Typography>
-                  <IconButton 
-                    size="small" 
-                    sx={{ 
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      background: 'rgba(0, 0, 0, 0.1)',
-                      '&:hover': {
-                        background: 'rgba(0, 0, 0, 0.2)'
-                      }
-                    }} 
-                    onClick={e => { e.stopPropagation(); handleMenuOpen(e, file); }}
-                  >
-                    <MoreVertIcon fontSize="small" />
-                  </IconButton>
                 </Box>
               </Paper>
               );
@@ -1069,7 +909,7 @@ export default function FileBrowser() {
                     }}
                     onMenuClick={(e) => {
                       e.stopPropagation();
-                      handleMenuOpen(e, file);
+                      handleViewDetails(file, {});
                     }}
                   />
                 ))
@@ -1146,16 +986,15 @@ export default function FileBrowser() {
                         </TableCell>
                         <TableCell>{file.type === 'directory' ? '--' : file.size}</TableCell>
                         <TableCell>{formatDate(file.modified)}</TableCell>
-                        <TableCell align="right">
-                          <IconButton
-                            size="small"
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleMenuOpen(e, file);
-                            }}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
+                        <TableCell align="right" onClick={e => e.stopPropagation()}>
+                          <FileActionMenu
+                            file={file}
+                            currentPath={currentPath}
+                            onViewDetails={handleViewDetails}
+                            onRename={() => fetchFiles(currentPath)}
+                            onDeleted={() => fetchFiles(currentPath)}
+                            onError={setError}
+                          />
                         </TableCell>
                       </TableRow>
                     ))
@@ -1166,102 +1005,6 @@ export default function FileBrowser() {
           )}
         </>
       )}
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            boxShadow: 6,
-            minWidth: 180,
-            bgcolor: theme.palette.background.paper,
-            color: theme.palette.text.primary,
-            mt: 1,
-            p: 0.5,
-          }
-        }}
-        MenuListProps={{
-          sx: {
-            p: 0,
-          }
-        }}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        {menuFile?.type === 'file' && (
-          <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleOpen}><PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />Play</MenuItem>
-        )}
-        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleViewDetails}><InfoIcon fontSize="small" sx={{ mr: 1 }} />View Details</MenuItem>
-        {menuFile?.type === 'file' && (
-          <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
-        )}
-        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, '&:hover': { bgcolor: theme.palette.action.hover } }} onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem sx={{ py: 1.2, px: 2, fontSize: '1.05rem', borderRadius: 2, color: theme.palette.error.main, '&:hover': { bgcolor: theme.palette.action.selected, color: theme.palette.error.dark } }} onClick={handleDeleteClick}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
-      </Menu>
-
-      <Dialog open={deleteConfirmOpen} onClose={handleDeleteConfirmClose} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
-        <DialogTitle
-          sx={{
-            fontWeight: 700,
-            fontSize: '1.3rem',
-            background: theme.palette.background.paper,
-            borderBottom: `1px solid ${theme.palette.divider}`,
-            borderTopLeftRadius: 12,
-            borderTopRightRadius: 12,
-            p: 2.5,
-            pr: 5
-          }}
-        >
-          Confirm Delete
-          <IconButton
-            aria-label="close"
-            onClick={handleDeleteConfirmClose}
-            sx={{
-              position: 'absolute',
-              right: 12,
-              top: 12,
-              color: theme.palette.grey[500],
-            }}
-            size="large"
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent
-          sx={{
-            background: theme.palette.background.default,
-            p: 3,
-            borderBottomLeftRadius: 12,
-            borderBottomRightRadius: 12,
-          }}
-        >
-          <Typography>
-            Are you sure you want to delete {fileToDelete?.name} ? This action cannot be undone.
-          </Typography>
-          {deleteError && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {deleteError}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2, background: theme.palette.background.paper }}>
-          <Button onClick={handleDeleteConfirmClose} sx={{ mr: 1 }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            variant="contained"
-            color="error"
-            disabled={!!deleteError}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="sm" fullWidth
         PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
@@ -1322,51 +1065,6 @@ export default function FileBrowser() {
           )}
         </DialogContent>
       </Dialog>
-
-      <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose} maxWidth="xs" fullWidth TransitionProps={{ appear: true }}
-        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
-        <DialogTitle sx={{ fontWeight: 700, color: theme.palette.primary.main, background: theme.palette.background.paper, borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
-          Rename {fileToRename?.type === 'directory' ? 'Folder' : 'File'}
-        </DialogTitle>
-        <DialogContent sx={{ background: theme.palette.background.default, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
-          <Box component="form" onSubmit={e => { e.preventDefault(); handleRenameSubmit(); }}>
-            <Typography sx={{ mb: 2, color: theme.palette.text.primary }}>
-              Enter a new name for <b>{fileToRename?.name}</b>:
-            </Typography>
-            <TextField
-              autoFocus
-              fullWidth
-              variant="outlined"
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              disabled={renameLoading}
-              inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
-              sx={{ mb: 2, background: theme.palette.background.paper, borderRadius: 2 }}
-              color="primary"
-            />
-            {renameError && <Typography color="error" sx={{ mb: 1 }}>{renameError}</Typography>}
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ background: theme.palette.background.paper, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
-          <Button onClick={handleRenameDialogClose} disabled={renameLoading} color="inherit">Cancel</Button>
-          <Button
-            onClick={handleRenameSubmit}
-            variant="contained"
-            color="primary"
-            disabled={renameLoading || !renameValue.trim() || renameValue === fileToRename?.name}
-          >
-            {renameLoading ? <CircularProgress size={22} color="inherit" /> : 'Rename'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <VideoPlayerDialog
-        open={videoPlayerOpen}
-        onClose={() => setVideoPlayerOpen(false)}
-        url={videoUrl}
-        title={videoTitle}
-        mimeType={videoMimeType}
-      />
     </Box>
   );
 } 
