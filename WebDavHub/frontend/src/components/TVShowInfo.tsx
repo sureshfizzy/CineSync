@@ -3,6 +3,8 @@ import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileActionMenu from './FileActionMenu';
 import VideoPlayerDialog from './VideoPlayerDialog';
 
@@ -103,6 +105,11 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   const [detailsData, setDetailsData] = useState<any>(null);
   const [renameValue, setRenameValue] = useState('');
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+  // Add state for dialog
+  const [seasonDialogOpen, setSeasonDialogOpen] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState<any>(null);
+  const [selectedSeasonFolder, setSelectedSeasonFolder] = useState<SeasonFolderInfo | null>(null);
 
   // Move fetchSeasonFolders to component scope
   async function fetchSeasonFolders() {
@@ -337,8 +344,18 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
               const showFolderPath = `${normalizedPath}/${folderName}`;
               const seasonPath = folder ? `${showFolderPath}/${folder.folderName}` : '';
+              const availableCount = folder ? folder.episodes.length : 0;
+              const totalCount = season.episode_count || (season.episodes ? season.episodes.length : 0);
               return (
-                <Paper key={season.id} elevation={2} sx={{ p: 2, borderRadius: 2 }}>
+                <Paper key={season.id} elevation={2} sx={{ p: 2, borderRadius: 2, cursor: folder ? 'pointer' : 'default', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 6, bgcolor: 'action.hover' } }}
+                  onClick={() => {
+                    if (folder) {
+                      setSelectedSeason(season);
+                      setSelectedSeasonFolder(folder);
+                      setSeasonDialogOpen(true);
+                    }
+                  }}
+                >
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     {season.poster_path && (
                       <Box sx={{ width: 100, flexShrink: 0 }}>
@@ -351,9 +368,11 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                     )}
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="h6" sx={{ mb: 1 }}>{season.name}</Typography>
-                      <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+                      <Box sx={{ display: 'flex', gap: 2, mb: 1, alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          {folder ? `${folder.episodes.length} Files Found` : 'No Files Found'}
+                          <span style={{ color: availableCount > 0 ? '#22c55e' : undefined, fontWeight: 700 }}>{availableCount}</span>
+                          <span style={{ color: 'inherit', fontWeight: 400 }}>/</span>
+                          <span style={{ color: 'inherit', fontWeight: 400 }}>{totalCount}</span> Episodes
                         </Typography>
                         {season.air_date && (
                           <Typography variant="body2" color="text.secondary">
@@ -364,112 +383,136 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                       {season.overview && (
                         <Typography variant="body2">{season.overview}</Typography>
                       )}
-                      {/* Episode Files Section */}
-                      {loadingFiles ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                          <CircularProgress size={18} />
-                          <Typography variant="body2">Loading episode files...</Typography>
-                        </Box>
-                      ) : errorFiles ? (
-                        <Typography color="error" variant="body2" sx={{ mt: 2 }}>{errorFiles}</Typography>
-                      ) : folder ? (
-                        <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {/* Only show TMDB episodes that have a matching file */}
-                          {season.episodes && season.episodes.length > 0 && folder.episodes.map(file => {
-                            const ep = season.episodes.find((ep: any) => ep.episode_number === file.episodeNumber);
-                            return ep ? (
-                              <Paper key={file.name} elevation={1} sx={{ p: 2, mb: 2, bgcolor: 'action.hover', borderRadius: 2, display: 'flex', gap: 2 }}>
-                                {ep.still_path && (
-                                  <Box sx={{ width: 180, minWidth: 120, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
-                                    <img
-                                      src={`https://image.tmdb.org/t/p/w300${ep.still_path}`}
-                                      alt={ep.name}
-                                      style={{ width: '100%', height: 'auto', borderRadius: 8 }}
-                                    />
-                                  </Box>
-                                )}
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0.5 }}>
-                                    <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>
-                                      {ep.episode_number}. {ep.name}
-                                    </Typography>
-                                    {ep.runtime && <Typography variant="body2" color="text.secondary">{ep.runtime}m</Typography>}
-                                    {ep.vote_average > 0 && (
-                                      <Typography variant="body2" color="text.secondary">★ {ep.vote_average.toFixed(1)}</Typography>
-                                    )}
-                                    {ep.air_date && (
-                                      <Typography variant="body2" color="text.secondary">{new Date(ep.air_date).toLocaleDateString()}</Typography>
-                                    )}
-                                    <FileActionMenu
-                                      file={{
-                                        name: file.name,
-                                        type: 'file',
-                                        size: file.size,
-                                        modified: file.modified,
-                                        path: file.path
-                                      }}
-                                      currentPath={seasonPath}
-                                      onViewDetails={handleViewDetails}
-                                      onRename={() => fetchSeasonFolders()}
-                                      onDeleted={handleDeleted}
-                                      onError={handleError}
-                                    />
-                                  </Box>
-                                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{ep.overview}</Typography>
-                                  <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1, boxShadow: 1 }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{file.name}</Typography>
-                                    <Box sx={{ display: 'flex', gap: 2, color: 'text.secondary', fontSize: '0.95em' }}>
-                                      <Typography variant="body2">{file.size}</Typography>
-                                      <Typography variant="body2">•</Typography>
-                                      <Typography variant="body2">{formatDate(file.modified)}</Typography>
-                                    </Box>
-                                    <Tooltip title={file.path} placement="top">
-                                      <Typography variant="body2" sx={{
-                                        fontFamily: 'monospace',
-                                        mt: 0.5,
-                                        fontSize: '0.85em',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
-                                      }}>{file.path}</Typography>
-                                    </Tooltip>
-                                  </Box>
-                                </Box>
-                              </Paper>
-                            ) : null;
-                          })}
-                          {/* Show files with no metadata at the end */}
-                          {folder.episodes.filter(f => !season.episodes.some((ep: any) => ep.episode_number === f.episodeNumber)).map(file => (
-                            <Paper key={file.name} elevation={1} sx={{ p: 2, mb: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{file.name}</Typography>
-                              <Box sx={{ display: 'flex', gap: 2, color: 'text.secondary', fontSize: '0.95em' }}>
-                                <Typography variant="body2">{file.size}</Typography>
-                                <Typography variant="body2">•</Typography>
-                                <Typography variant="body2">{formatDate(file.modified)}</Typography>
-                              </Box>
-                              <Tooltip title={file.path} placement="top">
-                                <Typography variant="body2" sx={{
-                                  fontFamily: 'monospace',
-                                  mt: 0.5,
-                                  fontSize: '0.85em',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap'
-                                }}>{file.path}</Typography>
-                              </Tooltip>
-                              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No metadata found for this file.</Typography>
-                            </Paper>
-                          ))}
-                        </Box>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No episode files found.</Typography>
-                      )}
                     </Box>
                   </Box>
                 </Paper>
               );
             })}
           </Box>
+          {/* Season Episodes Dialog */}
+          <Dialog open={seasonDialogOpen} onClose={() => setSeasonDialogOpen(false)} maxWidth="lg" fullWidth
+            PaperProps={{ sx: { maxWidth: { xs: '95vw', md: 900 }, width: { xs: '95vw', md: 'auto' }, m: 0 } }}>
+            <DialogTitle>
+              {selectedSeason?.name || 'Episodes'}
+              <IconButton
+                aria-label="close"
+                onClick={() => setSeasonDialogOpen(false)}
+                sx={{ position: 'absolute', right: 12, top: 12, color: 'grey.500' }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent dividers sx={{ bgcolor: 'background.default', minHeight: 300 }}>
+              {loadingFiles ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                  <CircularProgress size={18} />
+                  <Typography variant="body2">Loading episode files...</Typography>
+                </Box>
+              ) : errorFiles ? (
+                <Typography color="error" variant="body2" sx={{ mt: 2 }}>{errorFiles}</Typography>
+              ) : selectedSeason && selectedSeasonFolder ? (
+                <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {selectedSeason.episodes && selectedSeason.episodes.length > 0 && selectedSeasonFolder.episodes.map(file => {
+                    const ep = selectedSeason.episodes.find((ep: any) => ep.episode_number === file.episodeNumber);
+                    return ep ? (
+                      <Paper key={file.name} elevation={2} sx={{ p: 0, borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: { xs: 'column', md: 'row' }, bgcolor: 'background.paper', boxShadow: theme => theme.palette.mode === 'light' ? '0 4px 24px rgba(0,0,0,0.10)' : 3, maxWidth: { xs: 340, md: 'none' }, mx: { xs: 'auto', md: 0 }, width: { xs: '100%', md: 'auto' } }}>
+                        {ep.still_path && (
+                          <Box
+                            sx={{ width: { xs: '100%', md: 180 }, minWidth: { xs: '100%', md: 120 }, flexShrink: 0, bgcolor: 'grey.900', position: 'relative', display: 'flex', alignItems: 'stretch', aspectRatio: { xs: '16/9', md: 'auto' }, maxHeight: { xs: 140, md: 'none' }, overflow: 'hidden', borderTopLeftRadius: { xs: 12, md: 20 }, borderTopRightRadius: { xs: 12, md: 0 }, borderBottomLeftRadius: { xs: 0, md: 20 }, cursor: 'pointer' }}
+                            onClick={() => {
+                              const relPath = `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}/${file.name}`.replace(/\/+/g, '/').replace(/\/$/, '');
+                              const encodedPath = encodeURIComponent(relPath.replace(/^\/+/,''));
+                              const streamUrl = `/api/stream/${encodedPath}`;
+                              setSelectedFile({ ...file, videoUrl: streamUrl });
+                              setVideoPlayerOpen(true);
+                            }}
+                          >
+                            <img
+                              src={`https://image.tmdb.org/t/p/w300${ep.still_path}`}
+                              alt={ep.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 0 }}
+                            />
+                            <IconButton
+                              aria-label="play"
+                              sx={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                bgcolor: 'rgba(0,0,0,0.6)',
+                                color: 'white',
+                                '&:hover': { bgcolor: 'primary.main' },
+                                width: 40,
+                                height: 40,
+                                zIndex: 2,
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              <PlayArrowIcon sx={{ fontSize: 28 }} />
+                            </IconButton>
+                          </Box>
+                        )}
+                        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: { xs: 1.2, md: 3 }, justifyContent: 'center', minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: { xs: 'center', md: 'center' }, gap: 1, mb: 0.5, justifyContent: 'space-between', flexDirection: 'row', width: '100%' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: { xs: '0.98rem', md: '1.1rem' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {ep.episode_number}. {ep.name}
+                              </Typography>
+                              {ep.runtime && <Typography variant="caption" color="text.secondary">{ep.runtime}m</Typography>}
+                              {ep.vote_average > 0 && (
+                                <Typography variant="caption" color="text.secondary">★ {ep.vote_average.toFixed(1)}</Typography>
+                              )}
+                              {ep.air_date && (
+                                <Typography variant="caption" color="text.secondary">{new Date(ep.air_date).toLocaleDateString()}</Typography>
+                              )}
+                            </Box>
+                            <FileActionMenu
+                              file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path }}
+                              currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
+                              onViewDetails={handleViewDetails}
+                              onRename={() => fetchSeasonFolders()}
+                              onDeleted={handleDeleted}
+                              onError={handleError}
+                            />
+                          </Box>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, minHeight: 30, maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', fontSize: { xs: '0.92rem', md: '1rem' } }}>{ep.overview}</Typography>
+                        </Box>
+                      </Paper>
+                    ) : null;
+                  })}
+                  {/* Show files with no metadata at the end */}
+                  {selectedSeasonFolder.episodes.filter(f => !selectedSeason.episodes.some((ep: any) => ep.episode_number === f.episodeNumber)).map(file => (
+                    <Paper key={file.name} elevation={2} sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper', boxShadow: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{file.name}</Typography>
+                        <Box sx={{ display: 'flex', gap: 2, color: 'text.secondary', fontSize: '0.95em' }}>
+                          <Typography variant="body2">{file.size}</Typography>
+                          <Typography variant="body2">•</Typography>
+                          <Typography variant="body2">{formatDate(file.modified)}</Typography>
+                        </Box>
+                        <Tooltip title={file.path} placement="top">
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5, fontSize: '0.85em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.path}</Typography>
+                        </Tooltip>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No metadata found for this file.</Typography>
+                        <Box sx={{ mt: 0.5 }}>
+                          <FileActionMenu
+                            file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path }}
+                            currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
+                            onViewDetails={handleViewDetails}
+                            onRename={() => fetchSeasonFolders()}
+                            onDeleted={handleDeleted}
+                            onError={handleError}
+                          />
+                        </Box>
+                      </Box>
+                    </Paper>
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No episode files found.</Typography>
+              )}
+            </DialogContent>
+          </Dialog>
         </Box>
       )}
 

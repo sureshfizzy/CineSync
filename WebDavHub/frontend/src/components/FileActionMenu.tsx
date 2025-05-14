@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField } from '@mui/material';
+import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, Box, Tooltip } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -29,6 +29,7 @@ interface FileActionMenuProps {
   onRename: (file: FileItem) => void;
   onError: (msg: string) => void;
   onDeleted?: () => void;
+  variant?: 'menu' | 'buttons';
 }
 
 function joinPaths(...parts: string[]): string {
@@ -48,7 +49,7 @@ const getMimeType = (ext: string): string => {
   return mimeTypes[ext] || '';
 };
 
-const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted }) => {
+const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted, variant = 'menu' }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -220,6 +221,55 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       setDeleting(false);
     }
   };
+
+  if (variant === 'buttons') {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 1, 
+        flexWrap: 'wrap', 
+        justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' },
+        width: '100%',
+        mt: 1, mb: 0
+      }}>
+        {file.type === 'file' && (
+          <Button size="small" variant="contained" color="primary" startIcon={<PlayArrowIcon />} onClick={handleOpen} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Play</Button>
+        )}
+        {file.type === 'file' && (
+          <Button size="small" variant="outlined" color="primary" startIcon={<DownloadIcon />} onClick={handleDownload} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Download</Button>
+        )}
+        <Button size="small" variant="outlined" color="secondary" startIcon={<EditIcon />} onClick={handleRenameClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Rename</Button>
+        <Tooltip title="Delete file">
+          <span>
+            <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleDeleteClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Delete</Button>
+          </span>
+        </Tooltip>
+        <VideoPlayerDialog open={videoPlayerOpen} onClose={() => setVideoPlayerOpen(false)} url={videoUrl} title={videoTitle} mimeType={videoMimeType} />
+        <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose}>
+          <DialogTitle>Rename File</DialogTitle>
+          <DialogContent>
+            <TextField autoFocus margin="dense" label="New Name" fullWidth value={renameValue} onChange={e => setRenameValue(e.target.value)} />
+            {renameError && <Typography color="error" variant="body2">{renameError}</Typography>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleRenameDialogClose}>Cancel</Button>
+            <Button onClick={handleRenameSubmit} variant="contained" disabled={renameLoading}>Rename</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={deleteDialogOpen} onClose={handleDeleteConfirmClose}>
+          <DialogTitle>Delete File</DialogTitle>
+          <DialogContent>
+            <Typography>Are you sure you want to delete <b>{file.name}</b>?</Typography>
+            {deleteError && <Typography color="error" variant="body2">{deleteError}</Typography>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleDeleteConfirmClose}>Cancel</Button>
+            <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>Delete</Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    );
+  }
 
   return (
     <>

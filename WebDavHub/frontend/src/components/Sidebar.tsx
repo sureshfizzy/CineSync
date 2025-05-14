@@ -45,7 +45,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
 
   return (
     <Box sx={{
-      width: 260,
+      width: 200,
       bgcolor: 'background.paper',
       height: '100%',
       display: 'flex',

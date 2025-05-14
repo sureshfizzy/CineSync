@@ -85,7 +85,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               display: { xs: 'block', md: 'none' },
               '& .MuiDrawer-paper': { 
                 boxSizing: 'border-box', 
-                width: 260,
+                width: 200,
                 bgcolor: 'background.paper',
                 borderRight: `1px solid ${theme.palette.divider}`
               },
@@ -102,7 +102,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           <Box
             component="nav"
             sx={{
-              width: 260,
+              width: 200,
               flexShrink: 0,
               display: { xs: 'none', md: 'block' },
               position: 'sticky',

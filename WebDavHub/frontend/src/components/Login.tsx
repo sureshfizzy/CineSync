@@ -90,18 +90,25 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
           style={{ width: '100%' }}
         >
           <MotionPaper
-            elevation={24}
+            elevation={mode === 'dark' ? 24 : 0}
             sx={{
               padding: 4,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               width: '100%',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.05)'
+                : 'rgba(255, 255, 255, 0.85)',
               backdropFilter: 'blur(10px)',
               borderRadius: '16px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: mode === 'dark' 
+                ? '1px solid rgba(255, 255, 255, 0.1)'
+                : '1px solid rgba(0,0,0,0.07)',
               position: 'relative',
+              boxShadow: mode === 'dark'
+                ? undefined
+                : '0 4px 24px 0 rgba(0,0,0,0.10), 0 1.5px 4px 0 rgba(0,0,0,0.08)',
             }}
             initial={false}
             animate={true}

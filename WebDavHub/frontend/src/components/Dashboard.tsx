@@ -126,12 +126,12 @@ export default function Dashboard() {
   ];
 
   return (
-    <Box sx={{ px: { xs: 1, sm: 2, md: 0 } }}>
+    <Box sx={{ px: { xs: 1, sm: 1, md: 0 }, maxWidth: 1600, mx: 'auto' }}>
       <Box sx={{ 
         display: 'flex', 
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: { xs: 'flex-start', sm: 'center' }, 
-        gap: { xs: 2, sm: 0 },
+        gap: { xs: 2, sm: 1 },
         mb: 4 
       }}>
         <Typography 
@@ -140,7 +140,7 @@ export default function Dashboard() {
             fontWeight: 800, 
             flex: 1, 
             letterSpacing: 0.5,
-            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+            fontSize: { xs: '1.35rem', sm: '1.8rem', md: '2.1rem' }
           }}
         >
           Dashboard
@@ -153,7 +153,9 @@ export default function Dashboard() {
             fontWeight: 600, 
             bgcolor: 'primary.main', 
             boxShadow: 2,
-            width: { xs: '100%', sm: 'auto' }
+            width: { xs: '100%', sm: 'auto' },
+            fontSize: { xs: '0.95rem', sm: '1.08rem' },
+            py: 0.7, px: 2
           }}
         >
           Refresh
@@ -176,15 +178,15 @@ export default function Dashboard() {
                 boxShadow: { xs: 1, sm: 2, md: 4 },
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 '&:hover': {
-                  transform: { xs: 'none', sm: 'translateY(-6px) scale(1.03)' },
+                  transform: { xs: 'none', sm: 'translateY(-5px) scale(1.025)' },
                   boxShadow: { xs: 1, sm: 4, md: 8 },
                 },
-                p: { xs: 1.5, sm: 2 },
-                mb: { xs: 2, sm: 0 },
+                p: { xs: 1.3, sm: 1.8 },
+                mb: { xs: 1.5, sm: 0 },
               }}
             >
               <CardContent sx={{ p: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                   <Box sx={{
                     backgroundColor: `${card.color}22`,
                     borderRadius: '12px',
@@ -205,7 +207,7 @@ export default function Dashboard() {
                       fontWeight: 700, 
                       textTransform: 'uppercase', 
                       letterSpacing: 1,
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                      fontSize: { xs: '1.8rem', sm: '1.52rem' }
                     }}
                   >
                     {card.title}
@@ -217,7 +219,7 @@ export default function Dashboard() {
                     fontWeight: 900, 
                     color: card.color, 
                     lineHeight: 1.1,
-                    fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }
+                    fontSize: { xs: '1.5rem', sm: '2.1rem', md: '2.6rem' }
                   }}
                 >
                   {card.value}

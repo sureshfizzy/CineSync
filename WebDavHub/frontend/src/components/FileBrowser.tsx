@@ -826,7 +826,7 @@ export default function FileBrowser() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   background: theme.palette.background.default,
-                    p: 2,
+                    p: 0,
                     position: 'relative',
                 }}>
                     {isLoadingPoster ? (
@@ -839,7 +839,7 @@ export default function FileBrowser() {
                           width: '100%',
                           height: '100%',
                           objectFit: 'cover',
-                          borderRadius: 8,
+                          borderRadius: 6,
                           opacity: loaded ? 1 : 0,
                           transition: 'opacity 0.5s ease',
                         }}
