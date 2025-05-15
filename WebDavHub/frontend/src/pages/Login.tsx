@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -18,8 +18,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, authEnabled } = useAuth();
   const theme = useTheme();
+
+  useEffect(() => {
+    if (!authEnabled) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [authEnabled, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

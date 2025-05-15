@@ -145,7 +145,15 @@ func main() {
 				return
 			}
 			// Protected endpoints
-			auth.JWTMiddleware(apiMux).ServeHTTP(w, r)
+			enabled := true
+			if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
+				enabled = false
+			}
+			if enabled {
+				auth.JWTMiddleware(apiMux).ServeHTTP(w, r)
+			} else {
+				apiMux.ServeHTTP(w, r)
+			}
 			return
 		}
 		// WebDAV handler for non-API paths

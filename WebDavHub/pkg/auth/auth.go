@@ -81,6 +81,16 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Check if auth is enabled
+		enabled := true
+		if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
+			enabled = false
+		}
+		if !enabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		header := r.Header.Get("Authorization")
 		tokenStr := ""
 		if strings.HasPrefix(header, "Bearer ") {

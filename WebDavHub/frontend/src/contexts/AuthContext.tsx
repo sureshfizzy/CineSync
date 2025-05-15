@@ -70,31 +70,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const checkAuthState = async () => {
+    const checkAuthEnabled = async () => {
       setLoading(true);
-      const token = localStorage.getItem('cineSyncJWT');
       try {
-        if (token) {
+        const res = await axios.get('/api/auth/enabled');
+        setAuthEnabled(res.data.enabled);
+        if (!res.data.enabled) {
+          setIsAuthenticated(true);
+          setUser({ username: 'Guest' });
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setAuthEnabled(true); // fallback to enabled if error
+      }
+      // If enabled, check JWT
+      const token = localStorage.getItem('cineSyncJWT');
+      if (token) {
+        try {
           const meRes = await axios.get('/api/me', {
             headers: { Authorization: `Bearer ${token}` },
           });
           setUser(meRes.data);
           setIsAuthenticated(true);
-          setAuthEnabled(true);
-        } else {
+        } catch {
           setIsAuthenticated(false);
           setUser(null);
+          localStorage.removeItem('cineSyncJWT');
         }
-      } catch (error) {
+      } else {
         setIsAuthenticated(false);
-        setAuthEnabled(true);
         setUser(null);
-        localStorage.removeItem('cineSyncJWT');
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
-    checkAuthState();
+    checkAuthEnabled();
   }, []);
 
   const login = async (username: string, password: string) => {

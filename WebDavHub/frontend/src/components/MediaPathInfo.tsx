@@ -117,11 +117,10 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
 
           const relPath = `${folderPath}/${mediaFile.name}`;
           const res = await axios.post('/api/readlink', { path: relPath });
-          
           setPathInfo({
             webdavPath: `Home${relPath}`,
             fullPath: res.data.absPath || '',
-            sourcePath: res.data.realPath || '',
+            sourcePath: res.data.realPath || res.data.absPath || '',
             fileName: mediaFile.name,
             fileSize: mediaFile.size,
             modified: mediaFile.modified

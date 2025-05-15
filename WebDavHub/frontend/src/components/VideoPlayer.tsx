@@ -7,6 +7,7 @@ import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import CloseIcon from '@mui/icons-material/Close';
+import { useAuth } from '../contexts/AuthContext';
 
 interface VideoPlayerProps {
   url: string;
@@ -31,6 +32,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
   const [error, setError] = useState<string | null>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
+  const { authEnabled } = useAuth();
 
   // Utility: detect mobile
   const isMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -58,13 +60,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
     setIsLoading(true);
     setError(null);
     const token = localStorage.getItem('cineSyncJWT');
-    if (!token) {
-      setError('Authentication required. Please log in.');
-      setIsLoading(false);
-      return;
+    if (authEnabled) {
+      if (!token) {
+        setError('Authentication required. Please log in.');
+        setIsLoading(false);
+        return;
+      }
+      setVideoUrl(`${url}?token=${encodeURIComponent(token)}`);
+    } else {
+      setVideoUrl(url);
     }
-    setVideoUrl(`${url}?token=${encodeURIComponent(token)}`);
-  }, [url]);
+  }, [url, authEnabled]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {

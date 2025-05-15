@@ -234,6 +234,7 @@ func statsChanged(a, b Stats) bool {
 }
 
 func HandleStats(w http.ResponseWriter, r *http.Request) {
+	// Note: JWT is only required if WEBDAV_AUTH_ENABLED is true (handled by middleware)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
