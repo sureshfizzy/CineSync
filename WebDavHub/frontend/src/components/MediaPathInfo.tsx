@@ -281,7 +281,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
         {pathInfo.sourcePath && (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-              Source Path
+              Source Path (Actual Location)
             </Typography>
             <Tooltip title={pathInfo.sourcePath} placement="top">
               <Typography variant="body2" sx={{

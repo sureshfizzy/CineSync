@@ -1,4 +1,4 @@
-import { Box, Typography, Chip, Paper, Avatar, CircularProgress, Tooltip, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, TextField, Snackbar, Alert } from '@mui/material';
+import { Box, Typography, Chip, Paper, Avatar, CircularProgress, Tooltip, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, TextField, Snackbar, Alert, Divider, useTheme } from '@mui/material';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -7,6 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileActionMenu from './FileActionMenu';
 import VideoPlayerDialog from './VideoPlayerDialog';
+import { FolderOpen as FolderOpenIcon, InsertDriveFile as FileIcon, Image as ImageIcon, Movie as MovieIcon, Description as DescriptionIcon } from '@mui/icons-material';
 
 interface TVShowInfoProps {
   data: MediaDetailsData;
@@ -22,6 +23,7 @@ interface FileItem {
   size?: string;
   modified?: string;
   isSeasonFolder?: boolean;
+  path?: string;
 }
 
 interface EpisodeFileInfo {
@@ -80,17 +82,27 @@ function extractEpisodeNumber(filename: string, seasonNumber: number): number | 
     if (!isNaN(num)) return num;
   }
   // Fallback: log for debugging
-  console.warn('Could not extract episode number from filename:', filename, 'for season', seasonNumber);
   return undefined;
 }
 
 export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: TVShowInfoProps) {
+  const theme = useTheme();
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
   const cast = (data.credits?.cast || []).slice(0, 8);
   const genres = data.genres || [];
   const country = data.production_countries?.[0]?.name;
+
+  // Helper function to get appropriate icon for file type
+  function getFileIcon(name: string, type: string) {
+    if (type === 'directory') return <FolderOpenIcon color="primary" />;
+    const ext = name.split('.').pop()?.toLowerCase();
+    if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext || "")) return <ImageIcon color="secondary" />;
+    if (["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"].includes(ext || "")) return <MovieIcon color="action" />;
+    if (["pdf", "doc", "docx", "txt", "md", "rtf"].includes(ext || "")) return <DescriptionIcon color="success" />;
+    return <FileIcon color="disabled" />;
+  }
 
   const [seasonFolders, setSeasonFolders] = useState<SeasonFolderInfo[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -121,112 +133,68 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
       const folderResponse = await axios.get(`/api/files${showFolderPath}`);
       const files: FileItem[] = folderResponse.data;
 
-      // Map TMDB season_number to folder
-      const seasonFolderMap: { [seasonNum: number]: string } = {};
-      files.forEach(file => {
-        if (file.type === 'directory' && file.isSeasonFolder) {
-          const match = file.name.match(/(season[ _-]?|s)(\d{1,2})/i);
-          if (match) {
-            const num = parseInt(match[2], 10);
-            if (!isNaN(num)) {
-              seasonFolderMap[num] = file.name;
-            }
-          } else {
-            const digits = file.name.match(/(\d{1,2})/);
-            if (digits) {
-              const num = parseInt(digits[1], 10);
-              if (!isNaN(num)) {
-                seasonFolderMap[num] = file.name;
-              }
-            }
+      // Recursively collect all video files in all subfolders
+      async function collectVideoFiles(path: string): Promise<{ file: FileItem; relPath: string }[]> {
+        const res = await axios.get(`/api/files${path}`);
+        const items: FileItem[] = res.data;
+        let result: { file: FileItem; relPath: string }[] = [];
+        for (const item of items) {
+          if (item.type === 'directory') {
+            result = result.concat(await collectVideoFiles(`${path}/${item.name}`));
+          } else if (item.type === 'file' && ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext => item.name.toLowerCase().endsWith(ext))) {
+            result.push({ file: item, relPath: `${path}/${item.name}` });
           }
         }
-      });
-
-      // For each TMDB season, fetch episode files and their metadata
-      const seasonFoldersData: SeasonFolderInfo[] = [];
-      const tmdbSeasons = (data.seasons || []).filter(s => s.season_number > 0);
-
-      for (const tmdbSeason of tmdbSeasons) {
-        const folder = seasonFolderMap[tmdbSeason.season_number];
-        if (!folder) continue;
-
-        const seasonPath = `${showFolderPath}/${folder}`;
-        const seasonResponse = await axios.get(`/api/files${seasonPath}`);
-        const episodeFiles = seasonResponse.data.filter((file: FileItem) =>
-          file.type === 'file' &&
-          ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext =>
-            file.name.toLowerCase().endsWith(ext)
-          )
-        );
-
-        // Process episode files and extract episode numbers
-        const episodes: EpisodeFileInfo[] = [];
-        for (const episode of episodeFiles) {
-          const relPath = `${seasonPath}/${episode.name}`;
-          const pathInfo = await axios.post('/api/readlink', { path: relPath });
-          
-          // Extract episode number from filename
-          const episodeNumber = extractEpisodeNumber(episode.name, tmdbSeason.season_number);
-          if (episodeNumber === undefined) {
-            console.warn('No episode number extracted for file:', episode.name, 'in season', tmdbSeason.season_number);
-          }
-          
-          episodes.push({
-            name: episode.name,
-            size: episode.size || '--',
-            modified: episode.modified || '--',
-            path: pathInfo.data.realPath || pathInfo.data.absPath || relPath,
-            episodeNumber
-          });
-        }
-
-        if (episodes.length > 0) {
-          // Only fetch metadata for episodes that exist
-          const episodeNumbers = episodes.map(ep => ep.episodeNumber).filter(num => num !== undefined);
-          if (episodeNumbers.length > 0) {
-            try {
-              const seasonDetailsResponse = await axios.get(
-                `/api/tmdb/details?id=${data.id}&mediaType=tv&season=${tmdbSeason.season_number}&episodes=${episodeNumbers.join(',')}`
-              );
-              
-              if (seasonDetailsResponse.data && seasonDetailsResponse.data.seasons) {
-                const seasonData = seasonDetailsResponse.data.seasons.find(
-                  (s: any) => s.season_number === tmdbSeason.season_number
-                );
-                if (seasonData && seasonData.episodes) {
-                  // Match metadata with files
-                  episodes.forEach(episode => {
-                    if (episode.episodeNumber) {
-                      const metadata = seasonData.episodes.find(
-                        (e: any) => e.episode_number === episode.episodeNumber
-                      );
-                      if (metadata) {
-                        episode.metadata = metadata;
-                      } else {
-                        console.warn('No metadata found for file:', episode.name, 'with episode number:', episode.episodeNumber);
-                      }
-                    }
-                  });
-                }
-              }
-            } catch (err) {
-              console.error('Error fetching episode metadata:', err);
-            }
-          }
-
-          seasonFoldersData.push({
-            folderName: folder,
-            seasonNumber: tmdbSeason.season_number,
-            episodes
-          });
-        }
+        return result;
       }
+
+      const allVideoFiles = await collectVideoFiles(showFolderPath);
+          
+      // Group by season number from filename
+      const seasonMap: { [seasonNum: number]: EpisodeFileInfo[] } = {};
+      for (const { file, relPath } of allVideoFiles) {
+        // Extract season and episode from filename
+        let match = file.name.match(/S(\d{1,2})E(\d{1,2})/i) || file.name.match(/s(\d{2})e(\d{2})/i);
+        let seasonNum: number | undefined = undefined;
+        let episodeNum: number | undefined = undefined;
+        if (match) {
+          seasonNum = parseInt(match[1], 10);
+          episodeNum = parseInt(match[2], 10);
+        } else {
+          // Try 1x02
+          match = file.name.match(/(\d{1,2})x(\d{2})/i);
+          if (match) {
+            seasonNum = parseInt(match[1], 10);
+            episodeNum = parseInt(match[2], 10);
+          }
+        }
+        if (seasonNum === undefined) {
+          // fallback: skip file or put in season 0
+          seasonNum = 0;
+        }
+        if (!seasonMap[seasonNum]) seasonMap[seasonNum] = [];
+        // Do NOT call /api/readlink here. Just store the file info as-is.
+        seasonMap[seasonNum].push({
+          name: file.name,
+          size: file.size || '--',
+          modified: file.modified || '--',
+          path: (file.path as string) || '',
+          episodeNumber: episodeNum
+        });
+      }
+
+      // Convert to SeasonFolderInfo[]
+      const seasonFoldersData: SeasonFolderInfo[] = Object.entries(seasonMap)
+        .filter(([seasonNum, episodes]) => parseInt(seasonNum) > 0 && episodes.length > 0)
+        .map(([seasonNum, episodes]) => ({
+          folderName: `Season ${seasonNum}`,
+          seasonNumber: parseInt(seasonNum),
+          episodes: episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
+        }));
 
       setSeasonFolders(seasonFoldersData);
     } catch (err) {
       setErrorFiles('Failed to fetch episode file information');
-      console.error('Error fetching episode files:', err);
     } finally {
       setLoadingFiles(false);
     }
@@ -249,10 +217,24 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   };
 
   // Handlers for FileActionMenu
-  const handleViewDetails = (file: any, details: any) => {
+  const handleViewDetails = async (file: any, details: any) => {
     setSelectedFile(file);
-    setDetailsData(details);
     setDetailsDialogOpen(true);
+    // Show loading state in detailsData
+    setDetailsData({ loading: true });
+    try {
+      // Always use the actual file.path
+      const res = await axios.post('/api/readlink', { path: file.path });
+      const webdavPath = details?.webdavPath || `Home${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${file.name}`;
+      setDetailsData({
+        ...details,
+        webdavPath,
+        sourcePath: res.data.realPath || res.data.absPath || file.path,
+        fullPath: res.data.absPath || file.path
+      });
+    } catch (err) {
+      setDetailsData({ ...details, error: 'Failed to resolve file path' });
+    }
   };
   const handleRename = (file: any) => {
     setSelectedFile(file);
@@ -420,8 +402,18 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                           <Box
                             sx={{ width: { xs: '100%', md: 180 }, minWidth: { xs: '100%', md: 120 }, flexShrink: 0, bgcolor: 'grey.900', position: 'relative', display: 'flex', alignItems: 'stretch', aspectRatio: { xs: '16/9', md: 'auto' }, maxHeight: { xs: 140, md: 'none' }, overflow: 'hidden', borderTopLeftRadius: { xs: 12, md: 20 }, borderTopRightRadius: { xs: 12, md: 0 }, borderBottomLeftRadius: { xs: 0, md: 20 }, cursor: 'pointer' }}
                             onClick={() => {
-                              const relPath = `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}/${file.name}`.replace(/\/+/g, '/').replace(/\/$/, '');
-                              const encodedPath = encodeURIComponent(relPath.replace(/^\/+/,''));
+                              // Use the actual file path for streaming, but always send a path relative to rootDir
+                              let relPath = file.path;
+                              // Remove Windows drive letter or rootDir prefix if present
+                              // Example: E:\Testing\Shows\Stranger Things\Season 2\04x01.mp4
+                              // rootDir is not available in frontend, so strip up to /Shows or /Movies
+                              const match = relPath.match(/([\\/](Shows|Movies)[\\/].*)$/i);
+                              if (match) {
+                                relPath = match[1].replace(/^\\+|^\/+/,'');
+                              } else if (relPath.startsWith('/')) {
+                                relPath = relPath.replace(/^\/+/, '');
+                              }
+                              const encodedPath = encodeURIComponent(relPath);
                               const streamUrl = `/api/stream/${encodedPath}`;
                               setSelectedFile({ ...file, videoUrl: streamUrl });
                               setVideoPlayerOpen(true);
@@ -562,19 +554,82 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={detailsDialogOpen} onClose={() => setDetailsDialogOpen(false)}>
-        <DialogTitle>File Details</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2"><b>Name:</b> {selectedFile?.name}</Typography>
-          <Typography variant="body2"><b>Path:</b> {detailsData?.fullPath || selectedFile?.path}</Typography>
-          <Typography variant="body2"><b>WebDAV Path:</b> {detailsData?.webdavPath}</Typography>
-          <Typography variant="body2"><b>Source Path:</b> {detailsData?.sourcePath}</Typography>
-          <Typography variant="body2"><b>Size:</b> {selectedFile?.size}</Typography>
-          <Typography variant="body2"><b>Modified:</b> {selectedFile?.modified}</Typography>
+      <Dialog open={detailsDialogOpen} onClose={() => setDetailsDialogOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            fontSize: '1.3rem',
+            background: theme.palette.background.paper,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            borderTopLeftRadius: 12,
+            borderTopRightRadius: 12,
+            p: 2.5,
+            pr: 5
+          }}
+        >
+          Details
+          <IconButton
+            aria-label="close"
+            onClick={() => setDetailsDialogOpen(false)}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: theme.palette.grey[500],
+            }}
+            size="large"
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          dividers={true}
+          sx={{
+            background: theme.palette.background.default,
+            p: 3,
+            borderBottomLeftRadius: 12,
+            borderBottomRightRadius: 12,
+            minWidth: 350,
+            maxWidth: 600,
+          }}
+        >
+          {detailsData && (
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                {getFileIcon(selectedFile?.name || '', 'file')}
+                <Typography sx={{ ml: 2, fontWeight: 700, fontSize: '1.15rem', wordBreak: 'break-all', whiteSpace: 'normal' }}>{selectedFile?.name}</Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                <Typography variant="body2"><b>Type:</b> {selectedFile?.name ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'File') : 'File'}</Typography>
+                <Typography variant="body2"><b>Size:</b> {selectedFile?.size || '--'}</Typography>
+                <Typography variant="body2"><b>Modified:</b> {formatDate(selectedFile?.modified)}</Typography>
+                
+                {/* WebDAV path - The path used for WebDAV access, including Home prefix */}
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                  <b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                    {detailsData?.webdavPath || (selectedFile?.path ? `Home${currentPath}/${folderName}/${selectedFile.path.split('/').pop()}` : '--')}
+                  </span>
+                </Typography>
+                
+                {/* Source Path - The actual path on disk where the file is located (from readlink) */}
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                  <b>Source Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                    {detailsData?.sourcePath || selectedFile?.path || '--'}
+                  </span>
+                </Typography>
+                
+                {/* Full path - The actual path on the server */}
+                <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                  <b>Full Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                    {detailsData?.fullPath || '--'}
+                  </span>
+                </Typography>
+              </Box>
+            </Box>
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
-        </DialogActions>
       </Dialog>
       <VideoPlayerDialog
         open={videoPlayerOpen}
