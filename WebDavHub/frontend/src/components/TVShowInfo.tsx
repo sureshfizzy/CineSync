@@ -459,7 +459,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                               )}
                             </Box>
                             <FileActionMenu
-                              file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path }}
+                              file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path, sourcePath: file.path }}
                               currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
                               onViewDetails={handleViewDetails}
                               onRename={() => fetchSeasonFolders()}
@@ -488,7 +488,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No metadata found for this file.</Typography>
                         <Box sx={{ mt: 0.5 }}>
                           <FileActionMenu
-                            file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path }}
+                            file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path, sourcePath: file.path }}
                             currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
                             onViewDetails={handleViewDetails}
                             onRename={() => fetchSeasonFolders()}

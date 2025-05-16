@@ -72,6 +72,16 @@ type RenameResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// DownloadRequest and DownloadResponse for download API
+type DownloadRequest struct {
+	Path string `json:"path"`
+}
+
+type DownloadResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 func formatFileSize(size int64) string {
 	const unit = 1024
 	if size < unit {
@@ -660,5 +670,64 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		written += int64(n)
+	}
+}
+
+// HandleDownload streams a file as an attachment for download
+func HandleDownload(w http.ResponseWriter, r *http.Request) {
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		logger.Warn("Error: empty path provided")
+		http.Error(w, "Path is required", http.StatusBadRequest)
+		return
+	}
+	cleanPath := filepath.Clean(path)
+	if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
+		logger.Warn("Error: invalid path: %s", cleanPath)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	absPath := filepath.Join(rootDir, cleanPath)
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		logger.Warn("Error: failed to get absolute root path: %v", err)
+		http.Error(w, "Server configuration error", http.StatusInternalServerError)
+		return
+	}
+	absFile, err := filepath.Abs(absPath)
+	if err != nil {
+		logger.Warn("Error: failed to get absolute file path: %v", err)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	if !strings.HasPrefix(absFile, absRoot) {
+		logger.Warn("Error: path outside root directory: %s", absFile)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	file, err := os.Open(absFile)
+	if err != nil {
+		logger.Warn("Error: failed to open file: %v", err)
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+	fileInfo, err := file.Stat()
+	if err != nil {
+		logger.Warn("Error: failed to stat file: %v", err)
+		http.Error(w, "Failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+fileInfo.Name()+"\"")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.Copy(w, file); err != nil {
+		logger.Warn("Error: failed to send file: %v", err)
 	}
 }

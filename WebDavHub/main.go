@@ -131,6 +131,7 @@ func main() {
 	apiMux.HandleFunc("/api/readlink", api.HandleReadlink)
 	apiMux.HandleFunc("/api/delete", api.HandleDelete)
 	apiMux.HandleFunc("/api/rename", api.HandleRename)
+	apiMux.HandleFunc("/api/download", api.HandleDownload)
 	apiMux.HandleFunc("/api/me", auth.HandleMe)
 	apiMux.HandleFunc("/api/tmdb/search", api.HandleTmdbProxy)
 	apiMux.HandleFunc("/api/tmdb/details", api.HandleTmdbDetails)

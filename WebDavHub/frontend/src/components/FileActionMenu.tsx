@@ -128,21 +128,17 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       handleMenuClose();
       return;
     }
-    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
-    const url = `/api/files${relPath}`;
-    try {
-      const response = await axios.get(url, { responseType: 'blob' });
-      const blob = response.data;
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', file.name);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      onError('Failed to download file');
-    }
+    // Prefer sourcePath if available, otherwise use relPath
+    let relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    let downloadPath = file.sourcePath || relPath;
+    const url = `/api/download?path=${encodeURIComponent(downloadPath)}`;
+    // Use a direct link for GET download
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', file.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     handleMenuClose();
   };
 
