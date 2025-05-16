@@ -49,6 +49,16 @@ const getMimeType = (ext: string): string => {
   return mimeTypes[ext] || '';
 };
 
+function getRelativePath(absPath: string): string {
+  if (!absPath) return '';
+  const norm = absPath.replace(/\\/g, '/');
+  const homeMatch = norm.match(/([/\\]Home[/\\].*)$/i);
+  if (homeMatch) {
+    return homeMatch[1].replace(/^[/\\]+/, '');
+  }
+  return norm.replace(/^([A-Za-z]:)?[/\\]+/, '');
+}
+
 const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted, variant = 'menu' }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -159,7 +169,9 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
     if (!renameValue.trim() || renameValue === file.name) return;
     setRenameLoading(true);
     setRenameError(null);
-    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
+    // Use file.fullPath or file.sourcePath or fallback to relPath
+    let absPath = file.fullPath || file.sourcePath || '';
+    let relPath = absPath ? getRelativePath(absPath) : joinPaths(currentPath, file.name).replace(/\/$/, '');
     try {
       await axios.post('/api/rename', {
         oldPath: relPath,
@@ -188,17 +200,10 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
   const handleDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
-    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
-    let absPath = '';
-    try {
-      const res = await axios.post('/api/readlink', { path: relPath });
-      absPath = res.data.absPath || '';
-    } catch (e) {
-      setDeleteError('Failed to get file path');
-      setDeleting(false);
-      return;
-    }
-    if (!absPath) {
+    // Use file.fullPath or file.sourcePath or fallback to relPath
+    let absPath = file.fullPath || file.sourcePath || '';
+    let relPath = absPath ? getRelativePath(absPath) : joinPaths(currentPath, file.name).replace(/\/$/, '');
+    if (!relPath) {
       setDeleteError('Could not determine file path');
       setDeleting(false);
       return;

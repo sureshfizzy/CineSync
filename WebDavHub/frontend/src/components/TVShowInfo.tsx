@@ -460,7 +460,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                             </Box>
                             <FileActionMenu
                               file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path, sourcePath: file.path }}
-                              currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
+                              currentPath={selectedSeasonFolder ? `${folderName}/${selectedSeasonFolder.folderName}`.replace(/^\/+/,'') : folderName.replace(/^\/+/,'')}
                               onViewDetails={handleViewDetails}
                               onRename={() => fetchSeasonFolders()}
                               onDeleted={handleDeleted}
@@ -489,7 +489,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
                         <Box sx={{ mt: 0.5 }}>
                           <FileActionMenu
                             file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path, sourcePath: file.path }}
-                            currentPath={selectedSeasonFolder ? `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${selectedSeasonFolder.folderName}` : ''}
+                            currentPath={selectedSeasonFolder ? `${folderName}/${selectedSeasonFolder.folderName}`.replace(/^\/+/,'') : folderName.replace(/^\/+/,'')}
                             onViewDetails={handleViewDetails}
                             onRename={() => fetchSeasonFolders()}
                             onDeleted={handleDeleted}
