@@ -49,10 +49,10 @@ import {
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import axios from 'axios';
-import { useLayoutContext } from './Layout';
-import { searchTmdb, getTmdbPosterUrl, TmdbResult } from './tmdbApi';
+import { useLayoutContext } from '../Layout/Layout';
+import { searchTmdb, getTmdbPosterUrl, TmdbResult } from '../api/tmdbApi';
 import Skeleton from '@mui/material/Skeleton';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import FileActionMenu from './FileActionMenu';
 
 interface FileItem {

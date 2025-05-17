@@ -7,7 +7,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
-import VideoPlayerDialog from './VideoPlayerDialog';
+import VideoPlayerDialog from '../VideoPlayer/VideoPlayerDialog';
 
 interface FileItem {
   name: string;

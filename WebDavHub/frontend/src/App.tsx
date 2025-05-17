@@ -3,10 +3,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Layout from './components/Layout';
-import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import FileBrowser from './components/FileBrowser';
+import Layout from './components/Layout/Layout';
+import Login from './components/Auth/Login';
+import Dashboard from './components/Dashboard/Dashboard';
+import FileBrowser from './components/FileBrowser/FileBrowser';
 import { CircularProgress, Box, Typography, Button } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
