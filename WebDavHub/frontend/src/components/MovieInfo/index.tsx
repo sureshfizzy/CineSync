@@ -1,4 +1,6 @@
-import { Box } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import MovieHeader from './MovieHeader';
 import CastList from './CastList';
@@ -7,6 +9,7 @@ import { MovieInfoProps } from './types';
 
 export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     async function fetchFile() {
       try {
@@ -32,10 +35,36 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   }, [folderName, currentPath]);
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} />
-      <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />
-      <CastList data={data} getPosterUrl={getPosterUrl} />
+    <Box sx={{ position: 'relative' }}>
+      <IconButton
+        onClick={() => navigate(-1)}
+        sx={{
+          position: 'absolute',
+          top: { xs: -24, md: 'calc(-47px)' },
+          left: { xs: -8, md: 'calc(-47px)' },
+          zIndex: 10,
+          bgcolor: 'background.paper',
+          color: 'primary.main',
+          boxShadow: 2,
+          '&:hover': { bgcolor: 'primary.main', color: 'background.paper' },
+          borderRadius: '50%',
+          width: 44,
+          height: 44,
+        }}
+        size="large"
+        aria-label="Back"
+      >
+        <ArrowBackIosNewIcon fontSize="medium" />
+      </IconButton>
+      <Box sx={{ width: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ flex: 1 }}>
+            <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} />
+          </Box>
+        </Box>
+        <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />
+        <CastList data={data} getPosterUrl={getPosterUrl} />
+      </Box>
     </Box>
   );
 } 

@@ -1,9 +1,9 @@
+import React from 'react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Breadcrumbs,
-  Button,
   IconButton,
   Link,
   Paper,
@@ -15,270 +15,32 @@ import {
   TableRow,
   Typography,
   CircularProgress,
-  Menu,
-  MenuItem,
   useMediaQuery,
   useTheme,
   Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   Divider,
   TextField,
 } from '@mui/material';
 import {
-  FolderOpen as FolderOpenIcon,
-  InsertDriveFile as FileIcon,
-  Image as ImageIcon,
-  Movie as MovieIcon,
-  Description as DescriptionIcon,
   NavigateBefore as UpIcon,
   Refresh as RefreshIcon,
-  MoreVert as MoreVertIcon,
   ViewList as ViewListIcon,
   GridView as GridViewIcon,
-  Info as InfoIcon,
-  Delete as DeleteIcon,
-  OpenInNew as OpenInNewIcon,
   Close as CloseIcon,
-  Edit as EditIcon,
   Search as SearchIcon,
-  Download as DownloadIcon,
-  PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material';
-import { format, parseISO } from 'date-fns';
-import axios from 'axios';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb, getTmdbPosterUrl, TmdbResult } from '../api/tmdbApi';
 import Skeleton from '@mui/material/Skeleton';
-import { useAuth } from '../../contexts/AuthContext';
 import FileActionMenu from './FileActionMenu';
-
-interface FileItem {
-  name: string;
-  type: 'file' | 'directory';
-  size?: string;
-  modified?: string;
-  path?: string;
-  webdavPath?: string;
-  sourcePath?: string;
-  fullPath?: string;
-  isSeasonFolder?: boolean;
-  hasSeasonFolders?: boolean;
-}
-
-interface MobileListItemProps {
-  file: FileItem;
-  onItemClick: () => void;
-  onMenuClick: (event: React.MouseEvent<HTMLElement>) => void;
-  formatDate: (date?: string) => string;
-}
-
-function MobileListItem({ file, onItemClick, onMenuClick, formatDate }: MobileListItemProps) {
-  return (
-    <Box
-      onClick={onItemClick}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        p: 1.5,
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        cursor: file.type === 'directory' ? 'pointer' : 'default',
-        '&:active': {
-          bgcolor: 'action.selected',
-        },
-        bgcolor: 'background.paper',
-        '&:hover': {
-          bgcolor: 'action.hover',
-        },
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
-        <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
-          {getFileIcon(file.name, file.type)}
-        </Box>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            variant="body1"
-            sx={{
-              fontWeight: 500,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {file.name}
-          </Typography>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              display: 'block',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
-          </Typography>
-        </Box>
-      </Box>
-      <IconButton 
-        size="small" 
-        onClick={onMenuClick}
-        sx={{ 
-          ml: 1,
-          color: 'text.secondary',
-          '&:hover': {
-            color: 'text.primary',
-            bgcolor: 'action.selected',
-          },
-        }}
-      >
-        <MoreVertIcon fontSize="small" />
-      </IconButton>
-    </Box>
-  );
-}
-
-function getFileIcon(name: string, type: string) {
-  if (type === 'directory') return <FolderOpenIcon color="primary" />;
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext || "")) return <ImageIcon color="secondary" />;
-  if (["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"].includes(ext || "")) return <MovieIcon color="action" />;
-  if (["pdf", "doc", "docx", "txt", "md", "rtf"].includes(ext || "")) return <DescriptionIcon color="success" />;
-  return <FileIcon color="disabled" />;
-}
-
-function joinPaths(...parts: string[]): string {
-  // Remove empty parts and normalize slashes
-  const normalizedParts = parts
-    .map(part => part.replace(/^\/+|\/+$/g, '')) // Remove leading/trailing slashes
-    .filter(Boolean); // Remove empty parts
-  
-  // Handle root path case
-  if (normalizedParts.length === 0) return '/';
-  
-  // Join with single slashes and ensure leading/trailing slash
-  return '/' + normalizedParts.join('/') + '/';
-}
-
-// Add this new component for mobile breadcrumbs
-function MobileBreadcrumbs({ currentPath, onPathClick }: { 
-  currentPath: string;
-  onPathClick: (path: string) => void;
-}) {
-  const pathParts = currentPath.split('/').filter(Boolean);
-  const showBackOnly = pathParts.length > 2;
-
-  if (showBackOnly) {
-    // Show only current folder with back button
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center',
-        minWidth: 0,
-        width: '100%'
-      }}>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() => {
-            const parentPath = '/' + pathParts.slice(0, -1).join('/') + '/';
-            onPathClick(parentPath);
-          }}
-          sx={{ 
-            textDecoration: 'none',
-            color: 'primary.main',
-            display: 'flex',
-            alignItems: 'center',
-            minWidth: 0,
-            mr: 1
-          }}
-        >
-          <UpIcon sx={{ fontSize: 20 }} />
-          {pathParts[pathParts.length - 2]}
-        </Link>
-        <Typography
-          sx={{
-            fontWeight: 500,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            minWidth: 0
-          }}
-        >
-          {pathParts[pathParts.length - 1]}
-        </Typography>
-      </Box>
-    );
-  }
-
-  // Show full breadcrumbs for shorter paths
-  return (
-    <Breadcrumbs
-      sx={{
-        minWidth: 0,
-        width: '100%',
-        '& .MuiBreadcrumbs-ol': {
-          flexWrap: 'nowrap',
-          width: '100%',
-        },
-        '& .MuiBreadcrumbs-li': {
-          minWidth: 0,
-        }
-      }}
-    >
-      <Link
-        component="button"
-        variant="body1"
-        onClick={() => onPathClick('/')}
-        sx={{ 
-          textDecoration: 'none',
-          fontSize: '1rem',
-          fontWeight: 500,
-          whiteSpace: 'nowrap'
-        }}
-      >
-        Home
-      </Link>
-      {pathParts.map((part, index) => {
-        const path = '/' + pathParts.slice(0, index + 1).join('/') + '/';
-        return (
-          <Typography
-            key={path}
-            component="button"
-            onClick={() => onPathClick(path)}
-            sx={{
-              border: 'none',
-              background: 'none',
-              padding: 0,
-              fontSize: '1rem',
-              fontWeight: index === pathParts.length - 1 ? 500 : 400,
-              color: index === pathParts.length - 1 ? 'text.primary' : 'primary.main',
-              cursor: 'pointer',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-              maxWidth: '120px',
-              textAlign: 'left',
-              '&:hover': {
-                textDecoration: index === pathParts.length - 1 ? 'none' : 'underline'
-              }
-            }}
-          >
-            {part}
-          </Typography>
-        );
-      })}
-    </Breadcrumbs>
-  );
-}
+import { getFileIcon, joinPaths, formatDate, parseTitleYearFromFolder } from './fileUtils.tsx';
+import { FileItem } from './types';
+import MobileListItem from './MobileListItem';
+import MobileBreadcrumbs from './MobileBreadcrumbs';
+import { fetchFiles as fetchFilesApi } from './fileApi';
 
 const TMDB_CONCURRENCY_LIMIT = 4;
 
@@ -309,7 +71,6 @@ export default function FileBrowser() {
   const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
   const tmdbActive = useRef(0);
   const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0); // force rerender/queue check
-  const { isAuthenticated } = useAuth();
 
   // Helper to enqueue a TMDb lookup
   const enqueueTmdbLookup = useCallback((name: string, title: string, year: string | undefined, mediaType: 'movie' | 'tv' | undefined) => {
@@ -334,18 +95,12 @@ export default function FileBrowser() {
     }
   }, [tmdbQueueVersion]);
 
-  // Helper to check if a folder contains at least one allowed file
-  function folderHasAllowedFile(folderName: string): boolean {
-    // Find all files in the current folder
-    return files.some(f => f.type === 'file' && f.name && f.name.startsWith(folderName) && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext)));
-  }
-
   const fetchFiles = async (path: string) => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get(`/api/files${path}`);
-      setFiles(response.data);
+      const data = await fetchFilesApi(path);
+      setFiles(data);
     } catch (err) {
       setError('Failed to fetch files');
       console.error('Error fetching files:', err);
@@ -372,104 +127,12 @@ export default function FileBrowser() {
     handlePathClick(parentPath);
   };
 
-  const handleFileClick = (file: FileItem) => {
-    if (file.type === 'directory') {
-      const newPath = joinPaths(currentPath, file.name);
-      handlePathClick(newPath);
-    } else {
-      handleOpen();
-    }
-  };
-
   const handleViewDetails = (file: FileItem, details: any) => {
     setDetailsData({ ...file, ...details });
     setDetailsOpen(true);
   };
 
   const handleDetailsClose = () => setDetailsOpen(false);
-
-  const handleOpen = async () => {
-    if (!detailsData || detailsData.type === 'directory') {
-      handleDetailsClose();
-      return;
-    }
-    // Build the file path using normalized paths
-    const relPath = joinPaths(currentPath, detailsData.name).replace(/\/$/, '');
-    // Encode the path properly
-    const encodedPath = encodeURIComponent(relPath.replace(/^\/+/, ''));
-    // Guess file type
-    const ext = detailsData.name.split('.').pop()?.toLowerCase();
-    const isPreviewable = [
-      'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', // images
-      'pdf', 'txt', 'md', 'rtf' // docs
-    ].includes(ext || '');
-    try {
-      if (isPreviewable) {
-        const response = await axios.get(`/api/files/${encodedPath}`, {
-          responseType: 'blob',
-        });
-        const blob = response.data;
-        const blobUrl = window.URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank', 'noopener');
-      } else {
-        // fallback: download
-        const response = await axios.get(`/api/files/${encodedPath}`, {
-          responseType: 'blob',
-        });
-        const blob = response.data;
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.setAttribute('download', detailsData.name);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }
-    } catch (err) {
-      setError('Failed to open file');
-      console.error('Error opening file:', err);
-    }
-    handleDetailsClose();
-  };
-
-  const getMimeType = (ext: string): string => {
-    const mimeTypes: { [key: string]: string } = {
-      'mp4': 'video/mp4',
-      'mkv': 'video/x-matroska',
-      'avi': 'video/x-msvideo',
-      'mov': 'video/quicktime',
-      'wmv': 'video/x-ms-wmv',
-      'flv': 'video/x-flv',
-      'webm': 'video/webm',
-    };
-    return mimeTypes[ext] || '';
-  };
-
-  const handleDownload = async () => {
-    if (!detailsData || detailsData.type === 'directory') {
-      handleDetailsClose();
-      return;
-    }
-    const relPath = joinPaths(currentPath, detailsData.name).replace(/\/$/, '');
-    const url = `/api/files${relPath}`;
-    try {
-      const response = await axios.get(url, {
-        responseType: 'blob',
-      });
-      const blob = response.data;
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', detailsData.name);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      setError('Failed to download file');
-      console.error('Error downloading file:', err);
-    }
-    handleDetailsClose();
-  };
 
   const pathParts = currentPath.split('/').filter(Boolean);
   const breadcrumbs = pathParts.map((part, index) => {
@@ -487,28 +150,9 @@ export default function FileBrowser() {
     );
   });
 
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '--';
-    try {
-      return format(parseISO(dateStr), 'MMM d, yyyy, HH:mm');
-    } catch {
-      return dateStr;
-    }
-  };
-
   const filteredFiles = search.trim()
     ? files.filter(f => f.name.toLowerCase().includes(search.trim().toLowerCase()))
     : files;
-
-  // Helper to parse title/year from folder name
-  function parseTitleYearFromFolder(folderName: string): { title: string; year?: string } {
-    // Try to extract year (e.g. Movie.Title.2023)
-    const match = folderName.match(/(.+?)[. _\-\(\[]?(\d{4})[. _\-\)\]]?/);
-    if (match) {
-      return { title: match[1].replace(/[._-]/g, ' ').trim(), year: match[2] };
-    }
-    return { title: folderName.replace(/[._-]/g, ' ').trim() };
-  }
 
   // For each folder in poster view, fetch its contents and check for allowed files
   useEffect(() => {
@@ -522,9 +166,9 @@ export default function FileBrowser() {
         folderFetchRef.current[file.name] = true;
         const folderApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
         console.log(`[TMDB] Fetching contents for folder: ${folderApiPath}`);
-        axios.get(`/api/files${folderApiPath}`)
+        fetchFilesApi(folderApiPath)
           .then(res => {
-            const hasAllowed = (res.data || []).some((f: any) =>
+            const hasAllowed = (res || []).some((f: any) =>
               f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
             );
             setFolderHasAllowed(prev => ({ ...prev, [file.name]: hasAllowed }));
@@ -557,9 +201,9 @@ export default function FileBrowser() {
         // Fetch the contents of the parent folder to get season subfolders
         const parentApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
         console.log(`[TMDB] [TV] Fetching season folders for: ${parentApiPath}`);
-        axios.get(`/api/files${parentApiPath}`)
+        fetchFilesApi(parentApiPath)
           .then(res => {
-            const seasonFolders = (res.data || []).filter((f: any) => f.type === 'directory' && f.isSeasonFolder);
+            const seasonFolders = (res || []).filter((f: any) => f.type === 'directory' && f.isSeasonFolder);
             if (seasonFolders.length === 0) {
               setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
               console.log(`[TMDB] [TV] No season folders found in '${file.name}'.`);
@@ -571,9 +215,9 @@ export default function FileBrowser() {
             seasonFolders.forEach((season: any) => {
               const seasonApiPath = `${parentApiPath}/${season.name}`;
               console.log(`[TMDB] [TV] Fetching contents for season: ${seasonApiPath}`);
-              axios.get(`/api/files${seasonApiPath}`)
+              fetchFilesApi(seasonApiPath)
                 .then(seasonRes => {
-                  const hasAllowed = (seasonRes.data || []).some((f: any) =>
+                  const hasAllowed = (seasonRes || []).some((f: any) =>
                     f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
                   );
                   if (hasAllowed) {
@@ -665,12 +309,12 @@ export default function FileBrowser() {
                 </IconButton>
               </span>
             </Tooltip>
-            <Breadcrumbs sx={{ flexGrow: 1, ml: 2 }}>
+            <Breadcrumbs sx={{ flexGrow: 1 }} separator=" / ">
               <Link
                 component="button"
                 variant="body1"
                 onClick={() => handlePathClick('/')}
-                sx={{ textDecoration: 'none', fontSize: '1.1rem' }}
+                sx={{ textDecoration: 'none', fontSize: { xs: '1rem', sm: '1.1rem' } }}
               >
                 Home
               </Link>
@@ -907,10 +551,16 @@ export default function FileBrowser() {
                         handlePathClick(joinPaths(currentPath, file.name));
                       }
                     }}
-                    onMenuClick={(e) => {
-                      e.stopPropagation();
-                      handleViewDetails(file, {});
-                    }}
+                    menu={
+                      <FileActionMenu
+                        file={file}
+                        currentPath={currentPath}
+                        onViewDetails={handleViewDetails}
+                        onRename={() => fetchFiles(currentPath)}
+                        onDeleted={() => fetchFiles(currentPath)}
+                        onError={setError}
+                      />
+                    }
                   />
                 ))
               )}
