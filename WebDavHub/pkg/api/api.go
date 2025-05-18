@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,15 @@ import (
 var rootDir string
 var lastStats Stats
 
-// SetRootDir sets the root directory for file operations
+// SetRootDir sets the root directory for file operations and initializes the DB
 func SetRootDir(dir string) {
 	rootDir = dir
+	if err := InitDB(rootDir); err != nil {
+		logger.Warn("Failed to initialize SQLite DB: %v", err)
+	}
+	if err := InitTmdbCacheTable(); err != nil {
+		logger.Warn("Failed to initialize TMDB cache table: %v", err)
+	}
 }
 
 type FileInfo struct {
@@ -729,5 +736,183 @@ func HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.Copy(w, file); err != nil {
 		logger.Warn("Error: failed to send file: %v", err)
+	}
+}
+
+// HandleFileDetails handles GET/POST/DELETE for file details
+func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		// GET /api/file-details?path=... or ?prefix=...
+		path := r.URL.Query().Get("path")
+		prefix := r.URL.Query().Get("prefix")
+		if path != "" {
+			fd, err := GetFileDetail(path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if fd == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(fd)
+			return
+		}
+		if prefix != "" {
+			fds, err := ListFileDetails(prefix)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(fds)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	case http.MethodPost:
+		// POST /api/file-details (body: FileDetail)
+		var fd FileDetail
+		if err := json.NewDecoder(r.Body).Decode(&fd); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if err := UpsertFileDetail(fd); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	case http.MethodDelete:
+		// DELETE /api/file-details?path=...
+		path := r.URL.Query().Get("path")
+		if path == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := DeleteFileDetail(path); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// --- TMDB Cache API ---
+// GET /api/tmdb-cache?query=...  |  POST /api/tmdb-cache {query, result}
+func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cacheKey := r.URL.Query().Get("query")
+		if cacheKey == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		result, err := GetTmdbCache(cacheKey)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if result == "" {
+			// Cache miss: call TMDB API, store, and return
+			// Parse cacheKey: query|year|mediaType
+			parts := strings.Split(cacheKey, "|")
+			query := ""
+			year := ""
+			mediaType := ""
+			if len(parts) > 0 {
+				query = parts[0]
+			}
+			if len(parts) > 1 {
+				year = parts[1]
+			}
+			if len(parts) > 2 {
+				mediaType = parts[2]
+			}
+			// Call TMDB API (proxy)
+			backendHost := os.Getenv("CINESYNC_API_HOST")
+			if backendHost == "" {
+				backendHost = "http://localhost:8082"
+			}
+			params := url.Values{}
+			params.Set("query", query)
+			params.Set("include_adult", "false")
+			if year != "" {
+				params.Set("year", year)
+			}
+			if mediaType != "" {
+				params.Set("mediaType", mediaType)
+			}
+			tmdbUrl := backendHost + "/api/tmdb/search?" + params.Encode()
+			req, _ := http.NewRequest("GET", tmdbUrl, nil)
+			req.Header = r.Header
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil || resp.StatusCode != 200 {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			defer resp.Body.Close()
+			var tmdbResp struct {
+				Results []map[string]interface{} `json:"results"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&tmdbResp); err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if len(tmdbResp.Results) == 0 {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			best := tmdbResp.Results[0]
+			// Build minimal result JSON
+			id, _ := best["id"].(float64)
+			title, _ := best["title"].(string)
+			if title == "" {
+				title, _ = best["name"].(string)
+			}
+			posterPath, _ := best["poster_path"].(string)
+			releaseDate, _ := best["release_date"].(string)
+			if releaseDate == "" {
+				releaseDate, _ = best["first_air_date"].(string)
+			}
+			mediaType, _ = best["media_type"].(string)
+			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
+				int(id), title, posterPath, releaseDate, mediaType)
+			// Store in cache
+			UpsertTmdbCache(cacheKey, resultJson)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-TMDB-Cache", "MISS")
+			w.Write([]byte(resultJson))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-TMDB-Cache", "HIT")
+		w.Write([]byte(result))
+		return
+	case http.MethodPost:
+		var req struct {
+			Query  string `json:"query"`
+			Result string `json:"result"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.Query == "" || req.Result == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := UpsertTmdbCache(req.Query, req.Result); err != nil {
+			http.Error(w, "DB error: "+err.Error(), http.StatusInternalServerError)
+			logger.Warn("TMDB cache upsert error: %v", err)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }

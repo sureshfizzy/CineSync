@@ -10,6 +10,9 @@ interface UseSeasonFoldersProps {
   setSnackbar: (snackbar: { open: boolean, message: string, severity: 'success' | 'error' }) => void;
 }
 
+// Module-level cache to prevent duplicate fetches
+const globalRequestCache = new Set<string>();
+
 export default function useSeasonFolders({ data, folderName, currentPath, mediaType, setSnackbar }: UseSeasonFoldersProps) {
   const [seasonFolders, setSeasonFolders] = useState<SeasonFolderInfo[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -88,6 +91,11 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
 
   useEffect(() => {
     if (mediaType === 'tv' && folderName) {
+      const requestKey = `${folderName}|${currentPath}|${mediaType}`;
+      if (globalRequestCache.has(requestKey)) {
+        return;
+      }
+      globalRequestCache.add(requestKey);
       fetchSeasonFolders();
     }
     // eslint-disable-next-line

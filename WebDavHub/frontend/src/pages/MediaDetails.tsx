@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Chip, Avatar, Grid, Skeleton, Paper, IconButton, useTheme, Tabs, Tab } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -57,37 +57,61 @@ export default function MediaDetails() {
   const tmdbId = location.state?.tmdbId;
   const currentPath = location.state?.currentPath || '';
   const [tabValue, setTabValue] = useState(0);
+  const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string }>({});
+  const tmdbDataFromNav = location.state?.tmdbData;
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
   useEffect(() => {
+    // Only use navigation state if it contains credits (full details)
+    if (tmdbDataFromNav && tmdbDataFromNav.credits) {
+      setData(tmdbDataFromNav);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     const token = localStorage.getItem('cineSyncJWT');
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    let url = '';
-    if (tmdbId) {
-      url = `/api/tmdb/details?id=${tmdbId}&mediaType=${mediaType}`;
-    } else {
-      url = `/api/tmdb/details?query=${encodeURIComponent(folderName || '')}&mediaType=${mediaType}`;
+
+    // Guard: Only proceed if this is a new request
+    if (
+      lastRequestRef.current.tmdbId === tmdbId &&
+      lastRequestRef.current.currentPath === currentPath
+    ) {
+      setLoading(false);
+      return;
     }
-    axios.get(url, { headers })
-      .then(res => {
-        setData(res.data);
-        setLoading(false);
-      })
-      .catch(err => {
-        if (err.response && err.response.status === 401) {
-          setError('You must be logged in to view details.');
-        } else {
-          setError('Failed to load details');
-        }
-        setLoading(false);
-      });
-  }, [folderName, mediaType, tmdbId]);
+    lastRequestRef.current = { tmdbId, currentPath };
+
+    // Only fetch TMDB details from API
+    fetchTmdbDetails();
+
+    function fetchTmdbDetails() {
+      let url = '';
+      if (tmdbId) {
+        url = `/api/tmdb/details?id=${tmdbId}&mediaType=${mediaType}`;
+      } else {
+        url = `/api/tmdb/details?query=${encodeURIComponent(folderName || '')}&mediaType=${mediaType}`;
+      }
+      axios.get(url, { headers })
+        .then(res => {
+          setData(res.data);
+          setLoading(false);
+        })
+        .catch(err => {
+          if (err.response && err.response.status === 401) {
+            setError('You must be logged in to view details.');
+          } else {
+            setError('Failed to load details');
+          }
+          setLoading(false);
+        });
+    }
+  }, [folderName, mediaType, tmdbId, currentPath, tmdbDataFromNav]);
 
   if (loading) {
     return (

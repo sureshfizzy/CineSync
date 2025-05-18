@@ -140,6 +140,17 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	episodeNumbers := r.URL.Query().Get("episodes") // comma-separated list of episode numbers
 
 	if id != "" {
+		// Use id-based cache key
+		cacheKey := "id:" + id + ":" + mediaType
+		tmdbDetailsCache.mu.Lock()
+		if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
+			tmdbDetailsCache.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-TMDB-Details-Cache", "HIT")
+			w.Write(data)
+			return
+		}
+		tmdbDetailsCache.mu.Unlock()
 		// Fetch details directly by ID
 		var detailsUrl string
 		if mediaType == "tv" {
@@ -215,7 +226,12 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 				body, _ = json.Marshal(details)
 			}
 		}
+		// Store in id-based cache
+		tmdbDetailsCache.mu.Lock()
+		tmdbDetailsCache.items[cacheKey] = body
+		tmdbDetailsCache.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-TMDB-Details-Cache", "MISS")
 		w.Write(body)
 		return
 	}
@@ -225,11 +241,12 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cacheKey := mediaType + ":" + query
+	cacheKey := "query:" + mediaType + ":" + query
 	tmdbDetailsCache.mu.Lock()
 	if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
 		tmdbDetailsCache.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-TMDB-Details-Cache", "HIT")
 		w.Write(data)
 		return
 	}
@@ -315,5 +332,6 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	tmdbDetailsCache.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-TMDB-Details-Cache", "MISS")
 	w.Write(body)
 } 

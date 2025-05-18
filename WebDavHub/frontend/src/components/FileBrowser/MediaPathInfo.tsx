@@ -1,7 +1,8 @@
 import { Box, Typography, Tooltip, Paper, CircularProgress, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { getFileDetail } from './fileApi';
 
 interface MediaPathInfoProps {
   folderName: string;
@@ -43,8 +44,17 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [seasons, setSeasons] = useState<SeasonInfo[]>([]);
+  const lastRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
+    const folderPath = `${normalizedPath}/${folderName}`;
+    const requestKey = `${folderPath}|${mediaType}`;
+    if (lastRequestKeyRef.current === requestKey) {
+      // Already requested, skip
+      return;
+    }
+    lastRequestKeyRef.current = requestKey;
     const findMediaFile = async () => {
       try {
         setLoading(true);
@@ -81,6 +91,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
             const episodes: EpisodeInfo[] = [];
             for (const episode of episodeFiles) {
               const relPath = `${seasonPath}/${episode.name}`;
+              // Try to get persistent details
+              // (Removed getFileDetail logic)
+              console.log('[MediaPathInfo] readlink for', relPath);
               const pathInfo = await axios.post('/api/readlink', { path: relPath });
               episodes.push({
                 name: episode.name,
@@ -116,6 +129,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           }
 
           const relPath = `${folderPath}/${mediaFile.name}`;
+          // Try to get persistent details
+          // (Removed getFileDetail logic)
+          console.log('[MediaPathInfo] readlink for', relPath);
           const res = await axios.post('/api/readlink', { path: relPath });
           setPathInfo({
             webdavPath: `Home${relPath}`,

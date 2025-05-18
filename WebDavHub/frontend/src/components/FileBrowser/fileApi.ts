@@ -32,4 +32,19 @@ export async function openFile(path: string, fileName: string, isPreviewable: bo
     link.click();
     link.remove();
   }
+}
+
+// Persistent file details API
+export async function upsertFileDetail(detail: any) {
+  await axios.post('/api/file-details', detail);
+}
+
+export async function deleteFileDetail(path: string) {
+  await axios.delete(`/api/file-details?path=${encodeURIComponent(path)}`);
+}
+
+export async function getFileDetail(path: string) {
+  console.log('[getFileDetail] Requesting file details for:', path);
+  const response = await axios.get(`/api/file-details?path=${encodeURIComponent(path)}`);
+  return response.data;
 } 

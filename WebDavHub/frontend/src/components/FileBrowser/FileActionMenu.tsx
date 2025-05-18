@@ -8,6 +8,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
 import VideoPlayerDialog from '../VideoPlayer/VideoPlayerDialog';
+import { upsertFileDetail, deleteFileDetail } from './fileApi';
 
 interface FileItem {
   name: string;
@@ -177,6 +178,16 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         oldPath: relPath,
         newName: renameValue.trim(),
       });
+      // Update persistent file details DB
+      await upsertFileDetail({
+        path: joinPaths(currentPath, renameValue.trim()),
+        name: renameValue.trim(),
+        type: file.type,
+        size: file.size,
+        modified: file.modified,
+        icon: (file as any).icon || '',
+        extra: '',
+      });
       setRenameDialogOpen(false);
       setRenameLoading(false);
       if (onRename) onRename(file);
@@ -210,6 +221,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
     }
     try {
       await axios.post('/api/delete', { path: relPath });
+      await deleteFileDetail(relPath);
       setDeleteDialogOpen(false);
       setDeleting(false);
       if (onDeleted) onDeleted();

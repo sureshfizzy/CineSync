@@ -265,11 +265,13 @@ export default function FileBrowser() {
       ) {
         const { title, year } = parseTitleYearFromFolder(file.name);
         tmdbFetchRef.current[file.name] = true;
+        // 1. Try file details cache first
+        const folderPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
         enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFiles, view, folderHasAllowed, tvShowHasAllowed]);
+  }, [filteredFiles, view, folderHasAllowed, tvShowHasAllowed, currentPath]);
 
   if (loading) {
     return (
@@ -452,7 +454,8 @@ export default function FileBrowser() {
                           mediaType: isTvShow ? 'tv' : 'movie', 
                           tmdbId,
                           hasSeasonFolders: file.hasSeasonFolders,
-                          currentPath: fullPath
+                          currentPath: fullPath,
+                          tmdbData: tmdb
                         } 
                       });
                     } else {

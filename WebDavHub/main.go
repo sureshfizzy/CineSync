@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"cinesync/pkg/api"
@@ -135,6 +137,8 @@ func main() {
 	apiMux.HandleFunc("/api/me", auth.HandleMe)
 	apiMux.HandleFunc("/api/tmdb/search", api.HandleTmdbProxy)
 	apiMux.HandleFunc("/api/tmdb/details", api.HandleTmdbDetails)
+	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
+	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)
@@ -166,6 +170,20 @@ func main() {
 		logger.Error("Failed to start npm server: %v", err)
 		logger.Info("Continuing with backend server only...")
 	}
+
+	// Add shutdown handler to checkpoint WAL
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-shutdown
+		logger.Info("Shutting down: checkpointing SQLite WAL and optimizing DB...")
+		if api.DB() != nil {
+			api.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+			api.DB().Exec("PRAGMA optimize;")
+			api.DB().Exec("VACUUM;")
+		}
+		os.Exit(0)
+	}()
 
 	// Start server
 	addr := fmt.Sprintf("%s:%d", *ip, *port)
