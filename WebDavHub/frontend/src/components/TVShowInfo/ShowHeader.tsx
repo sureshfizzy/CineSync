@@ -25,7 +25,7 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl }) => {
       </Paper>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1 }}>
-          {data.title} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
+          {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
           {genres.map((g: { id: number; name: string }) => (

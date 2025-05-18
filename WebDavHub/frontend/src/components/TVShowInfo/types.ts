@@ -3,6 +3,7 @@
 export interface MediaDetailsData {
   id: number;
   title: string;
+  name?: string;
   poster_path: string | null;
   first_air_date?: string;
   episode_run_time?: number[];
