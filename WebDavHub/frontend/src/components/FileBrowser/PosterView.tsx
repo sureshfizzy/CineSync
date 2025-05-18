@@ -1,6 +1,5 @@
 import { Box, Card, CardContent, CardMedia, Typography, Chip, Stack } from '@mui/material';
 import { TMDbDetails } from '../../types/tmdb';
-import MediaPathInfo from './MediaPathInfo';
 
 interface PosterViewProps {
   tmdbDetails: TMDbDetails;
@@ -29,7 +28,6 @@ export default function PosterView({ tmdbDetails, currentPath, folderName }: Pos
         <Typography variant="body2" color="text.secondary" paragraph>
           {tmdbDetails.overview}
         </Typography>
-        <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={tmdbDetails.media_type as 'movie' | 'tv' || 'movie'} />
       </CardContent>
     </Card>
   );

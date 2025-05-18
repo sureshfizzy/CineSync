@@ -187,68 +187,6 @@ export default function FileBrowser() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredFiles, view, currentPath, allowedExtensions]);
 
-  // For folders with hasSeasonFolders, check all season subfolders for allowed files
-  useEffect(() => {
-    if (view !== 'poster') return;
-    filteredFiles.forEach(file => {
-      if (
-        file.type === 'directory' &&
-        file.hasSeasonFolders &&
-        tvShowHasAllowed[file.name] === undefined &&
-        !tvShowFetchRef.current[file.name]
-      ) {
-        tvShowFetchRef.current[file.name] = true;
-        // Fetch the contents of the parent folder to get season subfolders
-        const parentApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
-        console.log(`[TMDB] [TV] Fetching season folders for: ${parentApiPath}`);
-        fetchFilesApi(parentApiPath)
-          .then(res => {
-            const seasonFolders = (res || []).filter((f: any) => f.type === 'directory' && f.isSeasonFolder);
-            if (seasonFolders.length === 0) {
-              setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
-              console.log(`[TMDB] [TV] No season folders found in '${file.name}'.`);
-              return;
-            }
-            // For each season folder, fetch its contents and check for allowed files
-            let found = false;
-            let checked = 0;
-            seasonFolders.forEach((season: any) => {
-              const seasonApiPath = `${parentApiPath}/${season.name}`;
-              console.log(`[TMDB] [TV] Fetching contents for season: ${seasonApiPath}`);
-              fetchFilesApi(seasonApiPath)
-                .then(seasonRes => {
-                  const hasAllowed = (seasonRes || []).some((f: any) =>
-                    f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
-                  );
-                  if (hasAllowed) {
-                    found = true;
-                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: true }));
-                    console.log(`[TMDB] [TV] Found allowed file in '${season.name}' for show '${file.name}'.`);
-                  }
-                  checked++;
-                  if (checked === seasonFolders.length && !found) {
-                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
-                    console.log(`[TMDB] [TV] No allowed files found in any season for show '${file.name}'.`);
-                  }
-                })
-                .catch(err => {
-                  checked++;
-                  if (checked === seasonFolders.length && !found) {
-                    setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
-                  }
-                  console.error(`[TMDB] [TV] Error fetching season contents for '${season.name}' in show '${file.name}':`, err);
-                });
-            });
-          })
-          .catch(err => {
-            setTvShowHasAllowed(prev => ({ ...prev, [file.name]: false }));
-            console.error(`[TMDB] [TV] Error fetching season folders for '${file.name}':`, err);
-          });
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFiles, view, currentPath, allowedExtensions]);
-
   // Instead of calling searchTmdb directly, enqueue lookups
   useEffect(() => {
     if (view !== 'poster') return;
@@ -259,19 +197,17 @@ export default function FileBrowser() {
         file.type === 'directory' &&
         !isSeasonFolder &&
         (
-          (isTvShow && tvShowHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name]) ||
+          (isTvShow && !tmdbData[file.name] && !tmdbFetchRef.current[file.name]) ||
           (!isTvShow && folderHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name])
         )
       ) {
         const { title, year } = parseTitleYearFromFolder(file.name);
         tmdbFetchRef.current[file.name] = true;
-        // 1. Try file details cache first
-        const folderPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
         enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFiles, view, folderHasAllowed, tvShowHasAllowed, currentPath]);
+  }, [filteredFiles, view, folderHasAllowed, tmdbData, currentPath]);
 
   if (loading) {
     return (
@@ -416,11 +352,11 @@ export default function FileBrowser() {
               const isTvShow = file.hasSeasonFolders;
               const isSeasonFolder = file.isSeasonFolder;
               const showPoster = file.type === 'directory' && !isSeasonFolder && (
-                (isTvShow && tvShowHasAllowed[file.name] && tmdb && tmdb.poster_path) ||
+                (isTvShow && tmdb && tmdb.poster_path) ||
                 (!isTvShow && folderHasAllowed[file.name] && tmdb && tmdb.poster_path)
               );
               const isLoadingPoster = file.type === 'directory' && !isSeasonFolder && (
-                (isTvShow && tvShowHasAllowed[file.name] && !tmdb) ||
+                (isTvShow && !tmdb) ||
                 (!isTvShow && folderHasAllowed[file.name] && !tmdb)
               );
               const loaded = imgLoadedMap[file.name] || false;
