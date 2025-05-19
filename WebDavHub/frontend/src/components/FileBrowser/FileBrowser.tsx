@@ -409,11 +409,12 @@ export default function FileBrowser() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   background: theme.palette.background.default,
-                    p: 0,
-                    position: 'relative',
+                  p: 0,
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}>
                     {isLoadingPoster ? (
-                      <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ borderRadius: 2 }} />
+                      <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />
                     ) : showPoster ? (
                       <img
                         src={getTmdbPosterUrl(tmdb.poster_path) || ''}
@@ -421,10 +422,9 @@ export default function FileBrowser() {
                         style={{
                           width: '100%',
                           height: '100%',
-                          objectFit: 'cover',
-                          borderRadius: 6,
                           opacity: loaded ? 1 : 0,
                           transition: 'opacity 0.5s ease',
+                          display: 'block',
                         }}
                         onLoad={() => setImgLoadedMap(prev => ({ ...prev, [file.name]: true }))}
                       />
@@ -446,11 +446,11 @@ export default function FileBrowser() {
                       wordBreak: 'break-all',
                       mb: 0.5,
                       lineHeight: 1.2,
-                      maxHeight: '2.4em',
+                      maxHeight: '1.4em',
                       overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical'
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'block',
                     }}
                   >
                       {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
