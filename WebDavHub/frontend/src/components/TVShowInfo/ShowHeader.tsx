@@ -23,11 +23,11 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl }) => {
           style={{ width: '100%', height: 'auto', display: 'block' }}
         />
       </Paper>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1 }}>
+      <Box sx={{ flex: 1, minWidth: 0, textAlign: { xs: 'center', md: 'left' } }}>
+        <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1, textAlign: { xs: 'center', md: 'left' } }}>
           {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' }, textAlign: { xs: 'center', md: 'left' } }}>
           {genres.map((g: { id: number; name: string }) => (
             <Chip key={g.id} label={g.name} color="primary" variant="outlined" />
           ))}
