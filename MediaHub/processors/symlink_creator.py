@@ -81,6 +81,23 @@ def process_file(args, processed_files_log, force=False):
             os.remove(existing_symlink_path)
             log_message(f"Force mode: Initiating reprocessing of {file}", level="INFO")
 
+            # Delete .tmdb file if it exists
+            parts = os.path.normpath(existing_symlink_path).split(os.sep)
+            if any(part.lower().startswith('season ') for part in parts):
+                for i, part in enumerate(parts):
+                    if part.lower().startswith('season '):
+                        show_root = os.sep.join(parts[:i])
+                        break
+                tmdb_file_path = os.path.join(show_root, ".tmdb")
+            else:
+                tmdb_file_path = os.path.join(os.path.dirname(existing_symlink_path), ".tmdb")
+            if os.path.exists(tmdb_file_path):
+                try:
+                    os.remove(tmdb_file_path)
+                    log_message(f"Deleted .tmdb file at {tmdb_file_path}", level="INFO")
+                except Exception as e:
+                    log_message(f"Error deleting .tmdb file at {tmdb_file_path}: {e}", level="WARNING")
+
             # Delete if parent directory is empty
             try:
                 if not os.listdir(parent_dir):
@@ -226,6 +243,28 @@ def process_file(args, processed_files_log, force=False):
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
         save_processed_file(src_file, dest_file, tmdb_id, season_number)
+
+        if tmdb_id:
+            tmdb_id_str = str(tmdb_id)  # Write only the numeric ID
+            # For shows, place .tmdb in the show root (parent of 'Season xx')
+            parts = os.path.normpath(dest_file).split(os.sep)
+            if any(part.lower().startswith('season ') for part in parts):
+                for i, part in enumerate(parts):
+                    if part.lower().startswith('season '):
+                        show_root = os.sep.join(parts[:i])
+                        break
+                tmdb_file_path = os.path.join(show_root, ".tmdb")
+            else:
+                tmdb_file_path = os.path.join(os.path.dirname(dest_file), ".tmdb")
+            try:
+                with open(tmdb_file_path, "w") as tmdb_file:
+                    tmdb_file.write(tmdb_id_str)
+                if platform.system() == "Windows":
+                    import ctypes
+                    FILE_ATTRIBUTE_HIDDEN = 0x02
+                    ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_HIDDEN)
+            except Exception as e:
+                log_message(f"Error creating .tmdb file: {e}", level="WARNING")
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)

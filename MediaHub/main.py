@@ -19,6 +19,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
+from MediaHub.utils.id_refresh import refresh_tmdb_files
 
 db_initialized = False
 
@@ -344,6 +345,7 @@ def main(dest_dir):
     parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
     parser.add_argument("--season-episode", type=str, help="Specify season and episode numbers in format SxxExx (e.g., S03E15)")
     parser.add_argument("--skip", action="store_true", help="Skip processing the file and mark it as 'Skipped by user' in the database")
+    parser.add_argument("--id-refresh", action="store_true", help="Create missing .tmdb files for existing symlinks using the database.")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -411,6 +413,10 @@ def main(dest_dir):
             log_message(f"Archived Records: {stats['archived_records']}", level="INFO")
             log_message(f"Main DB Size: {stats['main_db_size']:.2f} MB", level="INFO")
             log_message(f"Archive DB Size: {stats['archive_db_size']:.2f} MB", level="INFO")
+        return
+
+    if args.id_refresh:
+        refresh_tmdb_files()
         return
 
     if not os.path.exists(LOCK_FILE):
