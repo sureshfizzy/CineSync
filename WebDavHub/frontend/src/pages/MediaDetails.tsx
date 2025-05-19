@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Skeleton, IconButton, useTheme } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MovieInfo from '../components/MovieInfo/index';
+import TVShowInfo from '../components/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 
@@ -22,7 +23,7 @@ export default function MediaDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
-  const mediaType = 'movie';
+  const mediaType = location.state?.mediaType || 'movie';
   const tmdbId = location.state?.tmdbId;
   const currentPath = location.state?.currentPath || '';
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string }>({});
@@ -153,13 +154,23 @@ export default function MediaDetails() {
         flexDirection: 'column',
       }}>
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <MovieInfo 
-            data={data} 
-            getPosterUrl={getPosterUrl}
-            folderName={folderName || ''}
-            currentPath={currentPath}
-            mediaType={mediaType as 'movie' | 'tv'}
-          />
+          {mediaType === 'tv' ? (
+            <TVShowInfo
+              data={data}
+              getPosterUrl={getPosterUrl}
+              folderName={folderName || ''}
+              currentPath={currentPath}
+              mediaType={mediaType as 'movie' | 'tv'}
+            />
+          ) : (
+            <MovieInfo
+              data={data}
+              getPosterUrl={getPosterUrl}
+              folderName={folderName || ''}
+              currentPath={currentPath}
+              mediaType={mediaType as 'movie' | 'tv'}
+            />
+          )}
         </Box>
       </Box>
     </Box>

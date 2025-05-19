@@ -155,6 +155,15 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build a filtered list of entries that excludes .tmdb
+	effectiveEntries := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name() == ".tmdb" {
+			continue
+		}
+		effectiveEntries = append(effectiveEntries, entry)
+	}
+
 	files := make([]FileInfo, 0)
 	seasonFolderCount := 0
 	fileCount := 0
@@ -175,23 +184,23 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	hasAllowed := false
 	// --- TV Show Root Detection ---
 	isTvShowRoot := false
-	if len(entries) > 0 {
+	if len(effectiveEntries) > 0 {
 		seasonCount := 0
 		fileCountInDir := 0
-		for _, entry := range entries {
+		for _, entry := range effectiveEntries {
 			if entry.IsDir() && isSeasonFolder(entry.Name()) {
 				seasonCount++
 			} else if !entry.IsDir() {
 				fileCountInDir++
 			}
 		}
-		if seasonCount > 0 && seasonCount == len(entries)-fileCountInDir && fileCountInDir == 0 {
+		if seasonCount > 0 && seasonCount == len(effectiveEntries)-fileCountInDir && fileCountInDir == 0 {
 			isTvShowRoot = true
 		}
 	}
 	if isTvShowRoot && len(allowedExts) > 0 {
 		// For TV show root, check all season subfolders for allowed files
-		for _, entry := range entries {
+		for _, entry := range effectiveEntries {
 			if entry.IsDir() && isSeasonFolder(entry.Name()) {
 				seasonDir := filepath.Join(dir, entry.Name())
 				subEntries, err := os.ReadDir(seasonDir)
@@ -199,6 +208,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				for _, subEntry := range subEntries {
+					if subEntry.Name() == ".tmdb" {
+						continue
+					}
 					if !subEntry.IsDir() {
 						ext := strings.ToLower(filepath.Ext(subEntry.Name()))
 						for _, allowed := range allowedExts {
@@ -219,7 +231,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if len(allowedExts) > 0 {
 		// Normal folder: check for allowed files in this directory only
-		for _, entry := range entries {
+		for _, entry := range effectiveEntries {
 			if !entry.IsDir() {
 				ext := strings.ToLower(filepath.Ext(entry.Name()))
 				for _, allowed := range allowedExts {
@@ -235,7 +247,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
-	for _, entry := range entries {
+	for _, entry := range effectiveEntries {
 		info, err := entry.Info()
 		if err != nil {
 			continue
@@ -260,16 +272,24 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			subDirPath := filepath.Join(dir, entry.Name())
 			subEntries, err := os.ReadDir(subDirPath)
 			if err == nil && len(subEntries) > 0 {
+				// Filter out .tmdb from subEntries
+				effectiveSubEntries := make([]os.DirEntry, 0, len(subEntries))
+				for _, subEntry := range subEntries {
+					if subEntry.Name() == ".tmdb" {
+						continue
+					}
+					effectiveSubEntries = append(effectiveSubEntries, subEntry)
+				}
 				seasonCount := 0
 				fileCountInSub := 0
-				for _, subEntry := range subEntries {
+				for _, subEntry := range effectiveSubEntries {
 					if subEntry.IsDir() && isSeasonFolder(subEntry.Name()) {
 						seasonCount++
 					} else if !subEntry.IsDir() {
 						fileCountInSub++
 					}
 				}
-				if seasonCount > 0 && seasonCount == len(subEntries) && fileCountInSub == 0 {
+				if seasonCount > 0 && seasonCount == len(effectiveSubEntries)-fileCountInSub && fileCountInSub == 0 {
 					fileInfo.HasSeasonFolders = true
 					logger.Info("[API] Detected TV show root: %s (all %d children are season folders)", filePath, seasonCount)
 				}
@@ -285,7 +305,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		files = append(files, fileInfo)
 	}
 	// If all directories are season folders and there are no files, mark parent as hasSeasonFolders
-	if seasonFolderCount > 0 && seasonFolderCount == len(entries)-fileCount && fileCount == 0 {
+	if seasonFolderCount > 0 && seasonFolderCount == len(effectiveEntries)-fileCount && fileCount == 0 {
 		for i := range files {
 			if files[i].Type == "directory" && files[i].IsSeasonFolder {
 				files[i].HasSeasonFolders = false // child
@@ -944,7 +964,6 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			best := tmdbResp.Results[0]
-			// Build minimal result JSON
 			id, _ := best["id"].(float64)
 			title, _ := best["title"].(string)
 			if title == "" {
@@ -958,7 +977,6 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			mediaType, _ = best["media_type"].(string)
 			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
 				int(id), title, posterPath, releaseDate, mediaType)
-			// Store in cache
 			UpsertTmdbCache(cacheKey, resultJson)
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-TMDB-Cache", "MISS")
