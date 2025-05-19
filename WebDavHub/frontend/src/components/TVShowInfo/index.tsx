@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Box, Snackbar, Alert, IconButton, Tooltip } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +9,6 @@ import CastList from './CastList';
 import useSeasonFolders from './useSeasonFolders';
 import { MediaDetailsData } from './types';
 import DetailsDialog from './DetailsDialog';
-import VideoPlayerDialog from '../VideoPlayer/VideoPlayerDialog';
 
 interface TVShowInfoProps {
   data: MediaDetailsData;
@@ -18,6 +17,8 @@ interface TVShowInfoProps {
   currentPath: string;
   mediaType: 'movie' | 'tv';
 }
+
+const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
 export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: TVShowInfoProps) {
   const [seasonDialogOpen, setSeasonDialogOpen] = useState(false);
@@ -99,13 +100,17 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           selectedFile={selectedFile}
           detailsData={detailsData}
         />
-        <VideoPlayerDialog
-          open={videoPlayerOpen}
-          onClose={() => setVideoPlayerOpen(false)}
-          url={selectedFile?.videoUrl}
-          title={selectedFile?.name}
-          mimeType={selectedFile?.videoMimeType}
-        />
+        {videoPlayerOpen && (
+          <Suspense fallback={null}>
+            <VideoPlayerDialog
+              open={videoPlayerOpen}
+              onClose={() => setVideoPlayerOpen(false)}
+              url={selectedFile?.videoUrl}
+              title={selectedFile?.name}
+              mimeType={selectedFile?.videoMimeType}
+            />
+          </Suspense>
+        )}
         <Snackbar
           open={snackbar.open}
           autoHideDuration={4000}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, lazy, Suspense } from 'react';
 import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, Box, Tooltip } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -7,7 +7,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
-import VideoPlayerDialog from '../VideoPlayer/VideoPlayerDialog';
 import { upsertFileDetail, deleteFileDetail } from './fileApi';
 
 interface FileItem {
@@ -59,6 +58,8 @@ function getRelativePath(absPath: string): string {
   }
   return norm.replace(/^([A-Za-z]:)?[/\\]+/, '');
 }
+
+const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
 const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted, variant = 'menu' }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -257,7 +258,17 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleDeleteClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Delete</Button>
           </span>
         </Tooltip>
-        <VideoPlayerDialog open={videoPlayerOpen} onClose={() => setVideoPlayerOpen(false)} url={videoUrl} title={videoTitle} mimeType={videoMimeType} />
+        {videoPlayerOpen && (
+          <Suspense fallback={null}>
+            <VideoPlayerDialog
+              open={videoPlayerOpen}
+              onClose={() => setVideoPlayerOpen(false)}
+              url={videoUrl}
+              title={videoTitle}
+              mimeType={videoMimeType}
+            />
+          </Suspense>
+        )}
         <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose}>
           <DialogTitle>Rename File</DialogTitle>
           <DialogContent>
@@ -317,13 +328,17 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
-      <VideoPlayerDialog
-        open={videoPlayerOpen}
-        onClose={() => setVideoPlayerOpen(false)}
-        url={videoUrl}
-        title={videoTitle}
-        mimeType={videoMimeType}
-      />
+      {videoPlayerOpen && (
+        <Suspense fallback={null}>
+          <VideoPlayerDialog
+            open={videoPlayerOpen}
+            onClose={() => setVideoPlayerOpen(false)}
+            url={videoUrl}
+            title={videoTitle}
+            mimeType={videoMimeType}
+          />
+        </Suspense>
+      )}
       <Dialog open={deleteDialogOpen} onClose={handleDeleteConfirmClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
