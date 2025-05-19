@@ -61,11 +61,8 @@ export default function FileBrowser() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [tmdbData, setTmdbData] = useState<{ [key: string]: TmdbResult | null }>({});
   const tmdbFetchRef = useRef<{ [key: string]: boolean }>({});
-  const allowedExtensions = (import.meta.env.VITE_ALLOWED_EXTENSIONS as string | undefined)?.split(',').map(ext => ext.trim().toLowerCase()).filter(Boolean) || [];
   const [folderHasAllowed, setFolderHasAllowed] = useState<{ [folder: string]: boolean }>({});
   const folderFetchRef = useRef<{ [folder: string]: boolean }>({});
-  const [tvShowHasAllowed, setTvShowHasAllowed] = useState<{ [folder: string]: boolean }>({});
-  const tvShowFetchRef = useRef<{ [folder: string]: boolean }>({});
   const [imgLoadedMap, setImgLoadedMap] = useState<{ [key: string]: boolean }>({});
   // TMDb lookup queue state
   const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
@@ -165,27 +162,17 @@ export default function FileBrowser() {
       ) {
         folderFetchRef.current[file.name] = true;
         const folderApiPath = currentPath.endsWith('/') ? `${currentPath}${file.name}` : `${currentPath}/${file.name}`;
-        console.log(`[TMDB] Fetching contents for folder: ${folderApiPath}`);
-        fetchFilesApi(folderApiPath)
-          .then(res => {
-            const hasAllowed = (res || []).some((f: any) =>
-              f.type === 'file' && allowedExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
-            );
+        fetchFilesApi(folderApiPath, true)
+          .then(({ data, hasAllowed }) => {
             setFolderHasAllowed(prev => ({ ...prev, [file.name]: hasAllowed }));
-            if (hasAllowed) {
-              console.log(`[TMDB] Folder '${file.name}' contains allowed files, will trigger TMDb search.`);
-            } else {
-              console.log(`[TMDB] Folder '${file.name}' does not contain allowed files.`);
-            }
           })
           .catch(err => {
             setFolderHasAllowed(prev => ({ ...prev, [file.name]: false }));
-            console.error(`[TMDB] Error fetching folder contents for '${file.name}':`, err);
           });
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFiles, view, currentPath, allowedExtensions]);
+  }, [filteredFiles, view, currentPath]);
 
   // Instead of calling searchTmdb directly, enqueue lookups
   useEffect(() => {
@@ -351,14 +338,8 @@ export default function FileBrowser() {
               const tmdb = tmdbData[file.name];
               const isTvShow = file.hasSeasonFolders;
               const isSeasonFolder = file.isSeasonFolder;
-              const showPoster = file.type === 'directory' && !isSeasonFolder && (
-                (isTvShow && tmdb && tmdb.poster_path) ||
-                (!isTvShow && folderHasAllowed[file.name] && tmdb && tmdb.poster_path)
-              );
-              const isLoadingPoster = file.type === 'directory' && !isSeasonFolder && (
-                (isTvShow && !tmdb) ||
-                (!isTvShow && folderHasAllowed[file.name] && !tmdb)
-              );
+              const showPoster = file.type === 'directory' && !isSeasonFolder && folderHasAllowed[file.name] && tmdb && tmdb.poster_path;
+              const isLoadingPoster = file.type === 'directory' && !isSeasonFolder && folderHasAllowed[file.name] && !tmdb;
               const loaded = imgLoadedMap[file.name] || false;
               return (
               <Paper 

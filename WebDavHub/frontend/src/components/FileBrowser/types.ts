@@ -9,8 +9,6 @@ export interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
-  isSeasonFolder?: boolean;
-  hasSeasonFolders?: boolean;
 }
 
 export interface MobileListItemProps {

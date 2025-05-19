@@ -158,6 +158,83 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	files := make([]FileInfo, 0)
 	seasonFolderCount := 0
 	fileCount := 0
+	// Check for allowed extensions in this directory
+	allowedExtStr := os.Getenv("ALLOWED_EXTENSIONS")
+	allowedExts := []string{}
+	if allowedExtStr != "" {
+		for _, ext := range strings.Split(allowedExtStr, ",") {
+			ext = strings.TrimSpace(strings.ToLower(ext))
+			if ext != "" {
+				if !strings.HasPrefix(ext, ".") {
+					ext = "." + ext
+				}
+				allowedExts = append(allowedExts, ext)
+			}
+		}
+	}
+	hasAllowed := false
+	// --- TV Show Root Detection ---
+	isTvShowRoot := false
+	if len(entries) > 0 {
+		seasonCount := 0
+		fileCountInDir := 0
+		for _, entry := range entries {
+			if entry.IsDir() && isSeasonFolder(entry.Name()) {
+				seasonCount++
+			} else if !entry.IsDir() {
+				fileCountInDir++
+			}
+		}
+		if seasonCount > 0 && seasonCount == len(entries)-fileCountInDir && fileCountInDir == 0 {
+			isTvShowRoot = true
+		}
+	}
+	if isTvShowRoot && len(allowedExts) > 0 {
+		// For TV show root, check all season subfolders for allowed files
+		for _, entry := range entries {
+			if entry.IsDir() && isSeasonFolder(entry.Name()) {
+				seasonDir := filepath.Join(dir, entry.Name())
+				subEntries, err := os.ReadDir(seasonDir)
+				if err != nil {
+					continue
+				}
+				for _, subEntry := range subEntries {
+					if !subEntry.IsDir() {
+						ext := strings.ToLower(filepath.Ext(subEntry.Name()))
+						for _, allowed := range allowedExts {
+							if ext == allowed {
+								hasAllowed = true
+								break
+							}
+						}
+						if hasAllowed {
+							break
+						}
+					}
+				}
+				if hasAllowed {
+					break
+				}
+			}
+		}
+	} else if len(allowedExts) > 0 {
+		// Normal folder: check for allowed files in this directory only
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				ext := strings.ToLower(filepath.Ext(entry.Name()))
+				for _, allowed := range allowedExts {
+					if ext == allowed {
+						hasAllowed = true
+						break
+					}
+				}
+				if hasAllowed {
+					break
+				}
+			}
+		}
+	}
+	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {

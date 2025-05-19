@@ -1,8 +1,12 @@
 import axios from 'axios';
 import { FileItem } from './types';
 
-export async function fetchFiles(path: string): Promise<FileItem[]> {
+export async function fetchFiles(path: string, withHeaders?: boolean): Promise<any> {
   const response = await axios.get(`/api/files${path}`);
+  if (withHeaders) {
+    const hasAllowed = response.headers['x-has-allowed-extensions'] === 'true';
+    return { data: response.data, hasAllowed };
+  }
   return response.data;
 }
 

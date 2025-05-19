@@ -1,39 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Chip, Avatar, Grid, Skeleton, Paper, IconButton, useTheme, Tabs, Tab } from '@mui/material';
+import { Box, Typography, Skeleton, IconButton, useTheme } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { useAuth } from '../contexts/AuthContext';
-import MediaPathInfo from '../components/FileBrowser/MediaPathInfo';
 import MovieInfo from '../components/MovieInfo/index';
-import TVShowInfo from '../components/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`media-tabpanel-${index}`}
-      aria-labelledby={`media-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ py: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -50,19 +21,12 @@ export default function MediaDetails() {
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { isAuthenticated } = useAuth();
   const theme = useTheme();
-  const hasSeasonFolders = location.state?.hasSeasonFolders || false;
-  const mediaType = hasSeasonFolders ? 'tv' : 'movie';
+  const mediaType = 'movie';
   const tmdbId = location.state?.tmdbId;
   const currentPath = location.state?.currentPath || '';
-  const [tabValue, setTabValue] = useState(0);
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
 
   useEffect(() => {
     // Only use navigation state if it contains credits (full details)
@@ -189,23 +153,13 @@ export default function MediaDetails() {
         flexDirection: 'column',
       }}>
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          {mediaType === 'tv' ? (
-            <TVShowInfo 
-              data={data} 
-              getPosterUrl={getPosterUrl}
-              folderName={folderName || ''}
-              currentPath={currentPath}
-              mediaType={mediaType as 'movie' | 'tv'}
-            />
-          ) : (
-            <MovieInfo 
-              data={data} 
-              getPosterUrl={getPosterUrl}
-              folderName={folderName || ''}
-              currentPath={currentPath}
-              mediaType={mediaType as 'movie' | 'tv'}
-            />
-          )}
+          <MovieInfo 
+            data={data} 
+            getPosterUrl={getPosterUrl}
+            folderName={folderName || ''}
+            currentPath={currentPath}
+            mediaType={mediaType as 'movie' | 'tv'}
+          />
         </Box>
       </Box>
     </Box>

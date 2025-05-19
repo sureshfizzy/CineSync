@@ -1,4 +1,4 @@
-import React, { useState, useRef, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, Box, Tooltip } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -18,8 +18,6 @@ interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
-  isSeasonFolder?: boolean;
-  hasSeasonFolders?: boolean;
 }
 
 interface FileActionMenuProps {
