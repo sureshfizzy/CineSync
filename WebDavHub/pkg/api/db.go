@@ -151,70 +151,119 @@ func DeleteFileDetail(path string) error {
 
 // --- TMDB Cache ---
 
-// Only store the fields actually used in the frontend
+// InitTmdbCacheTable initializes the new two-table TMDB cache schema.
+// It drops the old tmdb_cache table if it exists.
 func InitTmdbCacheTable() error {
-	query := `CREATE TABLE IF NOT EXISTS tmdb_cache (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		cache_key TEXT UNIQUE,
-		tmdb_id INTEGER,
+	// Drop the old single tmdb_cache table if it exists to avoid conflicts and ensure clean schema.
+	// Errors during drop are ignored as the table might not exist.
+	_, _ = db.Exec(`DROP TABLE IF EXISTS tmdb_cache;`)
+
+	// Create tmdb_entities table to store unique TMDB entity data
+	queryEntities := `CREATE TABLE IF NOT EXISTS tmdb_entities (
+		tmdb_id INTEGER NOT NULL,
+		media_type TEXT NOT NULL,
 		title TEXT,
 		poster_path TEXT,
-		year TEXT,
-		media_type TEXT
+		year TEXT, -- Stores release_date string, frontend parses year
+		PRIMARY KEY (tmdb_id, media_type)
 	);`
-	_, err := db.Exec(query)
-	return err
+	if _, err := db.Exec(queryEntities); err != nil {
+		return fmt.Errorf("failed to create tmdb_entities table: %w", err)
+	}
+
+	// Create tmdb_cache_keys table to map cache_key lookups to entities
+	queryCacheKeys := `CREATE TABLE IF NOT EXISTS tmdb_cache_keys (
+		cache_key TEXT PRIMARY KEY NOT NULL,
+		tmdb_id INTEGER NOT NULL,
+		media_type TEXT NOT NULL,
+		FOREIGN KEY (tmdb_id, media_type) REFERENCES tmdb_entities(tmdb_id, media_type) ON DELETE CASCADE ON UPDATE CASCADE
+	);`
+	if _, err := db.Exec(queryCacheKeys); err != nil {
+		return fmt.Errorf("failed to create tmdb_cache_keys table: %w", err)
+	}
+	return nil
 }
 
-type TmdbCacheEntry struct {
+type TmdbEntity struct {
 	TmdbID     int
+	MediaType  string
 	Title      string
 	PosterPath string
-	Year       string
-	MediaType  string
+	Year       string // Represents release_date
 }
 
 func GetTmdbCache(cacheKey string) (string, error) {
-	query := `SELECT tmdb_id, title, poster_path, year, media_type FROM tmdb_cache WHERE cache_key = ?;`
+	query := `
+		SELECT e.tmdb_id, e.media_type, e.title, e.poster_path, e.year
+		FROM tmdb_cache_keys k
+		JOIN tmdb_entities e ON k.tmdb_id = e.tmdb_id AND k.media_type = e.media_type
+		WHERE k.cache_key = ?;
+	`
 	row := db.QueryRow(query, cacheKey)
-	var entry TmdbCacheEntry
-	err := row.Scan(&entry.TmdbID, &entry.Title, &entry.PosterPath, &entry.Year, &entry.MediaType)
+	var entity TmdbEntity
+	err := row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to scan tmdb cache data: %w", err)
 	}
+
 	jsonStr := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-		entry.TmdbID, entry.Title, entry.PosterPath, entry.Year, entry.MediaType)
+		entity.TmdbID, entity.Title, entity.PosterPath, entity.Year, entity.MediaType)
 	return jsonStr, nil
 }
 
 func upsertTmdbCacheDirect(cacheKey, result string) error {
-	var entry struct {
-		ID         int    `json:"id"`
-		Title      string `json:"title"`
-		PosterPath string `json:"poster_path"`
-		ReleaseDate string `json:"release_date"`
-		MediaType  string `json:"media_type"`
+	var entryData struct {
+		ID          int    `json:"id"`
+		Title       string `json:"title"`
+		PosterPath  string `json:"poster_path"`
+		ReleaseDate string `json:"release_date"
+		MediaType   string `json:"media_type"`
 	}
-	err := json.Unmarshal([]byte(result), &entry)
+	err := json.Unmarshal([]byte(result), &entryData)
 	if err != nil {
-		return fmt.Errorf("failed to parse TMDB cache JSON: %w", err)
+		return fmt.Errorf("failed to parse TMDB cache JSON for upsert: %w", err)
 	}
-	// Check for existing tmdb_id + media_type
-	var existingID int
-	err = db.QueryRow(`SELECT id FROM tmdb_cache WHERE tmdb_id = ? AND media_type = ?`, entry.ID, entry.MediaType).Scan(&existingID)
-	if err == nil {
-		return nil
+
+	// Validate MediaType: must be 'movie' or 'tv'
+	if entryData.MediaType != "movie" && entryData.MediaType != "tv" {
+		return fmt.Errorf("invalid media_type for TMDB cache upsert: '%s'. Must be 'movie' or 'tv'", entryData.MediaType)
 	}
-	if err != sql.ErrNoRows {
-		return err
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction for tmdb cache upsert: %w", err)
 	}
-	_, err = db.Exec(`INSERT INTO tmdb_cache (cache_key, tmdb_id, title, poster_path, year, media_type) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(cache_key) DO UPDATE SET tmdb_id=excluded.tmdb_id, title=excluded.title, poster_path=excluded.poster_path, year=excluded.year, media_type=excluded.media_type`,
-		cacheKey, entry.ID, entry.Title, entry.PosterPath, entry.ReleaseDate, entry.MediaType)
-	return err
+	defer tx.Rollback()
+
+	// Upsert into tmdb_entities
+	_, err = tx.Exec(`
+		INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(tmdb_id, media_type) DO UPDATE SET
+			title=excluded.title,
+			poster_path=excluded.poster_path,
+			year=excluded.year;
+	`, entryData.ID, entryData.MediaType, entryData.Title, entryData.PosterPath, entryData.ReleaseDate)
+	if err != nil {
+		return fmt.Errorf("failed to upsert into tmdb_entities: %w", err)
+	}
+
+	// Upsert into tmdb_cache_keys
+	_, err = tx.Exec(`
+		INSERT INTO tmdb_cache_keys (cache_key, tmdb_id, media_type)
+		VALUES (?, ?, ?)
+		ON CONFLICT(cache_key) DO UPDATE SET
+			tmdb_id=excluded.tmdb_id,
+			media_type=excluded.media_type;
+	`, cacheKey, entryData.ID, entryData.MediaType)
+	if err != nil {
+		return fmt.Errorf("failed to upsert into tmdb_cache_keys: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // UpsertTmdbCache stores or updates a TMDB cache entry (async, robust)
@@ -224,23 +273,25 @@ func UpsertTmdbCache(cacheKey, result string) error {
 }
 
 // GetTmdbCacheByTmdbIdAndType returns the first cache entry for a given tmdb_id and media_type
-func GetTmdbCacheByTmdbIdAndType(tmdbID, mediaType string) (string, error) {
-	query := `SELECT tmdb_id, title, poster_path, year, media_type FROM tmdb_cache WHERE tmdb_id = ? AND media_type = ? LIMIT 1;`
-	var entry TmdbCacheEntry
-	var idInt int
-	idInt, err := strconv.Atoi(tmdbID)
+func GetTmdbCacheByTmdbIdAndType(tmdbIDStr, mediaType string) (string, error) {
+	tmdbID, err := strconv.Atoi(tmdbIDStr)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("invalid tmdbID format: %w", err)
 	}
-	err = db.QueryRow(query, idInt, mediaType).Scan(&entry.TmdbID, &entry.Title, &entry.PosterPath, &entry.Year, &entry.MediaType)
+
+	query := `SELECT tmdb_id, media_type, title, poster_path, year FROM tmdb_entities WHERE tmdb_id = ? AND media_type = ?;`
+	row := db.QueryRow(query, tmdbID, mediaType)
+	var entity TmdbEntity
+	err = row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to scan tmdb entity data: %w", err)
 	}
+
 	jsonStr := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-		entry.TmdbID, entry.Title, entry.PosterPath, entry.Year, entry.MediaType)
+		entity.TmdbID, entity.Title, entity.PosterPath, entity.Year, entity.MediaType)
 	return jsonStr, nil
 }
 

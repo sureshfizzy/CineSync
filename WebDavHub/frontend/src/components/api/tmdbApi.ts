@@ -49,7 +49,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       if (data && typeof data === 'object' && 'id' in data) {
         return {
           id: data.id,
-          title: data.title || data.name,
+          title: data.media_type === 'movie' ? data.title : data.name,
           overview: data.overview,
           poster_path: data.poster_path,
           release_date: data.release_date || data.first_air_date,

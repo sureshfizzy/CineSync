@@ -85,25 +85,50 @@ export default function FileBrowser() {
     while (tmdbActive.current < TMDB_CONCURRENCY_LIMIT && tmdbQueue.current.length > 0) {
       const { name, title, year, mediaType } = tmdbQueue.current.shift()!;
       tmdbActive.current++;
-      // Check cache first
+
       const cacheKeyTitle = title || '';
       const cacheKeyMediaType = mediaType || '';
       const cached = getPosterFromCache(cacheKeyTitle, cacheKeyMediaType);
-      if (cached) {
+
+      if (cached && cached.poster_path) {
         setTmdbData(prev => ({ ...prev, [name]: cached }));
         tmdbActive.current--;
         setTmdbQueueVersion(v => v + 1);
         continue;
       }
-      searchTmdb(title, year, mediaType).then(result => {
-        if (result) setPosterInCache(cacheKeyTitle, cacheKeyMediaType, result);
-        setTmdbData(prev => ({ ...prev, [name]: result }));
+
+      searchTmdb(title, year, mediaType).then(apiResult => {
+        if (apiResult) {
+          let finalData = { ...apiResult };
+          if (cached) { // Merge with existing cached data if any
+            finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
+          }
+
+          // Ensure media_type from API result is used if it's valid and current one isn't
+          if (apiResult.media_type && (apiResult.media_type === 'movie' || apiResult.media_type === 'tv')) {
+            if (finalData.media_type !== 'movie' && finalData.media_type !== 'tv') {
+                 finalData.media_type = apiResult.media_type;
+            }
+          }
+
+          // Only cache if media_type is valid
+          if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
+            setPosterInCache(cacheKeyTitle, cacheKeyMediaType, finalData);
+            setTmdbData(prev => ({ ...prev, [name]: finalData }));
+          } else {
+            setTmdbData(prev => ({ ...prev, [name]: finalData }));
+          }
+        } else if (cached) {
+          setTmdbData(prev => ({ ...prev, [name]: cached }));
+        } else {
+          setTmdbData(prev => ({ ...prev, [name]: null }));
+        }
       }).finally(() => {
         tmdbActive.current--;
-        setTmdbQueueVersion(v => v + 1); // trigger next in queue
+        setTmdbQueueVersion(v => v + 1);
       });
     }
-  }, [tmdbQueueVersion]);
+  }, [tmdbQueueVersion, getPosterFromCache, setPosterInCache, searchTmdb]);
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -196,41 +221,77 @@ export default function FileBrowser() {
   // Instead of calling searchTmdb directly, enqueue lookups
   useEffect(() => {
     if (view !== 'poster') return;
+
     filteredFiles.forEach(file => {
-      const isTvShow = file.hasSeasonFolders;
-      const isSeasonFolder = file.isSeasonFolder;
-      if (
-        file.type === 'directory' &&
-        !isSeasonFolder &&
-        (
-          (isTvShow && !tmdbData[file.name] && !tmdbFetchRef.current[file.name]) ||
-          (!isTvShow && folderHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name])
-        )
-      ) {
-        // Use tmdbId from file if available
-        if (file.tmdbId) {
-          tmdbFetchRef.current[file.name] = true;
-          const mediaType = file.type === 'directory' && file.hasSeasonFolders ? 'tv' : 'movie';
-          // Check cache first
-          const cacheKeyTmdbId = file.tmdbId || '';
-          const cached = getPosterFromCache(cacheKeyTmdbId, mediaType);
-          if (cached) {
-            setTmdbData(prev => ({ ...prev, [file.name]: cached }));
-            return;
-          }
-          searchTmdb(file.tmdbId, undefined, mediaType).then(result => {
-            if (result) setPosterInCache(cacheKeyTmdbId, mediaType, result);
-            setTmdbData(prev => ({ ...prev, [file.name]: result }));
-          });
-        } else {
-          const { title, year } = parseTitleYearFromFolder(file.name);
-          tmdbFetchRef.current[file.name] = true;
-          enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
+      if (file.type !== 'directory' || file.isSeasonFolder) {
+        return;
+      }
+
+      const existingTmdbInfo = tmdbData[file.name];
+      const hasPoster = !!(existingTmdbInfo && existingTmdbInfo.poster_path);
+      const fetchAttempted = tmdbFetchRef.current[file.name];
+
+      if (hasPoster || fetchAttempted) {
+        return;
+      }
+
+      const isMovie = !file.hasSeasonFolders;
+      if (isMovie && !folderHasAllowed[file.name]) {
+        return; 
+      }
+
+      tmdbFetchRef.current[file.name] = true;
+
+      if (file.tmdbId) {
+        const mediaTypeFromFile = isMovie ? 'movie' : 'tv';
+        const cacheKeyTmdbId = file.tmdbId;
+        const cached = getPosterFromCache(cacheKeyTmdbId, mediaTypeFromFile);
+
+        if (cached && cached.poster_path) {
+          setTmdbData(prev => ({ ...prev, [file.name]: cached }));
+          return;
         }
+
+        searchTmdb(file.tmdbId, undefined, mediaTypeFromFile).then(apiResult => {
+          if (apiResult) {
+            let finalData = { ...apiResult };
+            if (cached) { // Merge with existing cached data
+              finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
+            }
+
+            if (apiResult.media_type && (apiResult.media_type === 'movie' || apiResult.media_type === 'tv')) {
+                 if (finalData.media_type !== 'movie' && finalData.media_type !== 'tv') {
+                    finalData.media_type = apiResult.media_type;
+                 }
+            }
+            // Fallback to mediaTypeFromFile if finalData.media_type is still not valid
+            if (finalData.media_type !== 'movie' && finalData.media_type !== 'tv') {
+                finalData.media_type = mediaTypeFromFile;
+            }
+
+            // Only cache if media_type is valid
+            if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
+              setPosterInCache(cacheKeyTmdbId, finalData.media_type, finalData); // Use the validated finalData.media_type for caching
+              setTmdbData(prev => ({ ...prev, [file.name]: finalData }));
+            } else {
+              setTmdbData(prev => ({ ...prev, [file.name]: finalData }));
+            }
+          } else if (cached) {
+            setTmdbData(prev => ({ ...prev, [file.name]: cached }));
+          } else {
+            setTmdbData(prev => ({ ...prev, [file.name]: null }));
+          }
+        });
+      } else {
+
+        const { title, year } = parseTitleYearFromFolder(file.name);
+
+        const mediaTypeForQueue = isMovie ? undefined : 'tv';
+        enqueueTmdbLookup(file.name, title, year, mediaTypeForQueue);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFiles, view, folderHasAllowed, tmdbData, currentPath]);
+  }, [filteredFiles, view, folderHasAllowed, tmdbData, currentPath, enqueueTmdbLookup, getPosterFromCache, searchTmdb, setPosterInCache]);
 
   // Pre-populate tmdbData from cache on files load
   useEffect(() => {
@@ -245,11 +306,6 @@ export default function FileBrowser() {
           const cacheKey = file.tmdbId ? file.tmdbId : file.name;
           const cached = getPosterFromCache(cacheKey, file.tmdbId ? mediaType : '');
           if (cached) {
-            // Log cached data for both movies and TV shows on return
-            // console.log(`[FileBrowser] Cached data for ${mediaType} ${file.name} on return:`, cached);
-            if (!cached.release_date) {
-              // console.warn(`[FileBrowser] Cached data for ${mediaType} ${file.name} is missing release_date.`);
-            }
             // Prioritize existing release_date if available in current state
             newData[file.name] = { ...cached, release_date: newData[file.name]?.release_date || cached.release_date };
             if (cached.poster_path) {
@@ -552,7 +608,8 @@ export default function FileBrowser() {
                       display: 'block',
                     }}
                   >
-                      {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
+                      {/* Display TMDB title if available for movie/TV show folders, otherwise folder name */}
+                      {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title ? tmdb.title : file.name}
                   </Typography>
                   {tmdb && tmdb.release_date && (
                     <Typography
