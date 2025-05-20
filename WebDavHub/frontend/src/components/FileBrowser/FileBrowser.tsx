@@ -41,6 +41,7 @@ import { FileItem } from './types';
 import MobileListItem from './MobileListItem';
 import MobileBreadcrumbs from './MobileBreadcrumbs';
 import { fetchFiles as fetchFilesApi } from './fileApi';
+import { getPosterFromCache, setPosterInCache } from './tmdbCache';
 
 const TMDB_CONCURRENCY_LIMIT = 4;
 
@@ -84,7 +85,18 @@ export default function FileBrowser() {
     while (tmdbActive.current < TMDB_CONCURRENCY_LIMIT && tmdbQueue.current.length > 0) {
       const { name, title, year, mediaType } = tmdbQueue.current.shift()!;
       tmdbActive.current++;
+      // Check cache first
+      const cacheKeyTitle = title || '';
+      const cacheKeyMediaType = mediaType || '';
+      const cached = getPosterFromCache(cacheKeyTitle, cacheKeyMediaType);
+      if (cached) {
+        setTmdbData(prev => ({ ...prev, [name]: cached }));
+        tmdbActive.current--;
+        setTmdbQueueVersion(v => v + 1);
+        continue;
+      }
       searchTmdb(title, year, mediaType).then(result => {
+        if (result) setPosterInCache(cacheKeyTitle, cacheKeyMediaType, result);
         setTmdbData(prev => ({ ...prev, [name]: result }));
       }).finally(() => {
         tmdbActive.current--;
@@ -199,7 +211,15 @@ export default function FileBrowser() {
         if (file.tmdbId) {
           tmdbFetchRef.current[file.name] = true;
           const mediaType = file.type === 'directory' && file.hasSeasonFolders ? 'tv' : 'movie';
+          // Check cache first
+          const cacheKeyTmdbId = file.tmdbId || '';
+          const cached = getPosterFromCache(cacheKeyTmdbId, mediaType);
+          if (cached) {
+            setTmdbData(prev => ({ ...prev, [file.name]: cached }));
+            return;
+          }
           searchTmdb(file.tmdbId, undefined, mediaType).then(result => {
+            if (result) setPosterInCache(cacheKeyTmdbId, mediaType, result);
             setTmdbData(prev => ({ ...prev, [file.name]: result }));
           });
         } else {
@@ -211,6 +231,54 @@ export default function FileBrowser() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredFiles, view, folderHasAllowed, tmdbData, currentPath]);
+
+  // Pre-populate tmdbData from cache on files load
+  useEffect(() => {
+    if (view !== 'poster') return;
+    if (!filteredFiles.length) return;
+    setTmdbData(prev => {
+      const newData = { ...prev };
+      const newImgLoaded: { [key: string]: boolean } = {};
+      filteredFiles.forEach(file => {
+        if (file.type === 'directory' && !newData[file.name]) {
+          const mediaType = file.hasSeasonFolders ? 'tv' : 'movie';
+          const cacheKey = file.tmdbId ? file.tmdbId : file.name;
+          const cached = getPosterFromCache(cacheKey, file.tmdbId ? mediaType : '');
+          if (cached) {
+            // Log cached data for both movies and TV shows on return
+            // console.log(`[FileBrowser] Cached data for ${mediaType} ${file.name} on return:`, cached);
+            if (!cached.release_date) {
+              // console.warn(`[FileBrowser] Cached data for ${mediaType} ${file.name} is missing release_date.`);
+            }
+            // Prioritize existing release_date if available in current state
+            newData[file.name] = { ...cached, release_date: newData[file.name]?.release_date || cached.release_date };
+            if (cached.poster_path) {
+              newImgLoaded[file.name] = true;
+            }
+          }
+          // If tmdbData is still not available, populate with parsed info from folder name
+          if (!newData[file.name]) {
+            const { title: parsedTitle, year: parsedYear } = parseTitleYearFromFolder(file.name);
+            if (parsedTitle) {
+              newData[file.name] = {
+                id: 0, // Placeholder ID
+                title: parsedTitle,
+                overview: '',
+                poster_path: null,
+                release_date: parsedYear ? `${parsedYear}-01-01` : undefined, // Store year as a date string
+                media_type: mediaType,
+              };
+              // console.log(`[FileBrowser] Populated tmdbData for ${file.name} from folder name:`, newData[file.name]);
+            }
+          }
+        }
+      });
+      // Also update imgLoadedMap for these files
+      setImgLoadedMap(prevImg => ({ ...prevImg, ...newImgLoaded }));
+      return newData;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFiles, view]);
 
   if (loading) {
     return (
@@ -410,28 +478,62 @@ export default function FileBrowser() {
                   position: 'relative',
                   overflow: 'hidden',
                 }}>
-                    {isLoadingPoster ? (
-                      <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" />
-                    ) : showPoster ? (
-                      <img
-                        src={getTmdbPosterUrl(tmdb.poster_path) || ''}
-                        alt={tmdb.title || file.name}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          opacity: loaded ? 1 : 0,
-                          transition: 'opacity 0.5s ease',
-                          display: 'block',
-                        }}
-                        onLoad={() => setImgLoadedMap(prev => ({ ...prev, [file.name]: true }))}
-                      />
-                    ) : (
-                      getFileIcon(file.name, file.type)
-                    )}
+                    {/* Logic for showing skeleton, image, or icon */}
+                    {(() => {
+                      const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && folderHasAllowed[file.name] !== false;
+                      const hasTmdbData = !!tmdb;
+                      const hasPosterPath = tmdb && tmdb.poster_path;
+                      const loaded = imgLoadedMap[file.name] || false;
+
+                      if (isPosterCandidate) {
+                        return (
+                          <>
+                            {/* Skeleton: Shown while image is not loaded */}
+                            {!loaded && (
+                              <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+                            )}
+
+                            {/* Image: Rendered if tmdb data is available, opacity controlled by loaded state and hasPosterPath */}
+                            {hasTmdbData && (
+                              <img
+                                src={hasPosterPath ? getTmdbPosterUrl(tmdb.poster_path) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='} // Use poster_path or a tiny transparent GIF
+                                alt={tmdb.title || file.name}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  opacity: loaded && hasPosterPath ? 1 : 0, // Show image only when loaded AND hasPosterPath
+                                  transition: 'opacity 0.5s ease',
+                                  display: 'block',
+                                  position: 'absolute', // Layering
+                                  top: 0, left: 0, right: 0, bottom: 0,
+                                }}
+                                onLoad={() => setImgLoadedMap(prev => ({ ...prev, [file.name]: true }))}
+                                onError={(e) => {
+                                  console.error(`Failed to load image for ${file.name} or no poster path:`, e);
+                                  // On error, mark as loaded to hide skeleton, show fallback if no poster path
+                                  setImgLoadedMap(prev => ({ ...prev, [file.name]: true }));
+                                }}
+                              />
+                            )}
+
+                            {/* Fallback icon: Shown if tmdb data available but no poster path, AND image load attempt is complete/failed */}
+                            {hasTmdbData && !hasPosterPath && loaded && (
+                               <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                                  {getFileIcon(file.name, file.type)} {/* Using folder icon as a fallback */}
+                               </Box>
+                             )}
+                          </>
+                        );
+                      } else {
+                        // Show file icon for non-poster candidates
+                        return file.type === 'directory' && folderHasAllowed[file.name] === false ? getFileIcon(file.name, file.type) : null;
+                      }
+                    })()}
                 </Box>
                 <Box sx={{ 
                   width: '100%', 
-                  p: 2, 
+                  p: { xs: '6px 8px', sm: '4px 12px' },
                   background: theme.palette.background.paper,
                   borderTop: `1px solid ${theme.palette.divider}`
                 }}>
@@ -452,6 +554,24 @@ export default function FileBrowser() {
                   >
                       {file.type === 'directory' && tmdb && tmdb.title && (isTvShow || folderHasAllowed[file.name]) ? tmdb.title : file.name}
                   </Typography>
+                  {tmdb && tmdb.release_date && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        fontWeight: 500,
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                      }}
+                    >
+                      {tmdb.release_date 
+                        ? new Date(tmdb.release_date).getFullYear() 
+                        : ''}
+                    </Typography>
+                  )}
                 </Box>
               </Paper>
               );
