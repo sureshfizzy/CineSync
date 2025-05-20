@@ -6,6 +6,9 @@ import MovieInfo from '../components/MovieInfo/index';
 import TVShowInfo from '../components/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
+import CircularProgress from '@mui/material/CircularProgress';
+import MovieIcon from '@mui/icons-material/Movie';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -78,28 +81,11 @@ export default function MediaDetails() {
     }
   }, [folderName, mediaType, tmdbId, currentPath, tmdbDataFromNav]);
 
-  if (loading) {
-    return (
-      <Box sx={{ width: '100vw', minHeight: '100vh', bgcolor: 'background.default', p: 0 }}>
-        <Skeleton variant="rectangular" width="100%" height={320} />
-        <Box sx={{ p: 4 }}>
-          <Skeleton variant="text" width={300} height={60} />
-          <Skeleton variant="text" width={200} height={40} />
-          <Skeleton variant="rectangular" width="100%" height={120} sx={{ my: 2 }} />
-          <Skeleton variant="text" width={400} height={30} />
-          <Skeleton variant="rectangular" width="100%" height={200} sx={{ my: 2 }} />
-        </Box>
-      </Box>
-    );
-  }
-  if (error || !data) {
-    return <Box sx={{ p: 4 }}><Typography color="error">{error || 'Not found'}</Typography></Box>;
-  }
-
+  // Always render backdrop and back button
   return (
     <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default', position: 'relative' }}>
       {/* Improved Backdrop: edge-to-edge, with gradient overlay */}
-      {data.backdrop_path && (
+      {data?.backdrop_path && (
         <Box sx={{
           position: 'fixed',
           top: 0,
@@ -137,7 +123,7 @@ export default function MediaDetails() {
       >
         <ArrowBackIcon />
       </IconButton>
-      {/* Content */}
+      {/* Main content area: animate only this */}
       <Box sx={{
         position: 'relative',
         zIndex: 1,
@@ -153,25 +139,58 @@ export default function MediaDetails() {
         display: 'flex',
         flexDirection: 'column',
       }}>
-        <Box sx={{ position: 'relative', zIndex: 1 }}>
-          {mediaType === 'tv' ? (
-            <TVShowInfo
-              data={data}
-              getPosterUrl={getPosterUrl}
-              folderName={folderName || ''}
-              currentPath={currentPath}
-              mediaType={mediaType as 'movie' | 'tv'}
-            />
-          ) : (
-            <MovieInfo
-              data={data}
-              getPosterUrl={getPosterUrl}
-              folderName={folderName || ''}
-              currentPath={currentPath}
-              mediaType={mediaType as 'movie' | 'tv'}
-            />
-          )}
-        </Box>
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="loading-spinner"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+              style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}
+            >
+              <CircularProgress size={44} thickness={4} color="primary" />
+            </motion.div>
+          ) : error ? (
+            <motion.div
+              key="error-message"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <Box sx={{ p: 4 }}><Typography color="error">{error}</Typography></Box>
+            </motion.div>
+          ) : data ? (
+            <motion.div
+              key="media-details-content"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
+            >
+              <Box sx={{ position: 'relative', zIndex: 1 }}>
+                {mediaType === 'tv' ? (
+                  <TVShowInfo
+                    data={data}
+                    getPosterUrl={getPosterUrl}
+                    folderName={folderName || ''}
+                    currentPath={currentPath}
+                    mediaType={mediaType as 'movie' | 'tv'}
+                  />
+                ) : (
+                  <MovieInfo
+                    data={data}
+                    getPosterUrl={getPosterUrl}
+                    folderName={folderName || ''}
+                    currentPath={currentPath}
+                    mediaType={mediaType as 'movie' | 'tv'}
+                  />
+                )}
+              </Box>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </Box>
     </Box>
   );

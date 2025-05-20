@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, IconButton, Box, Typography, Divider, useTheme } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DetailsDialogProps {
   open: boolean;
@@ -54,47 +55,59 @@ const DetailsDialog: React.FC<DetailsDialogProps> = ({ open, onClose, selectedFi
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent
-        dividers={true}
-        sx={{
-          background: theme.palette.background.default,
-          p: 3,
-          borderBottomLeftRadius: 12,
-          borderBottomRightRadius: 12,
-          minWidth: 350,
-          maxWidth: 600,
-        }}
-      >
-        {detailsData && (
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              {getFileIcon()}
-              <Typography sx={{ ml: 2, fontWeight: 700, fontSize: '1.15rem', wordBreak: 'break-all', whiteSpace: 'normal' }}>{selectedFile?.name}</Typography>
-            </Box>
-            <Divider sx={{ mb: 2 }} />
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-              <Typography variant="body2"><b>Type:</b> {selectedFile?.name ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'File') : 'File'}</Typography>
-              <Typography variant="body2"><b>Size:</b> {selectedFile?.size || '--'}</Typography>
-              <Typography variant="body2"><b>Modified:</b> {formatDate(selectedFile?.modified)}</Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                <b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>
-                  {detailsData?.webdavPath || (selectedFile?.path ? `Home/${selectedFile?.path.split('/').pop()}` : '--')}
-                </span>
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                <b>Source Path:</b> <span style={{ fontFamily: 'monospace' }}>
-                  {detailsData?.sourcePath || selectedFile?.path || '--'}
-                </span>
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                <b>Full Path:</b> <span style={{ fontFamily: 'monospace' }}>
-                  {detailsData?.fullPath || '--'}
-                </span>
-              </Typography>
-            </Box>
-          </Box>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="dialog-content"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          >
+            <DialogContent
+              dividers={true}
+              sx={{
+                background: theme.palette.background.default,
+                p: 3,
+                borderBottomLeftRadius: 12,
+                borderBottomRightRadius: 12,
+                minWidth: 350,
+                maxWidth: 600,
+              }}
+            >
+              {detailsData && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    {getFileIcon()}
+                    <Typography sx={{ ml: 2, fontWeight: 700, fontSize: '1.15rem', wordBreak: 'break-all', whiteSpace: 'normal' }}>{selectedFile?.name}</Typography>
+                  </Box>
+                  <Divider sx={{ mb: 2 }} />
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                    <Typography variant="body2"><b>Type:</b> {selectedFile?.name ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'File') : 'File'}</Typography>
+                    <Typography variant="body2"><b>Size:</b> {selectedFile?.size || '--'}</Typography>
+                    <Typography variant="body2"><b>Modified:</b> {formatDate(selectedFile?.modified)}</Typography>
+                    <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                      <b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                        {detailsData?.webdavPath || (selectedFile?.path ? `Home/${selectedFile?.path.split('/').pop()}` : '--')}
+                      </span>
+                    </Typography>
+                    <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                      <b>Source Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                        {detailsData?.sourcePath || selectedFile?.path || '--'}
+                      </span>
+                    </Typography>
+                    <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                      <b>Full Path:</b> <span style={{ fontFamily: 'monospace' }}>
+                        {detailsData?.fullPath || '--'}
+                      </span>
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+            </DialogContent>
+          </motion.div>
         )}
-      </DialogContent>
+      </AnimatePresence>
     </Dialog>
   );
 };
