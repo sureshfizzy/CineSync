@@ -147,18 +147,34 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 			tmdbDetailsCache.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-TMDB-Details-Cache", "HIT")
+			// Also upsert to persistent DB cache for HITs
+			UpsertTmdbCache(cacheKey, string(data))
 			w.Write(data)
 			return
 		}
 		tmdbDetailsCache.mu.Unlock()
 		// Fetch details directly by ID
 		var detailsUrl string
+		var resp *http.Response
+		var err error
 		if mediaType == "tv" {
 			detailsUrl = "https://api.themoviedb.org/3/tv/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
-		} else {
+			resp, err = http.Get(detailsUrl)
+		} else if mediaType == "movie" {
 			detailsUrl = "https://api.themoviedb.org/3/movie/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
+			resp, err = http.Get(detailsUrl)
+		} else {
+			// Try TV first, then fallback to movie if not found
+			detailsUrl = "https://api.themoviedb.org/3/tv/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
+			resp, err = http.Get(detailsUrl)
+			if err != nil || resp.StatusCode != 200 {
+				if resp != nil {
+					resp.Body.Close()
+				}
+				detailsUrl = "https://api.themoviedb.org/3/movie/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
+				resp, err = http.Get(detailsUrl)
+			}
 		}
-		resp, err := http.Get(detailsUrl)
 		if err != nil || resp.StatusCode != 200 {
 			logger.Warn("TMDb details fetch by ID failed: %v", err)
 			http.Error(w, "Failed to fetch details from TMDb", http.StatusBadGateway)
@@ -226,10 +242,28 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 				body, _ = json.Marshal(details)
 			}
 		}
-		// Store in id-based cache
+		// Store in id-based cache (format for DB cache)
 		tmdbDetailsCache.mu.Lock()
 		tmdbDetailsCache.items[cacheKey] = body
 		tmdbDetailsCache.mu.Unlock()
+
+		// Format and upsert for persistent DB cache
+		var tmdbObj map[string]interface{}
+		if err := json.Unmarshal(body, &tmdbObj); err == nil {
+			idVal, _ := tmdbObj["id"].(float64)
+			title, _ := tmdbObj["title"].(string)
+			if title == "" {
+				title, _ = tmdbObj["name"].(string)
+			}
+			posterPath, _ := tmdbObj["poster_path"].(string)
+			releaseDate, _ := tmdbObj["release_date"].(string)
+			if releaseDate == "" {
+				releaseDate, _ = tmdbObj["first_air_date"].(string)
+			}
+			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
+				int(idVal), title, posterPath, releaseDate, mediaType)
+			UpsertTmdbCache(cacheKey, resultJson)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-TMDB-Details-Cache", "MISS")
 		w.Write(body)

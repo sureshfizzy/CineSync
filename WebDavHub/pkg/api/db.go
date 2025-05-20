@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	_ "modernc.org/sqlite"
@@ -201,6 +202,15 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse TMDB cache JSON: %w", err)
 	}
+	// Check for existing tmdb_id + media_type
+	var existingID int
+	err = db.QueryRow(`SELECT id FROM tmdb_cache WHERE tmdb_id = ? AND media_type = ?`, entry.ID, entry.MediaType).Scan(&existingID)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
 	_, err = db.Exec(`INSERT INTO tmdb_cache (cache_key, tmdb_id, title, poster_path, year, media_type) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(cache_key) DO UPDATE SET tmdb_id=excluded.tmdb_id, title=excluded.title, poster_path=excluded.poster_path, year=excluded.year, media_type=excluded.media_type`,
 		cacheKey, entry.ID, entry.Title, entry.PosterPath, entry.ReleaseDate, entry.MediaType)
@@ -211,6 +221,27 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 func UpsertTmdbCache(cacheKey, result string) error {
 	tmdbCacheWriteQueue <- tmdbCacheWriteReq{query: cacheKey, result: result}
 	return nil // always return nil, as write is async
+}
+
+// GetTmdbCacheByTmdbIdAndType returns the first cache entry for a given tmdb_id and media_type
+func GetTmdbCacheByTmdbIdAndType(tmdbID, mediaType string) (string, error) {
+	query := `SELECT tmdb_id, title, poster_path, year, media_type FROM tmdb_cache WHERE tmdb_id = ? AND media_type = ? LIMIT 1;`
+	var entry TmdbCacheEntry
+	var idInt int
+	idInt, err := strconv.Atoi(tmdbID)
+	if err != nil {
+		return "", err
+	}
+	err = db.QueryRow(query, idInt, mediaType).Scan(&entry.TmdbID, &entry.Title, &entry.PosterPath, &entry.Year, &entry.MediaType)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	jsonStr := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
+		entry.TmdbID, entry.Title, entry.PosterPath, entry.Year, entry.MediaType)
+	return jsonStr, nil
 }
 
 // DB returns the global *sql.DB instance

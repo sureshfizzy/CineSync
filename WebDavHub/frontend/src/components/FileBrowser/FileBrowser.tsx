@@ -68,6 +68,7 @@ export default function FileBrowser() {
   const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
   const tmdbActive = useRef(0);
   const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0); // force rerender/queue check
+  const [tmdbId, setTmdbId] = useState<string | null>(null);
 
   // Helper to enqueue a TMDb lookup
   const enqueueTmdbLookup = useCallback((name: string, title: string, year: string | undefined, mediaType: 'movie' | 'tv' | undefined) => {
@@ -96,8 +97,14 @@ export default function FileBrowser() {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchFilesApi(path);
+      // Always use withHeaders to get tmdbId
+      const { data, tmdbId: headerTmdbId } = await fetchFilesApi(path, true);
       setFiles(data);
+      if (headerTmdbId && headerTmdbId !== 'null' && headerTmdbId !== '') {
+        setTmdbId(headerTmdbId);
+      } else {
+        setTmdbId(null);
+      }
     } catch (err) {
       setError('Failed to fetch files');
       console.error('Error fetching files:', err);
@@ -188,9 +195,18 @@ export default function FileBrowser() {
           (!isTvShow && folderHasAllowed[file.name] && !tmdbData[file.name] && !tmdbFetchRef.current[file.name])
         )
       ) {
-        const { title, year } = parseTitleYearFromFolder(file.name);
-        tmdbFetchRef.current[file.name] = true;
-        enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
+        // Use tmdbId from file if available
+        if (file.tmdbId) {
+          tmdbFetchRef.current[file.name] = true;
+          const mediaType = file.type === 'directory' && file.hasSeasonFolders ? 'tv' : 'movie';
+          searchTmdb(file.tmdbId, undefined, mediaType).then(result => {
+            setTmdbData(prev => ({ ...prev, [file.name]: result }));
+          });
+        } else {
+          const { title, year } = parseTitleYearFromFolder(file.name);
+          tmdbFetchRef.current[file.name] = true;
+          enqueueTmdbLookup(file.name, title, year, isTvShow ? 'tv' : undefined);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

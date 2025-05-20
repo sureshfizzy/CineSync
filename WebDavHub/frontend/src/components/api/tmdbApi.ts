@@ -18,6 +18,50 @@ function makeTmdbCacheKey(query: string, year?: string, mediaType?: string) {
 }
 
 export async function searchTmdb(query: string, year?: string, mediaType?: 'movie' | 'tv', maxRetries = 3): Promise<TmdbResult | null> {
+  // If query is a TMDB ID (all digits), try cache first
+  if (/^\d+$/.test(query)) {
+    const cacheKey = `id:${query}:${mediaType || ''}`;
+    try {
+      const cacheRes = await axios.get('/api/tmdb-cache', { params: { query: cacheKey } });
+      if (cacheRes.data) {
+        const cached = cacheRes.data;
+        if (cached && typeof cached === 'object' && 'id' in cached) {
+          return cached as TmdbResult;
+        }
+        if (typeof cached === 'string') {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed === 'object' && 'id' in parsed) {
+              return parsed as TmdbResult;
+            }
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      if (err.response && err.response.status !== 404) {
+        console.warn('[TMDB] Cache error:', err);
+      }
+    }
+    // Not found in cache, fetch from details endpoint
+    try {
+      const res = await axios.get('/api/tmdb/details', { params: { id: query, mediaType } });
+      const data = res.data;
+      if (data && typeof data === 'object' && 'id' in data) {
+        return {
+          id: data.id,
+          title: data.title || data.name,
+          overview: data.overview,
+          poster_path: data.poster_path,
+          release_date: data.release_date || data.first_air_date,
+          media_type: data.media_type,
+        };
+      }
+    } catch (err) {
+      console.error('[TMDB] Error fetching details by ID:', err);
+      return null;
+    }
+  }
+
   // Use a stable cache key
   const cacheKey = makeTmdbCacheKey(query, year, mediaType);
   // 1. Try backend cache first

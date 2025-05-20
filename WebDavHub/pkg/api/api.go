@@ -37,6 +37,7 @@ type FileInfo struct {
 	Icon     string `json:"icon,omitempty"`
 	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
 	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
+	TmdbId   string `json:"tmdbId,omitempty"`
 }
 
 type Stats struct {
@@ -157,6 +158,12 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Build a filtered list of entries that excludes .tmdb
 	effectiveEntries := make([]os.DirEntry, 0, len(entries))
+	var tmdbID string
+	// Only set tmdbID if .tmdb exists directly in this directory
+	tmdbPath := filepath.Join(dir, ".tmdb")
+	if data, err := os.ReadFile(tmdbPath); err == nil {
+		tmdbID = strings.TrimSpace(string(data))
+	}
 	for _, entry := range entries {
 		if entry.Name() == ".tmdb" {
 			continue
@@ -247,6 +254,10 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
+	// Only set tmdbID if .tmdb exists directly in this directory and not at root
+	if tmdbID != "" && path != "/" {
+		w.Header().Set("X-TMDB-ID", tmdbID)
+	}
 	for _, entry := range effectiveEntries {
 		info, err := entry.Info()
 		if err != nil {
@@ -293,6 +304,12 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 					fileInfo.HasSeasonFolders = true
 					logger.Info("[API] Detected TV show root: %s (all %d children are season folders)", filePath, seasonCount)
 				}
+			}
+
+			// Check for .tmdb file inside this subdirectory
+			tmdbPath := filepath.Join(subDirPath, ".tmdb")
+			if data, err := os.ReadFile(tmdbPath); err == nil {
+				fileInfo.TmdbId = strings.TrimSpace(string(data))
 			}
 
 			logger.Info("Found directory: %s", filePath)
@@ -914,6 +931,24 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if result == "" {
+			// --- Secondary lookup for id-based cacheKey ---
+			if strings.HasPrefix(cacheKey, "id:") {
+				parts := strings.Split(cacheKey, ":")
+				if len(parts) >= 3 {
+					tmdbID := parts[1]
+					mediaType := parts[2]
+					// Try to find any cache row with this tmdb_id and media_type
+					altResult, err := GetTmdbCacheByTmdbIdAndType(tmdbID, mediaType)
+					if err == nil && altResult != "" {
+						// Upsert under the new cacheKey for future hits
+						UpsertTmdbCache(cacheKey, altResult)
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-TMDB-Cache", "HIT-SECONDARY")
+						w.Write([]byte(altResult))
+						return
+					}
+				}
+			}
 			// Cache miss: call TMDB API, store, and return
 			// Parse cacheKey: query|year|mediaType
 			parts := strings.Split(cacheKey, "|")
@@ -975,6 +1010,14 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 				releaseDate, _ = best["first_air_date"].(string)
 			}
 			mediaType, _ = best["media_type"].(string)
+			if mediaType == "" {
+				parsedType := strings.ToLower(parts[len(parts)-1])
+				if parsedType == "tv" {
+					mediaType = "tv"
+				} else {
+					mediaType = "movie"
+				}
+			}
 			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
 				int(id), title, posterPath, releaseDate, mediaType)
 			UpsertTmdbCache(cacheKey, resultJson)

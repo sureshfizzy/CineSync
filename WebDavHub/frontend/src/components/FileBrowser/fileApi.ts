@@ -5,7 +5,8 @@ export async function fetchFiles(path: string, withHeaders?: boolean): Promise<a
   const response = await axios.get(`/api/files${path}`);
   if (withHeaders) {
     const hasAllowed = response.headers['x-has-allowed-extensions'] === 'true';
-    return { data: response.data, hasAllowed };
+    const tmdbId = response.headers['x-tmdb-id'] || null;
+    return { data: response.data, hasAllowed, tmdbId };
   }
   return response.data;
 }
