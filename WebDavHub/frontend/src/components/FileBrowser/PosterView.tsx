@@ -1,34 +1,183 @@
-import { Box, Card, CardContent, CardMedia, Typography, Chip, Stack } from '@mui/material';
-import { TMDbDetails } from '../../types/tmdb';
+import React from 'react';
+import { Box, Paper, Typography, Skeleton } from '@mui/material';
+import { useTheme } from '@mui/material';
+import { FileItem } from './types';
+import { TmdbResult } from '../api/tmdbApi';
+import { getFileIcon } from './fileUtils';
+import { getTmdbPosterUrl } from '../api/tmdbApi';
 
 interface PosterViewProps {
-  tmdbDetails: TMDbDetails;
-  currentPath: string;
-  folderName: string;
+  files: FileItem[];
+  tmdbData: { [key: string]: TmdbResult | null };
+  folderHasAllowed: { [folder: string]: boolean };
+  imgLoadedMap: { [key: string]: boolean };
+  onFileClick: (file: FileItem, tmdb: TmdbResult | null) => void;
+  setImgLoadedMap: React.Dispatch<React.SetStateAction<{ [key: string]: boolean }>>;
 }
 
-export default function PosterView({ tmdbDetails, currentPath, folderName }: PosterViewProps) {
+export default function PosterView({
+  files,
+  tmdbData,
+  folderHasAllowed,
+  imgLoadedMap,
+  onFileClick,
+  setImgLoadedMap
+}: PosterViewProps) {
+  const theme = useTheme();
+
+  if (files.length === 0) {
+    return (
+      <Box sx={{ gridColumn: '1/-1', textAlign: 'center', py: 6 }}>
+        <Typography color="text.secondary">
+          This folder is empty.
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
-    <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <CardMedia
-        component="img"
-        sx={{ width: '100%', aspectRatio: '2/3' }}
-        image={`https://image.tmdb.org/t/p/w500${tmdbDetails.poster_path}`}
-        alt={tmdbDetails.title || tmdbDetails.name}
-      />
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography variant="h5" component="div" gutterBottom>
-          {tmdbDetails.title || tmdbDetails.name} ({new Date(tmdbDetails.release_date || tmdbDetails.first_air_date || '1970-01-01').getFullYear()})
-        </Typography>
-        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-          {tmdbDetails.genres?.map((genre: { id: number; name: string }) => (
-            <Chip key={genre.id} label={genre.name} size="small" />
-          ))}
-        </Stack>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {tmdbDetails.overview}
-        </Typography>
-      </CardContent>
-    </Card>
+    <Box sx={{ 
+      display: 'grid', 
+      gridTemplateColumns: { 
+        xs: 'repeat(2, 1fr)', 
+        sm: 'repeat(3, 1fr)', 
+        md: 'repeat(4, 1fr)', 
+        lg: 'repeat(5, 1fr)' 
+      }, 
+      gap: 3,
+      p: 1
+    }}>
+      {files.map((file) => {
+        const tmdb = tmdbData[file.name];
+        const isSeasonFolder = file.isSeasonFolder;
+        const loaded = imgLoadedMap[file.name] || false;
+
+        return (
+          <Paper 
+            key={file.name} 
+            sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              cursor: file.type === 'directory' ? 'pointer' : 'default',
+              transition: 'all 0.2s ease-in-out',
+              boxShadow: 2,
+              borderRadius: 3,
+              overflow: 'hidden',
+              position: 'relative',
+              '&:hover': { 
+                transform: 'translateY(-4px)',
+                boxShadow: 6,
+                background: theme.palette.action.selected 
+              }
+            }}
+            onClick={() => onFileClick(file, tmdb)}
+          >
+            <Box sx={{ 
+              width: '100%', 
+              aspectRatio: '3/4',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: theme.palette.background.default,
+              p: 0,
+              position: 'relative',
+              overflow: 'hidden',
+            }}>
+              {(() => {
+                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && folderHasAllowed[file.name] !== false;
+                const hasTmdbData = !!tmdb;
+                const hasPosterPath = tmdb && tmdb.poster_path;
+
+                if (isPosterCandidate) {
+                  return (
+                    <>
+                      {!loaded && (
+                        <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+                      )}
+
+                      {hasTmdbData && (
+                        <img
+                          src={hasPosterPath ? getTmdbPosterUrl(tmdb.poster_path) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
+                          alt={tmdb.title || file.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            display: 'block',
+                            opacity: loaded && hasPosterPath ? 1 : 0,
+                            filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)', 
+                            transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
+                            transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
+                          }}
+                          onLoad={() => {
+                            setImgLoadedMap(prev => ({ ...prev, [file.name]: true }));
+                          }}
+                          onError={() => {
+                            setImgLoadedMap(prev => ({ ...prev, [file.name]: true }));
+                          }}
+                        />
+                      )}
+
+                      {hasTmdbData && !hasPosterPath && loaded && (
+                        <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                          {getFileIcon(file.name, file.type)}
+                        </Box>
+                      )}
+                    </>
+                  );
+                } else {
+                  return file.type === 'directory' && folderHasAllowed[file.name] === false ? getFileIcon(file.name, file.type) : null;
+                }
+              })()}
+            </Box>
+            <Box sx={{ 
+              width: '100%', 
+              p: { xs: '6px 8px', sm: '4px 12px' },
+              background: theme.palette.background.paper,
+              borderTop: `1px solid ${theme.palette.divider}`
+            }}>
+              <Typography 
+                sx={{ 
+                  fontWeight: 500, 
+                  textAlign: 'center', 
+                  fontSize: { xs: '0.9rem', sm: '1rem' }, 
+                  wordBreak: 'break-all',
+                  mb: 0.5,
+                  lineHeight: 1.2,
+                  maxHeight: '1.4em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  display: 'block',
+                }}
+              >
+                {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title ? tmdb.title : file.name}
+              </Typography>
+              {tmdb && tmdb.release_date && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    fontWeight: 500,
+                    textAlign: 'center',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'block',
+                  }}
+                >
+                  {tmdb.release_date 
+                    ? new Date(tmdb.release_date).getFullYear() 
+                    : ''}
+                </Typography>
+              )}
+            </Box>
+          </Paper>
+        );
+      })}
+    </Box>
   );
 } 

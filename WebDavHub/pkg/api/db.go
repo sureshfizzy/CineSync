@@ -165,6 +165,7 @@ func InitTmdbCacheTable() error {
 		title TEXT,
 		poster_path TEXT,
 		year TEXT, -- Stores release_date string, frontend parses year
+		last_updated INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), -- Unix timestamp of last update
 		PRIMARY KEY (tmdb_id, media_type)
 	);`
 	if _, err := db.Exec(queryEntities); err != nil {
@@ -176,11 +177,16 @@ func InitTmdbCacheTable() error {
 		cache_key TEXT PRIMARY KEY NOT NULL,
 		tmdb_id INTEGER NOT NULL,
 		media_type TEXT NOT NULL,
+		last_accessed INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), -- Unix timestamp of last access
 		FOREIGN KEY (tmdb_id, media_type) REFERENCES tmdb_entities(tmdb_id, media_type) ON DELETE CASCADE ON UPDATE CASCADE
 	);`
 	if _, err := db.Exec(queryCacheKeys); err != nil {
 		return fmt.Errorf("failed to create tmdb_cache_keys table: %w", err)
 	}
+
+	// Create index for faster lookups
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_tmdb_cache_keys_tmdb ON tmdb_cache_keys(tmdb_id, media_type);`)
+	
 	return nil
 }
 
@@ -219,7 +225,7 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 		ID          int    `json:"id"`
 		Title       string `json:"title"`
 		PosterPath  string `json:"poster_path"`
-		ReleaseDate string `json:"release_date"
+		ReleaseDate string `json:"release_date"`
 		MediaType   string `json:"media_type"`
 	}
 	err := json.Unmarshal([]byte(result), &entryData)
@@ -238,26 +244,40 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	}
 	defer tx.Rollback()
 
-	// Upsert into tmdb_entities
+	// Check if the cache key exists and points to a different TMDB ID
+	var existingTmdbID int
+	var existingMediaType string
+	err = tx.QueryRow(`SELECT tmdb_id, media_type FROM tmdb_cache_keys WHERE cache_key = ?`, cacheKey).Scan(&existingTmdbID, &existingMediaType)
+	if err == nil && (existingTmdbID != entryData.ID || existingMediaType != entryData.MediaType) {
+		// Cache key exists but points to different TMDB ID - delete old mapping
+		_, err = tx.Exec(`DELETE FROM tmdb_cache_keys WHERE cache_key = ?`, cacheKey)
+		if err != nil {
+			return fmt.Errorf("failed to delete old cache key mapping: %w", err)
+		}
+	}
+
+	// Upsert into tmdb_entities with timestamp
 	_, err = tx.Exec(`
-		INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year, last_updated)
+		VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'))
 		ON CONFLICT(tmdb_id, media_type) DO UPDATE SET
 			title=excluded.title,
 			poster_path=excluded.poster_path,
-			year=excluded.year;
+			year=excluded.year,
+			last_updated=excluded.last_updated;
 	`, entryData.ID, entryData.MediaType, entryData.Title, entryData.PosterPath, entryData.ReleaseDate)
 	if err != nil {
 		return fmt.Errorf("failed to upsert into tmdb_entities: %w", err)
 	}
 
-	// Upsert into tmdb_cache_keys
+	// Upsert into tmdb_cache_keys with timestamp
 	_, err = tx.Exec(`
-		INSERT INTO tmdb_cache_keys (cache_key, tmdb_id, media_type)
-		VALUES (?, ?, ?)
+		INSERT INTO tmdb_cache_keys (cache_key, tmdb_id, media_type, last_accessed)
+		VALUES (?, ?, ?, strftime('%s', 'now'))
 		ON CONFLICT(cache_key) DO UPDATE SET
 			tmdb_id=excluded.tmdb_id,
-			media_type=excluded.media_type;
+			media_type=excluded.media_type,
+			last_accessed=excluded.last_accessed;
 	`, cacheKey, entryData.ID, entryData.MediaType)
 	if err != nil {
 		return fmt.Errorf("failed to upsert into tmdb_cache_keys: %w", err)

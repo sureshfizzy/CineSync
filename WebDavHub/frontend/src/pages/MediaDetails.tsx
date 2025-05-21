@@ -1,13 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Skeleton, IconButton, useTheme } from '@mui/material';
+import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MovieInfo from '../components/MovieInfo/index';
 import TVShowInfo from '../components/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 import CircularProgress from '@mui/material/CircularProgress';
-import MovieIcon from '@mui/icons-material/Movie';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function getPosterUrl(path: string | null, size = 'w500') {
@@ -26,6 +25,7 @@ export default function MediaDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const mediaType = location.state?.mediaType || 'movie';
   const tmdbId = location.state?.tmdbId;
   const currentPath = location.state?.currentPath || '';
@@ -94,15 +94,37 @@ export default function MediaDetails() {
           height: '100vh',
           zIndex: 0,
           pointerEvents: 'none',
+          overflow: 'hidden'
         }}>
-          <Box sx={{
-            width: '100%',
-            height: '100%',
-            backgroundImage: `linear-gradient(to bottom, ${theme.palette.mode === 'light' ? 'rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,1) 100%' : 'rgba(20,20,20,0.85) 0%, rgba(20,20,20,0.7) 60%, rgba(20,20,20,1) 100%'}), url(${getBackdropUrl(data.backdrop_path)})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: theme.palette.mode === 'light' ? 'blur(2px) brightness(1.05)' : 'blur(2px) brightness(0.7)',
-          }} />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ 
+              duration: isMobile ? 0.2 : 0.3,
+              ease: 'easeOut'
+            }}
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              willChange: 'opacity',
+              transform: 'translateZ(0)',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }}
+          >
+            <Box sx={{
+              width: '100%',
+              height: '100%',
+              backgroundImage: `linear-gradient(to bottom, ${theme.palette.mode === 'light' ? 'rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,1) 100%' : 'rgba(20,20,20,0.85) 0%, rgba(20,20,20,0.7) 60%, rgba(20,20,20,1) 100%'}), url(${getBackdropUrl(data.backdrop_path)})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: theme.palette.mode === 'light' ? 'blur(1px) brightness(1.05)' : 'blur(1px) brightness(0.7)',
+              transform: 'scale(1.02) translateZ(0)', // Add hardware acceleration
+              willChange: 'transform, opacity',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }} />
+          </motion.div>
         </Box>
       )}
       {/* Back button at very top left, always visible */}
@@ -110,8 +132,8 @@ export default function MediaDetails() {
         onClick={() => navigate(-1)}
         sx={{
           position: 'fixed',
-          top: 16,
-          left: 16,
+          top: { xs: 8, md: 16 },
+          left: { xs: 8, md: 16 },
           zIndex: 100,
           bgcolor: theme.palette.background.default,
           color: theme.palette.text.primary,
@@ -146,8 +168,15 @@ export default function MediaDetails() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.4 }}
-              style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}
+              transition={{ duration: isMobile ? 0.15 : 0.2 }}
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                minHeight: 300,
+                willChange: 'opacity',
+                transform: 'translateZ(0)'
+              }}
             >
               <CircularProgress size={44} thickness={4} color="primary" />
             </motion.div>
@@ -157,17 +186,32 @@ export default function MediaDetails() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.4 }}
+              transition={{ duration: isMobile ? 0.15 : 0.2 }}
+              style={{
+                willChange: 'opacity',
+                transform: 'translateZ(0)'
+              }}
             >
               <Box sx={{ p: 4 }}><Typography color="error">{error}</Typography></Box>
             </motion.div>
           ) : data ? (
             <motion.div
               key="media-details-content"
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: isMobile ? 10 : 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              transition={{ duration: 0.7, ease: 'easeOut' }}
+              exit={{ opacity: 0, y: isMobile ? 10 : 20 }}
+              transition={{ 
+                duration: isMobile ? 0.25 : 0.3,
+                ease: [0.4, 0, 0.2, 1],
+                opacity: { duration: isMobile ? 0.15 : 0.2 },
+                y: { duration: isMobile ? 0.25 : 0.3 }
+              }}
+              style={{ 
+                willChange: 'opacity, transform',
+                transform: 'translateZ(0)',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden'
+              }}
             >
               <Box sx={{ position: 'relative', zIndex: 1 }}>
                 {mediaType === 'tv' ? (

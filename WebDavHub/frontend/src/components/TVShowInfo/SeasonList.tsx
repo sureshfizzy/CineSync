@@ -32,13 +32,34 @@ const SeasonList: React.FC<SeasonListProps> = ({
                 return (
                   <motion.div
                     key={season.id}
-                    initial={{ opacity: 0, y: 30 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 30 }}
-                    transition={{ duration: 0.5, ease: 'easeOut', delay: idx * 0.08 }}
-                    style={{ width: '100%' }}
+                    exit={{ opacity: 0, y: 15 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1],
+                      delay: idx * 0.05,
+                      opacity: { duration: 0.2 },
+                      y: { duration: 0.3 }
+                    }}
+                    style={{ 
+                      width: '100%',
+                      willChange: 'opacity, transform'
+                    }}
                   >
-                    <Paper elevation={2} sx={{ p: 2, borderRadius: 2, cursor: folder ? 'pointer' : 'default', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 6, bgcolor: 'action.hover' } }}
+                    <Paper 
+                      elevation={2} 
+                      sx={{ 
+                        p: 2, 
+                        borderRadius: 2, 
+                        cursor: folder ? 'pointer' : 'default', 
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', 
+                        '&:hover': { 
+                          boxShadow: 6, 
+                          bgcolor: 'action.hover',
+                          transform: folder ? 'translateY(-2px)' : 'none'
+                        } 
+                      }}
                       onClick={() => {
                         if (folder) {
                           setSelectedSeason(season);

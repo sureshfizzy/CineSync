@@ -30,12 +30,39 @@ const EpisodeCard: React.FC<EpisodeCardProps> = ({
 }) => {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-      style={{ width: '100%' }}
+      transition={{ 
+        duration: 0.3,
+        ease: [0.4, 0, 0.2, 1],
+        opacity: { duration: 0.2 },
+        y: { duration: 0.3 }
+      }}
+      style={{ 
+        width: '100%',
+        willChange: 'opacity, transform'
+      }}
     >
-      <Paper elevation={2} sx={{ p: 0, borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: { xs: 'column', md: 'row' }, bgcolor: 'background.paper', boxShadow: theme => theme.palette.mode === 'light' ? '0 4px 24px rgba(0,0,0,0.10)' : 3, maxWidth: { xs: 340, md: 'none' }, mx: { xs: 'auto', md: 0 }, width: { xs: '100%', md: 'auto' } }}>
+      <Paper 
+        elevation={2} 
+        sx={{ 
+          p: 0, 
+          borderRadius: 3, 
+          overflow: 'hidden', 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' }, 
+          bgcolor: 'background.paper', 
+          boxShadow: theme => theme.palette.mode === 'light' ? '0 4px 24px rgba(0,0,0,0.10)' : 3, 
+          maxWidth: { xs: 340, md: 'none' }, 
+          mx: { xs: 'auto', md: 0 }, 
+          width: { xs: '100%', md: 'auto' },
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px rgba(0,0,0,0.15)' : 6
+          }
+        }}
+      >
         {ep.still_path && (
           <Box
             sx={{ width: { xs: '100%', md: 180 }, minWidth: { xs: '100%', md: 120 }, flexShrink: 0, bgcolor: 'grey.900', position: 'relative', display: 'flex', alignItems: 'stretch', aspectRatio: { xs: '16/9', md: 'auto' }, maxHeight: { xs: 140, md: 'none' }, overflow: 'hidden', borderTopLeftRadius: { xs: 12, md: 20 }, borderTopRightRadius: { xs: 12, md: 0 }, borderBottomLeftRadius: { xs: 0, md: 20 }, cursor: 'pointer' }}

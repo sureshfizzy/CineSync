@@ -1,7 +1,8 @@
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import MovieHeader from './MovieHeader';
 import CastList from './CastList';
 import MediaPathInfo from '../FileBrowser/MediaPathInfo';
@@ -10,6 +11,9 @@ import { MovieInfoProps } from './types';
 export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   useEffect(() => {
     async function fetchFile() {
       try {
@@ -35,36 +39,66 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   }, [folderName, currentPath]);
 
   return (
-    <Box sx={{ position: 'relative' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ 
+        duration: isMobile ? 0.2 : 0.3,
+        ease: 'easeOut'
+      }}
+      style={{ 
+        position: 'relative',
+        willChange: 'opacity',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden'
+      }}
+    >
       <IconButton
         onClick={() => navigate(-1)}
         sx={{
           position: 'absolute',
-          top: { xs: -24, md: 'calc(-47px)' },
-          left: { xs: -8, md: 'calc(-47px)' },
+          top: { xs: -20, md: 'calc(-47px)' },
+          left: { xs: -4, md: 'calc(-47px)' },
           zIndex: 10,
           bgcolor: 'background.paper',
           color: 'primary.main',
           boxShadow: 2,
           '&:hover': { bgcolor: 'primary.main', color: 'background.paper' },
           borderRadius: '50%',
-          width: 44,
-          height: 44,
+          width: { xs: 36, md: 44 },
+          height: { xs: 36, md: 44 },
         }}
-        size="large"
+        size={isMobile ? "medium" : "large"}
         aria-label="Back"
       >
-        <ArrowBackIosNewIcon fontSize="medium" />
+        <ArrowBackIosNewIcon fontSize={isMobile ? "small" : "medium"} />
       </IconButton>
       <Box sx={{ width: '100%' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ flex: 1 }}>
-            <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} />
+        <motion.div
+          initial={{ opacity: 0, y: isMobile ? 10 : 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: isMobile ? 0.25 : 0.3,
+            ease: [0.4, 0, 0.2, 1],
+            delay: 0.1
+          }}
+          style={{ 
+            willChange: 'opacity, transform',
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ flex: 1 }}>
+              <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} />
+            </Box>
           </Box>
-        </Box>
-        <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />
-        <CastList data={data} getPosterUrl={getPosterUrl} />
+          <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />
+          <CastList data={data} getPosterUrl={getPosterUrl} />
+        </motion.div>
       </Box>
-    </Box>
+    </motion.div>
   );
 } 
