@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query, sanitize_windows_filename
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 
@@ -723,7 +723,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
 
     # Helper function to format show name for the OS
     if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
-        show_name = original_show_name.replace(':', ' -')
+        show_name = sanitize_windows_filename(original_show_name)
     else:
         show_name = original_show_name
 

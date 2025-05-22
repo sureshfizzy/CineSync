@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query, sanitize_windows_filename
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
@@ -383,7 +383,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     # Helper function to format movie name for the OS
     def format_movie_name(name):
         if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
-            return name.replace(':', ' -')
+            return sanitize_windows_filename(name)
         return name
 
     # Handle direct ID searches first

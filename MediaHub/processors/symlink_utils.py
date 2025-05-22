@@ -503,7 +503,7 @@ def _check_all_symlinks(dest_dir):
 def normalize_path(path):
     """
     Normalizes a file path to ensure consistent formatting for comparison.
-    Only applies normalization specific to Windows (e.g., removing \\?\).
+    Only applies normalization specific to Windows
 
     Args:
         path (str): The file path to normalize.

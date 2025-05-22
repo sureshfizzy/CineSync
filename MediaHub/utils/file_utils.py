@@ -85,6 +85,7 @@ def extract_movie_name_and_year(filename):
         if match:
             name = match.group(1).replace('.', ' ').replace('-', ' ').strip()
             name = re.sub(r'[\[\]]', '', name).strip()
+            name = sanitize_windows_filename(name)
             year = match.group(2)
 
             if resolution and year == resolution.split('p')[0]:
@@ -262,6 +263,7 @@ def extract_title(filename):
     if match:
         title = match.group(1).replace('.', ' ').replace('-', ' ').strip()
         title = re.sub(r'\s*\d{2,4}p|\s*[Ss]\d{2}[Ee]\d{2}.*$', '', title).strip()
+        title = sanitize_windows_filename(title)
         return title
     else:
         return "", None
@@ -374,6 +376,7 @@ def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple
     final_title = re.sub(r'^[\W_]+|[\W_]+$', '', final_title)
     final_title = re.sub(r'\s+', ' ', final_title)
     final_title = final_title.strip()
+    final_title = sanitize_windows_filename(final_title)
 
     log_message(f"Cleaned movie title: '{final_title}'", "DEBUG", "stdout")
     return final_title, year
@@ -464,3 +467,34 @@ def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'k
 
     log_message(f"Cleaned show title: '{query}'", "DEBUG", "stdout")
     return query, None
+
+def sanitize_windows_filename(filename):
+    """
+    Sanitize a filename to be compatible with Windows filesystem.
+    Replaces or removes characters that are not allowed in Windows filenames.
+    """
+    # Windows filename restrictions: \ / : * ? " < > |
+    # Replace some characters with alternatives
+    replacements = {
+        ':': ' -',
+        '/': '-',
+        '\\': '-',
+        '*': 'x',
+        '?': '',
+        '"': "'",
+        '<': '(',
+        '>': ')',
+        '|': '-'
+    }
+
+    # Apply replacements
+    for char, replacement in replacements.items():
+        filename = filename.replace(char, replacement)
+
+    # Remove any remaining invalid characters
+    filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+
+    # Remove leading/trailing spaces and dots (Windows doesn't allow these)
+    filename = filename.strip(' .')
+
+    return filename
