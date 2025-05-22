@@ -69,6 +69,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         resolution = anime_result.get('resolution')
         is_anime_genre = anime_result.get('is_anime_genre')
         is_extra = anime_result.get('is_extra')
+        tmdb_id = anime_result.get('tmdb_id')
 
         episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
         if episode_match:

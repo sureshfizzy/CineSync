@@ -345,4 +345,5 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'media_info': media_info,
         'is_anime_genre': is_anime_genre,
         'is_extra': is_extra,
+        'tmdb_id': tmdb_id
     }
