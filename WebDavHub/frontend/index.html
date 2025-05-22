@@ -1,13 +1,92 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/src/assets/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CineSync</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #1a1a1a;
+      }
+      #root {
+        height: 100%;
+      }
+
+      .static-loader {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        width: 100vw;
+        position: fixed;
+        top: 0;
+        left: 0;
+        background-color: #1a1a1a;
+        z-index: 9999;
+      }
+      .static-loader img {
+        width: 120px;
+        height: auto;
+        margin-bottom: 20px;
+        animation: pulse 1.5s infinite ease-in-out;
+      }
+      .static-loader p {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 1.2em;
+        color: #cccccc;
+        letter-spacing: 1px;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        50% {
+          transform: scale(1.05);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="static-loader" class="static-loader">
+      <img src="/src/assets/logo.png" alt="Loading CineSync..." />
+      <p>Loading CineSync...</p>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+
+      const rootElement = document.getElementById('root');
+      const staticLoader = document.getElementById('static-loader');
+
+      const observer = new MutationObserver(function(mutationsList, observer) {
+
+        if (rootElement.childNodes.length > 0) {
+          if (staticLoader) {
+            staticLoader.style.opacity = '0';
+            staticLoader.style.transition = 'opacity 0.5s ease-out';
+            setTimeout(() => {
+              staticLoader.style.display = 'none';
+            }, 500);
+          }
+          observer.disconnect();
+        }
+      });
+
+      if (rootElement) {
+        observer.observe(rootElement, { childList: true });
+      }
+    </script>
   </body>
 </html> 

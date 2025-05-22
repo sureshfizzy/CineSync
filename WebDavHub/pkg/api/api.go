@@ -11,11 +11,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 var rootDir string
 var lastStats Stats
+var lastStatsUpdate time.Time
+var statsCacheDuration = 5 * time.Minute // Cache stats for 5 minutes
+var statsScanInProgress bool
+var statsScanProgress struct {
+	CurrentPath string
+	FilesScanned int
+	FoldersScanned int
+	TotalSize int64
+	LastUpdate time.Time
+}
 
 // SetRootDir sets the root directory for file operations and initializes the DB
 func SetRootDir(dir string) {
@@ -371,6 +382,40 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Return cached stats if they're still valid
+	if !lastStatsUpdate.IsZero() && time.Since(lastStatsUpdate) < statsCacheDuration {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(lastStats)
+		return
+	}
+
+	// If a scan is already in progress, return current progress
+	if statsScanInProgress {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"scanning": true,
+			"progress": statsScanProgress,
+		})
+		return
+	}
+
+	// Start new scan
+	statsScanInProgress = true
+	statsScanProgress = struct {
+		CurrentPath string
+		FilesScanned int
+		FoldersScanned int
+		TotalSize int64
+		LastUpdate time.Time
+	}{
+		LastUpdate: time.Now(),
+	}
+
+	// Use a buffered channel to limit concurrent operations
+	sem := make(chan struct{}, 10) // Limit to 10 concurrent operations
+	var wg sync.WaitGroup
+	var mu sync.Mutex // Mutex to protect shared variables
+
 	var totalFiles int
 	var totalFolders int
 	var totalSize int64
@@ -382,27 +427,54 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		logger.Warn("Failed to get disk stats: %v", err)
 	}
 
+	// Use a more efficient scanning method with concurrent processing
 	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			logger.Warn("Skipping path due to error: %s - %v", path, err)
 			return nil // Skip this file/dir but continue
 		}
+
+		// Update progress
+		statsScanProgress.CurrentPath = path
+		statsScanProgress.LastUpdate = time.Now()
+
 		if info.IsDir() {
-			totalFolders++
+			// For directories, process them concurrently
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sem <- struct{}{} // Acquire semaphore
+				defer func() { <-sem }() // Release semaphore
+
+				mu.Lock()
+				totalFolders++
+				statsScanProgress.FoldersScanned = totalFolders
+				mu.Unlock()
+			}()
 		} else {
+			// For files, process them in the current goroutine
+			mu.Lock()
 			totalFiles++
 			totalSize += info.Size()
+			statsScanProgress.FilesScanned = totalFiles
+			statsScanProgress.TotalSize = totalSize
 			if info.ModTime().After(lastSync) {
 				lastSync = info.ModTime()
 			}
+			mu.Unlock()
 		}
+
 		return nil
 	})
 
 	if err != nil {
+		statsScanInProgress = false
 		http.Error(w, "Failed to calculate stats", http.StatusInternalServerError)
 		return
 	}
+
+	// Wait for all concurrent operations to complete
+	wg.Wait()
 
 	ip := os.Getenv("CINESYNC_IP")
 	if ip == "" {
@@ -430,7 +502,9 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	if statsChanged(stats, lastStats) {
 		logger.Info("API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
 		lastStats = stats
+		lastStatsUpdate = time.Now()
 	}
+	statsScanInProgress = false
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }

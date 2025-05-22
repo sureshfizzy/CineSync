@@ -31,6 +31,14 @@ interface Stats {
   totalFolders: number;
   webdavStatus: string;
   storageUsed: string;
+  scanning?: boolean;
+  progress?: {
+    currentPath: string;
+    filesScanned: number;
+    foldersScanned: number;
+    totalSize: number;
+    lastUpdate: string;
+  };
 }
 
 const cardVariants = {
@@ -55,11 +63,20 @@ export default function Dashboard() {
     const fetchStats = async () => {
       try {
         const response = await axios.get('/api/stats');
-        setStats(response.data);
+        const data = response.data;
+
+        if (data.scanning) {
+          // If scanning is in progress, update stats with progress info
+          setStats(data);
+          // Continue polling until scan is complete
+          setTimeout(fetchStats, 1000);
+        } else {
+          setStats(data);
+          setLoading(false);
+        }
       } catch (err) {
         setError('Failed to fetch statistics');
         console.error('Error fetching stats:', err);
-      } finally {
         setLoading(false);
       }
     };
@@ -67,17 +84,35 @@ export default function Dashboard() {
     fetchStats();
   }, []);
 
-  if (loading) {
+  if (loading || (stats?.scanning)) {
     return (
       <Box
         sx={{
           display: 'flex',
+          flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: '60vh',
+          gap: 2
         }}
       >
-        <CircularProgress />
+        <CircularProgress size={40} />
+        <Typography variant="h6" color="text.secondary">
+          {stats?.scanning ? 'Scanning files...' : 'Loading dashboard data...'}
+        </Typography>
+        {stats?.scanning && stats.progress && (
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Files scanned: {stats.progress.filesScanned.toLocaleString()}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Folders scanned: {stats.progress.foldersScanned.toLocaleString()}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Current path: {stats.progress.currentPath}
+            </Typography>
+          </Box>
+        )}
       </Box>
     );
   }
