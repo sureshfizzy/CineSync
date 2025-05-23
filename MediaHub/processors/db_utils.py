@@ -11,6 +11,7 @@ from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
+import traceback
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
@@ -33,6 +34,9 @@ MAX_RETRIES = int(os.getenv('DB_MAX_RETRIES', 3))
 RETRY_DELAY = float(os.getenv('DB_RETRY_DELAY', 1.0))
 BATCH_SIZE = int(os.getenv('DB_BATCH_SIZE', 1000))
 MAX_WORKERS = int(os.getenv('DB_MAX_WORKERS', 4))
+
+# Add this near the top with other global variables
+_db_initialized = False
 
 class DatabaseError(Exception):
     pass
@@ -113,8 +117,11 @@ def retry_on_db_lock(func):
 @throttle
 @retry_on_db_lock
 def initialize_db():
-    global db_initialized
+    global _db_initialized
     """Initialize the SQLite database and create the necessary tables."""
+    if _db_initialized:
+        return
+
     if os.path.exists(LOCK_FILE):
         log_message("Database already initialized. Checking for updates.", level="INFO")
     else:
@@ -169,6 +176,8 @@ def initialize_db():
         # Create or update the lock file
         with open(LOCK_FILE, 'w') as lock_file:
             lock_file.write("Database initialized and up to date.")
+
+        _db_initialized = True
 
     except sqlite3.Error as e:
         log_message(f"Failed to initialize or update database: {e}", level="ERROR")
@@ -292,37 +301,76 @@ def display_missing_files(conn, destination_folder):
     destination_folder = os.path.normpath(destination_folder)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT file_path, destination_path FROM processed_files")
+        # Only select files that aren't marked as skipped (don't have a reason)
+        cursor.execute("""
+            SELECT file_path, destination_path, reason
+            FROM processed_files
+            WHERE reason IS NULL
+        """)
         missing_files = []
 
-        for source_path, dest_path in cursor.fetchall():
-            if not os.path.exists(dest_path):
-                # Check if the file has been renamed
-                dir_path = os.path.dirname(dest_path)
-                renamed = False
+        for source_path, dest_path, reason in cursor.fetchall():
+            if source_path is None:
+                log_message("Skipping entry with null source path", level="WARNING")
+                continue
 
-                if os.path.exists(dir_path):
-                    for filename in os.listdir(dir_path):
-                        potential_new_path = os.path.join(dir_path, filename)
+            if dest_path is None:
+                log_message(f"Entry missing destination path: {source_path}", level="WARNING")
+                continue
 
-                        # Only process if it's a different path than the original
-                        if potential_new_path != dest_path and os.path.islink(potential_new_path):
-                            try:
-                                # Check if the symlink points to the same source
-                                link_target = os.readlink(potential_new_path)
-                                if link_target == source_path:
-                                    # Found the renamed file
-                                    log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
-                                    update_renamed_file(dest_path, potential_new_path)
-                                    renamed = True
-                                    break
-                            except (OSError, IOError) as e:
-                                log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+            try:
+                source_path = os.path.normpath(source_path)
+                dest_path = os.path.normpath(dest_path)
+
+                if not os.path.exists(dest_path):
+                    # Get the original filename
+                    original_filename = os.path.basename(source_path)
+                    renamed = False
+
+                    # First check if the original source file still exists
+                    if not os.path.exists(source_path):
+                        log_message(f"Source file no longer exists: {source_path}", level="WARNING")
+                        continue
+
+                    # Recursively search the entire destination directory for the file
+                    for root, dirs, files in os.walk(destination_folder):
+                        for filename in files:
+                            potential_new_path = os.path.join(root, filename)
+
+                            # Skip if it's the same path we already checked
+                            if potential_new_path == dest_path:
                                 continue
 
-                if not renamed:
-                    missing_files.append((source_path, dest_path))
-                    log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+                            # Check if this is a symlink
+                            if os.path.islink(potential_new_path):
+                                try:
+                                    # Check if the symlink points to our source file
+                                    link_target = os.readlink(potential_new_path)
+                                    if os.path.normpath(link_target) == source_path:
+                                        # Found the moved/renamed file
+                                        log_message(f"Found file moved to: {potential_new_path}", level="INFO")
+                                        update_renamed_file(dest_path, potential_new_path)
+                                        renamed = True
+                                        break
+                                except (OSError, IOError) as e:
+                                    log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+                                    continue
+                            # If not a symlink, check if the filename matches our source
+                            elif filename == original_filename:
+                                log_message(f"Found matching file but not a symlink: {potential_new_path}", level="WARNING")
+
+                        if renamed:
+                            break
+
+                    if not renamed:
+                        missing_files.append((source_path, dest_path))
+                        log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+            except (OSError, IOError) as e:
+                log_message(f"Error accessing file or directory: {e}", level="WARNING")
+                continue
+            except Exception as e:
+                log_message(f"Unexpected error processing paths - Source: {source_path}, Dest: {dest_path} - Error: {str(e)}", level="ERROR")
+                continue
 
         total_duration = time.time() - start_time
         log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
@@ -331,6 +379,10 @@ def display_missing_files(conn, destination_folder):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in display_missing_files: {e}", level="ERROR")
         conn.rollback()
+        return []
+    except Exception as e:
+        log_message(f"Unexpected error in display_missing_files: {str(e)}", level="ERROR")
+        log_message(traceback.format_exc(), level="DEBUG")
         return []
 
 @throttle
@@ -737,5 +789,3 @@ def optimize_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error optimizing database: {e}", level="ERROR")
         return False
-
-initialize_db()

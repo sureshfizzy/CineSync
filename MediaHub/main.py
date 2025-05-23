@@ -8,6 +8,8 @@ import psutil
 import signal
 import socket
 import psutil
+import threading
+import traceback
 
 # Append the parent directory to the system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -55,25 +57,54 @@ def wait_for_mount():
 
         time.sleep(is_mount_check_interval())
 
-def initialize_db_with_mount_check():
-    """Initialize database after ensuring mount is available."""
-    global db_initialized
-
-    if not db_initialized:
-
+def check_mount_points():
+    """Check if all configured mount points are accessible."""
+    try:
         if is_rclone_mount_enabled():
-            wait_for_mount()
+            return check_rclone_mount()
+        return True
+    except Exception as e:
+        log_message(f"Error checking mount points: {e}", level="ERROR")
+        return False
 
+def initialize_db_with_mount_check():
+    """Initialize database with mount point verification."""
+    try:
+        # Only initialize if not already initialized
         initialize_db()
-        db_initialized = True
+
+        # Check if mount points are accessible
+        if is_rclone_mount_enabled() and not check_mount_points():
+            log_message("Mount points are not accessible. Please check your configuration.", level="ERROR")
+            return False
+        return True
+    except Exception as e:
+        log_message(f"Error during database initialization: {e}", level="ERROR")
+        return False
 
 def display_missing_files_with_mount_check(dest_dir):
     """Display missing files after ensuring mount is available."""
+    try:
+        if not dest_dir:
+            log_message("Destination directory not provided", level="ERROR")
+            return []
 
-    if is_rclone_mount_enabled():
-        wait_for_mount()
+        if is_rclone_mount_enabled():
+            try:
+                wait_for_mount()
+            except Exception as e:
+                log_message(f"Error waiting for mount: {str(e)}", level="ERROR")
+                return []
 
-    display_missing_files(dest_dir)
+        if not os.path.exists(dest_dir):
+            log_message(f"Destination directory does not exist: {dest_dir}", level="ERROR")
+            return []
+
+        return display_missing_files(dest_dir)
+    except Exception as e:
+        log_message(f"Error in display_missing_files_with_mount_check: {str(e)}", level="ERROR")
+        log_message(traceback.format_exc(), level="DEBUG")
+        return []
 
 def ensure_windows_temp_directory():
     """Create the C:\\temp directory if it does not exist on Windows."""
@@ -421,7 +452,9 @@ def main(dest_dir):
 
     if not os.path.exists(LOCK_FILE):
         # Wait for mount if needed and initialize database
-        initialize_db_with_mount_check()
+        if not initialize_db_with_mount_check():
+            log_message("Failed to initialize database. Exiting.", level="ERROR")
+            return
 
         if not args.disable_monitor:
             log_message("Starting background processes...", level="INFO")
@@ -433,11 +466,34 @@ def main(dest_dir):
 
             # Function to run the missing files check and call the callback when done
             def display_missing_files_with_callback(dest_dir, callback):
-                display_missing_files_with_mount_check(dest_dir)
-                callback()
+                try:
+                    if not dest_dir or not os.path.exists(dest_dir):
+                        log_message(f"Invalid or non-existent destination directory: {dest_dir}", level="ERROR")
+                        return
+                    missing_files_list = display_missing_files_with_mount_check(dest_dir)
+
+                    if missing_files_list:
+                        log_message(f"Found {len(missing_files_list)} missing files. Attempting to recreate symlinks.", level="INFO")
+                        # Get source directories for create_symlinks
+                        src_dirs, _ = get_directories()
+                        if not src_dirs:
+                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
+                            return
+
+                        for source_file_path, expected_dest_path in missing_files_list:
+                            log_message(f"Attempting to recreate symlink for missing file: {source_file_path}", level="INFO")
+                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, single_path=source_file_path, force=True, mode='create', auto_select=True
+                            )
+                    else:
+                        log_message("No missing files found.", level="INFO")
+
+                    callback()
+                except Exception as e:
+                    log_message(f"Error in display_missing_files_with_callback: {str(e)}", level="ERROR")
+                    log_message(traceback.format_exc(), level="DEBUG")
 
             # Run missing files check in a separate thread
-            missing_files_thread = threading.Thread(target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
+            missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
             missing_files_thread.daemon = False
             missing_files_thread.start()
 
