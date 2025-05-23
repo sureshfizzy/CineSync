@@ -30,17 +30,19 @@ def refresh_tmdb_files():
                             show_root = os.sep.join(parts[:i])
                             break
                     tmdb_file_path = os.path.join(show_root, ".tmdb")
+                    media_type = "tv"
                 else:
                     tmdb_file_path = os.path.join(os.path.dirname(file_path), ".tmdb")
+                    media_type = "movie"
                 if not os.path.exists(tmdb_file_path):
                     try:
                         with open(tmdb_file_path, "w") as tmdb_file:
-                            tmdb_file.write(str(tmdb_id))
+                            tmdb_file.write(f"{tmdb_id}:{media_type}")
                         if platform.system() == "Windows":
                             FILE_ATTRIBUTE_HIDDEN = 0x02
                             ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_HIDDEN)
                         count += 1
-                        log_message(f"Created .tmdb file for {file_path}", level="INFO")
+                        log_message(f"Created .tmdb file for {file_path} with ID {tmdb_id} and type {media_type}", level="INFO")
                     except Exception as e:
                         log_message(f"Error creating .tmdb file for {file_path}: {e}", level="WARNING")
     conn.close()
