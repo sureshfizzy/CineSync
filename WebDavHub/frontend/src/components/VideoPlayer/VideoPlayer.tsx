@@ -1,5 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Box, Typography, IconButton, Slider, Fade } from '@mui/material';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Slider,
+  Fade,
+  CircularProgress,
+  useTheme,
+  alpha,
+} from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
@@ -14,11 +23,13 @@ interface VideoPlayerProps {
   mimeType?: string;
   title?: string;
   onClose?: () => void;
+  isInDialog?: boolean;
 }
 
 const CONTROLS_HIDE_MS = 2500;
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDialog = false }) => {
+  const theme = useTheme();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -30,6 +41,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [buffered, setBuffered] = useState<TimeRanges | null>(null);
+  const [brightness] = useState(1);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
   const { authEnabled } = useAuth();
@@ -37,24 +50,67 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
   // Utility: detect mobile
   const isMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
+  // Auto-enter landscape mode on mobile when video starts playing
+  useEffect(() => {
+    if (isMobile && isPlaying) {
+      lockLandscape();
+    }
+  }, [isMobile, isPlaying]);
+
+  // Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      if (isMobile) {
+        if (document.fullscreenElement) {
+          lockLandscape();
+        } else {
+          unlockOrientation();
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [isMobile]);
+
   // Utility: lock orientation
   const lockLandscape = async () => {
-    if (isMobile && screen.orientation && screen.orientation.lock) {
+    if (isMobile && screen.orientation && (screen.orientation as any).lock) {
       try {
-        await screen.orientation.lock('landscape');
-      } catch (e) { /* ignore */ }
-    }
-  };
-  const unlockOrientation = async () => {
-    if (isMobile && screen.orientation && screen.orientation.unlock) {
-      try {
-        await screen.orientation.unlock();
-      } catch (e) { /* ignore */ }
+        await (screen.orientation as any).lock('landscape');
+      } catch (e) {
+        console.warn('Failed to lock orientation:', e);
+      }
     }
   };
 
-  // Track if we've already locked on initial play
-  const lockedOnPlayRef = useRef(false);
+  const unlockOrientation = async () => {
+    if (isMobile && screen.orientation && (screen.orientation as any).unlock) {
+      try {
+        await (screen.orientation as any).unlock();
+      } catch (e) {
+        console.warn('Failed to unlock orientation:', e);
+      }
+    }
+  };
+
+  // Track buffering
+  useEffect(() => {
+    const handleProgress = () => {
+      if (videoRef.current) {
+        setBuffered(videoRef.current.buffered);
+      }
+    };
+
+    const video = videoRef.current;
+    if (video) {
+      video.addEventListener('progress', handleProgress);
+      return () => video.removeEventListener('progress', handleProgress);
+    }
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -71,23 +127,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
       setVideoUrl(url);
     }
   }, [url, authEnabled]);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-      if (isMobile) {
-        if (document.fullscreenElement) {
-          lockLandscape();
-        } else {
-          unlockOrientation();
-        }
-      }
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
 
   // Auto-hide controls
   const showAndAutoHideControls = () => {
@@ -106,7 +145,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
     if (isPlaying) {
       videoRef.current.pause();
     } else {
-      videoRef.current.play().catch(err => setError('Failed to play video.'));
+      if (isMobile) {
+        lockLandscape();
+      }
+      videoRef.current.play().catch(err => {
+        console.error("Play error:", err);
+        setError('Failed to play video. Check console for details.');
+      });
     }
   };
 
@@ -157,9 +202,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
   };
   const onPlay = () => {
     setIsPlaying(true);
-    if (isMobile && !lockedOnPlayRef.current) {
+    if (isMobile) {
       lockLandscape();
-      lockedOnPlayRef.current = true;
     }
   };
   const onPause = () => setIsPlaying(false);
@@ -172,7 +216,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
     showAndAutoHideControls();
   };
   const handleMouseLeave = () => {
-    if (isPlaying) setShowControls(false);
+    if (isPlaying && !isMobile) setShowControls(false); // Don't hide on mobile leave, rely on tap/timeout
+  };
+
+  const getBufferedEnd = () => {
+    if (!buffered || !buffered.length) return 0;
+    const currentBufferIndex = findCurrentBufferIndex();
+    if (currentBufferIndex === -1) return 0;
+    return (buffered.end(currentBufferIndex) / duration) * 100;
+  };
+
+  const findCurrentBufferIndex = () => {
+    if (!buffered || !buffered.length) return -1;
+    for (let i = 0; i < buffered.length; i++) {
+      if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+        return i;
+      }
+    }
+    return -1;
   };
 
   return (
@@ -185,58 +246,144 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
         bgcolor: 'black',
         overflow: 'hidden',
         userSelect: 'none',
-      }}
-      onMouseMove={handleMouseMove}
-      onClick={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* Header Bar (always visible) */}
-      <Box sx={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        px: 3,
-        py: 1.5,
-        zIndex: 30,
-        color: 'white',
-        fontWeight: 600,
-        fontSize: { xs: '1.1rem', md: '1.3rem' },
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.95) 90%, rgba(0,0,0,0.0) 100%)',
-        boxShadow: '0 2px 12px 0 rgba(0,0,0,0.4)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        pointerEvents: 'auto',
-      }}>
-        {onClose && (
-          <IconButton onClick={onClose} sx={{ color: 'white', ml: 2, '&:hover': { color: 'error.main', background: 'rgba(255,255,255,0.08)' } }}>
-            <CloseIcon fontSize="large" />
-          </IconButton>
-        )}
-      </Box>
-      {/* Video */}
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        style={{
+        justifyContent: 'center',
+      }}
+      onMouseMove={!isMobile ? handleMouseMove : undefined}
+      onMouseLeave={!isMobile ? handleMouseLeave : undefined}
+      onClick={isMobile ? () => setShowControls(prev => !prev) : undefined}
+    >
+      {/* Video Container for zoom/pan */}
+      <Box
+        sx={{
           width: '100%',
           height: '100%',
-          objectFit: 'contain',
-          background: 'black',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
         }}
-        onLoadedMetadata={onLoadedMetadata}
-        onTimeUpdate={onTimeUpdate}
-        onPlay={onPlay}
-        onPause={onPause}
-        onWaiting={onWaiting}
-        onCanPlay={onCanPlay}
-        onError={onError}
-        onClick={handlePlayPause}
-        tabIndex={-1}
-        autoPlay
-      />
-      {/* Controls Overlay */}
+      >
+        <Box
+          sx={{
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              background: 'black',
+              filter: `brightness(${brightness})`,
+            }}
+            onLoadedMetadata={onLoadedMetadata}
+            onTimeUpdate={onTimeUpdate}
+            onPlay={onPlay}
+            onPause={onPause}
+            onWaiting={onWaiting}
+            onCanPlay={onCanPlay}
+            onError={onError}
+            playsInline
+            tabIndex={-1}
+            autoPlay
+          />
+        </Box>
+      </Box>
+
+      {/* Title Bar - Only show if not in dialog or on mobile */}
+      {(!isInDialog || isMobile) && (
+        <Fade in={showControls || isLoading || !!error} timeout={200}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 30,
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)',
+              padding: { xs: 1.5, sm: 2 },
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              pt: isInDialog ? (isMobile ? 7 : 0) : 0, // Add extra padding at top when in dialog on mobile
+            }}
+          >
+            <Typography
+              variant="h6"
+              sx={{
+                color: 'white',
+                fontSize: { xs: 16, sm: 20 },
+                fontWeight: 500,
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                maxWidth: isMobile ? 'calc(100% - 48px)' : '80%',
+              }}
+            >
+              {title || 'Video Player'}
+            </Typography>
+            {onClose && (
+              <IconButton
+                onClick={onClose}
+                size={isMobile ? 'small' : 'medium'}
+                sx={{
+                  color: 'white',
+                  '&:hover': {
+                    background: alpha(theme.palette.primary.main, 0.08),
+                  },
+                }}
+              >
+                <CloseIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+              </IconButton>
+            )}
+          </Box>
+        </Fade>
+      )}
+
+      {/* Loading Spinner */}
+      <Fade in={isLoading && !error}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 25,
+          }}
+        >
+          <CircularProgress size={60} thickness={4} sx={{ color: theme.palette.primary.main }} />
+        </Box>
+      </Fade>
+
+      {/* Error Display */}
+      {error && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 30,
+            maxWidth: '80%',
+            background: alpha(theme.palette.error.dark, 0.9),
+            padding: 3,
+            borderRadius: 2,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="h6" color="error.contrastText">
+            {error}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Controls Overlay (Bottom controls) */}
       <Fade in={showControls || isLoading || !!error} timeout={200}>
         <Box
           sx={{
@@ -245,103 +392,147 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, mimeType, title, onClose
             right: 0,
             bottom: 0,
             zIndex: 20,
-            px: { xs: 1, md: 3 },
-            pb: { xs: 1, md: 2 },
-            pt: 2,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.85) 80%, rgba(0,0,0,0.0) 100%)',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 60%, transparent 100%)',
+            paddingX: { xs: 2, sm: 3 },
+            paddingTop: 4,
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 16px) + 16px)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 1,
-            alignItems: 'stretch',
+            gap: 1.5,
           }}
         >
-          {/* Seek Bar */}
-          <Slider
-            value={currentTime}
-            min={0}
-            max={duration}
-            step={0.1}
-            onChange={handleSeek}
-            sx={{
-              color: 'primary.main',
-              height: 6,
-              '& .MuiSlider-thumb': {
-                width: 22,
-                height: 22,
-                background: 'white',
-                border: '2px solid #2196f3',
-                boxShadow: '0 2px 8px 0 rgba(33,150,243,0.25)',
-                transition: '0.2s all',
-                '&:hover, &.Mui-focusVisible': {
-                  boxShadow: '0px 0px 0px 12px rgba(33, 150, 243, 0.16)',
-                },
-                '&.Mui-active': {
-                  width: 28,
-                  height: 28,
-                },
-              },
-              '& .MuiSlider-rail': {
-                opacity: 0.28,
-              },
-            }}
-          />
-          {/* Controls Row */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%' }}>
-            {/* Play/Pause */}
-            <IconButton onClick={handlePlayPause} sx={{ color: 'white', fontSize: 40, mx: 1, '&:hover': { color: 'primary.main', background: 'rgba(33,150,243,0.08)' } }}>
-              {isPlaying ? <PauseIcon fontSize="inherit" /> : <PlayArrowIcon fontSize="inherit" />}
-            </IconButton>
-            {/* Mute/Volume */}
-            <IconButton onClick={handleMute} sx={{ color: 'white', fontSize: 32, mx: 1, '&:hover': { color: 'primary.main', background: 'rgba(33,150,243,0.08)' } }}>
-              {isMuted || volume === 0 ? <VolumeOffIcon fontSize="inherit" /> : <VolumeUpIcon fontSize="inherit" />}
-            </IconButton>
-            <Slider
-              value={isMuted ? 0 : volume}
-              min={0}
-              max={1}
-              step={0.01}
-              onChange={handleVolumeChange}
-              sx={{ width: 100, color: 'white', mx: 1 }}
+          {/* Progress and Buffer Bar */}
+          <Box sx={{ position: 'relative', width: '100%', height: 4, mb: 1 }}>
+            {/* Buffer Progress */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: '100%',
+                width: `${getBufferedEnd()}%`,
+                bgcolor: alpha(theme.palette.primary.main, 0.3),
+                borderRadius: 1,
+              }}
             />
-            {/* Time */}
-            <Typography variant="body2" sx={{ color: 'white', minWidth: 90, textAlign: 'center', fontVariantNumeric: 'tabular-nums', fontWeight: 500, fontSize: 18 }}>
+            {/* Seek Bar */}
+            <Slider
+              value={currentTime}
+              min={0}
+              max={duration}
+              step={0.1}
+              onChange={handleSeek}
+              sx={{
+                position: 'absolute',
+                top: -3,
+                padding: '13px 0',
+                color: theme.palette.primary.main,
+                '& .MuiSlider-thumb': {
+                  width: 16,
+                  height: 16,
+                  transition: '0.2s all',
+                  '&:hover, &.Mui-focusVisible': {
+                    boxShadow: `0px 0px 0px 8px ${alpha(theme.palette.primary.main, 0.16)}`,
+                  },
+                  '&.Mui-active': {
+                    width: 20,
+                    height: 20,
+                  },
+                },
+                '& .MuiSlider-rail': {
+                  opacity: 0.28,
+                },
+              }}
+            />
+          </Box>
+
+          {/* Controls Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+            {/* Play/Pause */}
+            <IconButton
+              onClick={handlePlayPause}
+              sx={{
+                color: 'white',
+                '&:hover': {
+                  background: alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              {isPlaying ? (
+                <PauseIcon sx={{ fontSize: { xs: 32, sm: 40 } }} />
+              ) : (
+                <PlayArrowIcon sx={{ fontSize: { xs: 32, sm: 40 } }} />
+              )}
+            </IconButton>
+
+            {/* Volume Control */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: { xs: 120, sm: 150 } }}>
+              <IconButton
+                onClick={handleMute}
+                sx={{
+                  color: 'white',
+                  '&:hover': {
+                    background: alpha(theme.palette.primary.main, 0.08),
+                  },
+                }}
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeOffIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+                ) : (
+                  <VolumeUpIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+                )}
+              </IconButton>
+              <Slider
+                value={isMuted ? 0 : volume}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={handleVolumeChange}
+                sx={{
+                  color: 'white',
+                  '& .MuiSlider-thumb': {
+                    width: 14,
+                    height: 14,
+                  },
+                }}
+              />
+            </Box>
+
+            {/* Time Display */}
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'white',
+                minWidth: 90,
+                textAlign: 'center',
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: { xs: 14, sm: 16 },
+              }}
+            >
               {formatTime(currentTime)} / {formatTime(duration)}
             </Typography>
+
             <Box sx={{ flex: 1 }} />
+
             {/* Fullscreen */}
-            <IconButton onClick={handleFullscreen} sx={{ color: 'white', fontSize: 32, mx: 1, '&:hover': { color: 'primary.main', background: 'rgba(33,150,243,0.08)' } }}>
-              {isFullscreen ? <FullscreenExitIcon fontSize="inherit" /> : <FullscreenIcon fontSize="inherit" />}
+            <IconButton
+              onClick={handleFullscreen}
+              sx={{
+                color: 'white',
+                '&:hover': {
+                  background: alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              {isFullscreen ? (
+                <FullscreenExitIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+              ) : (
+                <FullscreenIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+              )}
             </IconButton>
           </Box>
         </Box>
       </Fade>
-      {/* Loading/Error Overlay */}
-      {(isLoading || error) && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            bgcolor: 'rgba(0,0,0,0.35)',
-            zIndex: 30,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          {isLoading && (
-            <Box sx={{ color: 'white', fontSize: 24 }}>Loading...</Box>
-          )}
-          {error && (
-            <Typography variant="h6" color="error" sx={{ textAlign: 'center', bgcolor: 'rgba(0,0,0,0.7)', p: 2, borderRadius: 2 }}>
-              {error}
-            </Typography>
-          )}
-        </Box>
-      )}
     </Box>
   );
 };
