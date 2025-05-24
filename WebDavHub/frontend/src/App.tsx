@@ -7,11 +7,12 @@ import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
 import Dashboard from './components/Dashboard/Dashboard';
 import FileBrowser from './components/FileBrowser/FileBrowser';
-import { CircularProgress, Box, Typography, Button } from '@mui/material';
+import { CircularProgress, Box, Typography, Button, GlobalStyles } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { getTheme } from './theme';
 import MediaDetails from './pages/MediaDetails';
+import { TmdbProvider } from './contexts/TmdbContext';
 
 // Loading component
 function LoadingScreen() {
@@ -320,10 +321,16 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <GlobalStyles styles={{
+        html: { height: '100%', backgroundColor: theme.palette.background.default },
+        body: { minHeight: '100vh', height: '100%', backgroundColor: theme.palette.background.default }
+      }} />
       <AuthProvider>
-        <Router>
-          <AppContent toggleTheme={toggleTheme} mode={mode} />
-        </Router>
+        <TmdbProvider>
+          <Router>
+            <AppContent toggleTheme={toggleTheme} mode={mode} />
+          </Router>
+        </TmdbProvider>
       </AuthProvider>
     </ThemeProvider>
   );

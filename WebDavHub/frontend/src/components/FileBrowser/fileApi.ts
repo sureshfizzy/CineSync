@@ -1,15 +1,44 @@
 import axios from 'axios';
 import { FileItem } from './types';
 
-export async function fetchFiles(path: string, withHeaders?: boolean): Promise<any> {
-  const response = await axios.get(`/api/files${path}`);
-  if (withHeaders) {
-    const hasAllowed = response.headers['x-has-allowed-extensions'] === 'true';
-    const tmdbId = response.headers['x-tmdb-id'] || null;
-    return { data: response.data, hasAllowed, tmdbId };
-  }
-  return response.data;
+interface FileResponse {
+  data: FileItem[];
+  tmdbId?: string;
+  mediaType?: 'movie' | 'tv';
+  hasAllowed: boolean;
+  hasSeasonFolders: boolean;
 }
+
+export const fetchFiles = async (path: string, checkTmdb: boolean = false): Promise<FileResponse> => {
+  const headers: Record<string, string> = {};
+  if (checkTmdb) {
+    headers['X-Check-Tmdb'] = 'true';
+  }
+
+  const response = await axios.get<FileItem[]>('/api/files' + path, { headers });
+
+  return {
+    data: response.data,
+    tmdbId: response.headers['x-tmdb-id'],
+    mediaType: response.headers['x-media-type'] as 'movie' | 'tv',
+    hasAllowed: response.headers['x-has-allowed-extensions'] === 'true',
+    hasSeasonFolders: response.headers['x-has-season-folders'] === 'true'
+  };
+};
+
+export const fetchTmdbInfo = async (path: string) => {
+  try {
+    const response = await axios.get(`/api/files${path}/.tmdb`, {
+      headers: {
+        'X-Raw-Response': 'true'
+      }
+    });
+  return response.data;
+  } catch (error) {
+    console.error('Error fetching .tmdb file:', error);
+    return null;
+}
+};
 
 export async function downloadFile(path: string, fileName: string): Promise<void> {
   const response = await axios.get(`/api/files${path}`, { responseType: 'blob' });
@@ -49,7 +78,6 @@ export async function deleteFileDetail(path: string) {
 }
 
 export async function getFileDetail(path: string) {
-  console.log('[getFileDetail] Requesting file details for:', path);
   const response = await axios.get(`/api/file-details?path=${encodeURIComponent(path)}`);
   return response.data;
 } 

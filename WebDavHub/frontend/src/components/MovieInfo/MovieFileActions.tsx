@@ -31,7 +31,6 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({ data, folderName, c
     globalRequestCache.add(requestKey);
     async function fetchFile() {
       try {
-        console.log('[MovieFileActions] fetchFile for', folderName, currentPath);
         const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
         const folderPath = `${normalizedPath}/${folderName}`;
         const token = localStorage.getItem('cineSyncJWT');
@@ -44,7 +43,6 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({ data, folderName, c
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {
-          console.log('[MovieFileActions] setFileInfo for', mediaFile.name, folderPath);
           setFileInfo({ ...mediaFile, type: 'file' });
         }
       } catch (e) {

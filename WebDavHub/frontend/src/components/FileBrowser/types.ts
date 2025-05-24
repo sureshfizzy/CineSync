@@ -12,6 +12,7 @@ export interface FileItem {
   hasSeasonFolders?: boolean;
   isSeasonFolder?: boolean;
   tmdbId?: string;
+  mediaType?: 'movie' | 'tv';
 }
 
 export interface MobileListItemProps {

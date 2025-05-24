@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"cinesync/pkg/db"
 )
 
 var tmdbRateLimit = 40
@@ -148,7 +149,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-TMDB-Details-Cache", "HIT")
 			// Also upsert to persistent DB cache for HITs
-			UpsertTmdbCache(cacheKey, string(data))
+			db.UpsertTmdbCache(cacheKey, string(data))
 			w.Write(data)
 			return
 		}
@@ -262,7 +263,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 			}
 			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
 				int(idVal), title, posterPath, releaseDate, mediaType)
-			UpsertTmdbCache(cacheKey, resultJson)
+			db.UpsertTmdbCache(cacheKey, resultJson)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-TMDB-Details-Cache", "MISS")

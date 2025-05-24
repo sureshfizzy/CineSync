@@ -15,6 +15,7 @@ import (
 
 	"cinesync/pkg/api"
 	"cinesync/pkg/auth"
+	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/server"
@@ -177,10 +178,10 @@ func main() {
 	go func() {
 		<-shutdown
 		logger.Info("Shutting down: checkpointing SQLite WAL and optimizing DB...")
-		if api.DB() != nil {
-			api.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
-			api.DB().Exec("PRAGMA optimize;")
-			api.DB().Exec("VACUUM;")
+		if db.DB() != nil {
+			db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+			db.DB().Exec("PRAGMA optimize;")
+			db.DB().Exec("VACUUM;")
 		}
 		os.Exit(0)
 	}()

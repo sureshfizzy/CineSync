@@ -102,7 +102,6 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       const res = await axios.get('/api/tmdb/search', { params });
       const results = res.data.results || [];
       if (results.length === 0) {
-        console.log(`[TMDB] No results for query: ${query}`);
         return null;
       }
 
@@ -115,8 +114,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
         release_date: best.release_date || best.first_air_date,
         media_type: best.media_type,
       };
-      console.log(`[TMDB] Found match for '${query}':`, best);
-      // 3. Store in backend cache
+
       try {
         await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
       } catch (cacheErr) {

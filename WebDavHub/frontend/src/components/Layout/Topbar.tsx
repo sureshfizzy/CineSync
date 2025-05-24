@@ -29,7 +29,17 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   };
 
   return (
-    <AppBar position="static" elevation={0} sx={{ bgcolor: 'background.paper', color: 'text.primary', borderBottom: '1px solid', borderColor: 'divider', zIndex: 1201 }}>
+    <AppBar
+      position="sticky"
+      elevation={0}
+      sx={{
+        bgcolor: 'background.paper',
+        color: 'text.primary',
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        zIndex: theme.zIndex.drawer + 1
+      }}
+    >
       <Toolbar sx={{ minHeight: 64, px: { xs: 2, sm: 3 }, display: 'flex', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {onMenuClick && (

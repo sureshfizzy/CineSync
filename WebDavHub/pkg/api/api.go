@@ -2,14 +2,17 @@ package api
 
 import (
 	"cinesync/pkg/logger"
+	"cinesync/pkg/db"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,10 +34,10 @@ var statsScanProgress struct {
 // SetRootDir sets the root directory for file operations and initializes the DB
 func SetRootDir(dir string) {
 	rootDir = dir
-	if err := InitDB(rootDir); err != nil {
+	if err := db.InitDB(rootDir); err != nil {
 		logger.Warn("Failed to initialize SQLite DB: %v", err)
 	}
-	if err := InitTmdbCacheTable(); err != nil {
+	if err := db.InitTmdbCacheTable(); err != nil {
 		logger.Warn("Failed to initialize TMDB cache table: %v", err)
 	}
 }
@@ -49,6 +52,7 @@ type FileInfo struct {
 	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
 	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
 	TmdbId   string `json:"tmdbId,omitempty"`
+	MediaType string `json:"mediaType,omitempty"`
 }
 
 type Stats struct {
@@ -170,10 +174,18 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	// Build a filtered list of entries that excludes .tmdb
 	effectiveEntries := make([]os.DirEntry, 0, len(entries))
 	var tmdbID string
+	var mediaType string
 	// Only set tmdbID if .tmdb exists directly in this directory
 	tmdbPath := filepath.Join(dir, ".tmdb")
 	if data, err := os.ReadFile(tmdbPath); err == nil {
-		tmdbID = strings.TrimSpace(string(data))
+		content := strings.TrimSpace(string(data))
+		parts := strings.Split(content, ":")
+		if len(parts) >= 2 {
+			tmdbID = parts[0]
+			mediaType = parts[1]
+		} else {
+			tmdbID = content
+		}
 	}
 	for _, entry := range entries {
 		if entry.Name() == ".tmdb" {
@@ -200,37 +212,11 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	hasAllowed := false
-	// --- TV Show Root Detection ---
-	isTvShowRoot := false
-	if len(effectiveEntries) > 0 {
-		seasonCount := 0
-		fileCountInDir := 0
+	// Check for allowed extensions in this directory only
+	if len(allowedExts) > 0 {
 		for _, entry := range effectiveEntries {
-			if entry.IsDir() && isSeasonFolder(entry.Name()) {
-				seasonCount++
-			} else if !entry.IsDir() {
-				fileCountInDir++
-			}
-		}
-		if seasonCount > 0 && seasonCount == len(effectiveEntries)-fileCountInDir && fileCountInDir == 0 {
-			isTvShowRoot = true
-		}
-	}
-	if isTvShowRoot && len(allowedExts) > 0 {
-		// For TV show root, check all season subfolders for allowed files
-		for _, entry := range effectiveEntries {
-			if entry.IsDir() && isSeasonFolder(entry.Name()) {
-				seasonDir := filepath.Join(dir, entry.Name())
-				subEntries, err := os.ReadDir(seasonDir)
-				if err != nil {
-					continue
-				}
-				for _, subEntry := range subEntries {
-					if subEntry.Name() == ".tmdb" {
-						continue
-					}
-					if !subEntry.IsDir() {
-						ext := strings.ToLower(filepath.Ext(subEntry.Name()))
+			if !entry.IsDir() {
+				ext := strings.ToLower(filepath.Ext(entry.Name()))
 						for _, allowed := range allowedExts {
 							if ext == allowed {
 								hasAllowed = true
@@ -242,33 +228,40 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				}
-				if hasAllowed {
-					break
-				}
-			}
-		}
-	} else if len(allowedExts) > 0 {
-		// Normal folder: check for allowed files in this directory only
-		for _, entry := range effectiveEntries {
-			if !entry.IsDir() {
-				ext := strings.ToLower(filepath.Ext(entry.Name()))
-				for _, allowed := range allowedExts {
-					if ext == allowed {
-						hasAllowed = true
-						break
-					}
-				}
-				if hasAllowed {
-					break
-				}
-			}
-		}
 	}
+
 	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
-	// Only set tmdbID if .tmdb exists directly in this directory and not at root
+	// Set TMDB headers if we have the information
 	if tmdbID != "" && path != "/" {
 		w.Header().Set("X-TMDB-ID", tmdbID)
+		if mediaType != "" {
+			w.Header().Set("X-Media-Type", mediaType)
+		} else {
+			logger.Info("MediaType not in .tmdb for %s, will be determined by content or subdirectories.", dir)
+		}
 	}
+
+	// --- TV Show Root Detection ---
+	if len(effectiveEntries) > 0 {
+		seasonCount := 0
+		fileCountInDir := 0
+		for _, entry := range effectiveEntries {
+			if entry.IsDir() && isSeasonFolder(entry.Name()) {
+				seasonCount++
+			} else if !entry.IsDir() {
+				fileCountInDir++
+			}
+		}
+		if seasonCount > 0 && seasonCount == len(effectiveEntries)-fileCountInDir && fileCountInDir == 0 {
+			w.Header().Set("X-Has-Season-Folders", "true")
+			if mediaType == "" { // Only set if not already determined from .tmdb
+				w.Header().Set("X-Media-Type", "tv")
+				mediaType = "tv" // Update local mediaType as well
+				logger.Info("Directory %s identified as TV Show root by content, X-Media-Type set to tv", dir)
+			}
+		}
+	}
+
 	for _, entry := range effectiveEntries {
 		info, err := entry.Info()
 		if err != nil {
@@ -291,36 +284,138 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				seasonFolderCount++
 			}
 
+			// --- Subdirectory TMDB/Media Type Logic ---
 			subDirPath := filepath.Join(dir, entry.Name())
-			subEntries, err := os.ReadDir(subDirPath)
-			if err == nil && len(subEntries) > 0 {
-				// Filter out .tmdb from subEntries
-				effectiveSubEntries := make([]os.DirEntry, 0, len(subEntries))
-				for _, subEntry := range subEntries {
-					if subEntry.Name() == ".tmdb" {
-						continue
+			subDirTmdbID := ""
+			subDirMediaType := ""
+
+			// 1. Check .tmdb file in subdirectory first
+			subTmdbPath := filepath.Join(subDirPath, ".tmdb")
+			if data, err := os.ReadFile(subTmdbPath); err == nil {
+				content := strings.TrimSpace(string(data))
+				parts := strings.Split(content, ":")
+				if len(parts) >= 2 {
+					subDirTmdbID = parts[0]
+					subDirMediaType = parts[1]
+					fileInfo.TmdbId = subDirTmdbID
+					fileInfo.MediaType = subDirMediaType
+					if subDirMediaType == "tv" {
+						fileInfo.HasSeasonFolders = true
 					}
-					effectiveSubEntries = append(effectiveSubEntries, subEntry)
-				}
-				seasonCount := 0
-				fileCountInSub := 0
-				for _, subEntry := range effectiveSubEntries {
-					if subEntry.IsDir() && isSeasonFolder(subEntry.Name()) {
-						seasonCount++
-					} else if !subEntry.IsDir() {
-						fileCountInSub++
-					}
-				}
-				if seasonCount > 0 && seasonCount == len(effectiveSubEntries)-fileCountInSub && fileCountInSub == 0 {
-					fileInfo.HasSeasonFolders = true
-					logger.Info("[API] Detected TV show root: %s (all %d children are season folders)", filePath, seasonCount)
+				} else {
+					subDirTmdbID = content
+					fileInfo.TmdbId = subDirTmdbID
 				}
 			}
 
-			// Check for .tmdb file inside this subdirectory
-			tmdbPath := filepath.Join(subDirPath, ".tmdb")
-			if data, err := os.ReadFile(tmdbPath); err == nil {
-				fileInfo.TmdbId = strings.TrimSpace(string(data))
+			// 2. If MediaType not found in .tmdb, then check content (season folders/media files)
+			if subDirMediaType == "" {
+				if subEntries, err := os.ReadDir(subDirPath); err == nil {
+					seasonFound := false
+					hasMediaFiles := false
+					for _, subEntry := range subEntries {
+						if subEntry.IsDir() && isSeasonFolder(subEntry.Name()) {
+							seasonFound = true
+							break
+						}
+						if !subEntry.IsDir() {
+							ext := strings.ToLower(filepath.Ext(subEntry.Name()))
+							for _, allowed := range allowedExts {
+								if ext == allowed {
+									hasMediaFiles = true
+									break
+								}
+							}
+							if hasMediaFiles {
+								break
+							}
+						}
+					}
+
+					if seasonFound {
+						fileInfo.MediaType = "tv"
+						fileInfo.HasSeasonFolders = true
+						subDirMediaType = "tv"
+						logger.Info("Detected TV show structure in %s by content (no .tmdb type or .tmdb not present)", subDirPath)
+					} else if hasMediaFiles {
+						fileInfo.MediaType = "movie"
+						subDirMediaType = "movie"
+						logger.Info("Detected movie files in %s by content (no .tmdb type or .tmdb not present)", subDirPath)
+					}
+				}
+			}
+
+			// 3. If we have a media type (from .tmdb or content) but no TMDB ID yet (maybe .tmdb only had ID or no .tmdb), try to search
+			if subDirMediaType != "" && subDirTmdbID == "" {
+				folderName := entry.Name()
+				year := ""
+
+				// Try to extract year from folder name (assuming format like "Name (2023)" or "Name 2023")
+				yearMatch := regexp.MustCompile(`[\( ](\d{4})[\)]?`).FindStringSubmatch(folderName)
+				if len(yearMatch) > 1 {
+					year = yearMatch[1]
+				}
+
+				// Clean the folder name by removing year and any special characters
+				cleanName := regexp.MustCompile(`[\( ]\d{4}[\)]?`).ReplaceAllString(folderName, "")
+				cleanName = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(cleanName, " ")
+				cleanName = strings.TrimSpace(cleanName)
+
+				// Search TMDB with the cleaned name and year
+				if cleanName != "" {
+					logger.Info("Searching TMDB for %s (Year: %s, Type: %s)", cleanName, year, subDirMediaType)
+
+					// Use the existing TMDB proxy endpoint
+					params := url.Values{}
+					params.Set("query", cleanName)
+					if year != "" {
+						params.Set("year", year)
+					}
+					params.Set("mediaType", subDirMediaType)
+
+					// Make request to our local TMDB proxy
+					proxyReq, _ := http.NewRequest("GET", "/api/tmdb/search?" + params.Encode(), nil)
+					proxyReq.Header.Set("X-Real-IP", "127.0.0.1")
+
+					// Use the existing TMDB handler directly
+					recorder := httptest.NewRecorder()
+					HandleTmdbProxy(recorder, proxyReq)
+
+					resp := recorder.Result()
+					if resp != nil && resp.Body != nil {
+						defer resp.Body.Close()
+					}
+
+					if resp.StatusCode == http.StatusOK {
+						var result struct {
+							Results []struct {
+								ID    int    `json:"id"`
+								Title string `json:"title"`
+								Name  string `json:"name"`
+							} `json:"results"`
+						}
+
+						if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+							logger.Warn("Failed to decode TMDB response: %v", err)
+						} else if len(result.Results) > 0 {
+							// Use the first result
+							firstResult := result.Results[0]
+							fileInfo.TmdbId = fmt.Sprintf("%d", firstResult.ID)
+
+							// Create .tmdb file with the found ID AND MediaType
+							tmdbContent := fileInfo.TmdbId
+							if fileInfo.MediaType != "" { // Should always be true here if we searched
+								tmdbContent += ":" + fileInfo.MediaType
+							}
+
+							if err := os.WriteFile(subTmdbPath, []byte(tmdbContent), 0644); err != nil {
+								logger.Warn("Failed to write .tmdb file for %s: %v", entry.Name(), err)
+							} else {
+								logger.Info("Created .tmdb file for %s with ID %s and Type %s after search", entry.Name(), fileInfo.TmdbId, fileInfo.MediaType)
+							}
+						}
+					}
+				}
 			}
 
 			logger.Info("Found directory: %s", filePath)
@@ -332,16 +427,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 		files = append(files, fileInfo)
 	}
-	// If all directories are season folders and there are no files, mark parent as hasSeasonFolders
-	if seasonFolderCount > 0 && seasonFolderCount == len(effectiveEntries)-fileCount && fileCount == 0 {
-		for i := range files {
-			if files[i].Type == "directory" && files[i].IsSeasonFolder {
-				files[i].HasSeasonFolders = false // child
-			}
-		}
 
-		w.Header().Set("X-Has-Season-Folders", "true")
-	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
 }
@@ -443,16 +529,20 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sem <- struct{}{} // Acquire semaphore
-				defer func() { <-sem }() // Release semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				mu.Lock()
-				totalFolders++
-				statsScanProgress.FoldersScanned = totalFolders
+				if path != rootDir {
+					totalFolders++
+				}
+				statsScanProgress.FoldersScanned = totalFolders + 1 // Include root directory
 				mu.Unlock()
 			}()
 		} else {
-			// For files, process them in the current goroutine
+			if info.Name() == ".tmdb" {
+				return nil // Skip .tmdb files from counting and processing
+			}
 			mu.Lock()
 			totalFiles++
 			totalSize += info.Size()
@@ -935,7 +1025,7 @@ func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Query().Get("path")
 		prefix := r.URL.Query().Get("prefix")
 		if path != "" {
-			fd, err := GetFileDetail(path)
+			fd, err := db.GetFileDetail(path)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -948,7 +1038,7 @@ func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if prefix != "" {
-			fds, err := ListFileDetails(prefix)
+			fds, err := db.ListFileDetails(prefix)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -960,12 +1050,12 @@ func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	case http.MethodPost:
 		// POST /api/file-details (body: FileDetail)
-		var fd FileDetail
+		var fd db.FileDetail
 		if err := json.NewDecoder(r.Body).Decode(&fd); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		if err := UpsertFileDetail(fd); err != nil {
+		if err := db.UpsertFileDetail(fd); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -978,7 +1068,7 @@ func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := DeleteFileDetail(path); err != nil {
+		if err := db.DeleteFileDetail(path); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -999,7 +1089,7 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		result, err := GetTmdbCache(cacheKey)
+		result, err := db.GetTmdbCache(cacheKey)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1012,10 +1102,10 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 					tmdbID := parts[1]
 					mediaType := parts[2]
 					// Try to find any cache row with this tmdb_id and media_type
-					altResult, err := GetTmdbCacheByTmdbIdAndType(tmdbID, mediaType)
+					altResult, err := db.GetTmdbCacheByTmdbIdAndType(tmdbID, mediaType)
 					if err == nil && altResult != "" {
 						// Upsert under the new cacheKey for future hits
-						UpsertTmdbCache(cacheKey, altResult)
+						db.UpsertTmdbCache(cacheKey, altResult)
 						w.Header().Set("Content-Type", "application/json")
 						w.Header().Set("X-TMDB-Cache", "HIT-SECONDARY")
 						w.Write([]byte(altResult))
@@ -1094,7 +1184,7 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			}
 			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
 				int(id), title, posterPath, releaseDate, mediaType)
-			UpsertTmdbCache(cacheKey, resultJson)
+			db.UpsertTmdbCache(cacheKey, resultJson)
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-TMDB-Cache", "MISS")
 			w.Write([]byte(resultJson))
@@ -1117,7 +1207,7 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := UpsertTmdbCache(req.Query, req.Result); err != nil {
+		if err := db.UpsertTmdbCache(req.Query, req.Result); err != nil {
 			http.Error(w, "DB error: "+err.Error(), http.StatusInternalServerError)
 			logger.Warn("TMDB cache upsert error: %v", err)
 			return

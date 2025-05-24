@@ -12,7 +12,7 @@ interface PosterViewProps {
   folderHasAllowed: { [folder: string]: boolean };
   imgLoadedMap: { [key: string]: boolean };
   onFileClick: (file: FileItem, tmdb: TmdbResult | null) => void;
-  setImgLoadedMap: React.Dispatch<React.SetStateAction<{ [key: string]: boolean }>>;
+  onImageLoad: (key: string) => void;
 }
 
 export default function PosterView({
@@ -21,7 +21,7 @@ export default function PosterView({
   folderHasAllowed,
   imgLoadedMap,
   onFileClick,
-  setImgLoadedMap
+  onImageLoad,
 }: PosterViewProps) {
   const theme = useTheme();
 
@@ -55,7 +55,7 @@ export default function PosterView({
         return (
           <Paper 
             key={file.name} 
-            sx={{ 
+            sx={{
               display: 'flex', 
               flexDirection: 'column', 
               alignItems: 'center',
@@ -65,7 +65,7 @@ export default function PosterView({
               borderRadius: 3,
               overflow: 'hidden',
               position: 'relative',
-              '&:hover': { 
+              '&:hover': {
                 transform: 'translateY(-4px)',
                 boxShadow: 6,
                 background: theme.palette.action.selected 
@@ -112,12 +112,8 @@ export default function PosterView({
                             transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
                             transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
                           }}
-                          onLoad={() => {
-                            setImgLoadedMap(prev => ({ ...prev, [file.name]: true }));
-                          }}
-                          onError={() => {
-                            setImgLoadedMap(prev => ({ ...prev, [file.name]: true }));
-                          }}
+                          onLoad={() => onImageLoad(file.name)}
+                          onError={() => onImageLoad(file.name)}
                         />
                       )}
 
@@ -134,7 +130,7 @@ export default function PosterView({
               })()}
             </Box>
             <Box sx={{ 
-              width: '100%', 
+              width: '100%',
               p: { xs: '6px 8px', sm: '4px 12px' },
               background: theme.palette.background.paper,
               borderTop: `1px solid ${theme.palette.divider}`
@@ -154,7 +150,9 @@ export default function PosterView({
                   display: 'block',
                 }}
               >
-                {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title ? tmdb.title : file.name}
+                {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title
+                  ? (tmdb.release_date ? tmdb.title.replace(/\s*\(\d{4}\)$/, '') : tmdb.title)
+                  : file.name}
               </Typography>
               {tmdb && tmdb.release_date && (
                 <Typography

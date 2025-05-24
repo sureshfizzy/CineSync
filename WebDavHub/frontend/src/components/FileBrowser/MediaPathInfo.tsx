@@ -91,9 +91,6 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
             const episodes: EpisodeInfo[] = [];
             for (const episode of episodeFiles) {
               const relPath = `${seasonPath}/${episode.name}`;
-              // Try to get persistent details
-              // (Removed getFileDetail logic)
-              console.log('[MediaPathInfo] readlink for', relPath);
               const pathInfo = await axios.post('/api/readlink', { path: relPath });
               episodes.push({
                 name: episode.name,
@@ -129,9 +126,6 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           }
 
           const relPath = `${folderPath}/${mediaFile.name}`;
-          // Try to get persistent details
-          // (Removed getFileDetail logic)
-          console.log('[MediaPathInfo] readlink for', relPath);
           const res = await axios.post('/api/readlink', { path: relPath });
           setPathInfo({
             webdavPath: `Home${relPath}`,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -59,32 +59,38 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const theme = useTheme();
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await axios.get('/api/stats');
-        const data = response.data;
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get('/api/stats');
+      const data = response.data;
 
-        if (data.scanning) {
-          // If scanning is in progress, update stats with progress info
-          setStats(data);
-          // Continue polling until scan is complete
-          setTimeout(fetchStats, 1000);
-        } else {
-          setStats(data);
-          setLoading(false);
-        }
-      } catch (err) {
-        setError('Failed to fetch statistics');
-        console.error('Error fetching stats:', err);
+      if (data.scanning) {
+        setStats(data); // Update with progress
+        setTimeout(fetchStats, 2000); // Continue polling
+      } else {
+        setStats(data);
         setLoading(false);
       }
-    };
+    } catch (err) {
+      setError('Failed to fetch statistics');
+      console.error('Error fetching stats:', err);
+      setLoading(false);
+    }
+  }, []); // No dependencies, so it's stable
 
+  useEffect(() => {
     fetchStats();
-  }, []);
+  }, [fetchStats]);
 
-  if (loading || (stats?.scanning)) {
+  const handleRefresh = () => {
+    // Clear existing stats to show loading indicator immediately
+    // setStats(null); // Optional: depends on desired UX
+    fetchStats();
+  };
+
+  if (loading && !stats) { // Initial loading state
     return (
       <Box
         sx={{
@@ -98,9 +104,29 @@ export default function Dashboard() {
       >
         <CircularProgress size={40} />
         <Typography variant="h6" color="text.secondary">
-          {stats?.scanning ? 'Scanning files...' : 'Loading dashboard data...'}
+          Loading dashboard data...
         </Typography>
-        {stats?.scanning && stats.progress && (
+      </Box>
+    );
+  }
+  
+  if (stats?.scanning) { // Scanning in progress
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+          gap: 2
+        }}
+      >
+        <CircularProgress size={40} />
+        <Typography variant="h6" color="text.secondary">
+          Scanning files...
+        </Typography>
+        {stats.progress && (
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
               Files scanned: {stats.progress.filesScanned.toLocaleString()}
@@ -111,6 +137,14 @@ export default function Dashboard() {
             <Typography variant="body2" color="text.secondary">
               Current path: {stats.progress.currentPath}
             </Typography>
+             <Button 
+              onClick={handleRefresh} 
+              variant="outlined" 
+              startIcon={<RefreshIcon />} 
+              sx={{ mt: 2 }}
+            >
+              Manual Refresh
+            </Button>
           </Box>
         )}
       </Box>
@@ -120,7 +154,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <Typography color="error" sx={{ mt: 2, textAlign: 'center' }}>
-        {error}
+        {error} <Button onClick={handleRefresh}>Try again</Button>
       </Typography>
     );
   }
@@ -182,7 +216,8 @@ export default function Dashboard() {
         </Typography>
         <Button 
           variant="contained" 
-          startIcon={<RefreshIcon />} 
+          startIcon={<RefreshIcon />}
+          onClick={handleRefresh}
           sx={{ 
             borderRadius: 2, 
             fontWeight: 600, 

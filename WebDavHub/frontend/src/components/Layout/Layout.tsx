@@ -65,60 +65,70 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-      {/* Topbar always at the top, full width */}
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1201 }}>
-        <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />
-      </Box>
-      {/* Main area: sidebar + content */}
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            anchor="left"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{
-              keepMounted: true, // Better open performance on mobile
-            }}
-            sx={{
-              display: { xs: 'block', md: 'none' },
-              '& .MuiDrawer-paper': { 
-                boxSizing: 'border-box', 
-                width: 200,
-                bgcolor: 'background.paper',
-                borderRight: `1px solid ${theme.palette.divider}`
-              },
-            }}
-          >
-            <Sidebar 
-              onNavigate={handleSidebarNavigate} 
-              currentView={view}
-              onViewChange={handleViewChange}
-              onRefresh={handleRefresh}
-            />
-          </Drawer>
-        ) : (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
+      <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />
+
+      <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+
+        {!isMobile && (
           <Box
             component="nav"
             sx={{
               width: 200,
               flexShrink: 0,
-              display: { xs: 'none', md: 'block' },
-              position: 'sticky',
-              top: 64,
-              height: 'calc(100vh - 64px)',
-              zIndex: 1200,
+              bgcolor: 'background.paper',
+              borderRight: `1px solid ${theme.palette.divider}`,
+              height: '100%',
             }}
           >
-            <Sidebar 
+            <Sidebar
               currentView={view}
               onViewChange={handleViewChange}
               onRefresh={handleRefresh}
             />
           </Box>
         )}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, bgcolor: 'background.default', p: { xs: 2, sm: 3, md: 4 } }}>
+
+        {isMobile && (
+          <Drawer
+            variant="temporary"
+            anchor="left"
+            open={mobileOpen}
+            onClose={handleDrawerToggle}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              display: { xs: 'block', md: 'none' },
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+                width: 200,
+                bgcolor: 'background.paper',
+                borderRight: `1px solid ${theme.palette.divider}`,
+                height: '100vh',
+                overflow: 'hidden',
+              },
+            }}
+          >
+            <Box sx={{ height: '100%', overflowY: 'auto', '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <Sidebar
+                onNavigate={handleSidebarNavigate}
+                currentView={view}
+                onViewChange={handleViewChange}
+                onRefresh={handleRefresh}
+              />
+            </Box>
+          </Drawer>
+        )}
+
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            bgcolor: 'background.default',
+            p: { xs: 2, sm: 3, md: 4 },
+            overflowY: 'auto',
+            height: '100%',
+          }}
+        >
           <Outlet context={contextValue} />
         </Box>
       </Box>
