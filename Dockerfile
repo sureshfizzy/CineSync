@@ -9,6 +9,11 @@ RUN apt-get update && \
     apt-get install -y inotify-tools bash gosu curl git gcc g++ make && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
+
 # Install Go
 # Install Go (Dynamic architecture detection)
 ENV GO_VERSION=1.21.0
@@ -39,7 +44,9 @@ WORKDIR /app
 
 # Install required system packages
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu && \
+    apt-get install -y inotify-tools bash gosu curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file and install dependencies
