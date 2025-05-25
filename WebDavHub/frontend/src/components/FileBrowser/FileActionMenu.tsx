@@ -1,5 +1,8 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, Box, Tooltip } from '@mui/material';
+import {
+  Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent,
+  DialogActions, Button, Typography, TextField, Box, Tooltip
+} from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -7,6 +10,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
+import ModifyDialog from './ModifyDialog';
 import { upsertFileDetail, deleteFileDetail } from './fileApi';
 
 interface FileItem {
@@ -25,6 +29,7 @@ interface FileActionMenuProps {
   currentPath: string;
   onViewDetails: (file: FileItem, details: any) => void;
   onRename: (file: FileItem) => void;
+  onModify?: (file: FileItem) => void;
   onError: (msg: string) => void;
   onDeleted?: () => void;
   variant?: 'menu' | 'buttons';
@@ -59,7 +64,7 @@ function getRelativePath(absPath: string): string {
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onError, onDeleted, variant = 'menu' }) => {
+const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu' }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -73,6 +78,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
   const [renameLoading, setRenameLoading] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -163,6 +169,40 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
     setRenameDialogOpen(false);
     setRenameError(null);
     setRenameValue('');
+  };
+
+  const handleModifyClick = () => {
+    if (onModify) {
+      onModify(file);
+    }
+    setModifyDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
+    try {
+      const params = new URLSearchParams();
+
+      // Add the main action
+      if (selectedOption && selectedOption !== 'id') {
+        params.append(selectedOption, 'true');
+      }
+
+      // Add ID parameters if any
+      Object.entries(selectedIds).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+
+      const response = await axios.post(`/api/process-file?${params.toString()}`, {
+        path: file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)
+      });
+
+      onError(response.data.message || 'File processing completed');
+      // Refresh the view if needed
+      if (onRename) onRename(file);
+    } catch (error: any) {
+      onError(`Failed to process file: ${error.response?.data?.error || error.message}`);
+    }
   };
 
   const handleRenameSubmit = async () => {
@@ -256,6 +296,23 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleDeleteClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Delete</Button>
           </span>
         </Tooltip>
+        <Tooltip title="Modify file">
+          <Button
+            size="small"
+            variant="outlined"
+            color="secondary"
+            startIcon={null}
+            onClick={handleModifyClick}
+            sx={{
+              flex: '1 1 120px',
+              maxWidth: 180,
+              fontWeight: 600,
+              ml: 1
+            }}
+          >
+            Modify
+          </Button>
+        </Tooltip>
         {videoPlayerOpen && (
           <Suspense fallback={null}>
             <VideoPlayerDialog
@@ -295,6 +352,11 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
 
   return (
     <>
+      <ModifyDialog
+        open={modifyDialogOpen}
+        onClose={() => setModifyDialogOpen(false)}
+        onSubmit={handleModifySubmit}
+      />
       <IconButton onClick={handleMenuOpen} size="small">
         <MoreVertIcon />
       </IconButton>
@@ -325,6 +387,8 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={handleModifyClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
       </Menu>
       {videoPlayerOpen && (
         <Suspense fallback={null}>
@@ -379,8 +443,13 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           </Button>
         </DialogActions>
       </Dialog>
+      <ModifyDialog
+        open={modifyDialogOpen}
+        onClose={() => setModifyDialogOpen(false)}
+        onSubmit={handleModifySubmit}
+      />
     </>
   );
 };
 
-export default FileActionMenu; 
+export default FileActionMenu;
