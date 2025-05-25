@@ -42,7 +42,7 @@ func StartTmdbCacheWriter() {
 
 // InitDB initializes the SQLite database under the project directory (data/cinefiles.db)
 func InitDB(_ string) error {
-	dbDir := filepath.Join("data")
+	dbDir := filepath.Join("../db")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return fmt.Errorf("failed to create db directory: %w", err)
 	}
