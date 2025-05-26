@@ -4,17 +4,11 @@ FROM python:3.11-slim AS builder
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install required system packages
+# Install build dependencies
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu curl git gcc g++ make && \
+    apt-get install -y inotify-tools bash curl git gcc g++ make && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g npm@latest
-
-# Install Go
 # Install Go (Dynamic architecture detection)
 ENV GO_VERSION=1.21.0
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -25,22 +19,18 @@ RUN ARCH=$(dpkg --print-architecture) && \
       *) echo "Unsupported architecture: $ARCH"; exit 1;; \
     esac && \
     curl -fsSL https://go.dev/dl/go${GO_VERSION}.${GOARCH}.tar.gz | tar -C /usr/local -xz
-ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Set up Go workspace
+ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH=/go
 ENV PATH="${GOPATH}/bin:${PATH}"
 
-# Copy Go project files and build
+# Copy and build Go application
 COPY WebDavHub /app/WebDavHub
 WORKDIR /app/WebDavHub
-RUN go mod tidy && go build -o /app/WebDavHub/cinesync
+RUN go mod tidy && go build -o cinesync
 
-# ---- STAGE 2: Final Lightweight Image ----
+# ---- STAGE 2: Final Runtime Image ----
 FROM python:3.11-slim
-
-# Set the working directory inside the container
-WORKDIR /app
 
 # Install required system packages
 RUN apt-get update && \
@@ -49,23 +39,32 @@ RUN apt-get update && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file and install dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the entire Python project
-COPY MediaHub /app/MediaHub
-COPY --from=builder /app/WebDavHub /app/WebDavHub
+# Create app directory with proper permissions
+RUN mkdir -p /app && chmod 755 /app
 
 # Set environment variables for PUID and PGID
 ENV PUID=1000
 ENV PGID=1000
 
-# Add entrypoint script
+# Create default user and group (will be modified in entrypoint if needed)
+RUN groupadd -g ${PGID} appuser && \
+    useradd -u ${PUID} -g appuser -d /app -s /bin/bash appuser
+
+# Copy Python dependencies and install
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+# Copy application files and set ownership
+COPY --chown=appuser:appuser MediaHub /app/MediaHub
+COPY --from=builder --chown=appuser:appuser /app/WebDavHub /app/WebDavHub
+
+# Copy and setup entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Set working directory
+WORKDIR /app
 
-# Run the application
+# Use entrypoint to handle user setup
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "MediaHub/main.py", "--auto-select"]
