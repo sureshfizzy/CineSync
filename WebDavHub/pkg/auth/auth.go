@@ -168,6 +168,35 @@ func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// BasicAuthMiddleware provides HTTP Basic Authentication for a handler.
+func BasicAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if auth is enabled via environment variable
+		if !env.IsBool("WEBDAV_AUTH_ENABLED", false) { // Default to false if not set, or if explicitly set to false
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		username, password, ok := r.BasicAuth()
+
+		if !ok {
+			logger.Warn("[WebDAV Auth] Basic auth credentials not provided by %s for path %s", r.RemoteAddr, r.URL.Path)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		if !validateCredentials(username, password) {
+			logger.Warn("[WebDAV Auth] Invalid basic auth credentials for user '%s' from %s for path %s", username, r.RemoteAddr, r.URL.Path)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // HandleMe returns the current user's info from the JWT
 func HandleMe(w http.ResponseWriter, r *http.Request) {
 	header := r.Header.Get("Authorization")

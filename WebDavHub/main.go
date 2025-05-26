@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -143,27 +142,37 @@ func main() {
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			// Public endpoints
-			if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/enabled" {
-				apiMux.ServeHTTP(w, r)
-				return
-			}
-			// Protected endpoints
-			enabled := true
-			if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
-				enabled = false
-			}
-			if enabled {
-				auth.JWTMiddleware(apiMux).ServeHTTP(w, r)
-			} else {
-				apiMux.ServeHTTP(w, r)
-			}
+	// Create a new mux for the main server
+	rootMux := http.NewServeMux()
+
+	// API handling
+	apiRouter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/enabled" {
+			apiMux.ServeHTTP(w, r)
 			return
 		}
-		// WebDAV handler for non-API paths
-		webdavHandler.ServeHTTP(w, r)
+		// For other /api/ paths, apply JWT middleware if WEBDAV_AUTH_ENABLED is true
+		authRequired := env.IsBool("WEBDAV_AUTH_ENABLED", true)
+		if authRequired {
+			auth.JWTMiddleware(apiMux).ServeHTTP(w, r) // JWTMiddleware wraps the entire apiMux for protected routes
+		} else {
+			apiMux.ServeHTTP(w, r)
+		}
+	})
+	rootMux.Handle("/api/", apiRouter)
+
+	// WebDAV Handler
+	rootMux.Handle("/webdav/", auth.BasicAuthMiddleware(http.StripPrefix("/webdav", webdavHandler)))
+
+	// Root path handler for the server itself
+	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			logger.Info("Root path / accessed by %s", r.RemoteAddr)
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("CineSync Server is active.\nAPI access at /api/\nWebDAV access at /webdav/\n"))
+			return
+		}
+		http.NotFound(w, r)
 	})
 
 	// Start npm development server
@@ -194,9 +203,10 @@ func main() {
 	}
 
 	logger.Info("Starting CineSync server on http://%s", addr)
-	logger.Info("WebDAV access available at the root path for WebDAV clients")
+	logger.Info("WebDAV access available at http://%s/webdav/ for WebDAV clients", addr)
 	logger.Info("Serving content from: %s", rootInfo)
-	logger.Info("Dashboard available at http://%s for browsers", addr)
+	logger.Info("API available at http://%s/api/", addr)
+	logger.Info("Server Dashboard http://%s/", addr)
 
 	// In your main function, add this information after starting the server
 	if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
@@ -209,5 +219,5 @@ func main() {
 
 	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
 
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(http.ListenAndServe(addr, rootMux))
 }

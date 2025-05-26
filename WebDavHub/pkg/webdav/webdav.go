@@ -1,10 +1,11 @@
 package webdav
 
 import (
-	"log"
 	"net/http"
 
+	"cinesync/pkg/logger"
 	"golang.org/x/net/webdav"
+
 )
 
 // WebDAVHandler handles WebDAV requests
@@ -16,14 +17,14 @@ type WebDAVHandler struct {
 func NewWebDAVHandler(dir string) *WebDAVHandler {
 	return &WebDAVHandler{
 		handler: &webdav.Handler{
-			Prefix:     "/",
+			Prefix:     "",
 			FileSystem: webdav.Dir(dir),
 			LockSystem: webdav.NewMemLS(),
 			Logger: func(r *http.Request, err error) {
 				if err != nil {
-					log.Printf("%s %s ERROR: %v", r.Method, r.URL.Path, err)
+					logger.Error("[WebDAV] Method: %s, Path: %s, ERROR: %v", r.Method, r.URL.Path, err)
 				} else {
-					log.Printf("%s %s", r.Method, r.URL.Path)
+					logger.Info("[WebDAV] Method: %s, Path: %s", r.Method, r.URL.Path)
 				}
 			},
 		},
