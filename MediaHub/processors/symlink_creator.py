@@ -76,39 +76,26 @@ def process_file(args, processed_files_log, force=False):
         existing_symlink_path = get_existing_symlink_info(src_file)
         if existing_symlink_path:
             log_message(f"Force mode: Found existing symlink at {existing_symlink_path}", level="DEBUG")
-            parent_dir = os.path.dirname(existing_symlink_path)
-            parent_parent_dir = os.path.dirname(parent_dir)
-            os.remove(existing_symlink_path)
-            log_message(f"Force mode: Initiating reprocessing of {file}", level="INFO")
+            # Store the old symlink info for later cleanup
+            old_symlink_info = {
+                'path': existing_symlink_path,
+                'parent_dir': os.path.dirname(existing_symlink_path),
+                'parent_parent_dir': os.path.dirname(os.path.dirname(existing_symlink_path)),
+                'tmdb_file_path': None
+            }
 
-            # Delete .tmdb file if it exists
+            # Get .tmdb file path if it exists
             parts = os.path.normpath(existing_symlink_path).split(os.sep)
             if any(part.lower().startswith('season ') for part in parts):
                 for i, part in enumerate(parts):
                     if part.lower().startswith('season '):
                         show_root = os.sep.join(parts[:i])
                         break
-                tmdb_file_path = os.path.join(show_root, ".tmdb")
+                old_symlink_info['tmdb_file_path'] = os.path.join(show_root, ".tmdb")
             else:
-                tmdb_file_path = os.path.join(os.path.dirname(existing_symlink_path), ".tmdb")
-            if os.path.exists(tmdb_file_path):
-                try:
-                    os.remove(tmdb_file_path)
-                    log_message(f"Deleted .tmdb file at {tmdb_file_path}", level="INFO")
-                except Exception as e:
-                    log_message(f"Error deleting .tmdb file at {tmdb_file_path}: {e}", level="WARNING")
+                old_symlink_info['tmdb_file_path'] = os.path.join(os.path.dirname(existing_symlink_path), ".tmdb")
 
-            # Delete if parent directory is empty
-            try:
-                if not os.listdir(parent_dir):
-                    log_message(f"Deleting empty directory: {parent_dir}", level="INFO")
-                    os.rmdir(parent_dir)
-
-                    if not os.listdir(parent_parent_dir):
-                        log_message(f"Deleting empty directory: {parent_parent_dir}", level="INFO")
-                        os.rmdir(parent_parent_dir)
-            except OSError as e:
-                log_message(f"Error deleting directory: {e}", level="WARNING")
+            log_message(f"Force mode: Will process {file} and cleanup old symlink after successful creation", level="INFO")
 
     existing_dest_path = get_destination_path(src_file)
     if existing_dest_path and not force:
@@ -243,6 +230,32 @@ def process_file(args, processed_files_log, force=False):
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
         save_processed_file(src_file, dest_file, tmdb_id, season_number)
+
+        # Cleanup old symlink if it exists (force mode)
+        if force and 'old_symlink_info' in locals():
+            try:
+                if os.path.exists(old_symlink_info['path']):
+                    os.remove(old_symlink_info['path'])
+                    log_message(f"Force mode: Removed old symlink at {old_symlink_info['path']}", level="INFO")
+
+                # Delete .tmdb file if it exists
+                if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
+                    try:
+                        os.remove(old_symlink_info['tmdb_file_path'])
+                        log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
+                    except Exception as e:
+                        log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
+
+                # Delete if parent directory is empty
+                if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
+                    log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
+                    os.rmdir(old_symlink_info['parent_dir'])
+
+                    if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
+                        log_message(f"Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
+                        os.rmdir(old_symlink_info['parent_parent_dir'])
+            except OSError as e:
+                log_message(f"Error during force mode cleanup: {e}", level="WARNING")
 
         if tmdb_id:
             tmdb_id_str = str(tmdb_id)  # Write only the numeric ID
