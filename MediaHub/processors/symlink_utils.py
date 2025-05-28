@@ -3,10 +3,25 @@ import platform
 import sqlite3
 import subprocess
 import json
+import sys
+import time
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
+
+def send_structured_message(message_type, data):
+    """Send structured JSON message to stdout for WebDavHub API consumption."""
+    try:
+        structured_msg = {
+            "type": message_type,
+            "timestamp": time.time(),
+            "data": data
+        }
+        # Output to stderr so it doesn't interfere with normal stdout logging
+        log_message(f"WEBDAV_API_MESSAGE:{json.dumps(structured_msg)}", level="INFO", output="stderr")
+    except Exception as e:
+        log_message(f"Error sending structured message: {e}", level="WARNING")
 
 def delete_broken_symlinks(dest_dir, removed_path=None):
     """Delete broken symlinks in the destination directory and update databases.

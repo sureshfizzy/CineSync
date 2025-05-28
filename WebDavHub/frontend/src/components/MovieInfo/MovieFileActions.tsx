@@ -73,7 +73,6 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
   if (placement === 'belowDescription' && !isDesktop) return null;
 
   const handleError = (error: string) => {
-    console.error('File action error:', error);
     onError?.(error);
   };
 
@@ -134,10 +133,11 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
           open={modifyDialogOpen}
           onClose={handleModifyClose}
           onSubmit={handleModifySubmit}
+          currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
         />
       </>
     </Box>
   );
 };
 
-export default MovieFileActions; 
+export default MovieFileActions;

@@ -56,7 +56,7 @@ export default function Dashboard() {
       <Typography variant="h4" gutterBottom>
         Dashboard
       </Typography>
-      
+
       <Grid container spacing={3}>
         {/* Stats Cards */}
         <Grid item xs={12} md={4}>
@@ -142,4 +142,4 @@ export default function Dashboard() {
       </Grid>
     </Box>
   );
-} 
+}

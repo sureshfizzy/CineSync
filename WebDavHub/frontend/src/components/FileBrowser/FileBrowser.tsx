@@ -30,31 +30,31 @@ const TMDB_CONCURRENCY_LIMIT = 4;
 const ITEMS_PER_PAGE = 100;
 
 // Reusable pagination component
-const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: { 
+const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: {
   totalPages: number;
   page: number;
   onPageChange: (event: React.ChangeEvent<unknown>, value: number) => void;
   isMobile: boolean;
 }) => {
   if (totalPages <= 1) return null;
-  
+
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      mt: 4, 
+    <Box sx={{
+      display: 'flex',
+      justifyContent: 'center',
+      mt: 4,
       mb: 2,
       '& .MuiPagination-ul': {
         gap: { xs: 0.5, sm: 1 }
       }
     }}>
-      <Pagination 
-        count={totalPages} 
-        page={page} 
+      <Pagination
+        count={totalPages}
+        page={page}
         onChange={onPageChange}
         color="primary"
         size={isMobile ? "small" : "medium"}
-        showFirstButton 
+        showFirstButton
         showLastButton
       />
     </Box>
@@ -68,20 +68,20 @@ export default function FileBrowser() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { tmdbData, imgLoadedMap, updateTmdbData, setImageLoaded, getTmdbDataFromCache } = useTmdb();
-  
+
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
-  
+
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  
+
   // Dialog states
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsData, setDetailsData] = useState<FileItem | null>(null);
-  
+
   // Refs for tracking requests
   const tmdbFetchRef = useRef<{ [key: string]: boolean }>({});
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
@@ -113,7 +113,7 @@ export default function FileBrowser() {
     return sortedFiles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [sortedFiles, page]);
 
-  const totalPages = useMemo(() => 
+  const totalPages = useMemo(() =>
     Math.max(1, Math.ceil(sortedFiles.length / ITEMS_PER_PAGE))
   , [sortedFiles.length]);
 
@@ -182,7 +182,7 @@ export default function FileBrowser() {
       const response = await fetchFilesApi(path, true);
 
       if (!Array.isArray(response.data)) {
-        console.error('Unexpected response format:', response.data);
+        // Silent error handling for unexpected response format
         setError('Unexpected response format from server');
         setFiles([]);
         return;
@@ -215,7 +215,6 @@ export default function FileBrowser() {
       }
     } catch (err) {
       setError('Failed to fetch files');
-      console.error('Error fetching files:', err);
       setFiles([]);
     } finally {
       setLoading(false);
@@ -256,14 +255,14 @@ export default function FileBrowser() {
         const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
         const tmdbId = tmdb?.id;
         const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
-        navigate(`/media/${encodeURIComponent(file.name)}`, { 
-          state: { 
-            mediaType: isTvShow ? 'tv' : 'movie', 
+        navigate(`/media/${encodeURIComponent(file.name)}`, {
+          state: {
+            mediaType: isTvShow ? 'tv' : 'movie',
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: fullPath,
             tmdbData: tmdb
-          } 
+          }
         });
       } else {
         handlePathClick(joinPaths(currentPath, file.name));
@@ -358,7 +357,7 @@ export default function FileBrowser() {
             onFileClick={handleFileClick}
             onImageLoad={(key: string) => setImageLoaded(key, true)}
           />
-          <PaginationComponent 
+          <PaginationComponent
             totalPages={totalPages}
             page={page}
             onPageChange={handlePageChange}
@@ -377,7 +376,7 @@ export default function FileBrowser() {
             onDeleted={() => fetchFiles(currentPath)}
             onError={setError}
           />
-          <PaginationComponent 
+          <PaginationComponent
             totalPages={totalPages}
             page={page}
             onPageChange={handlePageChange}
@@ -386,18 +385,18 @@ export default function FileBrowser() {
         </>
       )}
 
-      <Dialog 
-        open={detailsOpen} 
-        onClose={handleDetailsClose} 
-        maxWidth="sm" 
+      <Dialog
+        open={detailsOpen}
+        onClose={handleDetailsClose}
+        maxWidth="sm"
         fullWidth
-        PaperProps={{ 
-          sx: { 
+        PaperProps={{
+          sx: {
             borderRadius: 3,
-            boxShadow: theme => theme.palette.mode === 'light' 
-              ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' 
-              : theme.shadows[6] 
-          } 
+            boxShadow: theme => theme.palette.mode === 'light'
+              ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)'
+              : theme.shadows[6]
+          }
         }}
       >
         <DialogTitle
@@ -467,4 +466,4 @@ export default function FileBrowser() {
       </Dialog>
     </Box>
   );
-} 
+}

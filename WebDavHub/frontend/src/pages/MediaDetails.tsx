@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -24,36 +24,155 @@ export default function MediaDetails() {
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const mediaType = location.state?.mediaType || 'movie';
   const tmdbId = location.state?.tmdbId;
   const currentPath = location.state?.currentPath || '';
-  const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string }>({});
+  const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
+  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Function to handle smooth folder name transitions
+  const handleFolderNameChange = useCallback((newFolderName: string) => {
+    if (newFolderName === folderName) return;
+
+
+
+    // Clear any existing transition timeout
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+
+    // Start transition
+    setIsTransitioning(true);
+    setPendingFolderName(newFolderName);
+
+    // Add a brief delay to allow for smooth visual transition
+    transitionTimeoutRef.current = setTimeout(() => {
+      // Navigate to the new folder name WITHOUT preserving old data
+      navigate(`/media/${encodeURIComponent(newFolderName)}`, {
+        state: {
+          mediaType,
+          tmdbId: undefined, // Clear tmdbId to force fresh lookup
+          currentPath,
+          tmdbData: undefined, // Don't preserve old data - force fresh fetch
+          isTransition: true
+        },
+        replace: true // Replace current history entry to avoid back button issues
+      });
+
+      // Reset transition state after navigation and allow time for data fetch
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setPendingFolderName(null);
+      }, 500); // Longer delay to allow for data fetching
+    }, 400); // Slightly longer delay for smoother transition
+  }, [folderName, navigate, mediaType, tmdbId, currentPath]);
+
+  // Test function to manually trigger transition (for debugging)
+  const testTransition = useCallback(() => {
+    const testFolderName = `${folderName} (Test)`;
+
+    handleFolderNameChange(testFolderName);
+  }, [folderName, handleFolderNameChange]);
+
+  // Expose test functions to window for console testing (development only)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      (window as any).testMediaDetailsTransition = testTransition;
+      (window as any).testSymlinkUpdate = (oldName: string, newName: string) => {
+        const { triggerFolderNameUpdate } = require('../utils/symlinkUpdates');
+        triggerFolderNameUpdate({
+          oldFolderName: oldName,
+          newFolderName: newName,
+          newPath: `/test/path/${newName}`,
+          timestamp: Date.now()
+        });
+      };
+    }
+    return () => {
+      if (process.env.NODE_ENV === 'development') {
+        delete (window as any).testMediaDetailsTransition;
+        delete (window as any).testSymlinkUpdate;
+      }
+    };
+  }, [testTransition]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Listen for folder name changes from symlink operations
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('symlink_folder_update_') && e.newValue) {
+        try {
+          const updateData = JSON.parse(e.newValue);
+          // Check if this update applies to current folder (exact match or wildcard)
+          if ((updateData.oldFolderName === folderName || updateData.oldFolderName === '*') && updateData.newFolderName) {
+            handleFolderNameChange(updateData.newFolderName);
+          }
+        } catch (err) {
+        }
+      }
+    };
+
+    // Custom event listener (fallback for same-tab communication)
+    const handleCustomEvent = (e: CustomEvent) => {
+      const updateData = e.detail;
+      // Check if this update applies to current folder (exact match or wildcard)
+      if ((updateData.oldFolderName === folderName || updateData.oldFolderName === '*') && updateData.newFolderName) {
+        handleFolderNameChange(updateData.newFolderName);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('symlink-folder-update', handleCustomEvent as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('symlink-folder-update', handleCustomEvent as EventListener);
+    };
+  }, [folderName, handleFolderNameChange]);
 
   useEffect(() => {
-    // Only use navigation state if it contains credits (full details)
-    if (tmdbDataFromNav && tmdbDataFromNav.credits) {
+
+
+    // Clear any stale data first to prevent stuck metadata
+    setData(null);
+    setError(null);
+    setLoading(true);
+
+    // Only use navigation state if it contains credits (full details) AND it's not a transition
+    const isTransition = location.state?.isTransition;
+    if (tmdbDataFromNav && tmdbDataFromNav.credits && !isTransition) {
+
       setData(tmdbDataFromNav);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+
     const token = localStorage.getItem('cineSyncJWT');
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
+    // Create a unique request key that includes folderName for better deduplication
+    const requestKey = `${tmdbId || 'query'}-${folderName}-${currentPath}-${mediaType}`;
+
     // Guard: Only proceed if this is a new request
-    if (
-      lastRequestRef.current.tmdbId === tmdbId &&
-      lastRequestRef.current.currentPath === currentPath
-    ) {
+    if (lastRequestRef.current.requestKey === requestKey) {
       setLoading(false);
       return;
     }
-    lastRequestRef.current = { tmdbId, currentPath };
+    lastRequestRef.current = { tmdbId, currentPath, folderName, requestKey };
 
     // Only fetch TMDB details from API
     fetchTmdbDetails();
@@ -63,8 +182,29 @@ export default function MediaDetails() {
       if (tmdbId) {
         url = `/api/tmdb/details?id=${tmdbId}&mediaType=${mediaType}`;
       } else {
-        url = `/api/tmdb/details?query=${encodeURIComponent(folderName || '')}&mediaType=${mediaType}`;
+        // Extract title and year from folder name for better TMDB search
+        const extractTitleAndYear = (name: string) => {
+          // Match patterns like "Movie Name (2014)" or "Movie Name (2014) [Quality]"
+          const match = name.match(/^(.+?)\s*\((\d{4})\)/);
+          if (match) {
+            return { title: match[1].trim(), year: match[2] };
+          }
+          return { title: name, year: undefined };
+        };
+
+        const { title, year } = extractTitleAndYear(folderName || '');
+        const params = new URLSearchParams({
+          query: title,
+          mediaType: mediaType
+        });
+        if (year) {
+          params.set('year', year);
+        }
+        url = `/api/tmdb/details?${params.toString()}`;
       }
+
+
+
       axios.get(url, { headers })
         .then(res => {
           setData(res.data);
@@ -73,6 +213,8 @@ export default function MediaDetails() {
         .catch(err => {
           if (err.response && err.response.status === 401) {
             setError('You must be logged in to view details.');
+          } else if (err.response && err.response.status === 404) {
+            setError(`No TMDB data found for "${folderName}"`);
           } else {
             setError('Failed to load details');
           }
@@ -99,12 +241,12 @@ export default function MediaDetails() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ 
+            transition={{
               duration: isMobile ? 0.2 : 0.3,
               ease: 'easeOut'
             }}
-            style={{ 
-              width: '100%', 
+            style={{
+              width: '100%',
               height: '100%',
               willChange: 'opacity',
               transform: 'translateZ(0)',
@@ -145,6 +287,28 @@ export default function MediaDetails() {
       >
         <ArrowBackIcon />
       </IconButton>
+
+      {/* Temporary test button for transition (remove in production) */}
+      {process.env.NODE_ENV === 'development' && (
+        <IconButton
+          onClick={testTransition}
+          sx={{
+            position: 'fixed',
+            top: { xs: 8, md: 16 },
+            right: { xs: 8, md: 16 },
+            zIndex: 100,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            boxShadow: 2,
+            '&:hover': {
+              bgcolor: 'primary.dark',
+            },
+          }}
+          title="Test Transition"
+        >
+          <Typography variant="caption" sx={{ fontSize: '10px' }}>TEST</Typography>
+        </IconButton>
+      )}
       {/* Main content area: animate only this */}
       <Box sx={{
         position: 'relative',
@@ -162,23 +326,39 @@ export default function MediaDetails() {
         flexDirection: 'column',
       }}>
         <AnimatePresence mode="wait">
-          {loading ? (
+          {loading || isTransitioning ? (
             <motion.div
-              key="loading-spinner"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: isMobile ? 0.15 : 0.2 }}
-              style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
+              key={isTransitioning ? "transitioning-spinner" : "loading-spinner"}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{
+                duration: isMobile ? 0.2 : 0.3,
+                ease: [0.4, 0, 0.2, 1]
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
                 minHeight: 300,
-                willChange: 'opacity',
-                transform: 'translateZ(0)'
+                willChange: 'opacity, transform',
+                transform: 'translateZ(0)',
+                gap: 16
               }}
             >
               <CircularProgress size={44} thickness={4} color="primary" />
+              {isTransitioning && pendingFolderName && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.3 }}
+                >
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                    Updating to "{pendingFolderName}"...
+                  </Typography>
+                </motion.div>
+              )}
             </motion.div>
           ) : error ? (
             <motion.div
@@ -196,24 +376,48 @@ export default function MediaDetails() {
             </motion.div>
           ) : data ? (
             <motion.div
-              key="media-details-content"
-              initial={{ opacity: 0, y: isMobile ? 10 : 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: isMobile ? 10 : 20 }}
-              transition={{ 
-                duration: isMobile ? 0.25 : 0.3,
-                ease: [0.4, 0, 0.2, 1],
-                opacity: { duration: isMobile ? 0.15 : 0.2 },
-                y: { duration: isMobile ? 0.25 : 0.3 }
+              key={`media-details-content-${folderName}-${data.id}`}
+              initial={{ opacity: 0, y: isMobile ? 15 : 25, scale: 0.98 }}
+              animate={{
+                opacity: isTransitioning ? 0.6 : 1,
+                y: 0,
+                scale: isTransitioning ? 0.96 : 1
               }}
-              style={{ 
+              exit={{ opacity: 0, y: isMobile ? -10 : -15, scale: 0.95 }}
+              transition={{
+                duration: isMobile ? 0.3 : 0.4,
+                ease: [0.25, 0.46, 0.45, 0.94],
+                opacity: { duration: isMobile ? 0.2 : 0.25 },
+                y: { duration: isMobile ? 0.3 : 0.4 },
+                scale: { duration: isMobile ? 0.25 : 0.35 }
+              }}
+              style={{
                 willChange: 'opacity, transform',
                 transform: 'translateZ(0)',
                 backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden'
+                WebkitBackfaceVisibility: 'hidden',
+                position: 'relative'
               }}
             >
               <Box sx={{ position: 'relative', zIndex: 1 }}>
+                {/* Transition overlay */}
+                {isTransitioning && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                      zIndex: 10,
+                      borderRadius: 2,
+                      pointerEvents: 'none',
+                      transition: 'opacity 0.3s ease-out'
+                    }}
+                  />
+                )}
+
                 {mediaType === 'tv' ? (
                   <TVShowInfo
                     data={data}
@@ -238,4 +442,4 @@ export default function MediaDetails() {
       </Box>
     </Box>
   );
-} 
+}

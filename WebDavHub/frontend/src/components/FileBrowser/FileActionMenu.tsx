@@ -265,6 +265,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       setDeleting(false);
       if (onDeleted) onDeleted();
     } catch (error) {
+      console.error('Failed to delete file:', error);
       if (axios.isAxiosError(error)) {
         setDeleteError(error.response?.data || error.message);
       } else {
@@ -356,6 +357,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         open={modifyDialogOpen}
         onClose={() => setModifyDialogOpen(false)}
         onSubmit={handleModifySubmit}
+        currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
       />
       <IconButton onClick={handleMenuOpen} size="small">
         <MoreVertIcon />
@@ -447,6 +449,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         open={modifyDialogOpen}
         onClose={() => setModifyDialogOpen(false)}
         onSubmit={handleModifySubmit}
+        currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
       />
     </>
   );

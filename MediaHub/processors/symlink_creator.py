@@ -4,6 +4,8 @@ import re
 import time
 import traceback
 import sqlite3
+import json
+import sys
 from threading import Thread
 from queue import Queue, Empty
 from threading import Thread, Event
@@ -229,6 +231,25 @@ def process_file(args, processed_files_log, force=False):
         os.symlink(src_file, dest_file)
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
+
+        # Print new folder name, filename and path when using force mode
+        if force:
+            new_folder_name = os.path.basename(os.path.dirname(dest_file))
+            new_filename = os.path.basename(dest_file)
+            new_path = dest_file
+
+            # Send structured data to WebDavHub API
+            send_structured_message("symlink_created", {
+                "source_file": src_file,
+                "destination_file": dest_file,
+                "new_folder_name": new_folder_name,
+                "new_filename": new_filename,
+                "new_path": new_path,
+                "tmdb_id": tmdb_id,
+                "season_number": season_number,
+                "force_mode": True
+            })
+
         save_processed_file(src_file, dest_file, tmdb_id, season_number)
 
         # Cleanup old symlink if it exists (force mode)

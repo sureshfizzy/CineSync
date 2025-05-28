@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Login failed');
       }
     } catch (error) {
+      console.error('Login failed:', error);
       setIsAuthenticated(false);
       setUser(null);
       localStorage.removeItem('cineSyncJWT');

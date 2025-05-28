@@ -35,7 +35,7 @@ export const fetchTmdbInfo = async (path: string) => {
     });
   return response.data;
   } catch (error) {
-    console.error('Error fetching .tmdb file:', error);
+    console.error('Failed to fetch TMDB info:', error);
     return null;
 }
 };
@@ -80,4 +80,4 @@ export async function deleteFileDetail(path: string) {
 export async function getFileDetail(path: string) {
   const response = await axios.get(`/api/file-details?path=${encodeURIComponent(path)}`);
   return response.data;
-} 
+}

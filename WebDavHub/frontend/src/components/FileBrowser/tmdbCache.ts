@@ -24,7 +24,7 @@ const createCacheError = (message: string, context: string, originalError?: any)
   const error = new Error(message) as CacheError;
   error.context = context;
   error.originalError = originalError;
-  console.error(`[TMDB Cache] ${context}:`, originalError || message);
+  // Silent error handling for TMDB cache
   return error;
 };
 
@@ -33,15 +33,15 @@ function getDB(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       if (typeof indexedDB === 'undefined') {
-        console.warn('[TMDB Cache] IndexedDB is not available, using mock DB.');
+        // IndexedDB not available, using mock DB
         return resolve(createMockDB());
       }
 
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      
+
       request.onerror = () => reject(createCacheError('Failed to open database', 'DB Init', request.error));
       request.onsuccess = () => resolve(request.result);
-      
+
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -81,7 +81,7 @@ export function generateCacheKey(id: string | number, mediaType: string = ''): s
 export function invalidateCache(oldId: string | number, mediaType: string = ''): void {
   const oldKey = generateCacheKey(oldId, mediaType);
   memoryCache.delete(oldKey);
-  
+
   getDB().then(db => {
     if (typeof db.transaction !== 'function') return;
     const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -95,17 +95,17 @@ export function invalidateCache(oldId: string | number, mediaType: string = ''):
 // Optimized cache read with better error handling
 export function getPosterFromCache(id: number | string, mediaType: string = ''): TmdbResult | undefined {
   if (!id) return undefined;
-  
+
   const cacheKey = generateCacheKey(id, mediaType);
   const cachedData = memoryCache.get(cacheKey);
-  
+
   if (cachedData) {
-    updateLastAccessed(cacheKey).catch(console.warn);
+    updateLastAccessed(cacheKey).catch(() => {});
     return cachedData;
   }
 
   // Asynchronously populate memory cache from IndexedDB
-  loadFromIndexedDB(cacheKey).catch(console.warn);
+  loadFromIndexedDB(cacheKey).catch(() => {});
   return undefined;
 }
 
@@ -113,10 +113,10 @@ export function getPosterFromCache(id: number | string, mediaType: string = ''):
 async function updateLastAccessed(cacheKey: string): Promise<void> {
   const db = await getDB();
   if (typeof db.transaction !== 'function') return;
-  
+
   const transaction = db.transaction(STORE_NAME, 'readwrite');
   const store = transaction.objectStore(STORE_NAME);
-  
+
   const request = store.get(cacheKey);
   request.onsuccess = () => {
     const item = request.result;
@@ -131,10 +131,10 @@ async function updateLastAccessed(cacheKey: string): Promise<void> {
 async function loadFromIndexedDB(cacheKey: string): Promise<void> {
   const db = await getDB();
   if (typeof db.transaction !== 'function') return;
-  
+
   const transaction = db.transaction(STORE_NAME, 'readwrite');
   const store = transaction.objectStore(STORE_NAME);
-  
+
   const request = store.get(cacheKey);
   request.onsuccess = () => {
     const item = request.result;
@@ -170,6 +170,7 @@ export async function setPosterInCache(id: number | string, mediaType: string = 
     await writeToIndexedDB(cacheKey, data);
     await evictOldItems();
   } catch (error) {
+    console.error('Failed to write to cache:', error);
     memoryCache.delete(cacheKey);
     throw createCacheError('Failed to write to cache', 'Cache Write', error);
   }
@@ -222,6 +223,7 @@ async function evictOldItems(): Promise<void> {
     const itemsToEvict = count - (MAX_CACHE_ITEMS - EVICTION_CHUNK_SIZE);
     await evictItems(index, itemsToEvict);
   } catch (error) {
+    console.error('Failed to evict old items:', error);
     throw createCacheError('Failed to evict old items', 'Cache Eviction', error);
   }
 }
@@ -261,7 +263,7 @@ function evictItems(index: IDBIndex, itemsToEvict: number): Promise<void> {
 // Clear entire cache
 export async function clearTmdbCache(): Promise<void> {
   memoryCache.clear();
-  
+
   try {
     const db = await getDB();
     if (typeof db.transaction !== 'function') return;
@@ -275,11 +277,12 @@ export async function clearTmdbCache(): Promise<void> {
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
+    console.error('Failed to clear cache:', error);
     throw createCacheError('Failed to clear cache', 'Cache Clear', error);
   }
 }
 
 // Initialize DB connection on script load
 getDB().catch(error => {
-  console.error('[TMDB Cache] Initial DB connection failed:', error);
-}); 
+  // Silent error handling for initial DB connection
+});

@@ -75,7 +75,6 @@ export default function Dashboard() {
       }
     } catch (err) {
       setError('Failed to fetch statistics');
-      console.error('Error fetching stats:', err);
       setLoading(false);
     }
   }, []); // No dependencies, so it's stable
@@ -109,7 +108,7 @@ export default function Dashboard() {
       </Box>
     );
   }
-  
+
   if (stats?.scanning) { // Scanning in progress
     return (
       <Box
@@ -137,10 +136,10 @@ export default function Dashboard() {
             <Typography variant="body2" color="text.secondary">
               Current path: {stats.progress.currentPath}
             </Typography>
-             <Button 
-              onClick={handleRefresh} 
-              variant="outlined" 
-              startIcon={<RefreshIcon />} 
+             <Button
+              onClick={handleRefresh}
+              variant="outlined"
+              startIcon={<RefreshIcon />}
               sx={{ mt: 2 }}
             >
               Manual Refresh
@@ -196,32 +195,32 @@ export default function Dashboard() {
 
   return (
     <Box sx={{ px: { xs: 1, sm: 1, md: 0 }, maxWidth: 1600, mx: 'auto' }}>
-      <Box sx={{ 
-        display: 'flex', 
+      <Box sx={{
+        display: 'flex',
         flexDirection: { xs: 'column', sm: 'row' },
-        alignItems: { xs: 'flex-start', sm: 'center' }, 
+        alignItems: { xs: 'flex-start', sm: 'center' },
         gap: { xs: 2, sm: 1 },
-        mb: 4 
+        mb: 4
       }}>
-        <Typography 
-          variant="h4" 
-          sx={{ 
-            fontWeight: 800, 
-            flex: 1, 
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 800,
+            flex: 1,
             letterSpacing: 0.5,
             fontSize: { xs: '1.35rem', sm: '1.8rem', md: '2.1rem' }
           }}
         >
           Dashboard
         </Typography>
-        <Button 
-          variant="contained" 
+        <Button
+          variant="contained"
           startIcon={<RefreshIcon />}
           onClick={handleRefresh}
-          sx={{ 
-            borderRadius: 2, 
-            fontWeight: 600, 
-            bgcolor: 'primary.main', 
+          sx={{
+            borderRadius: 2,
+            fontWeight: 600,
+            bgcolor: 'primary.main',
             boxShadow: 2,
             width: { xs: '100%', sm: 'auto' },
             fontSize: { xs: '0.95rem', sm: '1.08rem' },
@@ -266,16 +265,16 @@ export default function Dashboard() {
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}>
-                    {React.cloneElement(card.icon, { 
-                      sx: { fontSize: { xs: 32, sm: 40 } } 
+                    {React.cloneElement(card.icon, {
+                      sx: { fontSize: { xs: 32, sm: 40 } }
                     })}
                   </Box>
                   <Typography
                     variant="subtitle2"
-                    sx={{ 
-                      color: 'text.secondary', 
-                      fontWeight: 700, 
-                      textTransform: 'uppercase', 
+                    sx={{
+                      color: 'text.secondary',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
                       letterSpacing: 1,
                       fontSize: { xs: '1.8rem', sm: '1.52rem' }
                     }}
@@ -285,9 +284,9 @@ export default function Dashboard() {
                 </Box>
                 <Typography
                   variant="h3"
-                  sx={{ 
-                    fontWeight: 900, 
-                    color: card.color, 
+                  sx={{
+                    fontWeight: 900,
+                    color: card.color,
                     lineHeight: 1.1,
                     fontSize: { xs: '1.5rem', sm: '2.1rem', md: '2.6rem' }
                   }}
@@ -301,4 +300,4 @@ export default function Dashboard() {
       </Grid>
     </Box>
   );
-} 
+}

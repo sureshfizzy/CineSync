@@ -66,9 +66,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           // Get the TV show folder contents (seasons)
           const folderResponse = await axios.get(`/api/files${folderPath}`);
           const files: FileItem[] = folderResponse.data;
-          
+
           // Filter season folders
-          const seasonFolders = files.filter(file => 
+          const seasonFolders = files.filter(file =>
             file.type === 'directory' && file.isSeasonFolder
           ).sort((a, b) => {
             const aNum = parseInt(a.name.match(/\d+/)?.[0] || '0');
@@ -81,9 +81,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           for (const season of seasonFolders) {
             const seasonPath = `${folderPath}/${season.name}`;
             const seasonResponse = await axios.get(`/api/files${seasonPath}`);
-            const episodeFiles = seasonResponse.data.filter((file: FileItem) => 
-              file.type === 'file' && 
-              ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext => 
+            const episodeFiles = seasonResponse.data.filter((file: FileItem) =>
+              file.type === 'file' &&
+              ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext =>
                 file.name.toLowerCase().endsWith(ext)
               )
             );
@@ -116,8 +116,8 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           const files: FileItem[] = folderResponse.data;
 
           const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
-          const mediaFile = files.find(file => 
-            file.type === 'file' && 
+          const mediaFile = files.find(file =>
+            file.type === 'file' &&
             videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
           );
 
@@ -138,7 +138,6 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
         }
       } catch (err) {
         setError('Failed to fetch media file information');
-        console.error('Error fetching media file info:', err);
       } finally {
         setLoading(false);
       }
@@ -200,7 +199,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
               <AccordionDetails>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {season.episodes.map((episode) => (
-                    <Box key={episode.name} sx={{ 
+                    <Box key={episode.name} sx={{
                       bgcolor: 'action.hover',
                       p: 1.5,
                       borderRadius: 1,
@@ -287,7 +286,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
             {formatDate(pathInfo.modified)}
           </Typography>
         </Box>
-        
+
         {pathInfo.sourcePath && (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -308,7 +307,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
             </Tooltip>
           </Box>
         )}
-        
+
         {pathInfo.fullPath && (
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -332,4 +331,4 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
       </Box>
     </Paper>
   );
-} 
+}
