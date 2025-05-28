@@ -18,8 +18,6 @@ def send_structured_message(message_type, data):
             "timestamp": time.time(),
             "data": data
         }
-        # Output to stderr so it doesn't interfere with normal stdout logging
-        log_message(f"WEBDAV_API_MESSAGE:{json.dumps(structured_msg)}", level="INFO", output="stderr")
     except Exception as e:
         log_message(f"Error sending structured message: {e}", level="WARNING")
 
