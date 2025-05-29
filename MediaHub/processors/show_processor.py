@@ -223,19 +223,39 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     proper_show_name = show_folder
     if not anime_result:
-        result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra)
-        # Check if result is None (API connection issues)
+        # Retry logic for show name extraction
+        max_retries = 2
+        retry_count = 0
+        result = None
+
+        while retry_count < max_retries and result is None:
+            retry_count += 1
+            log_message(f"TMDb show search attempt {retry_count}/{max_retries} for: {show_folder} ({year})", level="DEBUG")
+
+            result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra)
+
+            if result is None and retry_count < max_retries:
+                import time
+                wait_time = 2
+                log_message(f"TMDb search failed, retrying in {wait_time} seconds...", level="WARNING")
+                time.sleep(wait_time)
+
+        # Check final result after all retries
         if result is None:
-            log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
+            log_message(f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
             return None, None, None, None
         elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
         else:
-            proper_show_name = result
-        if "TMDb API error" in proper_show_name:
-            log_message(f"Could not find TV show in TMDb or TMDb API error: {show_folder} ({year})", level="ERROR")
-            proper_show_name = show_folder
+            # If result is not None but also not a proper tuple, it means TMDb returned invalid data
+            log_message(f"TMDb returned invalid data for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
+            return None, None, None, None
+
+        # Validate that we got a proper show name from TMDb
+        if not proper_show_name or proper_show_name.strip() == "" or "TMDb API error" in str(proper_show_name):
+            log_message(f"TMDb could not provide valid show name for: {show_folder} ({year}). Skipping show processing.", level="ERROR")
+            return None, None, None, None
 
         if is_tmdb_folder_id_enabled():
             show_folder = proper_show_name
