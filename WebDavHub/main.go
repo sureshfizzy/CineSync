@@ -141,6 +141,7 @@ func main() {
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
+	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

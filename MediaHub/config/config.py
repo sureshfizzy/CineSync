@@ -249,3 +249,15 @@ def get_show_resolution_folder(file, resolution):
             return mappings.get('dvd', 'RetroDVD')
         else:
             return mappings.get('default', 'Shows')
+
+def get_cinesync_ip():
+    """Get CineSync IP from environment variable for client connections"""
+    ip = os.getenv('CINESYNC_IP', 'localhost')
+    # Convert 0.0.0.0 (server bind address) to localhost for client connections
+    if ip == '0.0.0.0':
+        return 'localhost'
+    return ip
+
+def get_cinesync_api_port():
+    """Get CineSync API port from environment variable"""
+    return os.getenv('CINESYNC_API_PORT', '8082')

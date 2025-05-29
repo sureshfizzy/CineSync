@@ -57,6 +57,8 @@ var (
 	activePythonCmd    *exec.Cmd
 	activePythonStdin  io.WriteCloser
 	activePythonMutex  sync.Mutex
+	activePythonResponseWriter http.ResponseWriter
+	activePythonResponseMutex  sync.Mutex
 )
 
 // parseStructuredMessage attempts to parse a structured message from Python
@@ -158,6 +160,11 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	activePythonCmd = cmd
 	activePythonStdin = stdin
 	activePythonMutex.Unlock()
+
+	// Store the response writer for structured message handling
+	activePythonResponseMutex.Lock()
+	activePythonResponseWriter = w
+	activePythonResponseMutex.Unlock()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		http.Error(w, "Failed to get stdout pipe: "+err.Error(), http.StatusInternalServerError)
@@ -258,11 +265,15 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	// Close stdin and cleanup
 	stdin.Close()
 
-	// Clear active command
+	// Clear active command and response writer
 	activePythonMutex.Lock()
 	activePythonCmd = nil
 	activePythonStdin = nil
 	activePythonMutex.Unlock()
+
+	activePythonResponseMutex.Lock()
+	activePythonResponseWriter = nil
+	activePythonResponseMutex.Unlock()
 }
 
 // HandlePythonBridgeInput handles sending input to the active python process
@@ -300,4 +311,52 @@ func HandlePythonBridgeInput(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// HandlePythonMessage handles structured messages sent directly from Python processors
+func HandlePythonMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse the structured message from request body
+	var msg StructuredMessage
+	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Get the active response writer to forward the message
+	activePythonResponseMutex.Lock()
+	responseWriter := activePythonResponseWriter
+	activePythonResponseMutex.Unlock()
+
+	if responseWriter == nil {
+		// No active python bridge session
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Create response with structured data
+	response := PythonBridgeResponse{
+		StructuredData: &msg,
+	}
+
+	// Send the response to the active bridge session
+	data, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
+		return
+	}
+
+	// Write to the active bridge response writer
+	responseWriter.Write(data)
+	responseWriter.Write([]byte("\n"))
+
+	if flusher, ok := responseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

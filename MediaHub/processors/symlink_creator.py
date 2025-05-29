@@ -22,6 +22,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.processors.symlink_utils import *
+from MediaHub.utils.webdav_api import send_structured_message
 
 error_event = Event()
 log_imported_db = False
