@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"strings"
 	"io"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/env"
 )
 
 // PythonBridgeRequest represents the request payload for running the python bridge
@@ -60,6 +62,20 @@ var (
 	activePythonResponseWriter http.ResponseWriter
 	activePythonResponseMutex  sync.Mutex
 )
+
+// getPythonCommand determines the correct Python executable based on the OS and environment
+func getPythonCommand() string {
+	// Check if a custom Python command is set via environment variable
+	if customPython := env.GetString("PYTHON_COMMAND", ""); customPython != "" {
+		return customPython
+	}
+
+	// Default platform-specific behavior
+	if runtime.GOOS == "windows" {
+		return "python"
+	}
+	return "python3"
+}
 
 // parseStructuredMessage attempts to parse a structured message from Python
 func parseStructuredMessage(line string) *StructuredMessage {
@@ -140,14 +156,17 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, "--force")
 
+	// Get the appropriate Python command for this platform
+	pythonCmd := getPythonCommand()
+
 	// Log the command being executed
-	logger.Info("Executing python bridge: python %s", strings.Join(args, " "))
+	logger.Info("Executing python bridge: %s %s", pythonCmd, strings.Join(args, " "))
 
 	// Create command context with cancel
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "python", args...)
+	cmd := exec.CommandContext(ctx, pythonCmd, args...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
