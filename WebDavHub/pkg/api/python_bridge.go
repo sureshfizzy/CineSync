@@ -20,6 +20,8 @@ import (
 type PythonBridgeRequest struct {
 	SourcePath string `json:"sourcePath"`
 	DisableMonitor bool `json:"disableMonitor"`
+	SelectedOption string `json:"selectedOption,omitempty"`
+	SelectedIds map[string]string `json:"selectedIds,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
@@ -108,6 +110,15 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Debug: Log the received request
+	logger.Info("Received python bridge request: %+v", req)
+	if req.SelectedIds != nil {
+		logger.Info("Selected IDs received:")
+		for key, value := range req.SelectedIds {
+			logger.Info("  %s: %s", key, value)
+		}
+	}
+
 	// Clean and validate the source path
 	cleanPath := filepath.Clean(req.SourcePath)
 	if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
@@ -155,6 +166,38 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--disable-monitor")
 	}
 	args = append(args, "--force")
+
+	// Add selected action option if provided
+	if req.SelectedOption != "" {
+		switch req.SelectedOption {
+		case "force":
+			// --force is already added above
+		case "force-show":
+			args = append(args, "--force-show")
+		case "force-movie":
+			args = append(args, "--force-movie")
+		case "force-extra":
+			args = append(args, "--force-extra")
+		case "skip":
+			args = append(args, "--skip")
+		}
+	}
+
+	// Add ID-based arguments if provided
+	if req.SelectedIds != nil {
+		if imdbId, ok := req.SelectedIds["imdb"]; ok && imdbId != "" {
+			args = append(args, "--imdb", imdbId)
+		}
+		if tmdbId, ok := req.SelectedIds["tmdb"]; ok && tmdbId != "" {
+			args = append(args, "--tmdb", tmdbId)
+		}
+		if tvdbId, ok := req.SelectedIds["tvdb"]; ok && tvdbId != "" {
+			args = append(args, "--tvdb", tvdbId)
+		}
+		if seasonEpisode, ok := req.SelectedIds["season-episode"]; ok && seasonEpisode != "" {
+			args = append(args, "--season-episode", seasonEpisode)
+		}
+	}
 
 	// Get the appropriate Python command for this platform
 	pythonCmd := getPythonCommand()

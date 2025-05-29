@@ -3,7 +3,7 @@ import { Box, useMediaQuery, useTheme } from '@mui/material';
 import axios from 'axios';
 import FileActionMenu from '../FileBrowser/FileActionMenu';
 import { MediaDetailsData } from '../../types/MediaTypes';
-import ModifyDialog from '../FileBrowser/ModifyDialog';
+import ModifyDialog from '../FileBrowser/ModifyDialog/ModifyDialog';
 
 interface MovieFileActionsProps {
   data: MediaDetailsData;

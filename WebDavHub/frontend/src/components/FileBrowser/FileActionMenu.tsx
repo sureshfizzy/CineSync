@@ -10,7 +10,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
-import ModifyDialog from './ModifyDialog';
+import ModifyDialog from './ModifyDialog/ModifyDialog';
 import { upsertFileDetail, deleteFileDetail } from './fileApi';
 
 interface FileItem {
@@ -277,10 +277,10 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
 
   if (variant === 'buttons') {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        gap: 1, 
-        flexWrap: 'wrap', 
+      <Box sx={{
+        display: 'flex',
+        gap: 1,
+        flexWrap: 'wrap',
         justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' },
         width: '100%',
         mt: 1, mb: 0
