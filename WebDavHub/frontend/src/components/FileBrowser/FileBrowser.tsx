@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -19,7 +19,7 @@ import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
 import { FileItem } from './types';
 import { getFileIcon, joinPaths, formatDate, parseTitleYearFromFolder } from './fileUtils';
-import { fetchFiles as fetchFilesApi, fetchTmdbInfo } from './fileApi';
+import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
 import Header from './Header';
@@ -83,14 +83,13 @@ export default function FileBrowser() {
   const [detailsData, setDetailsData] = useState<FileItem | null>(null);
 
   // Refs for tracking requests
-  const tmdbFetchRef = useRef<{ [key: string]: boolean }>({});
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
   const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
   const tmdbActive = useRef(0);
   const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0);
 
   // TMDB related states
-  const [folderHasAllowed, setFolderHasAllowed] = useState<{ [folder: string]: boolean }>({});
+  const [folderHasAllowed] = useState<{ [folder: string]: boolean }>({});
 
   // Memoized filtered and sorted files
   const filteredFiles = useMemo(() => {
@@ -124,10 +123,7 @@ export default function FileBrowser() {
     }
   }, [totalPages, page]);
 
-  const enqueueTmdbLookup = useCallback((name: string, title: string, year: string | undefined, mediaType: 'movie' | 'tv' | undefined) => {
-    tmdbQueue.current.push({ name, title, year, mediaType });
-    setTmdbQueueVersion(v => v + 1);
-  }, []);
+
 
   useEffect(() => {
     if (tmdbActive.current >= TMDB_CONCURRENCY_LIMIT) return;

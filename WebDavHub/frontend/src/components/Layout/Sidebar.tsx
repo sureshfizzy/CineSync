@@ -1,10 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, Divider, Chip, useTheme, useMediaQuery, IconButton } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, useTheme, useMediaQuery } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
-import HistoryIcon from '@mui/icons-material/History';
-import DeleteIcon from '@mui/icons-material/Delete';
 import WifiIcon from '@mui/icons-material/Wifi';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -67,9 +65,9 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             className={({ isActive }) => isActive ? 'active-nav' : ''}
             onClick={onNavigate}
           >
-            <ListItem 
+            <ListItem
               button
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 '&:hover': {
                   bgcolor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
@@ -92,11 +90,11 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
         <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${theme.palette.divider}` }}>
           <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 2, px: 1 }}>VIEW OPTIONS</Typography>
           <List sx={{ p: 0 }}>
-            <ListItem 
-              button 
+            <ListItem
+              button
               onClick={() => onViewChange?.('poster')}
               selected={currentView === 'poster'}
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 mb: 1,
                 '&.Mui-selected': {
@@ -114,11 +112,11 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               </ListItemIcon>
               <ListItemText primary="Poster View" />
             </ListItem>
-            <ListItem 
-              button 
+            <ListItem
+              button
               onClick={() => onViewChange?.('list')}
               selected={currentView === 'list'}
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 mb: 1,
                 '&.Mui-selected': {
@@ -136,10 +134,10 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               </ListItemIcon>
               <ListItemText primary="List View" />
             </ListItem>
-            <ListItem 
-              button 
+            <ListItem
+              button
               onClick={onRefresh}
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 color: theme.palette.primary.main,
                 '& .MuiListItemIcon-root': {
@@ -159,12 +157,12 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
 
       <Box sx={{ p: 2 }}>
         <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 1 }}>WEBDAV STATUS</Typography>
-        <Box sx={{ 
-          bgcolor: 'background.paper', 
-          borderRadius: 2, 
-          p: 2, 
+        <Box sx={{
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          p: 2,
           border: `1px solid ${theme.palette.divider}`,
-          boxShadow: 1 
+          boxShadow: 1
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <FiberManualRecordIcon sx={{ color: webdavStats.webdavStatus === 'Active' ? theme.palette.success.main : theme.palette.error.main, fontSize: 16, mr: 1 }} />
@@ -180,4 +178,4 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
       </Box>
     </Box>
   );
-} 
+}

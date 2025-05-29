@@ -283,6 +283,6 @@ export async function clearTmdbCache(): Promise<void> {
 }
 
 // Initialize DB connection on script load
-getDB().catch(error => {
+getDB().catch(() => {
   // Silent error handling for initial DB connection
 });

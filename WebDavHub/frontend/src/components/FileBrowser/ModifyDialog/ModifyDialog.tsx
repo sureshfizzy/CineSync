@@ -20,7 +20,7 @@ import IDOptions from './IDOptions';
 import ExecutionDialog from './ExecutionDialog';
 import { ModifyDialogProps, ModifyOption, IDOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, onSubmit, currentFilePath }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');

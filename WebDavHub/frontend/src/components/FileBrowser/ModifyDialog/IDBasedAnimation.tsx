@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Typography, useTheme, Chip } from '@mui/material';
+import React from 'react';
+import { Box, Typography, Chip } from '@mui/material';
 import { styled as muiStyled, keyframes } from '@mui/material/styles';
 
 interface IDBasedAnimationProps {
@@ -89,7 +89,6 @@ const FloatingDot = muiStyled(Box)(({ theme }) => ({
 }));
 
 const IDBasedAnimation: React.FC<IDBasedAnimationProps> = ({ selectedIds, isActive }) => {
-  const theme = useTheme();
 
   const getActiveIds = () => {
     return Object.entries(selectedIds).filter(([_, value]) => value && value.trim() !== '');

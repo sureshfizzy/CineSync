@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Box, Paper, Typography, Skeleton } from '@mui/material';
 import { useTheme } from '@mui/material';
 import { FileItem } from './types';
@@ -36,14 +36,14 @@ export default function PosterView({
   }
 
   return (
-    <Box sx={{ 
-      display: 'grid', 
-      gridTemplateColumns: { 
-        xs: 'repeat(2, 1fr)', 
-        sm: 'repeat(3, 1fr)', 
-        md: 'repeat(4, 1fr)', 
-        lg: 'repeat(5, 1fr)' 
-      }, 
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: {
+        xs: 'repeat(2, 1fr)',
+        sm: 'repeat(3, 1fr)',
+        md: 'repeat(4, 1fr)',
+        lg: 'repeat(5, 1fr)'
+      },
       gap: 3,
       p: 1
     }}>
@@ -53,11 +53,11 @@ export default function PosterView({
         const loaded = imgLoadedMap[file.name] || false;
 
         return (
-          <Paper 
-            key={file.name} 
+          <Paper
+            key={file.name}
             sx={{
-              display: 'flex', 
-              flexDirection: 'column', 
+              display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               cursor: file.type === 'directory' ? 'pointer' : 'default',
               transition: 'all 0.2s ease-in-out',
@@ -68,13 +68,13 @@ export default function PosterView({
               '&:hover': {
                 transform: 'translateY(-4px)',
                 boxShadow: 6,
-                background: theme.palette.action.selected 
+                background: theme.palette.action.selected
               }
             }}
             onClick={() => onFileClick(file, tmdb)}
           >
-            <Box sx={{ 
-              width: '100%', 
+            <Box sx={{
+              width: '100%',
               aspectRatio: '3/4',
               display: 'flex',
               alignItems: 'center',
@@ -108,7 +108,7 @@ export default function PosterView({
                             top: 0, left: 0, right: 0, bottom: 0,
                             display: 'block',
                             opacity: loaded && hasPosterPath ? 1 : 0,
-                            filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)', 
+                            filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)',
                             transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
                             transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
                           }}
@@ -129,17 +129,17 @@ export default function PosterView({
                 }
               })()}
             </Box>
-            <Box sx={{ 
+            <Box sx={{
               width: '100%',
               p: { xs: '6px 8px', sm: '4px 12px' },
               background: theme.palette.background.paper,
               borderTop: `1px solid ${theme.palette.divider}`
             }}>
-              <Typography 
-                sx={{ 
-                  fontWeight: 500, 
-                  textAlign: 'center', 
-                  fontSize: { xs: '0.9rem', sm: '1rem' }, 
+              <Typography
+                sx={{
+                  fontWeight: 500,
+                  textAlign: 'center',
+                  fontSize: { xs: '0.9rem', sm: '1rem' },
                   wordBreak: 'break-all',
                   mb: 0.5,
                   lineHeight: 1.2,
@@ -167,8 +167,8 @@ export default function PosterView({
                     display: 'block',
                   }}
                 >
-                  {tmdb.release_date 
-                    ? new Date(tmdb.release_date).getFullYear() 
+                  {tmdb.release_date
+                    ? new Date(tmdb.release_date).getFullYear()
                     : ''}
                 </Typography>
               )}
@@ -178,4 +178,4 @@ export default function PosterView({
       })}
     </Box>
   );
-} 
+}

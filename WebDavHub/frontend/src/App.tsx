@@ -8,7 +8,7 @@ import Login from './components/Auth/Login';
 import Dashboard from './components/Dashboard/Dashboard';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import { CircularProgress, Box, Typography, Button, GlobalStyles } from '@mui/material';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { getTheme } from './theme';
 import MediaDetails from './pages/MediaDetails';
@@ -259,7 +259,6 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'light' | 'dark' }) {
   const { authEnabled, isAuthenticated } = useAuth();
-  const location = useLocation();
 
   return (
     <Routes>

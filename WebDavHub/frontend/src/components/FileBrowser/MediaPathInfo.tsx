@@ -2,7 +2,6 @@ import { Box, Typography, Tooltip, Paper, CircularProgress, Accordion, Accordion
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { getFileDetail } from './fileApi';
 
 interface MediaPathInfoProps {
   folderName: string;

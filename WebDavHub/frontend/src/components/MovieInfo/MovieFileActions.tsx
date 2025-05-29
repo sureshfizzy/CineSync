@@ -19,7 +19,6 @@ interface MovieFileActionsProps {
 const globalRequestCache = new Set<string>();
 
 const MovieFileActions: React.FC<MovieFileActionsProps> = ({
-  data,
   folderName,
   currentPath,
   placement,

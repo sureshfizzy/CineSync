@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { TmdbResult } from '../components/api/tmdbApi';
-import { getPosterFromCache, setPosterInCache } from '../components/FileBrowser/tmdbCache';
+import { getPosterFromCache } from '../components/FileBrowser/tmdbCache';
 
 interface TmdbContextType {
   tmdbData: { [key: string]: TmdbResult | null };
@@ -30,14 +30,14 @@ export function TmdbProvider({ children }: { children: React.ReactNode }) {
   const getTmdbDataFromCache = useCallback((key: string, mediaType?: string) => {
     // First check our in-memory state
     if (tmdbData[key]) return tmdbData[key];
-    
+
     // Then check the IndexedDB cache
     const cached = getPosterFromCache(key, mediaType || '');
     if (cached) {
       updateTmdbData(key, cached);
       return cached;
     }
-    
+
     return null;
   }, [tmdbData, updateTmdbData]);
 
@@ -60,4 +60,4 @@ export function useTmdb() {
     throw new Error('useTmdb must be used within a TmdbProvider');
   }
   return context;
-} 
+}

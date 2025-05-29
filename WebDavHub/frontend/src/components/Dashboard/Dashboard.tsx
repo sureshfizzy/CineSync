@@ -8,13 +8,10 @@ import {
   CircularProgress,
   useTheme,
   Button,
-  Avatar,
-  Stack,
 } from '@mui/material';
 import {
   Storage as StorageIcon,
   Folder as FolderIcon,
-  AccessTime as TimeIcon,
   Description as DescriptionIcon,
   CloudDone as CloudDoneIcon,
   Refresh as RefreshIcon,

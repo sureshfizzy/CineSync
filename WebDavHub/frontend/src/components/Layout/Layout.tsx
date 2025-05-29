@@ -1,6 +1,5 @@
-import { Box, useMediaQuery, useTheme, IconButton, Drawer } from '@mui/material';
+import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext } from 'react-router-dom';
-import MenuIcon from '@mui/icons-material/Menu';
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -24,14 +23,13 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  
+
   // Get initial view from localStorage or default to 'poster'
   const getInitialView = () => {
     const saved = localStorage.getItem('fileViewMode');
     return saved === 'poster' || saved === 'list' ? saved as 'poster' | 'list' : 'poster';
   };
   const [view, setView] = useState<'list' | 'poster'>(getInitialView);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Save view mode to localStorage whenever it changes
   const handleViewChange = (newView: 'list' | 'poster') => {
@@ -43,7 +41,6 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   };
 
   const handleRefresh = () => {
-    setRefreshTrigger(prev => prev + 1);
     if (isMobile) {
       setMobileOpen(false);
     }
@@ -134,4 +131,4 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
       </Box>
     </Box>
   );
-} 
+}

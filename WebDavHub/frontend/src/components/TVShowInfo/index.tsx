@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
-import { Box, Snackbar, Alert, IconButton, Tooltip } from '@mui/material';
+import { Box, Snackbar, Alert, IconButton } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate } from 'react-router-dom';
 import ShowHeader from './ShowHeader';
@@ -122,4 +122,4 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
       </Box>
     </Box>
   );
-} 
+}

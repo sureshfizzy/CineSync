@@ -6,7 +6,6 @@ import {
   Typography,
   Card,
   CardContent,
-  CardHeader,
   IconButton,
   CircularProgress,
 } from '@mui/material';

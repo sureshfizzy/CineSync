@@ -1,4 +1,4 @@
-import { createTheme, alpha, Theme } from '@mui/material/styles';
+import { createTheme, Theme } from '@mui/material/styles';
 import { PaletteMode, Components } from '@mui/material';
 
 // Custom color definitions with extended palette
@@ -376,4 +376,4 @@ export const getTheme = (mode: PaletteMode): Theme => {
     shadows: shadows as Theme['shadows'],
     components,
   });
-}; 
+};

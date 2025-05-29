@@ -14,7 +14,7 @@ import {
 import { styled as muiStyled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import { ActionButton, pulse, fadeIn, fadeOut } from './StyledComponents';
+import { ActionButton, pulse, fadeOut } from './StyledComponents';
 import MovieOptionCard from './MovieOptionCard';
 import PosterSkeleton from './PosterSkeleton';
 import IDBasedAnimation from './IDBasedAnimation';
@@ -91,7 +91,6 @@ const StyledExecutionDialog = muiStyled(Dialog, {
 const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
   open,
   onClose,
-  execOutput,
   execInput,
   onInputChange,
   onInputSubmit,

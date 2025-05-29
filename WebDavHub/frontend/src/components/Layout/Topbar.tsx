@@ -1,14 +1,10 @@
-import { AppBar, Box, Toolbar, Typography, InputBase, IconButton, Avatar, Badge, Tooltip, useMediaQuery, useTheme } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
+import { AppBar, Box, Toolbar, Typography, IconButton, Avatar, Tooltip, useMediaQuery, useTheme } from '@mui/material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import logo from '../assets/logo.png';
 
 interface TopbarProps {
   toggleTheme: () => void;
@@ -19,7 +15,6 @@ interface TopbarProps {
 export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -82,4 +77,4 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
       </Toolbar>
     </AppBar>
   );
-} 
+}
