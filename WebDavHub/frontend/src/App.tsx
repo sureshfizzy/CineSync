@@ -290,7 +290,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
-        <Route path="media/:folderName" element={<MediaDetails />} />
+        <Route path="media/*" element={<MediaDetails />} />
       </Route>
 
       {/* Catch all route - 404 */}
@@ -336,4 +336,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

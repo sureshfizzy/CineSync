@@ -255,7 +255,8 @@ export default function FileBrowser() {
         const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
         const tmdbId = tmdb?.id;
         const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
-        navigate(`/media/${encodeURIComponent(file.name)}`, {
+        const mediaPath = joinPaths(currentPath, file.name);
+        navigate(`/media${mediaPath}`, {
           state: {
             mediaType: isTvShow ? 'tv' : 'movie',
             tmdbId,

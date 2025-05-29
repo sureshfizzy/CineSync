@@ -18,9 +18,17 @@ function getBackdropUrl(path: string | null, size = 'w1280') {
 }
 
 export default function MediaDetails() {
-  const { folderName } = useParams<{ folderName: string }>();
+  const params = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const urlPath = params['*'] || '';
+  const fullPath = '/' + urlPath;
+
+  const pathParts = fullPath.split('/').filter(Boolean);
+  const folderName = pathParts.pop() || '';
+  const currentPath = location.state?.currentPath || ('/' + pathParts.join('/') + (pathParts.length > 0 ? '/' : ''));
+
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +38,6 @@ export default function MediaDetails() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const mediaType = location.state?.mediaType || 'movie';
   const tmdbId = location.state?.tmdbId;
-  const currentPath = location.state?.currentPath || '';
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
   const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -52,8 +59,13 @@ export default function MediaDetails() {
 
     // Add a brief delay to allow for smooth visual transition
     transitionTimeoutRef.current = setTimeout(() => {
-      // Navigate to the new folder name WITHOUT preserving old data
-      navigate(`/media/${encodeURIComponent(newFolderName)}`, {
+      // Build new path by replacing the last segment with the new folder name
+      const pathParts = fullPath.split('/').filter(Boolean);
+      pathParts[pathParts.length - 1] = newFolderName;
+      const newFullPath = '/' + pathParts.join('/');
+
+      // Navigate to the new full path WITHOUT preserving old data
+      navigate(`/media${newFullPath}`, {
         state: {
           mediaType,
           tmdbId: undefined, // Clear tmdbId to force fresh lookup
@@ -70,7 +82,7 @@ export default function MediaDetails() {
         setPendingFolderName(null);
       }, 500); // Longer delay to allow for data fetching
     }, 400); // Slightly longer delay for smoother transition
-  }, [folderName, navigate, mediaType, tmdbId, currentPath]);
+  }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath]);
 
   // Test function to manually trigger transition (for debugging)
   const testTransition = useCallback(() => {
