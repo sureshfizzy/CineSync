@@ -347,7 +347,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// 3. If we have a media type (from .tmdb or content) but no TMDB ID yet (maybe .tmdb only had ID or no .tmdb), try to search
-			if subDirMediaType != "" && subDirTmdbID == "" {
+			// BUT: Don't create .tmdb files in season folders - only in show root directories
+			if subDirMediaType != "" && subDirTmdbID == "" && !isSeasonFolder(entry.Name()) {
 				folderName := entry.Name()
 				year := ""
 
@@ -416,6 +417,16 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 							}
 						}
 					}
+				}
+			}
+
+			// For season folders, try to inherit TMDB ID from parent directory
+			if isSeasonFolder(entry.Name()) && subDirTmdbID == "" {
+				// Check if parent directory has a .tmdb file
+				if tmdbID != "" {
+					fileInfo.TmdbId = tmdbID
+					fileInfo.MediaType = "tv" // Season folders are always TV
+					logger.Info("Season folder %s inherited TMDB ID %s from parent directory", entry.Name(), tmdbID)
 				}
 			}
 

@@ -3,6 +3,7 @@ export interface ModifyDialogProps {
   onClose: () => void;
   onSubmit?: (selectedOption: string, selectedIds: Record<string, string>) => void;
   currentFilePath?: string;
+  mediaType?: 'movie' | 'tv';
 }
 
 export interface ModifyOption {
@@ -26,7 +27,14 @@ export interface MovieOption {
   year?: string;
   tmdbId: string;
   posterUrl?: string;
-  tmdbData?: any;
+  tmdbData?: {
+    id: number;
+    title?: string;
+    name?: string;
+    poster_path?: string;
+    media_type?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ActionOptionsProps {

@@ -1,13 +1,20 @@
 import React from 'react';
 import { Box, Typography, Chip, Paper } from '@mui/material';
 import { MediaDetailsData } from './types';
+import ShowFileActions from './ShowFileActions';
 
 interface ShowHeaderProps {
   data: MediaDetailsData;
   getPosterUrl: (path: string | null, size?: string) => string | undefined;
+  folderName: string;
+  currentPath: string;
+  mediaType: 'movie' | 'tv';
+  onRename?: (file: any) => void;
+  onError?: (error: string) => void;
+  refreshTrigger?: number;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, mediaType, onRename, onError, refreshTrigger }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
@@ -27,6 +34,16 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl }) => {
         <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1, textAlign: { xs: 'center', md: 'left' } }}>
           {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
         </Typography>
+        <ShowFileActions
+          data={data}
+          folderName={folderName}
+          currentPath={currentPath}
+          mediaType={mediaType}
+          placement="belowTitle"
+          onRename={onRename}
+          onError={onError}
+          refreshTrigger={refreshTrigger}
+        />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' }, textAlign: { xs: 'center', md: 'left' } }}>
           {genres.map((g: { id: number; name: string }) => (
             <Chip key={g.id} label={g.name} color="primary" variant="outlined" />
@@ -46,9 +63,19 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl }) => {
           </Box>
         )}
         <Typography variant="body1" sx={{ mb: 2 }}>{data.overview}</Typography>
+        <ShowFileActions
+          data={data}
+          folderName={folderName}
+          currentPath={currentPath}
+          mediaType={mediaType}
+          placement="belowDescription"
+          onRename={onRename}
+          onError={onError}
+          refreshTrigger={refreshTrigger}
+        />
       </Box>
     </Box>
   );
 };
 
-export default ShowHeader; 
+export default ShowHeader;

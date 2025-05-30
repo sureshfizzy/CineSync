@@ -221,6 +221,20 @@ export default function FileBrowser() {
     fetchFiles(currentPath);
   }, [currentPath]);
 
+  // Listen for page refresh events from symlink cleanup
+  useEffect(() => {
+    const handlePageRefresh = () => {
+      // Refresh the current directory
+      fetchFiles(currentPath);
+    };
+
+    window.addEventListener('symlink-page-refresh', handlePageRefresh);
+
+    return () => {
+      window.removeEventListener('symlink-page-refresh', handlePageRefresh);
+    };
+  }, [currentPath]);
+
   const handlePathClick = (path: string) => {
     const normalizedPath = joinPaths(path);
     const urlPath = normalizedPath.replace(/\/$/, '');

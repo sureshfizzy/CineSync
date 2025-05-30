@@ -44,6 +44,7 @@ export function triggerFolderNameUpdate(updateData: SymlinkUpdateData): void {
 /**
  * Extracts folder name from a file path
  * Looks for media folder patterns like "Movie Name (Year)" or "Show Name"
+ * For TV shows, returns the show name, not the season folder name
  */
 export function extractFolderNameFromPath(path: string): string {
   const normalizedPath = path.replace(/\\/g, '/');
@@ -54,8 +55,16 @@ export function extractFolderNameFromPath(path: string): string {
   for (let i = parts.length - 2; i >= 0; i--) {
     const part = parts[i];
     if (part && part.trim() !== '') {
-      // Skip common folder names that aren't media folders
-      const skipFolders = ['Season', 'Extras', 'Specials', 'Bonus', 'Behind the Scenes'];
+      // Check if this is a season folder
+      if (part.toLowerCase().startsWith('season ')) {
+        // For season folders, return the parent folder (show name) if available
+        if (i > 0 && parts[i - 1] && parts[i - 1].trim() !== '') {
+          return parts[i - 1];
+        }
+      }
+
+      // Skip other common folder names that aren't media folders
+      const skipFolders = ['Extras', 'Specials', 'Bonus', 'Behind the Scenes'];
       const isSkipFolder = skipFolders.some(skip =>
         part.toLowerCase().includes(skip.toLowerCase())
       );
@@ -70,6 +79,20 @@ export function extractFolderNameFromPath(path: string): string {
 }
 
 /**
+ * Triggers a page refresh to update the file browser
+ */
+export function triggerPageRefresh(): void {
+  try {
+    // Dispatch a custom event for page refresh
+    window.dispatchEvent(new CustomEvent('symlink-page-refresh', {
+      detail: { timestamp: Date.now() }
+    }));
+  } catch (error) {
+    console.error('Failed to trigger page refresh:', error);
+  }
+}
+
+/**
  * Processes structured messages from the Python API
  */
 export function processStructuredMessage(message: any): void {
@@ -80,12 +103,17 @@ export function processStructuredMessage(message: any): void {
   if (type === 'symlink_created' && data.force_mode) {
     // For force mode, we need to determine what the old folder was
     // Since we're moving from one folder to another, we should trigger for any current folder
-    const newFolderName = data.new_folder_name;
+
+    // For TV shows, extract the show name from the destination path instead of using new_folder_name
+    // which might be just the season folder
+    const extractedFolderName = extractFolderNameFromPath(data.destination_file);
+
+
+
+    // Use the extracted folder name, but fallback to new_folder_name if extraction fails
+    const newFolderName = extractedFolderName || data.new_folder_name;
 
     if (newFolderName) {
-      // Extract the old folder name from the destination path to see what changed
-      const oldFolderFromDest = extractFolderNameFromPath(data.destination_file);
-
       // Trigger update with a special flag to update any current MediaDetails page
       triggerFolderNameUpdate({
         oldFolderName: '*', // Special wildcard to match any current folder
@@ -94,17 +122,14 @@ export function processStructuredMessage(message: any): void {
         tmdbId: data.tmdb_id,
         timestamp: Date.now()
       });
-
-      // Also trigger with the specific old folder name if we can determine it
-      if (oldFolderFromDest && oldFolderFromDest !== newFolderName) {
-        triggerFolderNameUpdate({
-          oldFolderName: oldFolderFromDest,
-          newFolderName,
-          newPath: data.new_path,
-          tmdbId: data.tmdb_id,
-          timestamp: Date.now()
-        });
-      }
+    }
+  } else if (type === 'symlink_cleanup' && data.force_mode) {
+    // Handle cleanup of old folders - trigger a page refresh to update the file browser
+    if (data.old_folder_removed || data.old_season_folder_removed) {
+      // Add a small delay to ensure cleanup is complete before refreshing
+      setTimeout(() => {
+        triggerPageRefresh();
+      }, 500);
     }
   }
 }

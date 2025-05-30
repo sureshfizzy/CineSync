@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense, useCallback } from 'react';
 import { Box, Snackbar, Alert, IconButton } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +25,13 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   const [selectedSeason, setSelectedSeason] = useState<any>(null);
   const [selectedSeasonFolder, setSelectedSeasonFolder] = useState<any>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
+
+  // Function to trigger refresh of file actions
+  const handleRefresh = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   const {
     seasonFolders,
@@ -69,7 +75,16 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
       <Box sx={{ width: '100%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Box sx={{ flex: 1 }}>
-            <ShowHeader data={data} getPosterUrl={getPosterUrl} />
+            <ShowHeader
+              data={data}
+              getPosterUrl={getPosterUrl}
+              folderName={folderName}
+              currentPath={currentPath}
+              mediaType={mediaType}
+              onRename={handleRefresh}
+              onError={(error) => setSnackbar({ open: true, message: error, severity: 'error' })}
+              refreshTrigger={refreshTrigger}
+            />
           </Box>
         </Box>
         <SeasonList

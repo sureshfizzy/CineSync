@@ -85,6 +85,11 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
             {option.year}
           </Typography>
         )}
+        {option.tmdbData?.id && (
+          <Typography variant="caption" color="primary.main" sx={{ fontSize: '0.7rem', fontWeight: 500 }}>
+            TMDb: {option.tmdbData.id}
+          </Typography>
+        )}
       </Box>
     </Paper>
   );

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -77,6 +78,55 @@ func getPythonCommand() string {
 		return "python"
 	}
 	return "python3"
+}
+
+// findVideoFileInTVShowFolder finds a video file within a TV show folder and resolves its symlink
+func findVideoFileInTVShowFolder(showFolderPath string) (string, error) {
+	videoExtensions := []string{".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".webm"}
+
+	// Walk through the show folder to find season folders
+	entries, err := os.ReadDir(showFolderPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Look for season folders first
+	for _, entry := range entries {
+		if entry.IsDir() && isSeasonFolder(entry.Name()) {
+			seasonPath := filepath.Join(showFolderPath, entry.Name())
+			seasonEntries, err := os.ReadDir(seasonPath)
+			if err != nil {
+				continue
+			}
+
+			// Find the first video file in this season folder
+			for _, seasonEntry := range seasonEntries {
+				if !seasonEntry.IsDir() {
+					fileName := seasonEntry.Name()
+					ext := strings.ToLower(filepath.Ext(fileName))
+
+					// Check if this is a video file
+					for _, videoExt := range videoExtensions {
+						if ext == videoExt {
+							videoFilePath := filepath.Join(seasonPath, fileName)
+
+							// Try to resolve the symlink of this video file
+							realPath, err := executeReadlink(videoFilePath)
+							if err != nil {
+								logger.Warn("Failed to resolve symlink for %s: %v", videoFilePath, err)
+								continue
+							}
+
+							logger.Info("Found video file in TV show folder: %s -> %s", videoFilePath, realPath)
+							return realPath, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no video files found in TV show folder")
 }
 
 // parseStructuredMessage attempts to parse a structured message from Python
@@ -153,11 +203,35 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to resolve real path using readlink logic
-	realPath, err := executeReadlink(finalAbsPath)
+	// Determine if this is a directory (TV show folder) or a file
+	fileInfo, err := os.Stat(finalAbsPath)
 	if err != nil {
-		logger.Warn("Failed to resolve real path for %s: %v, using original path", finalAbsPath, err)
-		realPath = finalAbsPath // fallback to original path
+		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
+		return
+	}
+
+	var realPath string
+	if fileInfo.IsDir() {
+		// This is a directory (likely a TV show folder)
+		logger.Info("Processing TV show folder: %s", finalAbsPath)
+		// Find a video file within season folders and resolve its symlink
+		realPath, err = findVideoFileInTVShowFolder(finalAbsPath)
+		if err != nil {
+			logger.Warn("Failed to find video file in TV show folder %s: %v, using original path", finalAbsPath, err)
+			realPath = finalAbsPath // fallback to original path
+		} else {
+			logger.Info("Resolved TV show folder to real source file: %s", realPath)
+		}
+	} else {
+		// This is a file, try to resolve real path using readlink logic
+		logger.Info("Processing individual file: %s", finalAbsPath)
+		realPath, err = executeReadlink(finalAbsPath)
+		if err != nil {
+			logger.Warn("Failed to resolve real path for %s: %v, using original path", finalAbsPath, err)
+			realPath = finalAbsPath // fallback to original path
+		} else {
+			logger.Info("Resolved file symlink to: %s", realPath)
+		}
 	}
 
 	// Prepare command args with resolved real path

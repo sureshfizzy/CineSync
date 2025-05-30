@@ -20,7 +20,7 @@ import IDOptions from './IDOptions';
 import ExecutionDialog from './ExecutionDialog';
 import { ModifyDialogProps, ModifyOption, IDOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie' }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -349,16 +349,19 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         return option;
       });
 
-      // Fetch poster images for each option using title and year
+      // Fetch poster images for each option using the TMDb ID provided by backend
       options.forEach(async (option) => {
-        if (option.title) {
+        if (option.tmdbId) {
           try {
-            // Try movie first, then TV if movie fails
-            let tmdbResult = await searchTmdb(option.title, option.year, 'movie');
+            // Use the TMDb ID directly instead of searching by title
+            let tmdbResult = await searchTmdb(option.tmdbId, undefined, mediaType);
 
-            if (!tmdbResult) {
-              // If movie didn't work, try TV
-              tmdbResult = await searchTmdb(option.title, option.year, 'tv');
+            if (!tmdbResult && mediaType === 'tv') {
+              // If TV didn't work, try movie as fallback
+              tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie');
+            } else if (!tmdbResult && mediaType === 'movie') {
+              // If movie didn't work, try TV as fallback
+              tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv');
             }
 
             if (tmdbResult && tmdbResult.poster_path) {

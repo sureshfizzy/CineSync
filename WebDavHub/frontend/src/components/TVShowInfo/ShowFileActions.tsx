@@ -1,47 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
 import axios from 'axios';
 import FileActionMenu from '../FileBrowser/FileActionMenu';
-import { MediaDetailsData } from '../../types/MediaTypes';
+import { MediaDetailsData } from './types';
 import ModifyDialog from '../FileBrowser/ModifyDialog/ModifyDialog';
 
-interface MovieFileActionsProps {
+interface ShowFileActionsProps {
   data: MediaDetailsData;
   folderName: string;
   currentPath: string;
+  mediaType: 'movie' | 'tv';
   placement: 'belowTitle' | 'belowDescription';
   fileInfo?: any;
   onRename?: (file: any) => void;
   onError?: (error: string) => void;
+  refreshTrigger?: number; // Add refresh trigger prop
 }
 
-// Module-level cache to prevent duplicate fetches
-const globalRequestCache = new Set<string>();
-
-const MovieFileActions: React.FC<MovieFileActionsProps> = ({
+const ShowFileActions: React.FC<ShowFileActionsProps> = ({
   folderName,
   currentPath,
+  mediaType,
   placement,
   fileInfo: fileInfoProp,
   onRename,
-  onError
+  onError,
+  refreshTrigger
 }) => {
   const [fileInfo, setFileInfo] = useState<any>(fileInfoProp || null);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const filePath = `${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}${folderName ? `/${folderName}` : ''}`;
+  const lastFetchRef = useRef<string>('');
 
   useEffect(() => {
     if (fileInfoProp) {
       setFileInfo(fileInfoProp);
       return;
     }
-    const requestKey = `${folderName}|${currentPath}`;
-    if (globalRequestCache.has(requestKey)) {
+
+    // Create a unique request key that includes refreshTrigger to force refresh when needed
+    const requestKey = `${folderName}|${currentPath}|${refreshTrigger || 0}`;
+
+    // Skip if this exact request was already made
+    if (lastFetchRef.current === requestKey) {
       return;
     }
-    globalRequestCache.add(requestKey);
+
+    lastFetchRef.current = requestKey;
+
     async function fetchFile() {
       try {
         const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
@@ -57,13 +65,17 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {
           setFileInfo({ ...mediaFile, type: 'file' });
+        } else {
+          // If no video file found, use the folder itself for actions
+          setFileInfo({ name: folderName, type: 'directory' });
         }
       } catch (e) {
-        setFileInfo(null);
+        // If no specific file found, use the folder itself for actions
+        setFileInfo({ name: folderName, type: 'directory' });
       }
     }
     fetchFile();
-  }, [folderName, currentPath, fileInfoProp]);
+  }, [folderName, currentPath, fileInfoProp, refreshTrigger]);
 
   if (!fileInfo) return null;
 
@@ -75,7 +87,10 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
     onError?.(error);
   };
 
-  const handleRename = () => window.location.reload();
+  const handleRename = () => {
+    // Trigger refresh instead of full page reload
+    onRename?.(fileInfo);
+  };
   const handleModify = () => setModifyDialogOpen(true);
   const handleModifyClose = () => setModifyDialogOpen(false);
 
@@ -133,11 +148,11 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
           onClose={handleModifyClose}
           onSubmit={handleModifySubmit}
           currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
-          mediaType="movie"
+          mediaType={mediaType}
         />
       </>
     </Box>
   );
 };
 
-export default MovieFileActions;
+export default ShowFileActions;

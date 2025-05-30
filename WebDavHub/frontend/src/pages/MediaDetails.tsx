@@ -2,8 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import MovieInfo from '../components/MovieInfo/index';
-import TVShowInfo from '../components/TVShowInfo';
+import MovieInfo from '../components/MovieInfo/MovieInfo';
+import TVShowInfo from '../components/TVShowInfo/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -43,7 +43,7 @@ export default function MediaDetails() {
   const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to handle smooth folder name transitions
-  const handleFolderNameChange = useCallback((newFolderName: string) => {
+  const handleFolderNameChange = useCallback((newFolderName: string, newTmdbId?: string | number) => {
     if (newFolderName === folderName) return;
 
 
@@ -64,13 +64,15 @@ export default function MediaDetails() {
       pathParts[pathParts.length - 1] = newFolderName;
       const newFullPath = '/' + pathParts.join('/');
 
-      // Navigate to the new full path WITHOUT preserving old data
+
+
+      // Navigate to the new full path, preserving TMDB ID if available
       navigate(`/media${newFullPath}`, {
         state: {
           mediaType,
-          tmdbId: undefined, // Clear tmdbId to force fresh lookup
+          tmdbId: newTmdbId || tmdbId, // Use new TMDB ID if provided, otherwise keep current
           currentPath,
-          tmdbData: undefined, // Don't preserve old data - force fresh fetch
+          tmdbData: undefined, // Don't preserve old data - force fresh fetch with correct ID
           isTransition: true
         },
         replace: true // Replace current history entry to avoid back button issues
@@ -130,7 +132,7 @@ export default function MediaDetails() {
           const updateData = JSON.parse(e.newValue);
           // Check if this update applies to current folder (exact match or wildcard)
           if ((updateData.oldFolderName === folderName || updateData.oldFolderName === '*') && updateData.newFolderName) {
-            handleFolderNameChange(updateData.newFolderName);
+            handleFolderNameChange(updateData.newFolderName, updateData.tmdbId);
           }
         } catch (err) {
         }
@@ -142,7 +144,7 @@ export default function MediaDetails() {
       const updateData = e.detail;
       // Check if this update applies to current folder (exact match or wildcard)
       if ((updateData.oldFolderName === folderName || updateData.oldFolderName === '*') && updateData.newFolderName) {
-        handleFolderNameChange(updateData.newFolderName);
+        handleFolderNameChange(updateData.newFolderName, updateData.tmdbId);
       }
     };
 
