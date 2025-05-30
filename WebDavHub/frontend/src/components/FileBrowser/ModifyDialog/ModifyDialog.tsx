@@ -34,9 +34,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [operationComplete, setOperationComplete] = useState(false);
   const [operationSuccess, setOperationSuccess] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const inputTimeoutRef = useRef<number | null>(null);
-  const autoCloseTimeoutRef = useRef<number | null>(null);
-  const loadingTimeoutRef = useRef<number | null>(null);
+  const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const theme = useTheme();
 

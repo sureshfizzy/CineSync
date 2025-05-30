@@ -40,10 +40,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buffered, setBuffered] = useState<TimeRanges | null>(null);
   const [brightness] = useState(1);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
   const { authEnabled } = useAuth();
 
@@ -202,13 +203,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
   };
   const onPlay = () => {
     setIsPlaying(true);
+    setIsBuffering(false);
     if (isMobile) {
       lockLandscape();
     }
   };
-  const onPause = () => setIsPlaying(false);
-  const onWaiting = () => setIsLoading(true);
-  const onCanPlay = () => setIsLoading(false);
+  const onPause = () => {
+    setIsPlaying(false);
+    setIsBuffering(false);
+  };
+  const onWaiting = () => {
+    // Only show buffering if we're actually playing, not when paused
+    if (isPlaying) {
+      setIsBuffering(true);
+    }
+  };
+  const onCanPlay = () => {
+    setIsLoading(false);
+    setIsBuffering(false);
+  };
   const onError = () => setError('Failed to load video.');
 
   // Show controls on mouse move/tap
@@ -296,58 +309,56 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
         </Box>
       </Box>
 
-      {/* Title Bar - Only show if not in dialog or on mobile */}
-      {(!isInDialog || isMobile) && (
-        <Fade in={showControls || isLoading || !!error} timeout={200}>
-          <Box
+      {/* Title Bar - Always show header with title and close button */}
+      <Fade in={showControls || isLoading || isBuffering || !!error} timeout={200}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 30,
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.5) 60%, transparent 100%)',
+            padding: { xs: 1.5, sm: 2 },
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            pt: isInDialog ? (isMobile ? 7 : 1) : 0, // Add padding at top when in dialog
+          }}
+        >
+          <Typography
+            variant="h6"
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 30,
-              background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)',
-              padding: { xs: 1.5, sm: 2 },
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              pt: isInDialog ? (isMobile ? 7 : 0) : 0, // Add extra padding at top when in dialog on mobile
+              color: 'white',
+              fontSize: { xs: 16, sm: 20 },
+              fontWeight: 500,
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
+              maxWidth: 'calc(100% - 60px)', // Leave space for close button
             }}
           >
-            <Typography
-              variant="h6"
+            {title || 'Video Player'}
+          </Typography>
+          {onClose && (
+            <IconButton
+              onClick={onClose}
+              size={isMobile ? 'small' : 'medium'}
               sx={{
                 color: 'white',
-                fontSize: { xs: 16, sm: 20 },
-                fontWeight: 500,
-                textOverflow: 'ellipsis',
-                overflow: 'hidden',
-                whiteSpace: 'nowrap',
-                maxWidth: isMobile ? 'calc(100% - 48px)' : '80%',
+                '&:hover': {
+                  background: alpha(theme.palette.primary.main, 0.12),
+                },
               }}
             >
-              {title || 'Video Player'}
-            </Typography>
-            {onClose && (
-              <IconButton
-                onClick={onClose}
-                size={isMobile ? 'small' : 'medium'}
-                sx={{
-                  color: 'white',
-                  '&:hover': {
-                    background: alpha(theme.palette.primary.main, 0.08),
-                  },
-                }}
-              >
-                <CloseIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
-              </IconButton>
-            )}
-          </Box>
-        </Fade>
-      )}
+              <CloseIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+            </IconButton>
+          )}
+        </Box>
+      </Fade>
 
       {/* Loading Spinner */}
-      <Fade in={isLoading && !error}>
+      <Fade in={(isLoading || isBuffering) && !error}>
         <Box
           sx={{
             position: 'absolute',
@@ -384,7 +395,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
       )}
 
       {/* Controls Overlay (Bottom controls) */}
-      <Fade in={showControls || isLoading || !!error} timeout={200}>
+      <Fade in={showControls || isLoading || isBuffering || !!error} timeout={200}>
         <Box
           sx={{
             position: 'absolute',
@@ -537,4 +548,4 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
   );
 };
 
-export default VideoPlayer; 
+export default VideoPlayer;
