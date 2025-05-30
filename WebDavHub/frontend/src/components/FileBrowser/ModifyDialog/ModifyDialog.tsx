@@ -18,7 +18,7 @@ import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';
 import ActionOptions from './ActionOptions';
 import IDOptions from './IDOptions';
 import ExecutionDialog from './ExecutionDialog';
-import { ModifyDialogProps, ModifyOption, IDOption } from './types';
+import { ModifyDialogProps, ModifyOption, IDOption, MovieOption } from './types';
 
 const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie' }) => {
   const [selectedOption, setSelectedOption] = useState('');
@@ -34,9 +34,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [operationComplete, setOperationComplete] = useState(false);
   const [operationSuccess, setOperationSuccess] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const inputTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const autoCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputTimeoutRef = useRef<number | null>(null);
+  const autoCloseTimeoutRef = useRef<number | null>(null);
+  const loadingTimeoutRef = useRef<number | null>(null);
 
   const theme = useTheme();
 
@@ -327,7 +327,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     if (matches.length > 0) {
       const options = matches.map(match => {
         // Handle different regex patterns
-        let option;
+        let option: MovieOption;
         if (match.length >= 5) {
           option = {
             number: match[1],
@@ -350,45 +350,54 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       });
 
       // Fetch poster images for each option using the TMDb ID provided by backend
-      options.forEach(async (option) => {
-        if (option.tmdbId) {
-          try {
-            // Use the TMDb ID directly instead of searching by title
-            let tmdbResult = await searchTmdb(option.tmdbId, undefined, mediaType);
+      // Use Promise.all to avoid excessive concurrent requests and reduce caching overhead
+      const fetchPostersAsync = async () => {
+        const posterPromises = options.map(async (option) => {
+          if (!option.tmdbId) return option;
 
-            if (!tmdbResult && mediaType === 'tv') {
-              // If TV didn't work, try movie as fallback
-              tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie');
-            } else if (!tmdbResult && mediaType === 'movie') {
-              // If movie didn't work, try TV as fallback
-              tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv');
-            }
+          try {
+            // Skip caching for temporary poster fetches in ModifyDialog - these are just for user selection
+            const tmdbResult = await searchTmdb(option.tmdbId, undefined, mediaType, 3, true);
 
             if (tmdbResult && tmdbResult.poster_path) {
               const posterUrl = getTmdbPosterUrl(tmdbResult.poster_path, 'w200');
-
-              setMovieOptions(prev => {
-                const updated = [...prev];
-                const existingIndex = updated.findIndex(opt => opt.number === option.number);
-                const optionWithPoster = {
-                  ...option,
-                  posterUrl: posterUrl,
-                  tmdbData: tmdbResult
-                };
-
-                if (existingIndex >= 0) {
-                  updated[existingIndex] = optionWithPoster;
-                } else {
-                  updated.push(optionWithPoster);
-                }
-                return updated.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-              });
+              return {
+                ...option,
+                posterUrl: posterUrl,
+                tmdbData: tmdbResult
+              };
             }
           } catch (error) {
-            console.error('Failed to fetch TMDB data:', error);
+            console.error('Failed to fetch TMDB data for option', option.number, ':', error);
           }
+
+          return option;
+        });
+
+        // Wait for all poster fetches to complete, then update state once
+        try {
+          const optionsWithPosters = await Promise.all(posterPromises);
+          setMovieOptions(prev => {
+            const updated = [...prev];
+
+            optionsWithPosters.forEach(option => {
+              const existingIndex = updated.findIndex(opt => opt.number === option.number);
+              if (existingIndex >= 0) {
+                updated[existingIndex] = option;
+              } else {
+                updated.push(option);
+              }
+            });
+
+            return updated.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+          });
+        } catch (error) {
+          console.error('Failed to fetch poster data:', error);
         }
-      });
+      };
+
+      // Execute the async function
+      fetchPostersAsync();
 
       // Set initial options without posters and clear loading state
       setMovieOptions(options);

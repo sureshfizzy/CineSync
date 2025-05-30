@@ -1290,6 +1290,14 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 		return
+	case http.MethodDelete:
+		if err := db.ClearTmdbCache(); err != nil {
+			http.Error(w, "Failed to clear cache: "+err.Error(), http.StatusInternalServerError)
+			logger.Warn("TMDB cache clear error: %v", err)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}

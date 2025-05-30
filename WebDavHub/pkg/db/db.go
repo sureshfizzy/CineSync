@@ -15,6 +15,8 @@ import (
 var db *sql.DB
 var tmdbCacheWriteQueue chan tmdbCacheWriteReq
 
+const MAX_TMDB_CACHE_ENTRIES = 5000
+
 type tmdbCacheWriteReq struct {
 	query  string
 	result string
@@ -186,7 +188,7 @@ func InitTmdbCacheTable() error {
 
 	// Create index for faster lookups
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_tmdb_cache_keys_tmdb ON tmdb_cache_keys(tmdb_id, media_type);`)
-	
+
 	return nil
 }
 
@@ -236,6 +238,11 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	// Validate MediaType: must be 'movie' or 'tv'
 	if entryData.MediaType != "movie" && entryData.MediaType != "tv" {
 		return fmt.Errorf("invalid media_type for TMDB cache upsert: '%s'. Must be 'movie' or 'tv'", entryData.MediaType)
+	}
+
+	// Check cache size and cleanup if needed before adding new entries
+	if err := cleanupTmdbCacheIfNeeded(); err != nil {
+		fmt.Printf("Warning: TMDB cache cleanup failed: %v\n", err)
 	}
 
 	tx, err := db.Begin()
@@ -315,7 +322,80 @@ func GetTmdbCacheByTmdbIdAndType(tmdbIDStr, mediaType string) (string, error) {
 	return jsonStr, nil
 }
 
+// cleanupTmdbCacheIfNeeded removes old cache entries if the cache exceeds the size limit
+func cleanupTmdbCacheIfNeeded() error {
+	// Count current cache entries
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM tmdb_cache_keys`).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count cache entries: %w", err)
+	}
+
+	// If under limit, no cleanup needed
+	if count <= MAX_TMDB_CACHE_ENTRIES {
+		return nil
+	}
+
+	// Remove oldest 20% of entries to make room for new ones
+	entriesToRemove := count / 5
+	if entriesToRemove < 100 {
+		entriesToRemove = 100 // Remove at least 100 entries
+	}
+
+	// Delete oldest entries based on last_accessed timestamp
+	_, err = db.Exec(`
+		DELETE FROM tmdb_cache_keys
+		WHERE cache_key IN (
+			SELECT cache_key FROM tmdb_cache_keys
+			ORDER BY last_accessed ASC
+			LIMIT ?
+		)
+	`, entriesToRemove)
+
+	if err != nil {
+		return fmt.Errorf("failed to cleanup old cache entries: %w", err)
+	}
+
+	// Clean up orphaned entities (entities with no cache keys pointing to them)
+	_, err = db.Exec(`
+		DELETE FROM tmdb_entities
+		WHERE NOT EXISTS (
+			SELECT 1 FROM tmdb_cache_keys k
+			WHERE k.tmdb_id = tmdb_entities.tmdb_id
+			AND k.media_type = tmdb_entities.media_type
+		)
+	`)
+
+	if err != nil {
+		return fmt.Errorf("failed to cleanup orphaned entities: %w", err)
+	}
+
+	fmt.Printf("TMDB cache cleanup: removed %d old entries\n", entriesToRemove)
+	return nil
+}
+
+// ClearTmdbCache removes all TMDB cache entries
+func ClearTmdbCache() error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction for cache clear: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM tmdb_cache_keys`)
+	if err != nil {
+		return fmt.Errorf("failed to clear cache keys: %w", err)
+	}
+
+	_, err = tx.Exec(`DELETE FROM tmdb_entities`)
+	if err != nil {
+		return fmt.Errorf("failed to clear entities: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // DB returns the global *sql.DB instance
 func DB() *sql.DB {
 	return db
-} 
+}

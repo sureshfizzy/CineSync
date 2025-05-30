@@ -139,21 +139,25 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("query")
 	seasonNumber := r.URL.Query().Get("season")
 	episodeNumbers := r.URL.Query().Get("episodes") // comma-separated list of episode numbers
+	skipCache := r.URL.Query().Get("skipCache") == "true" // skip caching for temporary lookups
 
 	if id != "" {
 		// Use id-based cache key
 		cacheKey := "id:" + id + ":" + mediaType
-		tmdbDetailsCache.mu.Lock()
-		if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
+
+		// Only check cache if skipCache is false
+		if !skipCache {
+			tmdbDetailsCache.mu.Lock()
+			if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
+				tmdbDetailsCache.mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-TMDB-Details-Cache", "HIT")
+				// Don't re-cache data that's already cached - reduces excessive DB writes
+				w.Write(data)
+				return
+			}
 			tmdbDetailsCache.mu.Unlock()
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-TMDB-Details-Cache", "HIT")
-			// Also upsert to persistent DB cache for HITs
-			db.UpsertTmdbCache(cacheKey, string(data))
-			w.Write(data)
-			return
 		}
-		tmdbDetailsCache.mu.Unlock()
 		// Fetch details directly by ID
 		var detailsUrl string
 		var resp *http.Response
@@ -243,27 +247,30 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 				body, _ = json.Marshal(details)
 			}
 		}
-		// Store in id-based cache (format for DB cache)
-		tmdbDetailsCache.mu.Lock()
-		tmdbDetailsCache.items[cacheKey] = body
-		tmdbDetailsCache.mu.Unlock()
+		// Only cache if skipCache is false
+		if !skipCache {
+			// Store in id-based cache (format for DB cache)
+			tmdbDetailsCache.mu.Lock()
+			tmdbDetailsCache.items[cacheKey] = body
+			tmdbDetailsCache.mu.Unlock()
 
-		// Format and upsert for persistent DB cache
-		var tmdbObj map[string]interface{}
-		if err := json.Unmarshal(body, &tmdbObj); err == nil {
-			idVal, _ := tmdbObj["id"].(float64)
-			title, _ := tmdbObj["title"].(string)
-			if title == "" {
-				title, _ = tmdbObj["name"].(string)
+			// Format and upsert for persistent DB cache
+			var tmdbObj map[string]interface{}
+			if err := json.Unmarshal(body, &tmdbObj); err == nil {
+				idVal, _ := tmdbObj["id"].(float64)
+				title, _ := tmdbObj["title"].(string)
+				if title == "" {
+					title, _ = tmdbObj["name"].(string)
+				}
+				posterPath, _ := tmdbObj["poster_path"].(string)
+				releaseDate, _ := tmdbObj["release_date"].(string)
+				if releaseDate == "" {
+					releaseDate, _ = tmdbObj["first_air_date"].(string)
+				}
+				resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
+					int(idVal), title, posterPath, releaseDate, mediaType)
+				db.UpsertTmdbCache(cacheKey, resultJson)
 			}
-			posterPath, _ := tmdbObj["poster_path"].(string)
-			releaseDate, _ := tmdbObj["release_date"].(string)
-			if releaseDate == "" {
-				releaseDate, _ = tmdbObj["first_air_date"].(string)
-			}
-			resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-				int(idVal), title, posterPath, releaseDate, mediaType)
-			db.UpsertTmdbCache(cacheKey, resultJson)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-TMDB-Details-Cache", "MISS")
@@ -277,15 +284,19 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cacheKey := "query:" + mediaType + ":" + query
-	tmdbDetailsCache.mu.Lock()
-	if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
+
+	// Only check cache if skipCache is false
+	if !skipCache {
+		tmdbDetailsCache.mu.Lock()
+		if data, ok := tmdbDetailsCache.items[cacheKey]; ok {
+			tmdbDetailsCache.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-TMDB-Details-Cache", "HIT")
+			w.Write(data)
+			return
+		}
 		tmdbDetailsCache.mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-TMDB-Details-Cache", "HIT")
-		w.Write(data)
-		return
 	}
-	tmdbDetailsCache.mu.Unlock()
 
 	// 1. Search for the movie/TV show to get the ID
 	searchType := "movie"
@@ -362,11 +373,14 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tmdbDetailsCache.mu.Lock()
-	tmdbDetailsCache.items[cacheKey] = body
-	tmdbDetailsCache.mu.Unlock()
+	// Only cache if skipCache is false
+	if !skipCache {
+		tmdbDetailsCache.mu.Lock()
+		tmdbDetailsCache.items[cacheKey] = body
+		tmdbDetailsCache.mu.Unlock()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-TMDB-Details-Cache", "MISS")
 	w.Write(body)
-} 
+}

@@ -17,10 +17,73 @@ function makeTmdbCacheKey(query: string, year?: string, mediaType?: string) {
   return [query.trim().toLowerCase(), year || '', mediaType || ''].join('|');
 }
 
-export async function searchTmdb(query: string, year?: string, mediaType?: 'movie' | 'tv', maxRetries = 3): Promise<TmdbResult | null> {
-  // If query is a TMDB ID (all digits), try cache first
+export async function searchTmdb(query: string, year?: string, mediaType?: 'movie' | 'tv', maxRetries = 3, skipCache = false): Promise<TmdbResult | null> {
+  // If query is a TMDB ID (all digits), try cache first (unless skipCache is true)
   if (/^\d+$/.test(query)) {
     const cacheKey = `id:${query}:${mediaType || ''}`;
+
+    // Only check cache if skipCache is false
+    if (!skipCache) {
+      try {
+        const cacheRes = await axios.get('/api/tmdb-cache', { params: { query: cacheKey } });
+        if (cacheRes.data) {
+          const cached = cacheRes.data;
+          if (cached && typeof cached === 'object' && 'id' in cached) {
+            return cached as TmdbResult;
+          }
+          if (typeof cached === 'string') {
+            try {
+              const parsed = JSON.parse(cached);
+              if (parsed && typeof parsed === 'object' && 'id' in parsed) {
+                return parsed as TmdbResult;
+              }
+            } catch {}
+          }
+        }
+      } catch (err: any) {
+        if (err.response && err.response.status !== 404) {
+          console.warn('[TMDB] Cache error:', err);
+        }
+      }
+    }
+
+    // Fetch from details endpoint
+    try {
+      const params: any = { id: query, mediaType };
+      if (skipCache) params.skipCache = 'true';
+      const res = await axios.get('/api/tmdb/details', { params });
+      const data = res.data;
+      if (data && typeof data === 'object' && 'id' in data) {
+        const resultObj = {
+          id: data.id,
+          title: data.media_type === 'movie' ? data.title : data.name,
+          overview: data.overview,
+          poster_path: data.poster_path,
+          release_date: data.release_date || data.first_air_date,
+          media_type: data.media_type,
+        };
+
+        // Only cache if skipCache is false
+        if (!skipCache) {
+          try {
+            await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
+          } catch (cacheErr) {
+            console.warn('[TMDB] Failed to cache ID result:', cacheErr);
+          }
+        }
+
+        return resultObj;
+      }
+    } catch (err) {
+      console.error('[TMDB] Error fetching details by ID:', err);
+      return null;
+    }
+  }
+
+  // Use a stable cache key
+  const cacheKey = makeTmdbCacheKey(query, year, mediaType);
+
+  if (!skipCache) {
     try {
       const cacheRes = await axios.get('/api/tmdb-cache', { params: { query: cacheKey } });
       if (cacheRes.data) {
@@ -28,6 +91,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
         if (cached && typeof cached === 'object' && 'id' in cached) {
           return cached as TmdbResult;
         }
+
         if (typeof cached === 'string') {
           try {
             const parsed = JSON.parse(cached);
@@ -42,50 +106,6 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
         console.warn('[TMDB] Cache error:', err);
       }
     }
-    // Not found in cache, fetch from details endpoint
-    try {
-      const res = await axios.get('/api/tmdb/details', { params: { id: query, mediaType } });
-      const data = res.data;
-      if (data && typeof data === 'object' && 'id' in data) {
-        return {
-          id: data.id,
-          title: data.media_type === 'movie' ? data.title : data.name,
-          overview: data.overview,
-          poster_path: data.poster_path,
-          release_date: data.release_date || data.first_air_date,
-          media_type: data.media_type,
-        };
-      }
-    } catch (err) {
-      console.error('[TMDB] Error fetching details by ID:', err);
-      return null;
-    }
-  }
-
-  // Use a stable cache key
-  const cacheKey = makeTmdbCacheKey(query, year, mediaType);
-  // 1. Try backend cache first
-  try {
-    const cacheRes = await axios.get('/api/tmdb-cache', { params: { query: cacheKey } });
-    if (cacheRes.data) {
-      const cached = cacheRes.data;
-      if (cached && typeof cached === 'object' && 'id' in cached) {
-        return cached as TmdbResult;
-      }
-      // If it's a stringified object
-      if (typeof cached === 'string') {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed && typeof parsed === 'object' && 'id' in parsed) {
-            return parsed as TmdbResult;
-          }
-        } catch {}
-      }
-    }
-  } catch (err: any) {
-    if (err.response && err.response.status !== 404) {
-      console.warn('[TMDB] Cache error:', err);
-    }
   }
 
   // 2. If not found, call TMDB API
@@ -99,6 +119,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       };
       if (year) params.year = year;
       if (mediaType) params.mediaType = mediaType;
+      if (skipCache) params.skipCache = 'true';
       const res = await axios.get('/api/tmdb/search', { params });
       const results = res.data.results || [];
       if (results.length === 0) {
@@ -115,10 +136,12 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
         media_type: best.media_type,
       };
 
-      try {
-        await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
-      } catch (cacheErr) {
-        console.warn('[TMDB] Failed to cache result:', cacheErr);
+      if (!skipCache && resultObj && resultObj.id) {
+        try {
+          await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
+        } catch (cacheErr) {
+          console.warn('[TMDB] Failed to cache result:', cacheErr);
+        }
       }
       return resultObj;
     } catch (err: any) {
@@ -149,4 +172,4 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 export function getTmdbPosterUrl(posterPath: string | null, size: string = 'w342'): string | null {
   if (!posterPath) return null;
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
-} 
+}
