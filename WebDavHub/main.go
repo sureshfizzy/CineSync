@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"cinesync/pkg/api"
+	"cinesync/pkg/config"
 	"cinesync/pkg/auth"
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
@@ -142,6 +143,8 @@ func main() {
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
+	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
+	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

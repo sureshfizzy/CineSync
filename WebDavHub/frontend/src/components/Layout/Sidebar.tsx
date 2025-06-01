@@ -3,6 +3,7 @@ import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, useTheme, 
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
+import SettingsIcon from '@mui/icons-material/Settings';
 import WifiIcon from '@mui/icons-material/Wifi';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -15,6 +16,7 @@ const navItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Browse', icon: <FolderIcon />, path: '/browse' },
   { text: 'Favorites', icon: <StarIcon />, path: '/favorites' },
+  { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
 
 interface SidebarProps {

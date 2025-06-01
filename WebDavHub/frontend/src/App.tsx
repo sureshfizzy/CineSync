@@ -12,6 +12,7 @@ import { motion } from 'framer-motion';
 import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { getTheme } from './theme';
 import MediaDetails from './pages/MediaDetails';
+import Settings from './pages/Settings';
 import { TmdbProvider } from './contexts/TmdbContext';
 
 // Loading component
@@ -290,6 +291,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
         <Route path="media/*" element={<MediaDetails />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       {/* Catch all route - 404 */}

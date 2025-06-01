@@ -1,0 +1,1388 @@
+import React, { useState, useEffect } from 'react';
+import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
+import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded } from '@mui/icons-material';
+import ConfirmDialog from '../components/Settings/ConfirmDialog';
+import LoadingButton from '../components/Settings/LoadingButton';
+import { FormField } from '../components/Settings/FormField';
+
+interface ConfigValue {
+  key: string;
+  value: string;
+  description: string;
+  category: string;
+  type: 'string' | 'boolean' | 'integer' | 'array';
+  required: boolean;
+}
+
+interface ConfigResponse {
+  config: ConfigValue[];
+  status: string;
+}
+
+interface CategoryInfo {
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+  gradient: string;
+  count: number;
+  requiredCount: number;
+  modifiedCount: number;
+}
+
+const Settings: React.FC = () => {
+  const theme = useTheme();
+
+  const [config, setConfig] = useState<ConfigValue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState<number>(0);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const getCategoryInfo = (category: string, items: ConfigValue[]): CategoryInfo => {
+    const modifiedCount = items.filter(item => pendingChanges[item.key] !== undefined).length;
+    const requiredCount = items.filter(item => item.required).length;
+
+    const categoryMap: Record<string, Omit<CategoryInfo, 'count' | 'requiredCount' | 'modifiedCount'>> = {
+      'Directory Paths': {
+        name: 'General',
+        description: 'Source & destination paths',
+        icon: <HomeRounded sx={{ fontSize: 28 }} />,
+        color: '#3b82f6',
+        gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+      },
+      'Media Folders Configuration': {
+        name: 'Media Folders',
+        description: 'Custom folder organization',
+        icon: <CreateNewFolderRounded sx={{ fontSize: 28 }} />,
+        color: '#8b5cf6',
+        gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+      },
+      'Resolution Folder Mappings Configuration': {
+        name: 'Resolution Mappings',
+        description: 'Quality-based folder structure',
+        icon: <AccountTreeRounded sx={{ fontSize: 28 }} />,
+        color: '#06b6d4',
+        gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+      },
+      'TMDb/IMDB Configuration': {
+        name: 'TMDB Configuration',
+        description: 'Movie & TV show metadata',
+        icon: <VideoLibraryRounded sx={{ fontSize: 28 }} />,
+        color: '#f59e0b',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      },
+      'Renaming Structure Configuration': {
+        name: 'Renaming Structure',
+        description: 'File renaming & metadata parsing',
+        icon: <DriveFileRenameOutlineRounded sx={{ fontSize: 28 }} />,
+        color: '#10b981',
+        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      },
+      'Plex Integration Configuration': {
+        name: 'Plex Integration',
+        description: 'Plex server & library settings',
+        icon: <LiveTvRounded sx={{ fontSize: 28 }} />,
+        color: '#e97e00',
+        gradient: 'linear-gradient(135deg, #e97e00 0%, #cc6e00 100%)',
+      },
+      'Database Configuration': {
+        name: 'Database',
+        description: 'Database settings & performance',
+        icon: <StorageRounded sx={{ fontSize: 28 }} />,
+        color: '#10b981',
+        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      },
+      'Real-Time Monitoring Configuration': {
+        name: 'Monitoring',
+        description: 'Real-time file monitoring',
+        icon: <NetworkCheckRounded sx={{ fontSize: 28 }} />,
+        color: '#06b6d4',
+        gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+      },
+      'WebDAV Configuration': {
+        name: 'WebDAV Server',
+        description: 'WebDAV API & file access',
+        icon: <ApiRounded sx={{ fontSize: 28 }} />,
+        color: '#f59e0b',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      },
+      'System Configuration': {
+        name: 'Advanced',
+        description: 'Advanced system settings',
+        icon: <SettingsApplicationsRounded sx={{ fontSize: 28 }} />,
+        color: '#ef4444',
+        gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      },
+    };
+
+    const info = categoryMap[category] || {
+      name: category,
+      description: 'Configuration settings',
+      icon: <TuneRounded sx={{ fontSize: 28 }} />,
+      color: '#6b7280',
+      gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+    };
+
+    return {
+      ...info,
+      count: items.length,
+      requiredCount,
+      modifiedCount,
+    };
+  };
+
+  const fetchConfig = async () => {
+    try {
+      setLoading(true);
+      // Add cache-busting parameter to ensure fresh data
+      const response = await fetch(`/api/config?t=${Date.now()}`, {
+        cache: 'no-cache',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch configuration');
+      }
+      const data: ConfigResponse = await response.json();
+      setConfig(data.config);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load configuration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFieldChange = (key: string, value: string) => {
+    setPendingChanges(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleSave = async () => {
+    if (Object.keys(pendingChanges).length === 0) {
+      setError('No changes to save');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const updates = Object.entries(pendingChanges).map(([key, value]) => {
+        const configItem = config.find(c => c.key === key);
+        return {
+          key,
+          value,
+          type: configItem?.type || 'string',
+          required: configItem?.required || false,
+        };
+      });
+
+      const response = await fetch('/api/config/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updates }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || 'Failed to save configuration');
+      }
+
+      // Refresh configuration from server to ensure we have the latest data
+      await fetchConfig();
+
+      setPendingChanges({});
+      setSuccess('Configuration saved successfully');
+      setShowConfirmDialog(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save configuration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+
+  const getFieldValue = (item: ConfigValue) => {
+    return pendingChanges[item.key] !== undefined ? pendingChanges[item.key] : item.value;
+  };
+
+  const formatFieldLabel = (key: string) => {
+    return key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const getFieldOptions = (item: ConfigValue): string[] | undefined => {
+    if (item.key === 'SHOW_RESOLUTION_STRUCTURE' || item.key === 'MOVIE_RESOLUTION_STRUCTURE') {
+      return ['none', 'year', 'resolution', 'year_resolution'];
+    }
+    if (item.key.includes('_ENABLED') || item.type === 'boolean') {
+      return ['true', 'false'];
+    }
+    return undefined;
+  };
+
+  const getFieldType = (item: ConfigValue): 'string' | 'boolean' | 'integer' | 'array' | 'password' => {
+    if (item.key.includes('PASSWORD') || item.key.includes('TOKEN') || item.key.includes('KEY')) {
+      return 'password';
+    }
+    return item.type;
+  };
+
+  // Define category order - General must be first
+  const categoryOrder = [
+    'Directory Paths', // General - must be first
+    'Media Folders Configuration', // Media Folders - custom folder organization
+    'Resolution Folder Mappings Configuration', // Resolution Mappings - quality-based folders
+    'TMDb/IMDB Configuration', // TMDB Configuration - movie & TV metadata
+    'Renaming Structure Configuration', // Renaming Structure - file renaming & metadata
+    'Plex Integration Configuration', // Plex Integration
+    'Database Configuration', // Database
+    'Real-Time Monitoring Configuration', // Monitoring
+    'WebDAV Configuration', // WebDAV Server
+    'System Configuration', // Advanced
+  ];
+
+  // Group config by category
+  const configByCategory = config.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, ConfigValue[]>);
+
+  // Sort fields within each category - prioritize source/destination paths
+  Object.keys(configByCategory).forEach(category => {
+    configByCategory[category].sort((a, b) => {
+      // For Directory Paths category, prioritize source and destination directories
+      if (category === 'Directory Paths') {
+        const sourceDestOrder = ['SOURCE_DIR', 'DESTINATION_DIR'];
+        const aIndex = sourceDestOrder.indexOf(a.key);
+        const bIndex = sourceDestOrder.indexOf(b.key);
+
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+      }
+
+      // For Resolution Mappings category, prioritize structure settings at the top
+      if (category === 'Resolution Folder Mappings Configuration') {
+        const resolutionStructureOrder = ['MOVIE_RESOLUTION_STRUCTURE', 'SHOW_RESOLUTION_STRUCTURE'];
+        const aIndex = resolutionStructureOrder.indexOf(a.key);
+        const bIndex = resolutionStructureOrder.indexOf(b.key);
+
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+      }
+
+      // For all categories, sort by required first, then alphabetically
+      if (a.required !== b.required) {
+        return a.required ? -1 : 1;
+      }
+      return a.key.localeCompare(b.key);
+    });
+  });
+
+  // Create ordered categories array
+  const orderedCategories = categoryOrder
+    .filter(category => configByCategory[category])
+    .map(category => [category, configByCategory[category]] as [string, ConfigValue[]]);
+
+  const hasChanges = Object.keys(pendingChanges).length > 0;
+
+  const totalChanges = Object.keys(pendingChanges).length;
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: 'background.default',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Typography variant="h6" color="text.secondary">
+          Loading configuration...
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+      }}
+    >
+      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4, md: 6 }, px: { xs: 2, sm: 3 } }}>
+        {/* Clean Professional Header */}
+        <Box sx={{ mb: { xs: 3, sm: 4, md: 6 } }}>
+          <Stack
+            direction="row"
+            alignItems="flex-start"
+            justifyContent="space-between"
+            spacing={2}
+            sx={{ mb: { xs: 2, sm: 4 } }}
+          >
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="h3"
+                fontWeight="600"
+                sx={{
+                  color: 'text.primary',
+                  mb: 1,
+                  letterSpacing: '-0.02em',
+                  fontSize: { xs: '2rem', sm: '3rem' },
+                }}
+              >
+                Settings
+              </Typography>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{ fontWeight: 400 }}
+              >
+                Configure your CineSync environment variables
+              </Typography>
+            </Box>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                flexShrink: 0,
+                alignItems: 'flex-start',
+                pt: { xs: 0.5, sm: 0 }
+              }}
+            >
+              <IconButton
+                onClick={fetchConfig}
+                disabled={loading || saving}
+                sx={{
+                  bgcolor: 'background.paper',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  width: { xs: 40, sm: 'auto' },
+                  height: { xs: 40, sm: 'auto' },
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'action.hover',
+                  },
+                }}
+              >
+                <Refresh sx={{ fontSize: { xs: 20, sm: 24 } }} />
+              </IconButton>
+              {hasChanges && (
+                <LoadingButton
+                  variant="contained"
+                  startIcon={<Save sx={{ fontSize: { xs: 16, sm: 20 } }} />}
+                  loading={saving}
+                  onClick={() => setShowConfirmDialog(true)}
+                  sx={{
+                    px: { xs: 1.5, sm: 3 },
+                    py: { xs: 1, sm: 1.5 },
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    boxShadow: 'none',
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    minWidth: { xs: 'auto', sm: 'auto' },
+                    '&:hover': {
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    },
+                  }}
+                >
+                  <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                    Save {totalChanges} Changes
+                  </Box>
+                  <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                    Save
+                  </Box>
+                </LoadingButton>
+              )}
+            </Stack>
+          </Stack>
+
+          {/* Status Alert */}
+          {hasChanges && (
+            <Box
+              sx={{
+                p: { xs: 2.5, sm: 3 },
+                bgcolor: alpha(theme.palette.warning.main, 0.1),
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: alpha(theme.palette.warning.main, 0.3),
+                mb: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  bgcolor: 'warning.main',
+                  color: 'warning.contrastText',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  flexShrink: 0,
+                }}
+              >
+                {totalChanges}
+              </Box>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.primary',
+                  fontWeight: 500,
+                  fontSize: { xs: '0.875rem', sm: '0.9rem' },
+                  lineHeight: 1.4,
+                }}
+              >
+                You have {totalChanges} unsaved change{totalChanges !== 1 ? 's' : ''}. Don't forget to save your configuration.
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
+        {/* Horizontal Tab Navigation */}
+        <Box sx={{ mb: 4, position: 'relative' }}>
+          {/* Desktop: Clean Horizontal Tabs */}
+          <Box
+            sx={{
+              display: { xs: 'none', lg: 'block' },
+              mb: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 0.5,
+                p: 0.5,
+                bgcolor: 'background.paper',
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'divider',
+                overflowX: 'auto',
+                '&::-webkit-scrollbar': {
+                  height: 6,
+                },
+                '&::-webkit-scrollbar-track': {
+                  bgcolor: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: 'divider',
+                  borderRadius: 3,
+                  '&:hover': {
+                    bgcolor: 'text.secondary',
+                  },
+                },
+              }}
+            >
+              {orderedCategories.map(([category, items], index) => {
+                const categoryInfo = getCategoryInfo(category, items);
+                const isSelected = selectedTab === index;
+                const hasModifications = categoryInfo.modifiedCount > 0;
+
+                return (
+                  <Box
+                    key={category}
+                    onClick={() => setSelectedTab(index)}
+                    sx={{
+                      cursor: 'pointer',
+                      px: 2,
+                      py: 1.5,
+                      borderRadius: 1.5,
+                      bgcolor: isSelected ? 'primary.main' : 'transparent',
+                      color: isSelected ? 'primary.contrastText' : 'text.primary',
+                      transition: 'all 0.2s ease-in-out',
+                      minWidth: 'fit-content',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      position: 'relative',
+                      '&:hover': {
+                        bgcolor: isSelected ? 'primary.main' : 'action.hover',
+                      },
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Box
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 0.5,
+                          bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : categoryInfo.color,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          '& svg': { fontSize: 14 },
+                        }}
+                      >
+                        {categoryInfo.icon}
+                      </Box>
+                      <Typography
+                        variant="body2"
+                        fontWeight="500"
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: isSelected ? 600 : 500,
+                        }}
+                      >
+                        {categoryInfo.name}
+                      </Typography>
+                      {hasModifications && (
+                        <Box
+                          sx={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            bgcolor: 'warning.main',
+                            color: 'warning.contrastText',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {categoryInfo.modifiedCount}
+                        </Box>
+                      )}
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+
+          {/* Tablet: Scrollable with Navigation Arrows */}
+          <Box
+            sx={{
+              display: { xs: 'none', sm: 'flex', lg: 'none' },
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <IconButton
+              onClick={() => {
+                const container = document.getElementById('tab-scroll-container');
+                if (container) {
+                  container.scrollBy({ left: -200, behavior: 'smooth' });
+                }
+              }}
+              sx={{
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                '&:hover': { borderColor: 'primary.main' },
+              }}
+            >
+              <ChevronLeft />
+            </IconButton>
+
+            <Box
+              id="tab-scroll-container"
+              sx={{
+                display: 'flex',
+                gap: 1.5,
+                overflowX: 'auto',
+                scrollBehavior: 'smooth',
+                flex: 1,
+                py: 1,
+                // Custom scrollbar for tablet
+                '&::-webkit-scrollbar': {
+                  height: 4,
+                },
+                '&::-webkit-scrollbar-track': {
+                  bgcolor: 'divider',
+                  borderRadius: 2,
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: 'primary.main',
+                  borderRadius: 2,
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                  },
+                },
+              }}
+            >
+              {orderedCategories.map(([category, items], index) => {
+                const categoryInfo = getCategoryInfo(category, items);
+                const isSelected = selectedTab === index;
+                const hasModifications = categoryInfo.modifiedCount > 0;
+
+                return (
+                  <Box
+                    key={category}
+                    onClick={() => setSelectedTab(index)}
+                    sx={{
+                      cursor: 'pointer',
+                      px: 3,
+                      py: 2,
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: isSelected ? 'primary.main' : 'divider',
+                      bgcolor: isSelected ? 'primary.main' : 'background.paper',
+                      color: isSelected ? 'primary.contrastText' : 'text.primary',
+                      transition: 'all 0.2s ease-in-out',
+                      minWidth: 'fit-content',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        bgcolor: isSelected ? 'primary.main' : 'action.hover',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                      },
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <Box
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 0.5,
+                          bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : categoryInfo.color,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          '& svg': { fontSize: 14 },
+                        }}
+                      >
+                        {categoryInfo.icon}
+                      </Box>
+                      <Typography
+                        variant="body2"
+                        fontWeight="600"
+                        sx={{ fontSize: '0.875rem' }}
+                      >
+                        {categoryInfo.name}
+                      </Typography>
+                      {hasModifications && (
+                        <Chip
+                          label={categoryInfo.modifiedCount}
+                          size="small"
+                          color="warning"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.7rem',
+                            '& .MuiChip-label': { px: 0.5 },
+                          }}
+                        />
+                      )}
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Box>
+
+            <IconButton
+              onClick={() => {
+                const container = document.getElementById('tab-scroll-container');
+                if (container) {
+                  container.scrollBy({ left: 200, behavior: 'smooth' });
+                }
+              }}
+              sx={{
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                '&:hover': { borderColor: 'primary.main' },
+              }}
+            >
+              <ChevronRight />
+            </IconButton>
+          </Box>
+
+          {/* Mobile: Larger Scrollable Tabs */}
+          <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1.5,
+                overflowX: 'auto',
+                scrollBehavior: 'smooth',
+                pb: 1.5,
+                px: 0.5,
+                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': { display: 'none' },
+              }}
+            >
+              {orderedCategories.map(([category, items], index) => {
+                const categoryInfo = getCategoryInfo(category, items);
+                const isSelected = selectedTab === index;
+                const hasModifications = categoryInfo.modifiedCount > 0;
+
+                return (
+                  <Box
+                    key={category}
+                    onClick={() => setSelectedTab(index)}
+                    sx={{
+                      cursor: 'pointer',
+                      px: 3,
+                      py: 2.5,
+                      borderRadius: 3,
+                      border: '1px solid',
+                      borderColor: isSelected ? 'primary.main' : 'divider',
+                      bgcolor: isSelected ? 'primary.main' : 'background.paper',
+                      color: isSelected ? 'primary.contrastText' : 'text.primary',
+                      transition: 'all 0.2s ease-in-out',
+                      minWidth: 'fit-content',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        bgcolor: isSelected ? 'primary.main' : 'action.hover',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                      },
+                      '&:active': {
+                        transform: 'translateY(0px)',
+                      },
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <Box
+                        sx={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 1,
+                          bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : categoryInfo.color,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          '& svg': { fontSize: 16 },
+                        }}
+                      >
+                        {categoryInfo.icon}
+                      </Box>
+                      <Typography
+                        variant="body2"
+                        fontWeight="600"
+                        sx={{
+                          fontSize: '0.875rem',
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {categoryInfo.name.split(' ')[0]}
+                      </Typography>
+                      {hasModifications && (
+                        <Box
+                          sx={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            bgcolor: 'warning.main',
+                            color: 'warning.contrastText',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {categoryInfo.modifiedCount}
+                        </Box>
+                      )}
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Box>
+
+            {/* Scroll indicators for mobile */}
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                mt: 1,
+                gap: 0.5,
+              }}
+            >
+              {orderedCategories.map((_, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    bgcolor: selectedTab === index ? 'primary.main' : 'divider',
+                    transition: 'all 0.2s ease-in-out',
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Tab Content */}
+        {orderedCategories[selectedTab] && (() => {
+          const [currentCategory, items] = orderedCategories[selectedTab];
+
+          // Special layout for Resolution Mappings category
+          if (currentCategory === 'Resolution Folder Mappings Configuration') {
+            // Separate items into movies, shows, and structure settings
+            const structureSettings = items.filter(item =>
+              item.key === 'MOVIE_RESOLUTION_STRUCTURE' || item.key === 'SHOW_RESOLUTION_STRUCTURE'
+            );
+            const movieSettings = items.filter(item =>
+              item.key.includes('MOVIE') && !structureSettings.includes(item)
+            );
+            const showSettings = items.filter(item =>
+              item.key.includes('SHOW') && !structureSettings.includes(item)
+            );
+
+            return (
+              <Box>
+                {/* Structure Settings at the top */}
+                {structureSettings.length > 0 && (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography
+                      variant="h6"
+                      fontWeight="600"
+                      sx={{ mb: 3, color: 'text.primary' }}
+                    >
+                      Resolution Structure Settings
+                    </Typography>
+                    <Grid container spacing={3}>
+                      {structureSettings.map((item) => (
+                        <Grid item xs={12} md={6} key={item.key}>
+                          <Box
+                            sx={{
+                              p: 3,
+                              bgcolor: 'background.paper',
+                              border: '1px solid',
+                              borderColor: pendingChanges[item.key] !== undefined
+                                ? 'warning.main'
+                                : 'divider',
+                              borderRadius: 3,
+                              transition: 'all 0.2s ease-in-out',
+                              '&:hover': {
+                                borderColor: 'primary.main',
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                transform: 'translateY(-1px)',
+                              },
+                            }}
+                          >
+                            <Stack spacing={2}>
+                              <Box>
+                                <Typography
+                                  variant="subtitle2"
+                                  fontWeight="600"
+                                  sx={{
+                                    color: 'text.primary',
+                                    mb: 0.5,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  {formatFieldLabel(item.key)}
+                                  {item.required && (
+                                    <Chip
+                                      label="Required"
+                                      size="small"
+                                      color="error"
+                                      variant="outlined"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  )}
+                                  {pendingChanges[item.key] !== undefined && (
+                                    <Chip
+                                      label="Modified"
+                                      size="small"
+                                      color="warning"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  )}
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  sx={{ mb: 2, lineHeight: 1.4 }}
+                                >
+                                  {item.description}
+                                </Typography>
+                              </Box>
+                              <FormField
+                                label=""
+                                value={getFieldValue(item)}
+                                onChange={(value) => handleFieldChange(item.key, value)}
+                                type={getFieldType(item)}
+                                required={item.required}
+                                options={getFieldOptions(item)}
+                                multiline={item.type === 'array' || item.key.includes('TAGS')}
+                                rows={item.type === 'array' ? 2 : 1}
+                              />
+                            </Stack>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
+
+                {/* Movie and Show Columns */}
+                <Grid container spacing={4}>
+                  {/* Movie Settings Column */}
+                  <Grid item xs={12} md={6}>
+                    <Box
+                      sx={{
+                        p: 3,
+                        bgcolor: alpha(theme.palette.primary.main, 0.05),
+                        border: '1px solid',
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                        borderRadius: 3,
+                        mb: 2,
+                      }}
+                    >
+                      <Typography
+                        variant="h6"
+                        fontWeight="600"
+                        sx={{
+                          color: 'primary.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mb: 2,
+                        }}
+                      >
+                        🎬 Movie Settings
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ lineHeight: 1.4 }}
+                      >
+                        Configure resolution folder mappings for movies
+                      </Typography>
+                    </Box>
+                    <Stack spacing={3}>
+                      {movieSettings.map((item) => (
+                        <Box
+                          key={item.key}
+                          sx={{
+                            p: 3,
+                            bgcolor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: pendingChanges[item.key] !== undefined
+                              ? 'warning.main'
+                              : 'divider',
+                            borderRadius: 3,
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {
+                              borderColor: 'primary.main',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              transform: 'translateY(-1px)',
+                            },
+                          }}
+                        >
+                          <Stack spacing={2}>
+                            <Box>
+                              <Typography
+                                variant="subtitle2"
+                                fontWeight="600"
+                                sx={{
+                                  color: 'text.primary',
+                                  mb: 0.5,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                {formatFieldLabel(item.key)}
+                                {item.required && (
+                                  <Chip
+                                    label="Required"
+                                    size="small"
+                                    color="error"
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                )}
+                                {pendingChanges[item.key] !== undefined && (
+                                  <Chip
+                                    label="Modified"
+                                    size="small"
+                                    color="warning"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                )}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ mb: 2, lineHeight: 1.4 }}
+                              >
+                                {item.description}
+                              </Typography>
+                            </Box>
+                            <FormField
+                              label=""
+                              value={getFieldValue(item)}
+                              onChange={(value) => handleFieldChange(item.key, value)}
+                              type={getFieldType(item)}
+                              required={item.required}
+                              options={getFieldOptions(item)}
+                              multiline={item.type === 'array' || item.key.includes('TAGS')}
+                              rows={item.type === 'array' ? 2 : 1}
+                            />
+                          </Stack>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Grid>
+
+                  {/* Show Settings Column */}
+                  <Grid item xs={12} md={6}>
+                    <Box
+                      sx={{
+                        p: 3,
+                        bgcolor: alpha(theme.palette.secondary.main, 0.05),
+                        border: '1px solid',
+                        borderColor: alpha(theme.palette.secondary.main, 0.2),
+                        borderRadius: 3,
+                        mb: 2,
+                      }}
+                    >
+                      <Typography
+                        variant="h6"
+                        fontWeight="600"
+                        sx={{
+                          color: 'secondary.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mb: 2,
+                        }}
+                      >
+                        📺 TV Show Settings
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ lineHeight: 1.4 }}
+                      >
+                        Configure resolution folder mappings for TV shows
+                      </Typography>
+                    </Box>
+                    <Stack spacing={3}>
+                      {showSettings.map((item) => (
+                        <Box
+                          key={item.key}
+                          sx={{
+                            p: 3,
+                            bgcolor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: pendingChanges[item.key] !== undefined
+                              ? 'warning.main'
+                              : 'divider',
+                            borderRadius: 3,
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {
+                              borderColor: 'secondary.main',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              transform: 'translateY(-1px)',
+                            },
+                          }}
+                        >
+                          <Stack spacing={2}>
+                            <Box>
+                              <Typography
+                                variant="subtitle2"
+                                fontWeight="600"
+                                sx={{
+                                  color: 'text.primary',
+                                  mb: 0.5,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                {formatFieldLabel(item.key)}
+                                {item.required && (
+                                  <Chip
+                                    label="Required"
+                                    size="small"
+                                    color="error"
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                )}
+                                {pendingChanges[item.key] !== undefined && (
+                                  <Chip
+                                    label="Modified"
+                                    size="small"
+                                    color="warning"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                )}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ mb: 2, lineHeight: 1.4 }}
+                              >
+                                {item.description}
+                              </Typography>
+                            </Box>
+                            <FormField
+                              label=""
+                              value={getFieldValue(item)}
+                              onChange={(value) => handleFieldChange(item.key, value)}
+                              type={getFieldType(item)}
+                              required={item.required}
+                              options={getFieldOptions(item)}
+                              multiline={item.type === 'array' || item.key.includes('TAGS')}
+                              rows={item.type === 'array' ? 2 : 1}
+                            />
+                          </Stack>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Grid>
+                </Grid>
+              </Box>
+            );
+          }
+
+          // Default layout for all other categories
+          return (
+            <Grid container spacing={3}>
+              {items.map((item) => (
+                <Grid item xs={12} md={6} key={item.key}>
+                  <Box
+                    sx={{
+                      p: 3,
+                      bgcolor: 'background.paper',
+                      border: '1px solid',
+                      borderColor: pendingChanges[item.key] !== undefined
+                        ? 'warning.main'
+                        : 'divider',
+                      borderRadius: 3,
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                        transform: 'translateY(-1px)',
+                      },
+                    }}
+                  >
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight="600"
+                          sx={{
+                            color: 'text.primary',
+                            mb: 0.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          {formatFieldLabel(item.key)}
+                          {item.required && (
+                            <Chip
+                              label="Required"
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              sx={{ height: 20, fontSize: '0.7rem' }}
+                            />
+                          )}
+                          {pendingChanges[item.key] !== undefined && (
+                            <Chip
+                              label="Modified"
+                              size="small"
+                              color="warning"
+                              sx={{ height: 20, fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mb: 2, lineHeight: 1.4 }}
+                        >
+                          {item.description}
+                        </Typography>
+                      </Box>
+                      <FormField
+                        label=""
+                        value={getFieldValue(item)}
+                        onChange={(value) => handleFieldChange(item.key, value)}
+                        type={getFieldType(item)}
+                        required={item.required}
+                        options={getFieldOptions(item)}
+                        multiline={item.type === 'array' || item.key.includes('TAGS')}
+                        rows={item.type === 'array' ? 2 : 1}
+                      />
+                    </Stack>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          );
+        })()}
+      </Container>
+
+
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        onConfirm={handleSave}
+        title="Save Configuration"
+        message={`Are you sure you want to save ${Object.keys(pendingChanges).length} configuration changes? This will update your .env file.`}
+        confirmText="Save Changes"
+        type="info"
+        loading={saving}
+      />
+
+      {/* Snackbars */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!success}
+        autoHideDuration={4000}
+        onClose={() => setSuccess(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSuccess(null)} severity="success" sx={{ width: '100%' }}>
+          {success}
+        </Alert>
+      </Snackbar>
+
+      {/* Save Loading Overlay */}
+      <Backdrop
+        sx={{
+          color: '#fff',
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          backdropFilter: 'blur(8px)',
+          bgcolor: alpha(theme.palette.background.default, 0.8),
+        }}
+        open={saving}
+      >
+        <Fade in={saving}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 3,
+              p: 4,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.background.paper, 0.9),
+              border: '1px solid',
+              borderColor: alpha(theme.palette.divider, 0.2),
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(20px)',
+              minWidth: 280,
+              textAlign: 'center',
+            }}
+          >
+            <Box sx={{ position: 'relative' }}>
+              <CircularProgress
+                size={60}
+                thickness={4}
+                sx={{
+                  color: 'primary.main',
+                  '& .MuiCircularProgress-circle': {
+                    strokeLinecap: 'round',
+                  },
+                }}
+              />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  bgcolor: 'primary.main',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'primary.contrastText',
+                }}
+              >
+                <Save sx={{ fontSize: 18 }} />
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 600,
+                  color: 'text.primary',
+                  mb: 1,
+                }}
+              >
+                Saving Configuration
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  lineHeight: 1.5,
+                }}
+              >
+                Updating {totalChanges} setting{totalChanges !== 1 ? 's' : ''}...
+                <br />
+                Please wait while we save your changes.
+              </Typography>
+            </Box>
+          </Box>
+        </Fade>
+      </Backdrop>
+    </Box>
+  );
+};
+
+export default Settings;
