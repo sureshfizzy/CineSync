@@ -45,15 +45,15 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
 
   return (
     <Box sx={{
-      width: 200,
+      width: 180,
       bgcolor: 'background.paper',
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
       borderRight: `1px solid ${theme.palette.divider}`,
-      pt: { xs: '64px', md: 0 }
+      pt: { xs: '56px', md: 0 }
     }}>
-      <List sx={{ flex: 1, pt: { xs: 2, md: 2 } }}>
+      <List sx={{ flex: 1, pt: { xs: 1.5, md: 1.5 } }}>
         {navItems.map((item) => (
           <NavLink
             key={item.text}
@@ -62,7 +62,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               textDecoration: 'none',
               color: 'inherit',
               display: 'block',
-              margin: '4px 8px',
+              margin: '2px 6px',
             }}
             className={({ isActive }) => isActive ? 'active-nav' : ''}
             onClick={onNavigate}
@@ -81,16 +81,22 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                 transition: 'background-color 0.2s',
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 32 }}>{item.icon}</ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500
+                }}
+              />
             </ListItem>
           </NavLink>
         ))}
       </List>
 
       {isMobileOrTablet && (
-        <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${theme.palette.divider}` }}>
-          <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 2, px: 1 }}>VIEW OPTIONS</Typography>
+        <Box sx={{ px: 1.5, py: 1, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 1.5, px: 0.5, fontSize: '0.75rem' }}>VIEW OPTIONS</Typography>
           <List sx={{ p: 0 }}>
             <ListItem
               button
@@ -109,10 +115,16 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                 transition: 'background-color 0.2s',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              <ListItemIcon sx={{ minWidth: 32 }}>
                 <GridViewIcon />
               </ListItemIcon>
-              <ListItemText primary="Poster View" />
+              <ListItemText
+                primary="Poster View"
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500
+                }}
+              />
             </ListItem>
             <ListItem
               button
@@ -131,10 +143,16 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                 transition: 'background-color 0.2s',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              <ListItemIcon sx={{ minWidth: 32 }}>
                 <ViewListIcon />
               </ListItemIcon>
-              <ListItemText primary="List View" />
+              <ListItemText
+                primary="List View"
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500
+                }}
+              />
             </ListItem>
             <ListItem
               button
@@ -148,33 +166,39 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                 transition: 'background-color 0.2s',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              <ListItemIcon sx={{ minWidth: 32 }}>
                 <RefreshIcon />
               </ListItemIcon>
-              <ListItemText primary="Refresh" />
+              <ListItemText
+                primary="Refresh"
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500
+                }}
+              />
             </ListItem>
           </List>
         </Box>
       )}
 
-      <Box sx={{ p: 2 }}>
-        <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 1 }}>WEBDAV STATUS</Typography>
+      <Box sx={{ p: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary, mb: 0.8, fontSize: '0.75rem' }}>WEBDAV STATUS</Typography>
         <Box sx={{
           bgcolor: 'background.paper',
           borderRadius: 2,
-          p: 2,
+          p: 1.5,
           border: `1px solid ${theme.palette.divider}`,
           boxShadow: 1
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <FiberManualRecordIcon sx={{ color: webdavStats.webdavStatus === 'Active' ? theme.palette.success.main : theme.palette.error.main, fontSize: 16, mr: 1 }} />
-            <Typography variant="body2" sx={{ color: webdavStats.webdavStatus === 'Active' ? theme.palette.success.main : theme.palette.error.main, fontWeight: 600 }}>{webdavStats.webdavStatus === 'Active' ? 'Online' : 'Offline'}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.8 }}>
+            <FiberManualRecordIcon sx={{ color: webdavStats.webdavStatus === 'Active' ? theme.palette.success.main : theme.palette.error.main, fontSize: 12, mr: 0.8 }} />
+            <Typography variant="body2" sx={{ color: webdavStats.webdavStatus === 'Active' ? theme.palette.success.main : theme.palette.error.main, fontWeight: 600, fontSize: '0.8rem' }}>{webdavStats.webdavStatus === 'Active' ? 'Online' : 'Offline'}</Typography>
           </Box>
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>IP: {loading ? '...' : webdavStats.ip || 'N/A'}</Typography><br />
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>Port: {loading ? '...' : webdavStats.port || 'N/A'}</Typography><br />
-          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-            <WifiIcon sx={{ color: webdavStats.webdavStatus === 'Active' ? '#0ea5e9' : theme.palette.text.disabled, fontSize: 18, mr: 1 }} />
-            <Typography variant="caption" sx={{ color: webdavStats.webdavStatus === 'Active' ? '#0ea5e9' : theme.palette.text.disabled }}>{webdavStats.webdavStatus === 'Active' ? 'WebDAV Active' : 'WebDAV Inactive'}</Typography>
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem' }}>IP: {loading ? '...' : webdavStats.ip || 'N/A'}</Typography><br />
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem' }}>Port: {loading ? '...' : webdavStats.port || 'N/A'}</Typography><br />
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.8 }}>
+            <WifiIcon sx={{ color: webdavStats.webdavStatus === 'Active' ? '#0ea5e9' : theme.palette.text.disabled, fontSize: 14, mr: 0.8 }} />
+            <Typography variant="caption" sx={{ color: webdavStats.webdavStatus === 'Active' ? '#0ea5e9' : theme.palette.text.disabled, fontSize: '0.7rem' }}>{webdavStats.webdavStatus === 'Active' ? 'WebDAV Active' : 'WebDAV Inactive'}</Typography>
           </Box>
         </Box>
       </Box>

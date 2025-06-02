@@ -35,41 +35,51 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
         zIndex: theme.zIndex.drawer + 1
       }}
     >
-      <Toolbar sx={{ minHeight: 64, px: { xs: 2, sm: 3 }, display: 'flex', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Toolbar sx={{ minHeight: 56, px: { xs: 1.5, sm: 2 }, display: 'flex', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
           {onMenuClick && (
             <IconButton
               color="inherit"
               aria-label="open drawer"
               edge="start"
               onClick={onMenuClick}
-              sx={{ mr: 1, display: { md: 'none' } }}
+              size="small"
+              sx={{ mr: 0.5, display: { md: 'none' } }}
             >
               <MenuIcon />
             </IconButton>
           )}
-          <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 600,
+              color: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: { xs: '1.1rem', sm: '1.25rem' }
+            }}
+          >
             CineSync
-            <span style={{ marginLeft: 8, color: theme.palette.text.secondary, fontWeight: 600, fontSize: 14 }}>v2.0.0</span>
+            <span style={{ marginLeft: 6, color: theme.palette.text.secondary, fontWeight: 500, fontSize: 12 }}>v2.0.0</span>
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.3, sm: 0.5 } }}>
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-            <IconButton size={isMobile ? "small" : "large"} onClick={toggleTheme} sx={{ color: 'text.secondary' }}>
+            <IconButton size="small" onClick={toggleTheme} sx={{ color: 'text.secondary' }}>
               {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
             </IconButton>
           </Tooltip>
           <Tooltip title="Account">
-            <IconButton size={isMobile ? "small" : "large"} sx={{ ml: 1 }}>
-              <Avatar sx={{ bgcolor: 'primary.main', width: isMobile ? 28 : 36, height: isMobile ? 28 : 36 }}>A</Avatar>
+            <IconButton size="small" sx={{ ml: 0.5 }}>
+              <Avatar sx={{ bgcolor: 'primary.main', width: isMobile ? 24 : 28, height: isMobile ? 24 : 28 }}>A</Avatar>
             </IconButton>
           </Tooltip>
           {!isMobile && (
-            <Typography variant="body2" sx={{ ml: 1, fontWeight: 600, color: 'text.primary' }}>{user?.username || ''}</Typography>
+            <Typography variant="body2" sx={{ ml: 0.5, fontWeight: 500, color: 'text.primary', fontSize: '0.875rem' }}>{user?.username || ''}</Typography>
           )}
           <Tooltip title="Logout">
-            <IconButton size={isMobile ? "small" : "large"} sx={{ ml: 1 }} onClick={handleLogout} color="error">
+            <IconButton size="small" sx={{ ml: 0.5 }} onClick={handleLogout} color="error">
               <LogoutIcon />
             </IconButton>
           </Tooltip>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
-import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded } from '@mui/icons-material';
+import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
+import MediaHubService from '../components/Settings/MediaHubService';
 
 interface ConfigValue {
   key: string;
@@ -38,6 +39,7 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
@@ -120,6 +122,13 @@ const Settings: React.FC = () => {
         icon: <SettingsApplicationsRounded sx={{ fontSize: 28 }} />,
         color: '#ef4444',
         gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      },
+      'Services': {
+        name: 'Services',
+        description: 'Service management & control',
+        icon: <Build sx={{ fontSize: 28 }} />,
+        color: '#8b5cf6',
+        gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
       },
     };
 
@@ -240,8 +249,14 @@ const Settings: React.FC = () => {
     return item.type;
   };
 
-  // Define category order - General must be first
-  const categoryOrder = [
+  // Define main tabs
+  const mainTabs = [
+    { name: 'General', icon: <TuneRounded sx={{ fontSize: 28 }} />, color: '#3b82f6' },
+    { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#10b981' }
+  ];
+
+  // Define category order for General tab (configuration categories)
+  const generalCategoryOrder = [
     'Directory Paths', // General - must be first
     'Media Folders Configuration', // Media Folders - custom folder organization
     'Resolution Folder Mappings Configuration', // Resolution Mappings - quality-based folders
@@ -300,10 +315,12 @@ const Settings: React.FC = () => {
     });
   });
 
-  // Create ordered categories array
-  const orderedCategories = categoryOrder
-    .filter(category => configByCategory[category])
-    .map(category => [category, configByCategory[category]] as [string, ConfigValue[]]);
+  // Create ordered categories array based on selected main tab
+  const orderedCategories = selectedMainTab === 0
+    ? generalCategoryOrder
+        .filter(category => configByCategory[category])
+        .map(category => [category, configByCategory[category]] as [string, ConfigValue[]])
+    : [];
 
   const hasChanges = Object.keys(pendingChanges).length > 0;
 
@@ -469,7 +486,115 @@ const Settings: React.FC = () => {
           )}
         </Box>
 
-        {/* Horizontal Tab Navigation */}
+        {/* Main Tab Navigation */}
+        <Box sx={{ mb: 4 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 0.5,
+              p: 0.5,
+              bgcolor: alpha(theme.palette.background.paper, 0.8),
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: alpha(theme.palette.divider, 0.5),
+              maxWidth: 'fit-content',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            {mainTabs.map((tab, index) => {
+              const isSelected = selectedMainTab === index;
+              return (
+                <Box
+                  key={tab.name}
+                  onClick={() => {
+                    setSelectedMainTab(index);
+                    setSelectedTab(0); // Reset sub-tab selection
+                  }}
+                  sx={{
+                    cursor: 'pointer',
+                    px: { xs: 2.5, sm: 4 },
+                    py: { xs: 1.5, sm: 2 },
+                    borderRadius: 2.5,
+                    bgcolor: isSelected
+                      ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                      : 'transparent',
+                    background: isSelected
+                      ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                      : 'transparent',
+                    color: isSelected ? 'white' : 'text.primary',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    minWidth: 'fit-content',
+                    whiteSpace: 'nowrap',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    '&:hover': {
+                      bgcolor: isSelected
+                        ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                        : alpha(tab.color, 0.1),
+                      background: isSelected
+                        ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                        : alpha(tab.color, 0.1),
+                      transform: 'translateY(-1px)',
+                      boxShadow: isSelected
+                        ? `0 12px 24px ${alpha(tab.color, 0.3)}`
+                        : `0 4px 12px ${alpha(tab.color, 0.2)}`,
+                    },
+                    '&:active': {
+                      transform: 'translateY(0px)',
+                    },
+                    '&::before': isSelected ? {
+                      content: '""',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: `linear-gradient(135deg, ${alpha('#ffffff', 0.1)} 0%, transparent 50%)`,
+                      borderRadius: 'inherit',
+                      pointerEvents: 'none',
+                    } : {},
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Box
+                      sx={{
+                        width: { xs: 20, sm: 24 },
+                        height: { xs: 20, sm: 24 },
+                        borderRadius: 1,
+                        bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : alpha(tab.color, 0.15),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: isSelected ? 'white' : tab.color,
+                        transition: 'all 0.3s ease',
+                        '& svg': {
+                          fontSize: { xs: 16, sm: 18 },
+                          filter: isSelected ? 'none' : 'none',
+                        },
+                      }}
+                    >
+                      {tab.icon}
+                    </Box>
+                    <Typography
+                      variant="body1"
+                      fontWeight="600"
+                      sx={{
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {tab.name}
+                    </Typography>
+                  </Stack>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+
+        {/* Sub-Tab Navigation (only for General) */}
+        {selectedMainTab === 0 && (
         <Box sx={{ mb: 4, position: 'relative' }}>
           {/* Desktop: Clean Horizontal Tabs */}
           <Box
@@ -539,7 +664,7 @@ const Settings: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: 'white',
+                          color: '#ffffff',
                           '& svg': { fontSize: 14 },
                         }}
                       >
@@ -671,7 +796,7 @@ const Settings: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: 'white',
+                          color: '#ffffff',
                           '& svg': { fontSize: 14 },
                         }}
                       >
@@ -777,7 +902,7 @@ const Settings: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: 'white',
+                          color: '#ffffff',
                           '& svg': { fontSize: 16 },
                         }}
                       >
@@ -842,9 +967,10 @@ const Settings: React.FC = () => {
             </Box>
           </Box>
         </Box>
+        )}
 
         {/* Tab Content */}
-        {orderedCategories[selectedTab] && (() => {
+        {selectedMainTab === 0 && orderedCategories[selectedTab] && (() => {
           const [currentCategory, items] = orderedCategories[selectedTab];
 
           // Special layout for Resolution Mappings category
@@ -1257,6 +1383,13 @@ const Settings: React.FC = () => {
             </Grid>
           );
         })()}
+
+        {/* Services Tab Content */}
+        {selectedMainTab === 1 && (
+          <Box>
+            <MediaHubService />
+          </Box>
+        )}
       </Container>
 
 

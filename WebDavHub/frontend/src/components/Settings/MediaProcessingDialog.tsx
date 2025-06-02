@@ -17,10 +17,9 @@ interface MediaProcessingDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (selectedOption: string, selectedIds: Record<string, string>) => void;
-  filePath: string;
 }
 
-const MediaProcessingDialog: React.FC<MediaProcessingDialogProps> = ({ open, onClose, onSubmit, filePath }) => {
+const MediaProcessingDialog: React.FC<MediaProcessingDialogProps> = ({ open, onClose, onSubmit }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');

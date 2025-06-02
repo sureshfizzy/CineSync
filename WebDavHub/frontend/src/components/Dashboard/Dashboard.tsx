@@ -7,6 +7,7 @@ import {
   Typography,
   CircularProgress,
   useTheme,
+  IconButton,
   Button,
 } from '@mui/material';
 import {
@@ -15,9 +16,11 @@ import {
   Description as DescriptionIcon,
   CloudDone as CloudDoneIcon,
   Refresh as RefreshIcon,
+  Dashboard as DashboardIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import RecentlyAddedMedia from './RecentlyAddedMedia';
 
 const MotionCard = motion(Card);
 
@@ -167,69 +170,87 @@ export default function Dashboard() {
     {
       title: 'Total Folders',
       value: safeStats.totalFolders.toLocaleString(),
-      icon: <FolderIcon sx={{ fontSize: 40 }} />,
+      icon: <FolderIcon />,
       color: theme.palette.primary.main,
     },
     {
       title: 'Total Files',
       value: safeStats.totalFiles.toLocaleString(),
-      icon: <DescriptionIcon sx={{ fontSize: 40 }} />,
+      icon: <DescriptionIcon />,
       color: theme.palette.secondary.main,
     },
     {
       title: 'WebDAV Status',
       value: safeStats.webdavStatus,
-      icon: <CloudDoneIcon sx={{ fontSize: 40 }} />,
+      icon: <CloudDoneIcon />,
       color: theme.palette.success.main,
     },
     {
       title: 'Storage Used',
       value: safeStats.storageUsed,
-      icon: <StorageIcon sx={{ fontSize: 40 }} />,
+      icon: <StorageIcon />,
       color: theme.palette.success.main,
     },
   ];
 
   return (
-    <Box sx={{ px: { xs: 1, sm: 1, md: 0 }, maxWidth: 1600, mx: 'auto' }}>
+    <Box sx={{ px: { xs: 0.8, sm: 1, md: 0 }, maxWidth: 1400, mx: 'auto' }}>
       <Box sx={{
         display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        alignItems: { xs: 'flex-start', sm: 'center' },
-        gap: { xs: 2, sm: 1 },
-        mb: 4
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        mb: { xs: 1.5, sm: 2.5 }
       }}>
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: 800,
-            flex: 1,
-            letterSpacing: 0.5,
-            fontSize: { xs: '1.35rem', sm: '1.8rem', md: '2.1rem' }
-          }}
-        >
-          Dashboard
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<RefreshIcon />}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <Box sx={{
+            backgroundColor: `${theme.palette.primary.main}15`,
+            borderRadius: '12px',
+            p: 0.8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `1px solid ${theme.palette.primary.main}30`,
+          }}>
+            <DashboardIcon sx={{
+              color: 'primary.main',
+              fontSize: { xs: 18, sm: 22 }
+            }} />
+          </Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              fontSize: { xs: '1.1rem', sm: '1.5rem', md: '1.75rem' }
+            }}
+          >
+            Dashboard
+          </Typography>
+        </Box>
+        <IconButton
           onClick={handleRefresh}
           sx={{
-            borderRadius: 2,
-            fontWeight: 600,
-            bgcolor: 'primary.main',
-            boxShadow: 2,
-            width: { xs: '100%', sm: 'auto' },
-            fontSize: { xs: '0.95rem', sm: '1.08rem' },
-            py: 0.7, px: 2
+            bgcolor: { xs: 'transparent', sm: 'action.hover' },
+            color: 'text.secondary',
+            '&:hover': {
+              bgcolor: 'action.hover',
+              color: 'primary.main',
+              transform: 'rotate(180deg)'
+            },
+            transition: 'all 0.3s ease',
+            p: { xs: 0.5, sm: 1 }
           }}
         >
-          Refresh
-        </Button>
+          <RefreshIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
+        </IconButton>
       </Box>
-      <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} mb={4}>
+      <Grid container spacing={{ xs: 0.8, sm: 2, md: 3 }} mb={{ xs: 2, sm: 3 }}>
         {cards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={3} key={card.title}>
+          <Grid item xs={6} sm={6} md={3} key={card.title}>
             <MotionCard
               variants={cardVariants}
               initial="hidden"
@@ -238,63 +259,87 @@ export default function Dashboard() {
               sx={{
                 height: '100%',
                 background: 'background.paper',
-                borderRadius: '20px',
+                borderRadius: { xs: '16px', sm: '20px' },
                 border: '1px solid',
                 borderColor: 'divider',
-                boxShadow: { xs: 1, sm: 2, md: 4 },
-                transition: 'transform 0.2s, box-shadow 0.2s',
+                boxShadow: { xs: 'none', sm: 1, md: 2 },
+                transition: 'all 0.2s ease',
                 '&:hover': {
-                  transform: { xs: 'none', sm: 'translateY(-5px) scale(1.025)' },
-                  boxShadow: { xs: 1, sm: 4, md: 8 },
+                  transform: { xs: 'none', sm: 'translateY(-2px)' },
+                  boxShadow: { xs: 'none', sm: 2, md: 4 },
+                  borderColor: { xs: 'divider', sm: 'primary.main' }
                 },
-                p: { xs: 1.3, sm: 1.8 },
-                mb: { xs: 1.5, sm: 0 },
+                p: { xs: 1, sm: 1.5 },
+                position: 'relative',
+                overflow: 'hidden'
               }}
             >
               <CardContent sx={{ p: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                {/* Mobile Layout - Compact Horizontal */}
+                <Box sx={{
+                  display: { xs: 'flex', sm: 'block' },
+                  alignItems: { xs: 'center', sm: 'flex-start' },
+                  gap: { xs: 1, sm: 0 }
+                }}>
                   <Box sx={{
-                    backgroundColor: `${card.color}22`,
-                    borderRadius: '12px',
-                    p: { xs: 1, sm: 1.2 },
-                    mr: 2,
+                    backgroundColor: 'action.hover',
+                    borderRadius: { xs: '12px', sm: '14px' },
+                    p: { xs: 0.8, sm: 1.2 },
+                    mr: { xs: 0, sm: 1.5 },
+                    mb: { xs: 0, sm: 2 },
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flexShrink: 0,
+                    border: '1px solid',
+                    borderColor: 'divider',
                   }}>
                     {React.cloneElement(card.icon, {
-                      sx: { fontSize: { xs: 32, sm: 40 } }
+                      sx: {
+                        fontSize: { xs: 20, sm: 28 },
+                        color: card.color
+                      }
                     })}
                   </Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{
-                      color: 'text.secondary',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1,
-                      fontSize: { xs: '1.8rem', sm: '1.52rem' }
-                    }}
-                  >
-                    {card.title}
-                  </Typography>
+
+                  <Box sx={{ flex: { xs: 1, sm: 'none' }, minWidth: 0 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        color: 'text.secondary',
+                        fontWeight: 500,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                        fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                        mb: { xs: 0.2, sm: 0.5 },
+                        lineHeight: 1.2
+                      }}
+                    >
+                      {card.title}
+                    </Typography>
+                    <Typography
+                      variant="h3"
+                      sx={{
+                        fontWeight: 700,
+                        color: 'text.primary',
+                        lineHeight: 1.1,
+                        fontSize: { xs: '1.1rem', sm: '1.5rem', md: '1.75rem' }
+                      }}
+                    >
+                      {card.value}
+                    </Typography>
+                  </Box>
                 </Box>
-                <Typography
-                  variant="h3"
-                  sx={{
-                    fontWeight: 900,
-                    color: card.color,
-                    lineHeight: 1.1,
-                    fontSize: { xs: '1.5rem', sm: '2.1rem', md: '2.6rem' }
-                  }}
-                >
-                  {card.value}
-                </Typography>
               </CardContent>
             </MotionCard>
           </Grid>
         ))}
       </Grid>
+
+      {/* Recently Added Media Section */}
+      <Box sx={{ mt: { xs: 2, sm: 3 } }}>
+        <RecentlyAddedMedia />
+      </Box>
     </Box>
   );
 }
