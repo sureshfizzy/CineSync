@@ -371,6 +371,7 @@ def main(dest_dir):
     parser.add_argument("--force-movie", action="store_true", help="Force process file as a movie regardless of naming pattern")
     parser.add_argument("--force-extra", action="store_true", help="Force an extra file to be considered as a Movie/Show")
     parser.add_argument("--disable-monitor", action="store_true", help="Disable polling monitor and symlink cleanup processes")
+    parser.add_argument("--monitor-only", action="store_true", help="Start only the polling monitor without processing existing files")
     parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
     parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
     parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
@@ -448,6 +449,17 @@ def main(dest_dir):
 
     if args.id_refresh:
         refresh_tmdb_files()
+        return
+
+    # Handle monitor-only mode
+    if args.monitor_only:
+        log_message("Starting in monitor-only mode", level="INFO")
+        # Initialize database
+        if not initialize_db_with_mount_check():
+            log_message("Failed to initialize database. Exiting.", level="ERROR")
+            return
+        # Start only the polling monitor
+        start_polling_monitor()
         return
 
     if not os.path.exists(LOCK_FILE):

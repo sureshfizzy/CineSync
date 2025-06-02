@@ -468,13 +468,45 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
     return symlinks_deleted
 
 def _cleanup_empty_dirs(dir_path):
-    """Helper function to clean up empty directories."""
-    while dir_path and os.path.isdir(dir_path) and not os.listdir(dir_path):
-        log_message(f"Deleting empty folder: {dir_path}", level="INFO")
+    """Helper function to clean up empty directories and associated .tmdb files."""
+    while dir_path and os.path.isdir(dir_path):
         try:
-            os.rmdir(dir_path)
-            dir_path = os.path.dirname(dir_path)
-        except OSError:
+            # Check for .tmdb files in the directory and remove them
+            dir_contents = os.listdir(dir_path)
+            tmdb_files = [f for f in dir_contents if f.endswith('.tmdb')]
+
+            # Remove any .tmdb files found
+            for tmdb_file in tmdb_files:
+                tmdb_path = os.path.join(dir_path, tmdb_file)
+                try:
+                    # On Windows, remove hidden attribute if present
+                    if platform.system() == "Windows":
+                        try:
+                            import ctypes
+                            FILE_ATTRIBUTE_NORMAL = 0x80
+                            ctypes.windll.kernel32.SetFileAttributesW(tmdb_path, FILE_ATTRIBUTE_NORMAL)
+                        except Exception:
+                            pass  # Continue even if we can't change attributes
+
+                    os.remove(tmdb_path)
+                    log_message(f"Deleted .tmdb file: {tmdb_path}", level="INFO")
+                except Exception as e:
+                    log_message(f"Error deleting .tmdb file {tmdb_path}: {e}", level="WARNING")
+
+            # Refresh directory contents after .tmdb cleanup
+            dir_contents = os.listdir(dir_path)
+
+            # If directory is now empty, delete it
+            if not dir_contents:
+                log_message(f"Deleting empty folder: {dir_path}", level="INFO")
+                os.rmdir(dir_path)
+                dir_path = os.path.dirname(dir_path)
+            else:
+                # Directory is not empty, stop cleanup
+                break
+
+        except OSError as e:
+            log_message(f"Error during directory cleanup for {dir_path}: {e}", level="WARNING")
             break
 
 def _check_all_symlinks(dest_dir):

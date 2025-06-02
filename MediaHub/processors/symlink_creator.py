@@ -19,6 +19,7 @@ from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_junk_file
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
+from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
@@ -183,13 +184,28 @@ def process_file(args, processed_files_log, force=False):
         return
 
     # Determine whether to process as show or movie
+    show_metadata = None
     if is_show or is_anime_show:
         result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
         # Check if result is None or the first item (dest_file) is None
         if result is None or result[0] is None:
             log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
             return
-        dest_file, tmdb_id, season_number, is_extra = result
+
+        # Handle both old and new return formats
+        if len(result) == 5:
+            dest_file, tmdb_id, season_number, is_extra, show_metadata = result
+            # Extract episode number from metadata if available
+            if show_metadata and 'episode_number' in show_metadata:
+                episode_number = show_metadata['episode_number']
+        else:
+            # Fallback for old format
+            dest_file, tmdb_id, season_number, is_extra = result
+            # Extract episode number from filename if not already set
+            if episode_number is None and season_number is not None:
+                episode_match_result = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
+                if episode_match_result:
+                    episode_number = int(episode_match_result.group(1))
 
         # Skip symlink creation for extras unless skipped from env or force_extra is enabled
         if is_extra and not force_extra and is_skip_extras_folder_enabled():
@@ -235,23 +251,41 @@ def process_file(args, processed_files_log, force=False):
         log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
-        # Print new folder name, filename and path when using force mode
-        if force:
-            new_folder_name = os.path.basename(os.path.dirname(dest_file))
-            new_filename = os.path.basename(dest_file)
-            new_path = dest_file
+        # Extract media information for structured message
+        new_folder_name = os.path.basename(os.path.dirname(dest_file))
+        new_filename = os.path.basename(dest_file)
 
-            # Send structured data to WebDavHub API
-            send_structured_message("symlink_created", {
-                "source_file": src_file,
-                "destination_file": dest_file,
-                "new_folder_name": new_folder_name,
-                "new_filename": new_filename,
-                "new_path": new_path,
-                "tmdb_id": tmdb_id,
-                "season_number": season_number,
-                "force_mode": True
+        # Determine media type based on folder structure
+        media_type = "movie"
+        if "TV Shows" in dest_file or "Series" in dest_file or season_number is not None:
+            media_type = "tvshow"
+
+        # Prepare structured data for WebDavHub API
+        structured_data = {
+            "source_file": src_file,
+            "destination_file": dest_file,
+            "media_name": new_folder_name,
+            "filename": new_filename,
+            "media_type": media_type,
+            "tmdb_id": tmdb_id,
+            "season_number": season_number,
+            "episode_number": episode_number,
+            "timestamp": time.time(),
+            "force_mode": force if 'force' in locals() else False
+        }
+
+        # Add metadata for TV shows
+        if show_metadata and media_type == "tvshow":
+            structured_data.update({
+                "show_name": show_metadata.get('show_name'),
+                "proper_show_name": show_metadata.get('proper_show_name'),
+                "episode_title": show_metadata.get('episode_title'),
+                "year": show_metadata.get('year'),
+                "is_anime_genre": show_metadata.get('is_anime_genre', False)
             })
+
+        # Send structured data to WebDavHub API
+        send_structured_message("symlink_created", structured_data)
 
         save_processed_file(src_file, dest_file, tmdb_id, season_number)
 

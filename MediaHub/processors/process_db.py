@@ -20,8 +20,12 @@ if not dotenv_path:
 
 load_dotenv(dotenv_path)
 
-DB_DIR = "db"
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DB_DIR = os.path.join(BASE_DIR, "db")
 PROCESS_DB = os.path.join(DB_DIR, "file_database.db")
+
+# Ensure database directory exists
+os.makedirs(DB_DIR, exist_ok=True)
 
 def initialize_file_database():
     with sqlite3.connect(PROCESS_DB) as conn:

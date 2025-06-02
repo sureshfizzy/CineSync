@@ -21,12 +21,15 @@ if not dotenv_path:
 
 load_dotenv(dotenv_path)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
 MAX_RECORDS = 100000
 LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
+
+# Ensure database directory exists
+os.makedirs(DB_DIR, exist_ok=True)
 
 # Get configuration from environment variables
 THROTTLE_RATE = float(os.getenv('DB_THROTTLE_RATE', 10))
@@ -51,8 +54,9 @@ class ConnectionPool:
     def get_connection(self):
         with self.lock:
             if not os.path.exists(self.db_file):
-                print(f"[ERROR] Database file {self.db_file} not found, creating a new one...")
-                os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+                print(f"[INFO] Database file {self.db_file} not found, creating a new one...")
+                db_dir = os.path.dirname(self.db_file)
+                os.makedirs(db_dir, exist_ok=True)
                 open(self.db_file, 'a').close()  # Create an empty file
                 os.chmod(self.db_file, 0o666)  # Ensure proper permissions
 
@@ -66,7 +70,8 @@ class ConnectionPool:
                     conn.execute("PRAGMA cache_size=10000")
                     return conn
                 except sqlite3.OperationalError as e:
-                    print(f"[ERROR] Failed to open database file: {e}")
+                    print(f"[ERROR] Failed to open database file: {self.db_file}")
+                    print(f"[ERROR] Database error: {e}")
                     raise
 
 

@@ -21,7 +21,6 @@ def send_structured_message_http(message_type, data):
 
     # Quick check if server is available (0.1 second timeout)
     if not is_server_available(host, port):
-        log_message(f"WebDavHub server not available - structured message skipped: {message_type}", level="DEBUG")
         return False
 
     try:
@@ -31,8 +30,8 @@ def send_structured_message_http(message_type, data):
             "data": data
         }
 
-        # Send to the WebDavHub API endpoint
-        api_url = f"http://{host}:{port}/api/python-bridge/message"
+        # Send to the MediaHub-specific API endpoint
+        api_url = f"http://{host}:{port}/api/mediahub/message"
         response = requests.post(
             api_url,
             json=structured_msg,
