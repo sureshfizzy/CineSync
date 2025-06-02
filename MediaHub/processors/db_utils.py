@@ -6,12 +6,17 @@ import sys
 import concurrent.futures
 import csv
 import sqlite3
+import platform
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
 import traceback
+
+# Define color constants for terminal output
+RED_COLOR = "\033[91m"
+RESET_COLOR = "\033[0m"
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
@@ -272,7 +277,26 @@ def check_file_in_db(conn, file_path):
         return False
 
 def normalize_file_path(file_path):
-    return os.path.normpath(file_path)
+    """
+    Normalizes a file path to ensure consistent formatting for comparison.
+    Applies platform-specific normalization for better cross-platform compatibility.
+    """
+    if not file_path:
+        return file_path
+
+    # Basic normalization
+    normalized = os.path.normpath(file_path)
+
+    # Windows-specific normalization for better path comparison
+    if platform.system() == "Windows":
+        # Remove \\?\ prefix if present
+        if normalized.startswith("\\\\?\\"):
+            normalized = normalized[4:]
+        normalized = os.path.abspath(normalized)
+        if len(normalized) >= 2 and normalized[1] == ':':
+            normalized = normalized[0].upper() + normalized[1:]
+
+    return normalized
 
 def find_file_in_directory(file_name, directory):
     for root, dirs, files in os.walk(directory):
@@ -324,8 +348,8 @@ def display_missing_files(conn, destination_folder):
                 continue
 
             try:
-                source_path = os.path.normpath(source_path)
-                dest_path = os.path.normpath(dest_path)
+                source_path = normalize_file_path(source_path)
+                dest_path = normalize_file_path(dest_path)
 
                 if not os.path.exists(dest_path):
                     # Get the original filename
@@ -343,7 +367,7 @@ def display_missing_files(conn, destination_folder):
                             potential_new_path = os.path.join(root, filename)
 
                             # Skip if it's the same path we already checked
-                            if potential_new_path == dest_path:
+                            if normalize_file_path(potential_new_path) == dest_path:
                                 continue
 
                             # Check if this is a symlink
@@ -351,7 +375,11 @@ def display_missing_files(conn, destination_folder):
                                 try:
                                     # Check if the symlink points to our source file
                                     link_target = os.readlink(potential_new_path)
-                                    if os.path.normpath(link_target) == source_path:
+                                    # Use improved normalization for both paths
+                                    normalized_link_target = normalize_file_path(link_target)
+                                    normalized_source_path = normalize_file_path(source_path)
+
+                                    if normalized_link_target == normalized_source_path:
                                         # Found the moved/renamed file
                                         log_message(f"Found file moved to: {potential_new_path}", level="INFO")
                                         update_renamed_file(dest_path, potential_new_path)
