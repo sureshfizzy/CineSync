@@ -267,9 +267,29 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 				if releaseDate == "" {
 					releaseDate, _ = tmdbObj["first_air_date"].(string)
 				}
-				resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-					int(idVal), title, posterPath, releaseDate, mediaType)
-				db.UpsertTmdbCache(cacheKey, resultJson)
+
+				// Determine actual media type from the response if not provided
+				actualMediaType := mediaType
+				if actualMediaType == "" {
+					if _, hasFirstAirDate := tmdbObj["first_air_date"]; hasFirstAirDate {
+						actualMediaType = "tv"
+					} else if _, hasReleaseDate := tmdbObj["release_date"]; hasReleaseDate {
+						actualMediaType = "movie"
+					} else {
+						if _, hasName := tmdbObj["name"]; hasName && title == "" {
+							actualMediaType = "tv"
+						} else {
+							actualMediaType = "movie"
+						}
+					}
+				}
+
+				// Only cache if we have a valid media type
+				if actualMediaType == "movie" || actualMediaType == "tv" {
+					resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
+						int(idVal), title, posterPath, releaseDate, actualMediaType)
+					db.UpsertTmdbCache(cacheKey, resultJson)
+				}
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")

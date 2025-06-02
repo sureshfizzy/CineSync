@@ -143,8 +143,19 @@ func main() {
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
+	apiMux.HandleFunc("/api/mediahub/message", api.HandleMediaHubMessage)
+	apiMux.HandleFunc("/api/recent-media", api.HandleRecentMedia)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
+
+	// MediaHub service endpoints
+	apiMux.HandleFunc("/api/mediahub/status", api.HandleMediaHubStatus)
+	apiMux.HandleFunc("/api/mediahub/start", api.HandleMediaHubStart)
+	apiMux.HandleFunc("/api/mediahub/stop", api.HandleMediaHubStop)
+	apiMux.HandleFunc("/api/mediahub/restart", api.HandleMediaHubRestart)
+	apiMux.HandleFunc("/api/mediahub/logs", api.HandleMediaHubLogs)
+	apiMux.HandleFunc("/api/mediahub/monitor/start", api.HandleMediaHubMonitorStart)
+	apiMux.HandleFunc("/api/mediahub/monitor/stop", api.HandleMediaHubMonitorStop)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

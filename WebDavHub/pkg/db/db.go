@@ -84,8 +84,34 @@ func createTable() error {
 		icon TEXT,
 		extra TEXT
 	);`
-	_, err := db.Exec(query)
-	return err
+	if _, err := db.Exec(query); err != nil {
+		return err
+	}
+
+	// Create recent_media table
+	recentMediaQuery := `CREATE TABLE IF NOT EXISTS recent_media (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		path TEXT NOT NULL,
+		folder_name TEXT NOT NULL,
+		updated_at INTEGER NOT NULL,
+		type TEXT NOT NULL,
+		tmdb_id TEXT,
+		show_name TEXT,
+		season_number INTEGER,
+		episode_number INTEGER,
+		episode_title TEXT,
+		filename TEXT,
+		created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+	);`
+	if _, err := db.Exec(recentMediaQuery); err != nil {
+		return err
+	}
+
+	// Create index for faster queries
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_recent_media_created_at ON recent_media(created_at DESC);`)
+
+	return nil
 }
 
 // FileDetail represents a row in the file_details table
@@ -398,4 +424,112 @@ func ClearTmdbCache() error {
 // DB returns the global *sql.DB instance
 func DB() *sql.DB {
 	return db
+}
+
+// RecentMedia represents a recent media item
+type RecentMedia struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	FolderName    string `json:"folderName"`
+	UpdatedAt     int64  `json:"updatedAt"`
+	Type          string `json:"type"`
+	TmdbId        string `json:"tmdbId,omitempty"`
+	ShowName      string `json:"showName,omitempty"`
+	SeasonNumber  int    `json:"seasonNumber,omitempty"`
+	EpisodeNumber int    `json:"episodeNumber,omitempty"`
+	EpisodeTitle  string `json:"episodeTitle,omitempty"`
+	Filename      string `json:"filename,omitempty"`
+	CreatedAt     int64  `json:"createdAt"`
+}
+
+// AddRecentMedia adds a new recent media item to the database
+func AddRecentMedia(media RecentMedia) error {
+	query := `INSERT INTO recent_media (name, path, folder_name, updated_at, type, tmdb_id, show_name, season_number, episode_number, episode_title, filename)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := db.Exec(query, media.Name, media.Path, media.FolderName, media.UpdatedAt, media.Type,
+		media.TmdbId, media.ShowName, media.SeasonNumber, media.EpisodeNumber, media.EpisodeTitle, media.Filename)
+
+	if err != nil {
+		return fmt.Errorf("failed to add recent media: %w", err)
+	}
+
+	return cleanupRecentMedia()
+}
+
+// GetRecentMedia retrieves the most recent media items
+func GetRecentMedia(limit int) ([]RecentMedia, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	query := `SELECT id, name, path, folder_name, updated_at, type, tmdb_id, show_name, season_number, episode_number, episode_title, filename, created_at
+		FROM recent_media ORDER BY created_at DESC LIMIT ?`
+
+	rows, err := db.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent media: %w", err)
+	}
+	defer rows.Close()
+
+	var results []RecentMedia
+	for rows.Next() {
+		var media RecentMedia
+		var tmdbId, showName, episodeTitle, filename sql.NullString
+		var seasonNumber, episodeNumber sql.NullInt64
+
+		err := rows.Scan(&media.ID, &media.Name, &media.Path, &media.FolderName, &media.UpdatedAt,
+			&media.Type, &tmdbId, &showName, &seasonNumber, &episodeNumber, &episodeTitle, &filename, &media.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan recent media: %w", err)
+		}
+
+		// Handle nullable fields
+		if tmdbId.Valid {
+			media.TmdbId = tmdbId.String
+		}
+		if showName.Valid {
+			media.ShowName = showName.String
+		}
+		if seasonNumber.Valid {
+			media.SeasonNumber = int(seasonNumber.Int64)
+		}
+		if episodeNumber.Valid {
+			media.EpisodeNumber = int(episodeNumber.Int64)
+		}
+		if episodeTitle.Valid {
+			media.EpisodeTitle = episodeTitle.String
+		}
+		if filename.Valid {
+			media.Filename = filename.String
+		}
+
+		results = append(results, media)
+	}
+
+	return results, nil
+}
+
+// cleanupRecentMedia removes old entries to keep only the most recent 20
+func cleanupRecentMedia() error {
+	query := `DELETE FROM recent_media WHERE id NOT IN (
+		SELECT id FROM recent_media ORDER BY created_at DESC LIMIT 20
+	)`
+
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup recent media: %w", err)
+	}
+
+	return nil
+}
+
+// ClearRecentMedia removes all recent media entries
+func ClearRecentMedia() error {
+	_, err := db.Exec(`DELETE FROM recent_media`)
+	if err != nil {
+		return fmt.Errorf("failed to clear recent media: %w", err)
+	}
+	return nil
 }

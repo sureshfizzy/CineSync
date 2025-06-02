@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1029,4 +1030,227 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// HandleMediaHubMessage handles structured messages
+func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var message struct {
+		Type      string                 `json:"type"`
+		Timestamp float64                `json:"timestamp"`
+		Data      map[string]interface{} `json:"data"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if message.Type == "symlink_created" {
+		handleSymlinkCreated(message.Data)
+	}
+
+	forwardToPythonBridge(message)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+func forwardToPythonBridge(message struct {
+	Type      string                 `json:"type"`
+	Timestamp float64                `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"`
+}) {
+	// Get the active response writer to forward the message
+	activePythonResponseMutex.Lock()
+	responseWriter := activePythonResponseWriter
+	activePythonResponseMutex.Unlock()
+
+	if responseWriter == nil {
+		return
+	}
+
+	// Create the structured message in the format expected by the frontend
+	structuredMsg := StructuredMessage{
+		Type:      message.Type,
+		Timestamp: message.Timestamp,
+		Data:      message.Data,
+	}
+
+	// Create response with structured data
+	response := PythonBridgeResponse{
+		StructuredData: &structuredMsg,
+	}
+
+	// Send the response to the active bridge session
+	data, err := json.Marshal(response)
+	if err != nil {
+		logger.Warn("Failed to marshal structured message for forwarding: %v", err)
+		return
+	}
+
+	// Write to the active bridge response writer
+	responseWriter.Write(data)
+	responseWriter.Write([]byte("\n"))
+
+	if flusher, ok := responseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	logger.Info("Forwarded structured message to Python bridge: %s", message.Type)
+}
+
+func handleSymlinkCreated(data map[string]interface{}) {
+	mediaName, _ := data["media_name"].(string)
+	mediaType, _ := data["media_type"].(string)
+	destinationFile, _ := data["destination_file"].(string)
+	filename, _ := data["filename"].(string)
+	tmdbIdInterface := data["tmdb_id"]
+
+	var tmdbId string
+	if tmdbIdInterface != nil {
+		if id, ok := tmdbIdInterface.(float64); ok {
+			tmdbId = fmt.Sprintf("%.0f", id)
+		} else if id, ok := tmdbIdInterface.(string); ok {
+			tmdbId = id
+		}
+	}
+
+	if mediaName == "" || mediaType == "" {
+		return
+	}
+
+	// Determine folder name based on media type
+	folderName := "Movies"
+	if mediaType == "tvshow" {
+		folderName = "TV Shows"
+	}
+
+	// Initialize the new media entry
+	newMedia := db.RecentMedia{
+		Name:       mediaName,
+		Path:       destinationFile,
+		FolderName: folderName,
+		UpdatedAt:  time.Now().Unix(),
+		Type:       mediaType,
+		TmdbId:     tmdbId,
+		Filename:   filename,
+	}
+
+	// For TV shows, use rich data directly from MediaHub
+	if mediaType == "tvshow" {
+		// Season number
+		if seasonInterface, exists := data["season_number"]; exists {
+			if season, ok := seasonInterface.(float64); ok {
+				newMedia.SeasonNumber = int(season)
+			} else if seasonStr, ok := seasonInterface.(string); ok {
+				if season, err := strconv.Atoi(seasonStr); err == nil {
+					newMedia.SeasonNumber = season
+				}
+			}
+		}
+
+		// Episode number
+		if episodeInterface, exists := data["episode_number"]; exists {
+			if episode, ok := episodeInterface.(float64); ok {
+				newMedia.EpisodeNumber = int(episode)
+			} else if episodeStr, ok := episodeInterface.(string); ok {
+				if episode, err := strconv.Atoi(episodeStr); err == nil {
+					newMedia.EpisodeNumber = episode
+				}
+			}
+		}
+
+		// Show name (prefer show_name, fallback to cleaned proper_show_name)
+		if showNameInterface, exists := data["show_name"]; exists {
+			if showName, ok := showNameInterface.(string); ok && showName != "" {
+				newMedia.ShowName = showName
+			}
+		}
+		if newMedia.ShowName == "" {
+			if properShowNameInterface, exists := data["proper_show_name"]; exists {
+				if properShowName, ok := properShowNameInterface.(string); ok && properShowName != "" {
+					tmdbPattern := regexp.MustCompile(`\s*\{tmdb-\d+\}`)
+					cleanShowName := tmdbPattern.ReplaceAllString(properShowName, "")
+					newMedia.ShowName = strings.TrimSpace(cleanShowName)
+				}
+			}
+		}
+
+		// Episode title (directly from MediaHub/TMDB)
+		if episodeTitleInterface, exists := data["episode_title"]; exists {
+			if episodeTitle, ok := episodeTitleInterface.(string); ok && episodeTitle != "" {
+				seasonEpisodePattern := regexp.MustCompile(`^S\d{2}E\d{2}\s*-?\s*`)
+				cleanEpisodeTitle := seasonEpisodePattern.ReplaceAllString(episodeTitle, "")
+				newMedia.EpisodeTitle = strings.TrimSpace(cleanEpisodeTitle)
+			}
+		}
+	}
+
+	// Add to database
+	if err := db.AddRecentMedia(newMedia); err != nil {
+		logger.Warn("Failed to add recent media to database: %v", err)
+		return
+	}
+
+	if mediaType == "tvshow" {
+		logger.Info("Added recent TV show: %s S%02dE%02d - %s",
+			newMedia.ShowName, newMedia.SeasonNumber, newMedia.EpisodeNumber, newMedia.EpisodeTitle)
+	} else {
+		logger.Info("Added recent media: %s (%s)", mediaName, mediaType)
+	}
+}
+
+// HandleRecentMedia returns the recent media list from database
+func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get recent media from database
+	recentMedia, err := db.GetRecentMedia(10)
+	if err != nil {
+		logger.Warn("Failed to get recent media from database: %v", err)
+		http.Error(w, "Failed to retrieve recent media", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert database format to API format for compatibility
+	var result []map[string]interface{}
+	for _, media := range recentMedia {
+		item := map[string]interface{}{
+			"name":       media.Name,
+			"path":       media.Path,
+			"folderName": media.FolderName,
+			"updatedAt":  time.Unix(media.UpdatedAt, 0).Format(time.RFC3339),
+			"type":       media.Type,
+			"filename":   media.Filename,
+		}
+
+		if media.TmdbId != "" {
+			item["tmdbId"] = media.TmdbId
+		}
+		if media.ShowName != "" {
+			item["showName"] = media.ShowName
+		}
+		if media.SeasonNumber > 0 {
+			item["seasonNumber"] = media.SeasonNumber
+		}
+		if media.EpisodeNumber > 0 {
+			item["episodeNumber"] = media.EpisodeNumber
+		}
+		if media.EpisodeTitle != "" {
+			item["episodeTitle"] = media.EpisodeTitle
+		}
+
+		result = append(result, item)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
