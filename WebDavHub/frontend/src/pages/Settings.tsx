@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
-import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build } from '@mui/icons-material';
+import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
 import MediaHubService from '../components/Settings/MediaHubService';
+import JobsTable from '../components/Jobs/JobsTable';
 
 interface ConfigValue {
   key: string;
@@ -39,7 +40,7 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services
+  const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services, 2: Jobs
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
@@ -252,7 +253,8 @@ const Settings: React.FC = () => {
   // Define main tabs
   const mainTabs = [
     { name: 'General', icon: <TuneRounded sx={{ fontSize: 28 }} />, color: '#3b82f6' },
-    { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#10b981' }
+    { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#10b981' },
+    { name: 'Jobs', icon: <WorkRounded sx={{ fontSize: 28 }} />, color: '#8b5cf6' }
   ];
 
   // Define category order for General tab (configuration categories)
@@ -497,9 +499,15 @@ const Settings: React.FC = () => {
               borderRadius: 3,
               border: '1px solid',
               borderColor: alpha(theme.palette.divider, 0.5),
-              maxWidth: 'fit-content',
+              width: { xs: '100%', sm: 'fit-content' },
+              maxWidth: '100%',
               backdropFilter: 'blur(10px)',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+              overflowX: { xs: 'auto', sm: 'visible' },
+              '&::-webkit-scrollbar': {
+                display: 'none',
+              },
+              scrollbarWidth: 'none',
             }}
           >
             {mainTabs.map((tab, index) => {
@@ -513,8 +521,8 @@ const Settings: React.FC = () => {
                   }}
                   sx={{
                     cursor: 'pointer',
-                    px: { xs: 2.5, sm: 4 },
-                    py: { xs: 1.5, sm: 2 },
+                    px: { xs: 1.5, sm: 4 },
+                    py: { xs: 1, sm: 2 },
                     borderRadius: 2.5,
                     bgcolor: isSelected
                       ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
@@ -524,7 +532,8 @@ const Settings: React.FC = () => {
                       : 'transparent',
                     color: isSelected ? 'white' : 'text.primary',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    minWidth: 'fit-content',
+                    flex: { xs: '1 1 0', sm: '0 0 auto' },
+                    minWidth: { xs: 0, sm: 'auto' },
                     whiteSpace: 'nowrap',
                     position: 'relative',
                     overflow: 'hidden',
@@ -556,11 +565,11 @@ const Settings: React.FC = () => {
                     } : {},
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
                     <Box
                       sx={{
-                        width: { xs: 20, sm: 24 },
-                        height: { xs: 20, sm: 24 },
+                        width: { xs: 18, sm: 24 },
+                        height: { xs: 18, sm: 24 },
                         borderRadius: 1,
                         bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : alpha(tab.color, 0.15),
                         display: 'flex',
@@ -568,8 +577,9 @@ const Settings: React.FC = () => {
                         justifyContent: 'center',
                         color: isSelected ? 'white' : tab.color,
                         transition: 'all 0.3s ease',
+                        flexShrink: 0,
                         '& svg': {
-                          fontSize: { xs: 16, sm: 18 },
+                          fontSize: { xs: 14, sm: 18 },
                           filter: isSelected ? 'none' : 'none',
                         },
                       }}
@@ -580,8 +590,11 @@ const Settings: React.FC = () => {
                       variant="body1"
                       fontWeight="600"
                       sx={{
-                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontSize: { xs: '0.8rem', sm: '1rem' },
                         letterSpacing: '0.02em',
+                        flexShrink: 0,
+                        minWidth: 0,
+                        textAlign: 'center',
                       }}
                     >
                       {tab.name}
@@ -1388,6 +1401,13 @@ const Settings: React.FC = () => {
         {selectedMainTab === 1 && (
           <Box>
             <MediaHubService />
+          </Box>
+        )}
+
+        {/* Jobs Tab Content */}
+        {selectedMainTab === 2 && (
+          <Box>
+            <JobsTable onRefresh={fetchConfig} />
           </Box>
         )}
       </Container>
