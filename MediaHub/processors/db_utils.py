@@ -359,6 +359,12 @@ def display_missing_files(conn, destination_folder):
                     # First check if the original source file still exists
                     if not os.path.exists(source_path):
                         log_message(f"Source file no longer exists: {source_path}", level="WARNING")
+                        try:
+                            from MediaHub.processors.symlink_utils import delete_broken_symlinks
+                            log_message(f"Triggering broken symlinks cleanup for missing source: {source_path}", level="INFO")
+                            delete_broken_symlinks(destination_folder, source_path)
+                        except Exception as cleanup_error:
+                            log_message(f"Error during broken symlinks cleanup: {cleanup_error}", level="ERROR")
                         continue
 
                     # Recursively search the entire destination directory for the file
