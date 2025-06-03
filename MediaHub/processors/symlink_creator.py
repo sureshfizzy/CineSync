@@ -385,7 +385,6 @@ def process_file(args, processed_files_log, force=False):
                     try:
                         with open(tmdb_file_path, "w") as tmdb_file:
                             tmdb_file.write(tmdb_content)
-                        log_message(f"Created/updated .tmdb file with media type: {tmdb_file_path} ({tmdb_content})", level="DEBUG")
                     except Exception as e:
                         log_message(f"Error writing .tmdb file content: {e}", level="WARNING")
                         raise
@@ -397,7 +396,7 @@ def process_file(args, processed_files_log, force=False):
                         FILE_ATTRIBUTE_HIDDEN = 0x02
                         result = ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_HIDDEN)
                         if result:
-                            log_message(f"Set hidden attribute on .tmdb file: {tmdb_file_path}", level="DEBUG")
+                            pass
                         else:
                             log_message(f"Warning: Failed to set hidden attribute on .tmdb file: {tmdb_file_path}", level="DEBUG")
                     except Exception as e:

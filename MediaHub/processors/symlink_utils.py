@@ -471,38 +471,37 @@ def _cleanup_empty_dirs(dir_path):
     """Helper function to clean up empty directories and associated .tmdb files."""
     while dir_path and os.path.isdir(dir_path):
         try:
-            # Check for .tmdb files in the directory and remove them
+            # Get directory contents
             dir_contents = os.listdir(dir_path)
             tmdb_files = [f for f in dir_contents if f.endswith('.tmdb')]
+            non_tmdb_files = [f for f in dir_contents if not f.endswith('.tmdb')]
 
-            # Remove any .tmdb files found
-            for tmdb_file in tmdb_files:
-                tmdb_path = os.path.join(dir_path, tmdb_file)
-                try:
-                    # On Windows, remove hidden attribute if present
-                    if platform.system() == "Windows":
-                        try:
-                            import ctypes
-                            FILE_ATTRIBUTE_NORMAL = 0x80
-                            ctypes.windll.kernel32.SetFileAttributesW(tmdb_path, FILE_ATTRIBUTE_NORMAL)
-                        except Exception:
-                            pass  # Continue even if we can't change attributes
+            # Only proceed with cleanup if directory is empty except for .tmdb files
+            if not non_tmdb_files:
+                # Directory is empty except for .tmdb files, safe to remove everything
 
-                    os.remove(tmdb_path)
-                    log_message(f"Deleted .tmdb file: {tmdb_path}", level="INFO")
-                except Exception as e:
-                    log_message(f"Error deleting .tmdb file {tmdb_path}: {e}", level="WARNING")
+                # Remove any .tmdb files found
+                for tmdb_file in tmdb_files:
+                    tmdb_path = os.path.join(dir_path, tmdb_file)
+                    try:
+                        # On Windows, remove hidden attribute if present
+                        if platform.system() == "Windows":
+                            try:
+                                import ctypes
+                                FILE_ATTRIBUTE_NORMAL = 0x80
+                                ctypes.windll.kernel32.SetFileAttributesW(tmdb_path, FILE_ATTRIBUTE_NORMAL)
+                            except Exception:
+                                pass
 
-            # Refresh directory contents after .tmdb cleanup
-            dir_contents = os.listdir(dir_path)
+                        os.remove(tmdb_path)
+                    except Exception as e:
+                        log_message(f"Error deleting .tmdb file {tmdb_path}: {e}", level="WARNING")
 
-            # If directory is now empty, delete it
-            if not dir_contents:
+                # Now delete the empty directory
                 log_message(f"Deleting empty folder: {dir_path}", level="INFO")
                 os.rmdir(dir_path)
                 dir_path = os.path.dirname(dir_path)
             else:
-                # Directory is not empty, stop cleanup
                 break
 
         except OSError as e:
