@@ -296,6 +296,19 @@ const Settings: React.FC = () => {
         if (bIndex !== -1) return 1;
       }
 
+      // For Media Folders Configuration category, prioritize CineSync Layout first
+      if (category === 'Media Folders Configuration') {
+        const mediaFoldersOrder = ['CINESYNC_LAYOUT', '4K_SEPARATION', 'ANIME_SEPARATION'];
+        const aIndex = mediaFoldersOrder.indexOf(a.key);
+        const bIndex = mediaFoldersOrder.indexOf(b.key);
+
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+      }
+
       // For Resolution Mappings category, prioritize structure settings at the top
       if (category === 'Resolution Folder Mappings Configuration') {
         const resolutionStructureOrder = ['MOVIE_RESOLUTION_STRUCTURE', 'SHOW_RESOLUTION_STRUCTURE'];

@@ -147,6 +147,10 @@ def is_anime_separation_enabled():
     """Check if anime content should be separated into different folders"""
     return os.getenv('ANIME_SEPARATION', 'false').lower() == 'true'
 
+def is_4k_separation_enabled():
+    """Check if 4K content separation should be enabled"""
+    return os.getenv('4K_SEPARATION', 'true').lower() == 'true'
+
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()
 

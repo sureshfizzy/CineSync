@@ -57,6 +57,7 @@ func getConfigDefinitions() []ConfigValue {
 
 		// Media Folders Configuration
 		{Key: "CINESYNC_LAYOUT", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable CineSync layout organization"},
+		{Key: "4K_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable automatic 4K content separation into separate folders"},
 		{Key: "ANIME_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable anime separation"},
 		{Key: "CUSTOM_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for TV shows"},
 		{Key: "CUSTOM_4KSHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for 4K TV shows"},

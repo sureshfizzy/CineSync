@@ -123,7 +123,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                         if is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, movie_folder)
-                        elif is_4k:
+                        elif is_4k and is_4k_separation_enabled():
                             dest_path = os.path.join(dest_dir, custom_4kmovie_layout(), movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
@@ -136,7 +136,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                     else:
                         if is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
-                        elif is_4k:
+                        elif is_4k and is_4k_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', '4KMovies', movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
