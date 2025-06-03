@@ -69,19 +69,19 @@ def custom_4kshow_layout():
     return token
 
 def custom_movie_layout():
-    token = os.getenv('CUSTOM_MOVIE_FOLDER', 'Movies')
+    token = os.getenv('CUSTOM_MOVIE_FOLDER', None)
     return token
 
 def custom_4kmovie_layout():
-    token = os.getenv('CUSTOM_4KMOVIE_FOLDER', '4KMovies')
+    token = os.getenv('CUSTOM_4KMOVIE_FOLDER', None)
     return token
 
 def custom_anime_movie_layout():
-    token = os.getenv('CUSTOM_ANIME_MOVIE_FOLDER', 'AnimeMovies')
+    token = os.getenv('CUSTOM_ANIME_MOVIE_FOLDER', None)
     return token
 
 def custom_anime_show_layout():
-    token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', 'AnimeShows')
+    token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', None)
     return token
 
 def get_mediainfo_tags():

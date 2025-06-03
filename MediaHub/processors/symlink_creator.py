@@ -361,7 +361,6 @@ def process_file(args, processed_files_log, force=False):
                                     log_message(f"Updating .tmdb file format to include media type: {tmdb_file_path}", level="DEBUG")
                                 else:
                                     file_needs_update = False
-                                    log_message(f"TMDB file already exists with correct content: {tmdb_file_path}", level="DEBUG")
                     except Exception:
                         pass
 
