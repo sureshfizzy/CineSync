@@ -122,6 +122,9 @@ func main() {
 	// Set the root directory for file operations
 	api.SetRootDir(effectiveRootDir)
 
+	// Initialize job manager
+	api.InitJobManager()
+
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/files/", api.HandleFiles)
@@ -156,6 +159,11 @@ func main() {
 	apiMux.HandleFunc("/api/mediahub/logs", api.HandleMediaHubLogs)
 	apiMux.HandleFunc("/api/mediahub/monitor/start", api.HandleMediaHubMonitorStart)
 	apiMux.HandleFunc("/api/mediahub/monitor/stop", api.HandleMediaHubMonitorStop)
+
+	// Job management endpoints
+	apiMux.HandleFunc("/api/jobs/events", api.HandleJobEvents)
+	apiMux.HandleFunc("/api/jobs/", api.HandleJobsRouter)
+	apiMux.HandleFunc("/api/jobs", api.HandleJobsRouter)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)
@@ -203,7 +211,8 @@ func main() {
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-shutdown
-		logger.Info("Shutting down: checkpointing SQLite WAL and optimizing DB...")
+		logger.Info("Shutting down: stopping job manager and checkpointing SQLite WAL...")
+		api.StopJobManager()
 		if db.DB() != nil {
 			db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
 			db.DB().Exec("PRAGMA optimize;")
