@@ -281,7 +281,7 @@ const RecentlyAddedMedia: React.FC = () => {
   // All refs at the top
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fetchingIds = useRef<Set<string>>(new Set());
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchTimeoutRef = useRef<number | null>(null);
 
   // Theme hook
   const theme = useTheme();
@@ -328,7 +328,7 @@ const RecentlyAddedMedia: React.FC = () => {
     }
 
     // Debounce the fetch to prevent rapid successive calls
-    fetchTimeoutRef.current = setTimeout(() => {
+    fetchTimeoutRef.current = window.setTimeout(() => {
       const fetchTmdbData = async () => {
         // Create a map of unique media items to avoid duplicates
         const uniqueMedia = new Map<string, RecentMedia>();

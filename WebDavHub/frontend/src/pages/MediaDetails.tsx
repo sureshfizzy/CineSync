@@ -40,7 +40,7 @@ export default function MediaDetails() {
   const tmdbId = location.state?.tmdbId;
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
-  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const transitionTimeoutRef = useRef<number | null>(null);
 
   // Function to handle smooth folder name transitions
   const handleFolderNameChange = useCallback((newFolderName: string, newTmdbId?: string | number) => {
@@ -58,7 +58,7 @@ export default function MediaDetails() {
     setPendingFolderName(newFolderName);
 
     // Add a brief delay to allow for smooth visual transition
-    transitionTimeoutRef.current = setTimeout(() => {
+    transitionTimeoutRef.current = window.setTimeout(() => {
       // Build new path by replacing the last segment with the new folder name
       const pathParts = fullPath.split('/').filter(Boolean);
       pathParts[pathParts.length - 1] = newFolderName;
@@ -95,20 +95,21 @@ export default function MediaDetails() {
 
   // Expose test functions to window for console testing (development only)
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       (window as any).testMediaDetailsTransition = testTransition;
       (window as any).testSymlinkUpdate = (oldName: string, newName: string) => {
-        const { triggerFolderNameUpdate } = require('../utils/symlinkUpdates');
-        triggerFolderNameUpdate({
-          oldFolderName: oldName,
-          newFolderName: newName,
-          newPath: `/test/path/${newName}`,
-          timestamp: Date.now()
+        import('../utils/symlinkUpdates').then(({ triggerFolderNameUpdate }) => {
+          triggerFolderNameUpdate({
+            oldFolderName: oldName,
+            newFolderName: newName,
+            newPath: `/test/path/${newName}`,
+            timestamp: Date.now()
+          });
         });
       };
     }
     return () => {
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         delete (window as any).testMediaDetailsTransition;
         delete (window as any).testSymlinkUpdate;
       }
@@ -303,7 +304,7 @@ export default function MediaDetails() {
       </IconButton>
 
       {/* Temporary test button for transition (remove in production) */}
-      {process.env.NODE_ENV === 'development' && (
+      {import.meta.env.DEV && (
         <IconButton
           onClick={testTransition}
           sx={{

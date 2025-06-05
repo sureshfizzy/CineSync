@@ -6,11 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"cinesync/pkg/api"
 	"cinesync/pkg/config"
@@ -24,59 +22,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func startNpmServer() error {
-	// Change to the frontend directory
-	if err := os.Chdir("frontend"); err != nil {
-		return fmt.Errorf("failed to change to frontend directory: %v", err)
-	}
 
-	// Check if node_modules exists
-	if _, err := os.Stat("node_modules"); os.IsNotExist(err) {
-		// Only install dependencies if node_modules doesn't exist
-		logger.Info("Installing frontend dependencies...")
-		installCmd := exec.Command("npm", "install")
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		if err := installCmd.Run(); err != nil {
-			return fmt.Errorf("failed to install dependencies: %v", err)
-		}
-	} else {
-		logger.Info("Frontend dependencies already installed, skipping npm install")
-	}
-
-	// Start npm dev server
-	logger.Info("Starting frontend development server...")
-	cmd := exec.Command("npm", "run", "dev")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Start the command in a new process
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start npm server: %v", err)
-	}
-
-	// Change back to the original directory
-	if err := os.Chdir(".."); err != nil {
-		return fmt.Errorf("failed to change back to original directory: %v", err)
-	}
-
-	// Get UI port from environment variable or use default
-	uiPort := env.GetString("CINESYNC_UI_PORT", "5173")
-
-	// Wait for the development server to be ready
-	logger.Info("Waiting for frontend server to be ready...")
-	for i := 0; i < 30; i++ {
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%s", uiPort))
-		if err == nil {
-			resp.Body.Close()
-			logger.Info("Frontend server is ready!")
-			return nil
-		}
-		time.Sleep(time.Second)
-	}
-
-	return fmt.Errorf("frontend server failed to start within 30 seconds")
-}
 
 func main() {
 	// Load .env from one directory above
@@ -200,12 +146,13 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	// Start npm development server
-	if err := startNpmServer(); err != nil {
-		logger.Error("Failed to start npm server: %v", err)
-		logger.Info("Continuing with backend server only...")
-	}
 
+
+	// Return the configured server for external startup
+	StartServer(rootMux, *ip, *port, *dir, effectiveRootDir, rootDir)
+}
+
+func StartServer(rootMux *http.ServeMux, ip string, port int, dir, effectiveRootDir, rootDir string) {
 	// Add shutdown handler to checkpoint WAL
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
@@ -222,17 +169,18 @@ func main() {
 	}()
 
 	// Start server
-	addr := fmt.Sprintf("%s:%d", *ip, *port)
-	rootInfo := *dir
-	if effectiveRootDir != *dir {
-		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", *dir)
+	addr := fmt.Sprintf("%s:%d", ip, port)
+	rootInfo := dir
+	if effectiveRootDir != dir {
+		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", dir)
 	}
 
-	logger.Info("Starting CineSync server on http://%s", addr)
+	logger.Info("Starting CineSync API server on http://%s", addr)
 	logger.Info("WebDAV access available at http://%s/webdav/ for WebDAV clients", addr)
 	logger.Info("Serving content from: %s", rootInfo)
 	logger.Info("API available at http://%s/api/", addr)
-	logger.Info("Server Dashboard http://%s/", addr)
+	uiPort := env.GetString("CINESYNC_UI_PORT", "5173")
+	logger.Info("Frontend Dashboard: http://localhost:%s/", uiPort)
 
 	// In your main function, add this information after starting the server
 	if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
@@ -243,7 +191,7 @@ func main() {
 		logger.Warn("WebDAV authentication is disabled")
 	}
 
-	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
+	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", port, rootDir)
 
 	log.Fatal(http.ListenAndServe(addr, rootMux))
 }
