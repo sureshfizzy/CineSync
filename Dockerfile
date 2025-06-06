@@ -49,33 +49,28 @@ RUN apt-get update && \
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Create app directory with proper permissions
-RUN mkdir -p /app && chmod 755 /app
-
-# Set environment variables for PUID and PGID
-ENV PUID=1000
-ENV PGID=1000
-
-# Create default user and group (will be modified in entrypoint if needed)
-RUN groupadd -g ${PGID} appuser && \
-    useradd -u ${PUID} -g appuser -d /app -s /bin/bash appuser
-
 # Copy Python dependencies and install
 COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-# Copy application files and set ownership
-COPY --chown=appuser:appuser MediaHub /app/MediaHub
-COPY --from=builder --chown=appuser:appuser /app/WebDavHub /app/WebDavHub
+# Set default PUID and PGID
+ENV PUID=1000
+ENV PGID=1000
 
-# Copy and setup entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Create default user and group
+RUN groupadd -g ${PGID} appuser && \
+    useradd -u ${PUID} -g appuser -d /app -s /bin/bash appuser
+
+# Copy application files
+COPY MediaHub /app/MediaHub
+COPY --from=builder /app/WebDavHub /app/WebDavHub
+
+# Add the entrypoint script
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Set working directory
 WORKDIR /app
 
-# Use entrypoint to handle user setup
-ENTRYPOINT ["/entrypoint.sh"]
-
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python3", "WebDavHub/scripts/start-prod.py"]

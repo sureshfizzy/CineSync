@@ -1,49 +1,33 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # Default values
 PUID=${PUID:-1000}
 PGID=${PGID:-1000}
 
-# Function to update group if needed
-update_group() {
-    local current_gid
-    current_gid=$(getent group appuser | cut -d: -f3)
+# Update user/group IDs if they differ from current values
+current_uid=$(id -u appuser)
+current_gid=$(id -g appuser)
 
-    if [ "$current_gid" != "$PGID" ]; then
-        echo "Updating appuser group GID from $current_gid to $PGID"
-        groupmod -o -g "$PGID" appuser
-    fi
-}
+if [ "$PUID" != "$current_uid" ] || [ "$PGID" != "$current_gid" ]; then
+    # Update group ID
+    groupmod -o -g "$PGID" appuser
 
-# Function to update user if needed
-update_user() {
-    local current_uid
-    current_uid=$(id -u appuser)
+    # Update user ID
+    usermod -o -u "$PUID" appuser
+fi
 
-    if [ "$current_uid" != "$PUID" ]; then
-        echo "Updating appuser UID from $current_uid to $PUID"
-        usermod -o -u "$PUID" appuser
+# Ensure critical directories exist and have proper ownership
+mkdir -p /app/db /app/logs /app/cache 2>/dev/null || true
+chown -R appuser:appuser /app/db 2>/dev/null || true
+chown -R appuser:appuser /app/logs 2>/dev/null || true
+chown -R appuser:appuser /app/cache 2>/dev/null || true
 
-        # Fix ownership after UID change
-        echo "Fixing file ownership..."
-        find /app -user "$current_uid" -exec chown appuser:appuser {} \; 2>/dev/null || true
-    fi
-}
-
-# Update user and group if needed
-update_group
-update_user
-
-# Ensure critical directories have correct ownership
-chown -R appuser:appuser /app 2>/dev/null || {
-    echo "Warning: Could not change ownership of all files in /app"
-    echo "This might be expected if mounting volumes"
-}
-
-# Change to app directory
-cd /app
+# Frontend directory
+if [ -d "/app/WebDavHub/frontend" ]; then
+    find /app/WebDavHub/frontend -path "*/node_modules" -prune -o -type f -exec chown appuser:appuser {} \; 2>/dev/null || true
+    find /app/WebDavHub/frontend -path "*/node_modules" -prune -o -type d -exec chown appuser:appuser {} \; 2>/dev/null || true
+fi
 
 # Execute command as appuser
-echo "Starting application as appuser (UID: $PUID, GID: $PGID)"
 exec gosu appuser "$@"
