@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -38,41 +37,7 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var fullPath string
-	if runtime.GOOS == "windows" {
-		// For Windows, just join the rootDir and path directly
-		fullPath = filepath.Join(rootDir, decodedPath)
-	} else {
-		// For Linux/Unix systems, handle the first directory logic
-		entries, err := os.ReadDir(rootDir)
-		if err != nil {
-			logger.Error("Failed to read root directory: %v", err)
-			http.Error(w, "Failed to read root directory", http.StatusInternalServerError)
-			return
-		}
-
-		// Find the first non-hidden directory
-		var firstDir string
-		for _, entry := range entries {
-			if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
-				firstDir = entry.Name()
-				break
-			}
-		}
-
-		if firstDir == "" {
-			logger.Error("No valid first directory found in root directory")
-			http.Error(w, "Invalid directory structure", http.StatusInternalServerError)
-			return
-		}
-
-		// Construct the full path ensuring the first directory is included for Linux
-		if !strings.HasPrefix(decodedPath, firstDir) {
-			fullPath = filepath.Join(rootDir, firstDir, decodedPath)
-		} else {
-			fullPath = filepath.Join(rootDir, decodedPath)
-		}
-	}
+	fullPath := filepath.Join(rootDir, decodedPath)
 
 	logger.Info("Starting video stream for: %s", fullPath)
 
