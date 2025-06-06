@@ -54,17 +54,29 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       const res = await axios.get('/api/tmdb/details', { params });
       const data = res.data;
       if (data && typeof data === 'object' && 'id' in data) {
+        // Determine media_type: use response data if available, otherwise fall back to the parameter we sent
+        let finalMediaType = data.media_type;
+        if (!finalMediaType || (finalMediaType !== 'movie' && finalMediaType !== 'tv')) {
+          if (mediaType === 'movie' || mediaType === 'tv') {
+            finalMediaType = mediaType;
+          } else if (data.first_air_date || data.name) {
+            finalMediaType = 'tv';
+          } else {
+            finalMediaType = 'movie';
+          }
+        }
+
         const resultObj = {
           id: data.id,
-          title: data.media_type === 'movie' ? data.title : data.name,
+          title: finalMediaType === 'movie' ? data.title : (data.name || data.title),
           overview: data.overview,
           poster_path: data.poster_path,
           release_date: data.release_date || data.first_air_date,
-          media_type: data.media_type,
+          media_type: finalMediaType,
         };
 
-        // Only cache if skipCache is false
-        if (!skipCache) {
+        // Only cache if skipCache is false and we have a valid media_type
+        if (!skipCache && (finalMediaType === 'movie' || finalMediaType === 'tv')) {
           try {
             await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
           } catch (cacheErr) {
@@ -127,16 +139,29 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       }
 
       const best = results[0];
+
+      // Ensure we have a valid media_type
+      let finalMediaType = best.media_type;
+      if (!finalMediaType || (finalMediaType !== 'movie' && finalMediaType !== 'tv')) {
+        if (mediaType === 'movie' || mediaType === 'tv') {
+          finalMediaType = mediaType;
+        } else if (best.first_air_date || best.name) {
+          finalMediaType = 'tv';
+        } else {
+          finalMediaType = 'movie';
+        }
+      }
+
       const resultObj: TmdbResult = {
         id: best.id,
         title: best.title || best.name,
         overview: best.overview,
         poster_path: best.poster_path,
         release_date: best.release_date || best.first_air_date,
-        media_type: best.media_type,
+        media_type: finalMediaType,
       };
 
-      if (!skipCache && resultObj && resultObj.id) {
+      if (!skipCache && resultObj && resultObj.id && (finalMediaType === 'movie' || finalMediaType === 'tv')) {
         try {
           await axios.post('/api/tmdb-cache', { query: cacheKey, result: JSON.stringify(resultObj) });
         } catch (cacheErr) {
@@ -153,7 +178,6 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
           const retrySec = parseInt(retryHeader, 10);
           if (!isNaN(retrySec)) retryAfter = retrySec * 1000;
         }
-        console.warn(`[TMDB] Rate limited (429). Retrying in ${retryAfter / 1000}s (attempt ${attempt + 1})...`);
         await sleep(retryAfter);
         attempt++;
         continue;
@@ -170,6 +194,13 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 }
 
 export function getTmdbPosterUrl(posterPath: string | null, size: string = 'w342'): string | null {
+  if (!posterPath) return null;
+
+  return `/api/image-cache?poster=${encodeURIComponent(posterPath)}&size=${size}`;
+}
+
+// Direct TMDB URL function (fallback)
+export function getTmdbPosterUrlDirect(posterPath: string | null, size: string = 'w342'): string | null {
   if (!posterPath) return null;
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
 }

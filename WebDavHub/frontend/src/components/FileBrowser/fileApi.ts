@@ -7,22 +7,34 @@ interface FileResponse {
   mediaType?: 'movie' | 'tv';
   hasAllowed: boolean;
   hasSeasonFolders: boolean;
+  totalCount: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
-export const fetchFiles = async (path: string, checkTmdb: boolean = false): Promise<FileResponse> => {
+export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100): Promise<FileResponse> => {
   const headers: Record<string, string> = {};
   if (checkTmdb) {
     headers['X-Check-Tmdb'] = 'true';
   }
 
-  const response = await axios.get<FileItem[]>('/api/files' + path, { headers });
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+
+  const response = await axios.get<FileItem[]>('/api/files' + path + '?' + params.toString(), { headers });
 
   return {
     data: response.data,
     tmdbId: response.headers['x-tmdb-id'],
     mediaType: response.headers['x-media-type'] as 'movie' | 'tv',
     hasAllowed: response.headers['x-has-allowed-extensions'] === 'true',
-    hasSeasonFolders: response.headers['x-has-season-folders'] === 'true'
+    hasSeasonFolders: response.headers['x-has-season-folders'] === 'true',
+    totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
+    page: parseInt(response.headers['x-page'] || '1', 10),
+    limit: parseInt(response.headers['x-limit'] || '100', 10),
+    totalPages: parseInt(response.headers['x-total-pages'] || '1', 10)
   };
 };
 

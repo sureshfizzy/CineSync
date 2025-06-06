@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +40,11 @@ func SetRootDir(dir string) {
 	if err := db.InitTmdbCacheTable(); err != nil {
 		logger.Warn("Failed to initialize TMDB cache table: %v", err)
 	}
+}
+
+// InitializeImageCache initializes the image cache service with project directory
+func InitializeImageCache(projectDir string) {
+	InitImageCache(projectDir)
 }
 
 type FileInfo struct {
@@ -150,6 +155,20 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	} else {
 		path = strings.TrimPrefix(path, "/api/files")
+	}
+
+	// Parse pagination parameters
+	page := 1
+	limit := 100
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if parsedPage, err := strconv.Atoi(pageStr); err == nil && parsedPage > 0 {
+			page = parsedPage
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+			limit = parsedLimit
+		}
 	}
 
 	dir := filepath.Join(rootDir, path)
@@ -335,80 +354,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// 3. If we have a media type (from .tmdb or content) but no TMDB ID yet (maybe .tmdb only had ID or no .tmdb), try to search
-			// BUT: Don't create .tmdb files in season folders - only in show root directories
-			if subDirMediaType != "" && subDirTmdbID == "" && !isSeasonFolder(entry.Name()) {
-				folderName := entry.Name()
-				year := ""
-
-				// Try to extract year from folder name (assuming format like "Name (2023)" or "Name 2023")
-				yearMatch := regexp.MustCompile(`[\( ](\d{4})[\)]?`).FindStringSubmatch(folderName)
-				if len(yearMatch) > 1 {
-					year = yearMatch[1]
-				}
-
-				// Clean the folder name by removing year and any special characters
-				cleanName := regexp.MustCompile(`[\( ]\d{4}[\)]?`).ReplaceAllString(folderName, "")
-				cleanName = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(cleanName, " ")
-				cleanName = strings.TrimSpace(cleanName)
-
-				// Search TMDB with the cleaned name and year
-				if cleanName != "" {
-					logger.Info("Searching TMDB for %s (Year: %s, Type: %s)", cleanName, year, subDirMediaType)
-
-					// Use the existing TMDB proxy endpoint
-					params := url.Values{}
-					params.Set("query", cleanName)
-					if year != "" {
-						params.Set("year", year)
-					}
-					params.Set("mediaType", subDirMediaType)
-
-					// Make request to our local TMDB proxy
-					proxyReq, _ := http.NewRequest("GET", "/api/tmdb/search?" + params.Encode(), nil)
-					proxyReq.Header.Set("X-Real-IP", "127.0.0.1")
-
-					// Use the existing TMDB handler directly
-					recorder := httptest.NewRecorder()
-					HandleTmdbProxy(recorder, proxyReq)
-
-					resp := recorder.Result()
-					if resp != nil && resp.Body != nil {
-						defer resp.Body.Close()
-					}
-
-					if resp.StatusCode == http.StatusOK {
-						var result struct {
-							Results []struct {
-								ID    int    `json:"id"`
-								Title string `json:"title"`
-								Name  string `json:"name"`
-							} `json:"results"`
-						}
-
-						if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-							logger.Warn("Failed to decode TMDB response: %v", err)
-						} else if len(result.Results) > 0 {
-							// Use the first result
-							firstResult := result.Results[0]
-							fileInfo.TmdbId = fmt.Sprintf("%d", firstResult.ID)
-
-							// Create .tmdb file with the found ID AND MediaType
-							tmdbContent := fileInfo.TmdbId
-							if fileInfo.MediaType != "" { // Should always be true here if we searched
-								tmdbContent += ":" + fileInfo.MediaType
-							}
-
-							if err := os.WriteFile(subTmdbPath, []byte(tmdbContent), 0644); err != nil {
-								logger.Warn("Failed to write .tmdb file for %s: %v", entry.Name(), err)
-							} else {
-								logger.Info("Created .tmdb file for %s with ID %s and Type %s after search", entry.Name(), fileInfo.TmdbId, fileInfo.MediaType)
-							}
-						}
-					}
-				}
-			}
-
 			// For season folders, try to inherit TMDB ID from parent directory
 			if isSeasonFolder(entry.Name()) && subDirTmdbID == "" {
 				// Check if parent directory has a .tmdb file
@@ -428,6 +373,37 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 		files = append(files, fileInfo)
 	}
+
+	// Sort files: directories first, then alphabetically
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].Type == "directory" && files[j].Type != "directory" {
+			return true
+		}
+		if files[i].Type != "directory" && files[j].Type == "directory" {
+			return false
+		}
+		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
+	})
+
+	// Apply pagination
+	totalFiles := len(files)
+	startIndex := (page - 1) * limit
+	endIndex := startIndex + limit
+
+	if startIndex >= totalFiles {
+		files = []FileInfo{}
+	} else {
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+		files = files[startIndex:endIndex]
+	}
+
+	// Add pagination headers
+	w.Header().Set("X-Total-Count", fmt.Sprintf("%d", totalFiles))
+	w.Header().Set("X-Page", fmt.Sprintf("%d", page))
+	w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
+	w.Header().Set("X-Total-Pages", fmt.Sprintf("%d", (totalFiles+limit-1)/limit))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)

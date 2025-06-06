@@ -18,7 +18,7 @@ import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
 import { FileItem } from './types';
-import { getFileIcon, joinPaths, formatDate, parseTitleYearFromFolder } from './fileUtils';
+import { getFileIcon, joinPaths, formatDate } from './fileUtils';
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
@@ -26,7 +26,6 @@ import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
 
-const TMDB_CONCURRENCY_LIMIT = 4;
 const ITEMS_PER_PAGE = 100;
 
 // Reusable pagination component
@@ -84,12 +83,9 @@ export default function FileBrowser() {
 
   // Refs for tracking requests
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
-  const tmdbQueue = useRef<{ name: string; title: string; year?: string; mediaType?: 'movie' | 'tv' }[]>([]);
-  const tmdbActive = useRef(0);
-  const [tmdbQueueVersion, setTmdbQueueVersion] = useState(0);
+  const tmdbProcessingRef = useRef<{ [key: string]: boolean }>({});
 
-  // TMDB related states
-  const [folderHasAllowed] = useState<{ [folder: string]: boolean }>({});
+  // TMDB related states (folderHasAllowed removed - no longer needed)
 
   // Memoized filtered and sorted files
   const filteredFiles = useMemo(() => {
@@ -99,22 +95,8 @@ export default function FileBrowser() {
       : files;
   }, [files, search]);
 
-  const sortedFiles = useMemo(() => {
-    return [...filteredFiles].sort((a, b) => {
-      if (a.type === 'directory' && b.type !== 'directory') return -1;
-      if (a.type !== 'directory' && b.type === 'directory') return 1;
-      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-    });
-  }, [filteredFiles]);
-
-  const paginatedFiles = useMemo(() => {
-    const startIndex = (page - 1) * ITEMS_PER_PAGE;
-    return sortedFiles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [sortedFiles, page]);
-
-  const totalPages = useMemo(() =>
-    Math.max(1, Math.ceil(sortedFiles.length / ITEMS_PER_PAGE))
-  , [sortedFiles.length]);
+  // Use backend pagination data
+  const [totalPages, setTotalPages] = useState(1);
 
   // Reset to page 1 when files change
   useEffect(() => {
@@ -123,59 +105,22 @@ export default function FileBrowser() {
     }
   }, [totalPages, page]);
 
-
-
+  // Clear folder fetch reference when page changes for progressive loading
   useEffect(() => {
-    if (tmdbActive.current >= TMDB_CONCURRENCY_LIMIT) return;
-    if (tmdbQueue.current.length === 0) return;
+    folderFetchRef.current = {};
+  }, [page]);
 
-    while (tmdbActive.current < TMDB_CONCURRENCY_LIMIT && tmdbQueue.current.length > 0) {
-      const { name, title, year, mediaType } = tmdbQueue.current.shift()!;
-      tmdbActive.current++;
+  // Clear folder fetch reference when changing directories
+  useEffect(() => {
+    folderFetchRef.current = {};
+    tmdbProcessingRef.current = {};
+  }, [currentPath]);
 
-      const cached = getTmdbDataFromCache(name, mediaType);
-      if (cached?.poster_path) {
-        tmdbActive.current--;
-        setTmdbQueueVersion(v => v + 1);
-        continue;
-      }
-
-      searchTmdb(title, year, mediaType).then(apiResult => {
-        if (apiResult) {
-          let finalData = { ...apiResult };
-          if (cached) {
-            finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
-          }
-
-          if (apiResult.media_type && (apiResult.media_type === 'movie' || apiResult.media_type === 'tv')) {
-            if (finalData.media_type !== 'movie' && finalData.media_type !== 'tv') {
-              finalData.media_type = apiResult.media_type;
-            }
-          }
-
-          if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
-            setPosterInCache(name, mediaType || '', finalData);
-            updateTmdbData(name, finalData);
-          } else {
-            updateTmdbData(name, finalData);
-          }
-        } else if (cached) {
-          updateTmdbData(name, cached);
-        } else {
-          updateTmdbData(name, null);
-        }
-      }).finally(() => {
-        tmdbActive.current--;
-        setTmdbQueueVersion(v => v + 1);
-      });
-    }
-  }, [tmdbQueueVersion, getTmdbDataFromCache, updateTmdbData]);
-
-  const fetchFiles = async (path: string) => {
+  const fetchFiles = async (path: string, pageNum: number = page) => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetchFilesApi(path, true);
+      const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE);
 
       if (!Array.isArray(response.data)) {
         // Silent error handling for unexpected response format
@@ -200,6 +145,7 @@ export default function FileBrowser() {
       });
 
       setFiles(filesWithTmdb);
+      setTotalPages(response.totalPages);
 
       // If we have TMDB info, fetch the poster
       if (response.tmdbId && response.mediaType) {
@@ -257,6 +203,7 @@ export default function FileBrowser() {
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
+    fetchFiles(currentPath, value);
   };
 
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
@@ -283,51 +230,72 @@ export default function FileBrowser() {
     }
   };
 
+  // Simple TMDB fetching with delays to avoid rate limiting
   useEffect(() => {
     if (view !== 'poster') return;
-    filteredFiles.forEach(file => {
-      if (
-        file.type === 'directory' &&
-        file.tmdbId && // Only check directories with TMDB IDs
-        !tmdbData[file.name] && // Only if we don't already have the data
-        !folderFetchRef.current[file.name]
-      ) {
+
+    // Process all items but with increasing delays
+    const itemsToProcess = filteredFiles.filter((file: any) =>
+      file.type === 'directory' &&
+      file.tmdbId && // Only check directories with TMDB IDs
+      !tmdbData[file.name] && // Only if we don't already have the data
+      !folderFetchRef.current[file.name] &&
+      !tmdbProcessingRef.current[file.name]
+    );
+
+    if (itemsToProcess.length === 0) return;
+
+    // Process items sequentially instead of all at once to avoid overwhelming the backend
+    const processSequentially = async () => {
+      for (let index = 0; index < itemsToProcess.length; index++) {
+        const file = itemsToProcess[index];
+
+        // Double-check if already processed or being processed
+        if (folderFetchRef.current[file.name] || tmdbProcessingRef.current[file.name] || tmdbData[file.name]) {
+          continue;
+        }
+
         folderFetchRef.current[file.name] = true;
+        tmdbProcessingRef.current[file.name] = true;
         const mediaType = file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie');
-        searchTmdb(file.tmdbId, undefined, mediaType).then(result => {
-          if (result) {
-            updateTmdbData(file.name, result);
+
+        try {
+          const cached = getTmdbDataFromCache(file.name, mediaType);
+          if (cached?.poster_path) {
+            updateTmdbData(file.name, cached);
+            continue;
           }
-        });
-      }
-    });
-  }, [filteredFiles, view, tmdbData, updateTmdbData]);
 
-  useEffect(() => {
-    if (view !== 'poster') return;
-    if (!filteredFiles.length) return;
+          const apiResult = await searchTmdb(file.tmdbId || file.name, undefined, mediaType, 3);
+          if (apiResult) {
+            let finalData = { ...apiResult };
+            if (cached) {
+              finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
+            }
 
-    filteredFiles.forEach(file => {
-      if (file.type === 'directory' && !tmdbData[file.name]) {
-        const mediaType = file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie');
-        const cached = getTmdbDataFromCache(file.name, mediaType);
-
-        if (!cached) {
-          const { title: parsedTitle, year: parsedYear } = parseTitleYearFromFolder(file.name);
-          if (parsedTitle) {
-            updateTmdbData(file.name, {
-              id: 0,
-              title: parsedTitle,
-              overview: '',
-              poster_path: null,
-              release_date: parsedYear ? `${parsedYear}-01-01` : undefined,
-              media_type: mediaType,
-            });
+            if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
+              setPosterInCache(file.name, finalData.media_type, finalData);
+              updateTmdbData(file.name, finalData);
+            } else {
+              updateTmdbData(file.name, finalData);
+            }
+          } else if (cached) {
+            updateTmdbData(file.name, cached);
+          } else {
+            updateTmdbData(file.name, null);
           }
+        } catch (error: any) {
+          console.error(`Failed to fetch TMDB data for ${file.name}:`, error);
+          const cached = getTmdbDataFromCache(file.name, mediaType);
+          updateTmdbData(file.name, cached || null);
+        } finally {
+          tmdbProcessingRef.current[file.name] = false;
         }
       }
-    });
-  }, [filteredFiles, view, tmdbData, getTmdbDataFromCache, updateTmdbData]);
+    };
+
+    processSequentially();
+  }, [filteredFiles, view]);
 
   if (loading) {
     return (
@@ -361,9 +329,8 @@ export default function FileBrowser() {
       {view === 'poster' ? (
         <>
           <PosterView
-            files={paginatedFiles}
+            files={filteredFiles}
             tmdbData={tmdbData}
-            folderHasAllowed={folderHasAllowed}
             imgLoadedMap={imgLoadedMap}
             onFileClick={handleFileClick}
             onImageLoad={(key: string) => setImageLoaded(key, true)}
@@ -378,7 +345,7 @@ export default function FileBrowser() {
       ) : (
         <>
           <ListView
-            files={paginatedFiles}
+            files={filteredFiles}
             currentPath={currentPath}
             formatDate={formatDate}
             onItemClick={(file) => handleFileClick(file, null)}

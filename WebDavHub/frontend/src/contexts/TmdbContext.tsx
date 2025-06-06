@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { TmdbResult } from '../components/api/tmdbApi';
 import { getPosterFromCache } from '../components/FileBrowser/tmdbCache';
 
@@ -16,6 +16,12 @@ export function TmdbProvider({ children }: { children: React.ReactNode }) {
   const [tmdbData, setTmdbData] = useState<{ [key: string]: TmdbResult | null }>({});
   const [imgLoadedMap, setImgLoadedMap] = useState<{ [key: string]: boolean }>({});
 
+  // Use ref to access current tmdbData without causing re-renders
+  const tmdbDataRef = useRef(tmdbData);
+  useEffect(() => {
+    tmdbDataRef.current = tmdbData;
+  }, [tmdbData]);
+
   const updateTmdbData = useCallback((key: string, data: TmdbResult | null) => {
     setTmdbData(prev => ({ ...prev, [key]: data }));
     if (data?.poster_path) {
@@ -28,8 +34,9 @@ export function TmdbProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getTmdbDataFromCache = useCallback((key: string, mediaType?: string) => {
-    // First check our in-memory state
-    if (tmdbData[key]) return tmdbData[key];
+    // First check our in-memory state using ref to avoid dependency
+    const currentData = tmdbDataRef.current[key];
+    if (currentData) return currentData;
 
     // Then check the IndexedDB cache
     const cached = getPosterFromCache(key, mediaType || '');
@@ -39,7 +46,7 @@ export function TmdbProvider({ children }: { children: React.ReactNode }) {
     }
 
     return null;
-  }, [tmdbData, updateTmdbData]);
+  }, [updateTmdbData]);
 
   return (
     <TmdbContext.Provider value={{

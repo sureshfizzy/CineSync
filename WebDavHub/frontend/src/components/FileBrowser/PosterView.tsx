@@ -9,7 +9,6 @@ import { getTmdbPosterUrl } from '../api/tmdbApi';
 interface PosterViewProps {
   files: FileItem[];
   tmdbData: { [key: string]: TmdbResult | null };
-  folderHasAllowed: { [folder: string]: boolean };
   imgLoadedMap: { [key: string]: boolean };
   onFileClick: (file: FileItem, tmdb: TmdbResult | null) => void;
   onImageLoad: (key: string) => void;
@@ -18,7 +17,6 @@ interface PosterViewProps {
 export default function PosterView({
   files,
   tmdbData,
-  folderHasAllowed,
   imgLoadedMap,
   onFileClick,
   onImageLoad,
@@ -85,9 +83,10 @@ export default function PosterView({
               overflow: 'hidden',
             }}>
               {(() => {
-                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && folderHasAllowed[file.name] !== false;
                 const hasTmdbData = !!tmdb;
                 const hasPosterPath = tmdb && tmdb.poster_path;
+
+                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasTmdbData;
 
                 if (isPosterCandidate) {
                   return (
@@ -96,28 +95,27 @@ export default function PosterView({
                         <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
                       )}
 
-                      {hasTmdbData && (
-                        <img
-                          src={hasPosterPath ? getTmdbPosterUrl(tmdb.poster_path) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
-                          alt={tmdb.title || file.name}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            position: 'absolute',
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            display: 'block',
-                            opacity: loaded && hasPosterPath ? 1 : 0,
-                            filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)',
-                            transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
-                            transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
-                          }}
-                          onLoad={() => onImageLoad(file.name)}
-                          onError={() => onImageLoad(file.name)}
-                        />
-                      )}
+                      <img
+                        src={hasPosterPath ? getTmdbPosterUrl(tmdb.poster_path) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
+                        alt={tmdb.title || file.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          position: 'absolute',
+                          top: 0, left: 0, right: 0, bottom: 0,
+                          display: 'block',
+                          // Progressive loading: show poster immediately when available
+                          opacity: loaded && hasPosterPath ? 1 : 0,
+                          filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)',
+                          transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
+                          transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
+                        }}
+                        onLoad={() => onImageLoad(file.name)}
+                        onError={() => onImageLoad(file.name)}
+                      />
 
-                      {hasTmdbData && !hasPosterPath && loaded && (
+                      {!hasPosterPath && loaded && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
                           {getFileIcon(file.name, file.type)}
                         </Box>
@@ -125,7 +123,8 @@ export default function PosterView({
                     </>
                   );
                 } else {
-                  return file.type === 'directory' && folderHasAllowed[file.name] === false ? getFileIcon(file.name, file.type) : null;
+                  // Show folder icon for directories without TMDB data
+                  return file.type === 'directory' ? getFileIcon(file.name, file.type) : null;
                 }
               })()}
             </Box>

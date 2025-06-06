@@ -12,6 +12,7 @@ WebDavHub/frontend/node_modules/
 
 # Data and logs
 /db
+cache/
 WebDavHub/data/
 logs
 Screenshots

@@ -381,7 +381,7 @@ const RecentlyAddedMedia: React.FC = () => {
             const { cacheKey, result } = promiseResult.value;
             if (result) {
               if (result.poster_path) {
-                const posterUrl = getTmdbPosterUrl(result.poster_path, 'w500');
+                const posterUrl = getTmdbPosterUrl(result.poster_path, 'w342');
                 if (posterUrl) newPosterUrls[cacheKey] = posterUrl;
               }
               if (result.title) newTmdbTitles[cacheKey] = result.title;

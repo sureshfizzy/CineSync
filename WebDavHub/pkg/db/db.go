@@ -193,12 +193,18 @@ func InitTmdbCacheTable() error {
 		title TEXT,
 		poster_path TEXT,
 		year TEXT, -- Stores release_date string, frontend parses year
+		local_poster_path TEXT, -- Path to locally cached poster image
+		poster_cached_at INTEGER, -- Unix timestamp when poster was cached
 		last_updated INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), -- Unix timestamp of last update
 		PRIMARY KEY (tmdb_id, media_type)
 	);`
 	if _, err := db.Exec(queryEntities); err != nil {
 		return fmt.Errorf("failed to create tmdb_entities table: %w", err)
 	}
+
+	// Add new columns to existing tmdb_entities table if they don't exist (migration)
+	_, _ = db.Exec(`ALTER TABLE tmdb_entities ADD COLUMN local_poster_path TEXT;`)
+	_, _ = db.Exec(`ALTER TABLE tmdb_entities ADD COLUMN poster_cached_at INTEGER;`)
 
 	// Create tmdb_cache_keys table to map cache_key lookups to entities
 	queryCacheKeys := `CREATE TABLE IF NOT EXISTS tmdb_cache_keys (

@@ -442,9 +442,6 @@ func HandlePythonBridgeInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log the input being sent
-	logger.Info("Sent input to python process: %s", strings.TrimSpace(req.Input))
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

@@ -68,6 +68,9 @@ func main() {
 	// Set the root directory for file operations
 	api.SetRootDir(effectiveRootDir)
 
+	projectDir := ".."
+	api.InitializeImageCache(projectDir)
+
 	// Initialize job manager
 	api.InitJobManager()
 
@@ -89,6 +92,7 @@ func main() {
 	apiMux.HandleFunc("/api/tmdb/details", api.HandleTmdbDetails)
 	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
+	apiMux.HandleFunc("/api/image-cache", api.HandleImageCache)
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)

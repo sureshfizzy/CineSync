@@ -171,9 +171,6 @@ func getMediaHubStatus() (*MediaHubStatus, error) {
 	// of the main service running. Monitor running alone doesn't mean main service is running.
 	status.IsRunning = status.ProcessExists
 
-	logger.Debug("MediaHub status: IsRunning=%v, LockFile=%v, ProcessExists=%v, MonitorRunning=%v, MonitorPID=%d",
-		status.IsRunning, status.LockFileExists, status.ProcessExists, status.MonitorRunning, status.MonitorPID)
-
 	return status, nil
 }
 
@@ -224,7 +221,7 @@ func streamOutput(pipe io.ReadCloser, prefix string) {
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
 			logEntry := fmt.Sprintf("[%s] %s: %s", timestamp, prefix, line)
 			addLiveLog(logEntry)
-			logger.Info("MediaHub %s: %s", prefix, line)
+			fmt.Println(line)
 		}
 	}
 }

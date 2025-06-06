@@ -15,16 +15,49 @@ import (
 	"cinesync/pkg/db"
 )
 
-var tmdbRateLimit = 40
-var tmdbRateWindow = time.Minute
+var tmdbRateLimit = 35
+var tmdbRateWindow = 10 * time.Second
 var tmdbRateMap = make(map[string][]time.Time)
 var tmdbRateMu sync.Mutex
+
+// Global TMDB request queue to ensure sequential processing
+var tmdbQueue = make(chan struct{}, 10)
+var tmdbQueueInitialized = false
+var tmdbQueueMu sync.Mutex
+var tmdbRequestCounter = 0
+var tmdbCounterMu sync.Mutex
 
 // Simple in-memory cache for details
 var tmdbDetailsCache = struct {
 	mu    sync.Mutex
 	items map[string][]byte
 }{items: make(map[string][]byte)}
+
+// Initialize the TMDB queue
+func initTmdbQueue() {
+	tmdbQueueMu.Lock()
+	defer tmdbQueueMu.Unlock()
+	if !tmdbQueueInitialized {
+		tmdbQueue <- struct{}{}
+		tmdbQueueInitialized = true
+	}
+}
+
+// Acquire queue lock for sequential TMDB processing
+func acquireTmdbQueue() {
+	initTmdbQueue()
+	<-tmdbQueue
+
+	// Increment counter
+	tmdbCounterMu.Lock()
+	tmdbRequestCounter++
+	tmdbCounterMu.Unlock()
+}
+
+// Release queue lock after TMDB processing
+func releaseTmdbQueue() {
+	tmdbQueue <- struct{}{}
+}
 
 func checkTmdbRateLimit(ip string) bool {
 	tmdbRateMu.Lock()
@@ -49,23 +82,52 @@ func checkTmdbRateLimit(ip string) bool {
 	return true
 }
 
+// waitForRateLimit waits until the rate limit window allows a new request
+func waitForRateLimit(ip string) {
+	for {
+		tmdbRateMu.Lock()
+		now := time.Now()
+		windowStart := now.Add(-tmdbRateWindow)
+		times := tmdbRateMap[ip]
+
+		var newTimes []time.Time
+		for _, t := range times {
+			if t.After(windowStart) {
+				newTimes = append(newTimes, t)
+			}
+		}
+
+		if len(newTimes) < tmdbRateLimit {
+			// We can proceed
+			newTimes = append(newTimes, now)
+			tmdbRateMap[ip] = newTimes
+			tmdbRateMu.Unlock()
+			return
+		}
+
+		// Calculate how long to wait
+		oldestRequest := newTimes[0]
+		waitTime := tmdbRateWindow - now.Sub(oldestRequest)
+		tmdbRateMu.Unlock()
+		time.Sleep(waitTime + 100*time.Millisecond)
+	}
+}
+
 func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Rate limiting by client IP
+	// Acquire queue lock for sequential processing
+	acquireTmdbQueue()
+	defer releaseTmdbQueue()
+
 	ip := r.RemoteAddr
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
 	}
-	if !checkTmdbRateLimit(ip) {
-		logger.Warn("Rate limit exceeded for IP: %s", ip)
-		w.Header().Set("Retry-After", "60")
-		http.Error(w, "Rate limit exceeded (40 requests per minute). Please try again later.", http.StatusTooManyRequests)
-		return
-	}
+	waitForRateLimit(ip)
 
 	tmdbApiKey := os.Getenv("TMDB_API_KEY")
 	if tmdbApiKey == "" {
@@ -116,16 +178,15 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Acquire queue lock for sequential processing
+	acquireTmdbQueue()
+	defer releaseTmdbQueue()
+
 	ip := r.RemoteAddr
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
 	}
-	if !checkTmdbRateLimit(ip) {
-		logger.Warn("Rate limit exceeded for IP: %s", ip)
-		w.Header().Set("Retry-After", "60")
-		http.Error(w, "Rate limit exceeded (40 requests per minute). Please try again later.", http.StatusTooManyRequests)
-		return
-	}
+	waitForRateLimit(ip)
 
 	tmdbApiKey := os.Getenv("TMDB_API_KEY")
 	if tmdbApiKey == "" {

@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
-import { searchTmdb, getTmdbPosterUrl } from '../../api/tmdbApi';
+import { searchTmdb, getTmdbPosterUrlDirect } from '../../api/tmdbApi';
 import { processStructuredMessage } from '../../../utils/symlinkUpdates';
 
 // Import the modular components
@@ -360,7 +360,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
             const tmdbResult = await searchTmdb(option.tmdbId, undefined, mediaType, 3, true);
 
             if (tmdbResult && tmdbResult.poster_path) {
-              const posterUrl = getTmdbPosterUrl(tmdbResult.poster_path, 'w200');
+              const posterUrl = getTmdbPosterUrlDirect(tmdbResult.poster_path, 'w200');
               return {
                 ...option,
                 posterUrl: posterUrl,
