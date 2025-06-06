@@ -1,0 +1,28 @@
+# Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+WebDavHub/cinesync
+WebDavHub/cinesync.exe
+WebDavHub/frontend/dist/
+WebDavHub/frontend/node_modules/
+
+# Data and logs
+/db
+WebDavHub/data/
+logs
+Screenshots
+
+# Git and IDE files
+.git
+.gitignore
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
+

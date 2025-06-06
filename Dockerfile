@@ -1,4 +1,4 @@
-# ---- STAGE 1: Build Go Binary ----
+# ---- STAGE 1: Build WebDavHub ----
 FROM python:3.11-slim AS builder
 
 # Set the working directory inside the container
@@ -7,6 +7,8 @@ WORKDIR /app
 # Install build dependencies
 RUN apt-get update && \
     apt-get install -y inotify-tools bash curl git gcc g++ make && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Go (Dynamic architecture detection)
@@ -24,10 +26,15 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH=/go
 ENV PATH="${GOPATH}/bin:${PATH}"
 
-# Copy and build Go application
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Copy WebDavHub and build
 COPY WebDavHub /app/WebDavHub
 WORKDIR /app/WebDavHub
-RUN go mod tidy && go build -o cinesync
+
+# Build using the production build script
+RUN python3 scripts/build-prod.py
 
 # ---- STAGE 2: Final Runtime Image ----
 FROM python:3.11-slim
@@ -38,6 +45,9 @@ RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm globally
+RUN npm install -g pnpm
 
 # Create app directory with proper permissions
 RUN mkdir -p /app && chmod 755 /app
@@ -67,4 +77,5 @@ WORKDIR /app
 
 # Use entrypoint to handle user setup
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python3", "MediaHub/main.py", "--auto-select"]
+
+CMD ["python3", "WebDavHub/scripts/start-prod.py"]

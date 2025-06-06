@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
-// Load .env
-const envPath = path.resolve(__dirname, '../../.env');
+// Load .env from one directory above WebDavHub
+const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
 
 const uiPort = process.env.CINESYNC_UI_PORT ? parseInt(process.env.CINESYNC_UI_PORT, 10) : 5173;

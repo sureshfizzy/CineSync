@@ -148,11 +148,6 @@ func main() {
 
 
 
-	// Return the configured server for external startup
-	StartServer(rootMux, *ip, *port, *dir, effectiveRootDir, rootDir)
-}
-
-func StartServer(rootMux *http.ServeMux, ip string, port int, dir, effectiveRootDir, rootDir string) {
 	// Add shutdown handler to checkpoint WAL
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
@@ -169,18 +164,17 @@ func StartServer(rootMux *http.ServeMux, ip string, port int, dir, effectiveRoot
 	}()
 
 	// Start server
-	addr := fmt.Sprintf("%s:%d", ip, port)
-	rootInfo := dir
-	if effectiveRootDir != dir {
-		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", dir)
+	addr := fmt.Sprintf("%s:%d", *ip, *port)
+	rootInfo := *dir
+	if effectiveRootDir != *dir {
+		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", *dir)
 	}
 
-	logger.Info("Starting CineSync API server on http://%s", addr)
+	logger.Info("Starting CineSync server on http://%s", addr)
 	logger.Info("WebDAV access available at http://%s/webdav/ for WebDAV clients", addr)
 	logger.Info("Serving content from: %s", rootInfo)
 	logger.Info("API available at http://%s/api/", addr)
-	uiPort := env.GetString("CINESYNC_UI_PORT", "5173")
-	logger.Info("Frontend Dashboard: http://localhost:%s/", uiPort)
+	logger.Info("Server Dashboard http://%s/", addr)
 
 	// In your main function, add this information after starting the server
 	if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
@@ -191,7 +185,7 @@ func StartServer(rootMux *http.ServeMux, ip string, port int, dir, effectiveRoot
 		logger.Warn("WebDAV authentication is disabled")
 	}
 
-	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", port, rootDir)
+	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
 
 	log.Fatal(http.ListenAndServe(addr, rootMux))
 }
