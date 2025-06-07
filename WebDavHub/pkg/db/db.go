@@ -464,6 +464,114 @@ func AddRecentMedia(media RecentMedia) error {
 	return cleanupRecentMedia()
 }
 
+// Uses efficient database queries on the processed_files table - no file system scanning needed
+func GetMediaCounts(rootDir string) (movieCount int, showCount int, err error) {
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	if err != nil {
+		db.QueryRow(`SELECT COUNT(DISTINCT tmdb_id) FROM tmdb_entities WHERE media_type = 'movie'`).Scan(&movieCount)
+		db.QueryRow(`SELECT COUNT(DISTINCT tmdb_id) FROM tmdb_entities WHERE media_type = 'tv'`).Scan(&showCount)
+		return movieCount, showCount, nil
+	}
+	defer mediaHubDB.Close()
+
+	// Count unique TV shows (entries with season_number)
+	showQuery := `SELECT COUNT(DISTINCT tmdb_id) FROM processed_files WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND tmdb_id != 'NULL' AND season_number IS NOT NULL AND season_number != '' AND season_number != 'NULL'`
+	err = mediaHubDB.QueryRow(showQuery).Scan(&showCount)
+	if err != nil {
+		showCount = 0
+	}
+
+	// Count unique movies (entries with tmdb_id but no season_number)
+	movieQuery := `SELECT COUNT(DISTINCT tmdb_id) FROM processed_files WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND tmdb_id != 'NULL' AND (season_number IS NULL OR season_number = '' OR season_number = 'NULL')`
+	err = mediaHubDB.QueryRow(movieQuery).Scan(&movieCount)
+	if err != nil {
+		movieCount = 0
+	}
+
+	return movieCount, showCount, nil
+}
+
+// GetAllStatsFromDB returns all stats from MediaHub database - no file system scanning
+func GetAllStatsFromDB() (totalFiles int, totalFolders int, totalSize int64, movieCount int, showCount int, err error) {
+	// Connect to MediaHub database with fresh connection
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+
+	// Check if database file exists
+	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
+		return 0, 0, 0, 0, 0, nil
+	}
+
+	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	if err != nil {
+		return 0, 0, 0, 0, 0, nil
+	}
+	defer mediaHubDB.Close()
+
+	// Set connection parameters for fresh data
+	mediaHubDB.SetMaxOpenConns(1)
+	mediaHubDB.SetMaxIdleConns(0)
+	mediaHubDB.SetConnMaxLifetime(0)
+
+	// Enable WAL mode for better concurrent access
+	_, err = mediaHubDB.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		return 0, 0, 0, 0, 0, nil
+	}
+
+	// Test database connection
+	err = mediaHubDB.Ping()
+	if err != nil {
+		return 0, 0, 0, 0, 0, nil
+	}
+
+	// Get total file count (count files that have destination paths)
+	err = mediaHubDB.QueryRow(`SELECT COUNT(*) FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''`).Scan(&totalFiles)
+	if err != nil {
+		totalFiles = 0
+	}
+
+	// Get unique folder count by extracting directories from DESTINATION paths
+	rows, err := mediaHubDB.Query(`SELECT DISTINCT destination_path FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''`)
+	if err != nil {
+		totalFolders = 0
+	} else {
+		defer rows.Close()
+		folderSet := make(map[string]bool)
+
+		for rows.Next() {
+			var destinationPath string
+			if err := rows.Scan(&destinationPath); err != nil {
+				continue
+			}
+
+			// Extract directory path from destination
+			dir := filepath.Dir(destinationPath)
+			if dir != "." && dir != "/" && dir != "\\" && dir != "" {
+				folderSet[dir] = true
+			}
+		}
+		totalFolders = len(folderSet)
+	}
+
+	// Calculate storage size from database - fast and accurate!
+	totalSize = 0
+
+	// Get total size from stored file_size column
+	err = mediaHubDB.QueryRow(`SELECT COALESCE(SUM(file_size), 0) FROM processed_files WHERE file_size IS NOT NULL`).Scan(&totalSize)
+	if err != nil {
+		totalSize = 0
+	}
+
+	// Get movie and show counts (reuse existing logic)
+	movieCount, showCount, err = GetMediaCounts("")
+	if err != nil {
+		movieCount, showCount = 0, 0
+	}
+
+	return totalFiles, totalFolders, totalSize, movieCount, showCount, nil
+}
+
 // GetRecentMedia retrieves the most recent media items
 func GetRecentMedia(limit int) ([]RecentMedia, error) {
 	if limit <= 0 {

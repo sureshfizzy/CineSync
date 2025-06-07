@@ -30,13 +30,20 @@ type FileOperation struct {
 	Operation       string `json:"operation"`
 }
 
-// HandleFileOperations returns file operations data from MediaHub database
+// HandleFileOperations handles both GET (retrieve operations) and POST (track operations)
 func HandleFileOperations(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		handleGetFileOperations(w, r)
+	case http.MethodPost:
+		handleTrackFileOperation(w, r)
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+// handleGetFileOperations returns file operations data from MediaHub database
+func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
 	// Get file operations from MediaHub database
 	operations, err := getFileOperationsFromMediaHub()
 	if err != nil {
@@ -52,14 +59,10 @@ func HandleFileOperations(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleTrackDeletion handles POST requests to track file deletions
-func HandleTrackDeletion(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+// handleTrackFileOperation tracks file additions and deletions
+func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Operation       string `json:"operation"`       // "add" or "delete"
 		SourcePath      string `json:"sourcePath"`
 		DestinationPath string `json:"destinationPath"`
 		TmdbID          string `json:"tmdbId"`
@@ -77,19 +80,43 @@ func HandleTrackDeletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := TrackFileDeletion(req.SourcePath, req.DestinationPath, req.TmdbID, req.SeasonNumber, req.Reason)
-	if err != nil {
-		logger.Warn("Failed to track file deletion: %v", err)
-		http.Error(w, "Failed to track deletion", http.StatusInternalServerError)
+	if req.Operation == "" {
+		http.Error(w, "operation is required (add or delete)", http.StatusBadRequest)
 		return
 	}
+
+	var message string
+	var err error
+
+	switch req.Operation {
+	case "add":
+		message = "Addition tracked successfully"
+
+	case "delete":
+		err = TrackFileDeletion(req.SourcePath, req.DestinationPath, req.TmdbID, req.SeasonNumber, req.Reason)
+		if err != nil {
+			logger.Warn("Failed to track file deletion: %v", err)
+			http.Error(w, "Failed to track deletion", http.StatusInternalServerError)
+			return
+		}
+		message = "Deletion tracked successfully"
+
+	default:
+		http.Error(w, "Invalid operation. Must be 'add' or 'delete'", http.StatusBadRequest)
+		return
+	}
+
+	// Notify dashboard about stats change
+	NotifyDashboardStatsChanged()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": "Deletion tracked successfully",
+		"message": message,
 	})
 }
+
+
 
 // getFileOperationsFromMediaHub reads file operations from MediaHub database
 func getFileOperationsFromMediaHub() ([]FileOperation, error) {
@@ -364,6 +391,80 @@ func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason
 		return fmt.Errorf("failed to insert deletion record: %w", err)
 	}
 
-	logger.Info("Tracked file deletion: %s -> %s", sourcePath, destinationPath)
 	return nil
+}
+
+// Global variables to track dashboard notification subscribers
+var dashboardNotificationChannels = make(map[chan bool]bool)
+var dashboardChannelMutex = make(chan bool, 1)
+
+// NotifyDashboardStatsChanged sends a notification to all dashboard subscribers
+func NotifyDashboardStatsChanged() {
+	dashboardChannelMutex <- true
+	defer func() { <-dashboardChannelMutex }()
+
+	for ch := range dashboardNotificationChannels {
+		select {
+		case ch <- true:
+		default:
+			delete(dashboardNotificationChannels, ch)
+		}
+	}
+}
+
+// subscribeToDashboardNotifications adds a channel to receive dashboard notifications
+func subscribeToDashboardNotifications() chan bool {
+	dashboardChannelMutex <- true
+	defer func() { <-dashboardChannelMutex }()
+
+	ch := make(chan bool, 1)
+	dashboardNotificationChannels[ch] = true
+	return ch
+}
+
+// unsubscribeFromDashboardNotifications removes a channel from dashboard notifications
+func unsubscribeFromDashboardNotifications(ch chan bool) {
+	dashboardChannelMutex <- true
+	defer func() { <-dashboardChannelMutex }()
+
+	delete(dashboardNotificationChannels, ch)
+	close(ch)
+}
+
+// HandleDashboardEvents provides Server-Sent Events for dashboard updates
+func HandleDashboardEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Subscribe to dashboard notifications
+	notificationCh := subscribeToDashboardNotifications()
+	defer unsubscribeFromDashboardNotifications(notificationCh)
+
+	// Send initial connection message
+	fmt.Fprintf(w, "data: {\"type\":\"connected\"}\n\n")
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	// Listen for notifications or client disconnect
+	for {
+		select {
+		case <-notificationCh:
+			fmt.Fprintf(w, "data: {\"type\":\"stats_changed\"}\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		case <-r.Context().Done():
+			// Client disconnected
+			return
+		}
+	}
 }

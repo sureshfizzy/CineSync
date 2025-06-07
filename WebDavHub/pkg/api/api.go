@@ -14,14 +14,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 var rootDir string
 var lastStats Stats
 var lastStatsUpdate time.Time
-var statsCacheDuration = 5 * time.Minute // Cache stats for 5 minutes
+var statsCacheDuration = 30 * time.Second
 var statsScanInProgress bool
 var statsScanProgress struct {
 	CurrentPath string
@@ -69,6 +68,8 @@ type Stats struct {
 	StorageUsed  string `json:"storageUsed"`
 	IP           string `json:"ip"`
 	Port         string `json:"port"`
+	TotalMovies  int    `json:"totalMovies"`
+	TotalShows   int    `json:"totalShows"`
 }
 
 type ReadlinkRequest struct {
@@ -435,7 +436,9 @@ func statsChanged(a, b Stats) bool {
 		a.WebDAVStatus != b.WebDAVStatus ||
 		a.StorageUsed != b.StorageUsed ||
 		a.IP != b.IP ||
-		a.Port != b.Port
+		a.Port != b.Port ||
+		a.TotalMovies != b.TotalMovies ||
+		a.TotalShows != b.TotalShows
 }
 
 func HandleStats(w http.ResponseWriter, r *http.Request) {
@@ -445,8 +448,11 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return cached stats if they're still valid
-	if !lastStatsUpdate.IsZero() && time.Since(lastStatsUpdate) < statsCacheDuration {
+	// Check for force refresh parameter
+	forceRefresh := r.URL.Query().Get("refresh") == "true"
+
+	// Return cached stats if they're still valid (unless force refresh requested)
+	if !forceRefresh && !lastStatsUpdate.IsZero() && time.Since(lastStatsUpdate) < statsCacheDuration {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(lastStats)
 		return
@@ -471,77 +477,27 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		TotalSize int64
 		LastUpdate time.Time
 	}{
+		CurrentPath: "Initializing database query...",
 		LastUpdate: time.Now(),
 	}
 
-	// Use a buffered channel to limit concurrent operations
-	sem := make(chan struct{}, 10) // Limit to 10 concurrent operations
-	var wg sync.WaitGroup
-	var mu sync.Mutex // Mutex to protect shared variables
-
-	var totalFiles int
-	var totalFolders int
-	var totalSize int64
-	var lastSync time.Time
-
-	// Get disk usage information
-	_, _, err := getDiskUsage(rootDir)
-	if err != nil {
-		logger.Warn("Failed to get disk stats: %v", err)
-	}
-
-	// Use a more efficient scanning method with concurrent processing
-	err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			logger.Warn("Skipping path due to error: %s - %v", path, err)
-			return nil // Skip this file/dir but continue
-		}
-
-		// Update progress
-		statsScanProgress.CurrentPath = path
-		statsScanProgress.LastUpdate = time.Now()
-
-		if info.IsDir() {
-			// For directories, process them concurrently
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				mu.Lock()
-				if path != rootDir {
-					totalFolders++
-				}
-				statsScanProgress.FoldersScanned = totalFolders + 1 // Include root directory
-				mu.Unlock()
-			}()
-		} else {
-			if info.Name() == ".tmdb" {
-				return nil // Skip .tmdb files from counting and processing
-			}
-			mu.Lock()
-			totalFiles++
-			totalSize += info.Size()
-			statsScanProgress.FilesScanned = totalFiles
-			statsScanProgress.TotalSize = totalSize
-			if info.ModTime().After(lastSync) {
-				lastSync = info.ModTime()
-			}
-			mu.Unlock()
-		}
-
-		return nil
-	})
+	// Get all stats from MediaHub database - no file system scanning needed
+	totalFiles, totalFolders, totalSize, movieCount, showCount, err := db.GetAllStatsFromDB()
 
 	if err != nil {
-		statsScanInProgress = false
-		http.Error(w, "Failed to calculate stats", http.StatusInternalServerError)
-		return
+		// Set reasonable defaults
+		totalFiles, totalFolders, totalSize, movieCount, showCount = 0, 0, 0, 0, 0
 	}
 
-	// Wait for all concurrent operations to complete
-	wg.Wait()
+	// Update progress to show completion
+	statsScanProgress.FilesScanned = totalFiles
+	statsScanProgress.FoldersScanned = totalFolders
+	statsScanProgress.TotalSize = totalSize
+	statsScanProgress.CurrentPath = "Database query completed"
+	statsScanProgress.LastUpdate = time.Now()
+
+	// For lastSync, use current time since we're not scanning files
+	lastSync := time.Now()
 
 	ip := os.Getenv("CINESYNC_IP")
 	if ip == "" {
@@ -565,13 +521,17 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		StorageUsed:  formatFileSize(totalSize),
 		IP:           ip,
 		Port:         port,
+		TotalMovies:  movieCount,
+		TotalShows:   showCount,
 	}
+
 	if statsChanged(stats, lastStats) {
-		logger.Info("API response: totalFiles=%d, totalFolders=%d, totalSize=%d bytes (%.2f GB)", totalFiles, totalFolders, totalSize, float64(totalSize)/(1024*1024*1024))
 		lastStats = stats
 		lastStatsUpdate = time.Now()
 	}
+
 	statsScanInProgress = false
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
@@ -1169,9 +1129,11 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	// Add to database
 	if err := db.AddRecentMedia(newMedia); err != nil {
-		logger.Warn("Failed to add recent media to database: %v", err)
 		return
 	}
+
+	// Notify dashboard about stats change (file was added)
+	NotifyDashboardStatsChanged()
 }
 
 // HandleRecentMedia returns the recent media list from database
@@ -1184,7 +1146,6 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 	// Get recent media from database
 	recentMedia, err := db.GetRecentMedia(10)
 	if err != nil {
-		logger.Warn("Failed to get recent media from database: %v", err)
 		http.Error(w, "Failed to retrieve recent media", http.StatusInternalServerError)
 		return
 	}

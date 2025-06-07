@@ -17,6 +17,8 @@ import {
   CloudDone as CloudDoneIcon,
   Refresh as RefreshIcon,
   Dashboard as DashboardIcon,
+  Movie as MovieIcon,
+  Tv as TvIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { motion } from 'framer-motion';
@@ -31,6 +33,8 @@ interface Stats {
   totalFolders: number;
   webdavStatus: string;
   storageUsed: string;
+  totalMovies: number;
+  totalShows: number;
   scanning?: boolean;
   progress?: {
     currentPath: string;
@@ -59,20 +63,16 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const theme = useTheme();
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get('/api/stats');
+      const url = forceRefresh ? '/api/stats?refresh=true' : '/api/stats';
+      const response = await axios.get(url);
       const data = response.data;
 
-      if (data.scanning) {
-        setStats(data); // Update with progress
-        setTimeout(fetchStats, 2000); // Continue polling
-      } else {
-        setStats(data);
-        setLoading(false);
-      }
+      setStats(data);
+      setLoading(false);
     } catch (err) {
       setError('Failed to fetch statistics');
       setLoading(false);
@@ -81,12 +81,33 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
+
+    // Set up Server-Sent Events for real-time updates
+    const eventSource = new EventSource('/api/dashboard/events');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'stats_changed') {
+          fetchStats(false);
+        }
+      } catch (err) {
+        console.warn('Failed to parse SSE message:', err);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.warn('SSE connection error:', error);
+    };
+
+    // Cleanup on unmount
+    return () => {
+      eventSource.close();
+    };
   }, [fetchStats]);
 
   const handleRefresh = () => {
-    // Clear existing stats to show loading indicator immediately
-    // setStats(null); // Optional: depends on desired UX
-    fetchStats();
+    fetchStats(true);
   };
 
   if (loading && !stats) { // Initial loading state
@@ -109,47 +130,6 @@ export default function Dashboard() {
     );
   }
 
-  if (stats?.scanning) { // Scanning in progress
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '60vh',
-          gap: 2
-        }}
-      >
-        <CircularProgress size={40} />
-        <Typography variant="h6" color="text.secondary">
-          Scanning files...
-        </Typography>
-        {stats.progress && (
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              Files scanned: {stats.progress.filesScanned.toLocaleString()}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Folders scanned: {stats.progress.foldersScanned.toLocaleString()}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Current path: {stats.progress.currentPath}
-            </Typography>
-             <Button
-              onClick={handleRefresh}
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              sx={{ mt: 2 }}
-            >
-              Manual Refresh
-            </Button>
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
   if (error) {
     return (
       <Typography color="error" sx={{ mt: 2, textAlign: 'center' }}>
@@ -158,26 +138,34 @@ export default function Dashboard() {
     );
   }
 
-  // Safe fallback values for stats
+  // Safe fallback values for stats with comprehensive null checks
   const safeStats = {
-    totalFolders: stats && typeof stats.totalFolders === 'number' ? stats.totalFolders : 0,
-    totalFiles: stats && typeof stats.totalFiles === 'number' ? stats.totalFiles : 0,
-    webdavStatus: stats && typeof stats.webdavStatus === 'string' ? stats.webdavStatus : 'Unknown',
-    storageUsed: stats && typeof stats.storageUsed === 'string' ? stats.storageUsed : '0 B',
+    totalFolders: (stats?.totalFolders != null && typeof stats.totalFolders === 'number') ? stats.totalFolders : 0,
+    totalFiles: (stats?.totalFiles != null && typeof stats.totalFiles === 'number') ? stats.totalFiles : 0,
+    webdavStatus: (stats?.webdavStatus != null && typeof stats.webdavStatus === 'string') ? stats.webdavStatus : 'Unknown',
+    storageUsed: (stats?.storageUsed != null && typeof stats.storageUsed === 'string') ? stats.storageUsed : '0 B',
+    totalMovies: (stats?.totalMovies != null && typeof stats.totalMovies === 'number') ? stats.totalMovies : 0,
+    totalShows: (stats?.totalShows != null && typeof stats.totalShows === 'number') ? stats.totalShows : 0,
   };
 
   const cards = [
-    {
-      title: 'Total Folders',
-      value: safeStats.totalFolders.toLocaleString(),
-      icon: <FolderIcon />,
-      color: theme.palette.primary.main,
-    },
     {
       title: 'Total Files',
       value: safeStats.totalFiles.toLocaleString(),
       icon: <DescriptionIcon />,
       color: theme.palette.secondary.main,
+    },
+    {
+      title: 'Movies',
+      value: safeStats.totalMovies.toLocaleString(),
+      icon: <MovieIcon />,
+      color: theme.palette.primary.main,
+    },
+    {
+      title: 'TV Shows',
+      value: safeStats.totalShows.toLocaleString(),
+      icon: <TvIcon />,
+      color: theme.palette.info.main,
     },
     {
       title: 'WebDAV Status',
@@ -189,7 +177,13 @@ export default function Dashboard() {
       title: 'Storage Used',
       value: safeStats.storageUsed,
       icon: <StorageIcon />,
-      color: theme.palette.success.main,
+      color: theme.palette.warning.main,
+    },
+    {
+      title: 'Total Folders',
+      value: safeStats.totalFolders.toLocaleString(),
+      icon: <FolderIcon />,
+      color: theme.palette.grey[600],
     },
   ];
 
@@ -250,7 +244,7 @@ export default function Dashboard() {
       </Box>
       <Grid container spacing={{ xs: 0.8, sm: 2, md: 3 }} mb={{ xs: 2, sm: 3 }}>
         {cards.map((card, index) => (
-          <Grid item xs={6} sm={6} md={3} key={card.title}>
+          <Grid item xs={6} sm={4} md={2} key={card.title}>
             <MotionCard
               variants={cardVariants}
               initial="hidden"

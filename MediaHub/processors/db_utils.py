@@ -174,12 +174,17 @@ def initialize_db():
             cursor.execute("ALTER TABLE processed_files ADD COLUMN reason TEXT")
             log_message("Added reason column to processed_files table.", level="INFO")
 
+        if "file_size" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN file_size INTEGER")
+            log_message("Added file_size column to processed_files table.", level="INFO")
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -242,17 +247,36 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
+
+    # Get file size if not provided and source file exists
+    if file_size is None and source_path and os.path.exists(source_path):
+        try:
+            file_size = os.path.getsize(source_path)
+        except (OSError, IOError) as e:
+            log_message(f"Could not get file size for {source_path}: {e}", level="WARNING")
+            file_size = None
+
     try:
         cursor = conn.cursor()
+
+        # Check if this is a new file (not an update)
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (source_path,))
+        is_new_file = cursor.fetchone()[0] == 0
+
         cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason)
-            VALUES (?, ?, ?, ?, ?)
-        """, (source_path, dest_path, tmdb_id, season_number, reason))
+            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (source_path, dest_path, tmdb_id, season_number, reason, file_size))
         conn.commit()
+
+        # Notify WebDavHub about the file addition if it's a new file and not skipped
+        if is_new_file and not reason and dest_path:
+            track_file_addition(source_path, dest_path, tmdb_id, season_number)
+
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
         conn.rollback()
@@ -578,6 +602,198 @@ def vacuum_database(conn):
         log_message(f"Error during database vacuum: {e}", level="ERROR")
         return False
 
+def populate_missing_file_sizes(cursor, conn):
+    """Populate file_size column for existing records that don't have it - called during initialization"""
+    try:
+        # Check if we need to populate file sizes
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NULL AND file_path IS NOT NULL")
+        missing_count = cursor.fetchone()[0]
+
+        if missing_count == 0:
+            log_message("All records already have file sizes populated.", level="INFO")
+            return
+
+        # Get records without file sizes in batches
+        cursor.execute("""
+            SELECT file_path, destination_path
+            FROM processed_files
+            WHERE file_size IS NULL AND file_path IS NOT NULL
+            LIMIT 1000
+        """)
+
+        records = cursor.fetchall()
+        updated_count = 0
+
+        for file_path, dest_path in records:
+            file_size = None
+
+            # Try to get size from source file first
+            if file_path and os.path.exists(file_path):
+                try:
+                    file_size = os.path.getsize(file_path)
+                except (OSError, IOError):
+                    pass
+
+            # If source doesn't exist, try destination
+            if file_size is None and dest_path and os.path.exists(dest_path):
+                try:
+                    # For symlinks, get the size of the target file
+                    if os.path.islink(dest_path):
+                        target = os.readlink(dest_path)
+                        if os.path.exists(target):
+                            file_size = os.path.getsize(target)
+                    else:
+                        file_size = os.path.getsize(dest_path)
+                except (OSError, IOError):
+                    pass
+
+            # Update the record if we got a file size
+            if file_size is not None:
+                cursor.execute("UPDATE processed_files SET file_size = ? WHERE file_path = ?", (file_size, file_path))
+                updated_count += 1
+
+        if updated_count > 0:
+            conn.commit()
+
+    except Exception as e:
+        log_message(f"Error populating file sizes during initialization: {e}", level="WARNING")
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def populate_all_file_sizes(conn):
+    """Populate file_size column for ALL records - command line option"""
+    try:
+        # Get all records
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path IS NOT NULL")
+        total_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NOT NULL")
+        existing_count = cursor.fetchone()[0]
+
+        # Process all records in batches
+        batch_size = 500
+        updated_count = 0
+        error_count = 0
+
+        for offset in range(0, total_count, batch_size):
+            cursor.execute("""
+                SELECT file_path, destination_path
+                FROM processed_files
+                WHERE file_path IS NOT NULL
+                LIMIT ? OFFSET ?
+            """, (batch_size, offset))
+
+            records = cursor.fetchall()
+            log_message(f"Processing batch {offset//batch_size + 1}/{(total_count + batch_size - 1)//batch_size} ({len(records)} records)", level="INFO")
+
+            for file_path, dest_path in records:
+                file_size = None
+
+                # Try to get size from source file first
+                if file_path and os.path.exists(file_path):
+                    try:
+                        file_size = os.path.getsize(file_path)
+                    except (OSError, IOError):
+                        pass
+
+                # If source doesn't exist, try destination
+                if file_size is None and dest_path and os.path.exists(dest_path):
+                    try:
+                        # For symlinks, get the size of the target file
+                        if os.path.islink(dest_path):
+                            target = os.readlink(dest_path)
+                            if os.path.exists(target):
+                                file_size = os.path.getsize(target)
+                        else:
+                            file_size = os.path.getsize(dest_path)
+                    except (OSError, IOError):
+                        pass
+
+                # Update the record
+                if file_size is not None:
+                    cursor.execute("UPDATE processed_files SET file_size = ? WHERE file_path = ?", (file_size, file_path))
+                    updated_count += 1
+
+                    if updated_count <= 5:  # Log first few for verification
+                        log_message(f"Updated {os.path.basename(file_path)}: {file_size} bytes ({file_size/(1024*1024):.2f} MB)", level="INFO")
+                else:
+                    error_count += 1
+
+            # Commit batch
+            conn.commit()
+
+        log_message(f"File size population completed:", level="INFO")
+        log_message(f"  - Total records processed: {total_count}", level="INFO")
+        log_message(f"  - Successfully updated: {updated_count}", level="INFO")
+        log_message(f"  - Errors/missing files: {error_count}", level="INFO")
+        log_message(f"  - Success rate: {(updated_count/total_count)*100:.1f}%", level="INFO")
+
+        # Show storage summary
+        cursor.execute("SELECT SUM(file_size) FROM processed_files WHERE file_size IS NOT NULL")
+        total_size = cursor.fetchone()[0] or 0
+        log_message(f"Total storage calculated: {total_size} bytes ({total_size/(1024*1024*1024):.2f} GB)", level="INFO")
+
+    except Exception as e:
+        log_message(f"Error in populate_all_file_sizes: {e}", level="ERROR")
+        conn.rollback()
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_total_storage_size(conn):
+    """Get total storage size from file_size column in database - fast and accurate"""
+    try:
+        cursor = conn.cursor()
+
+        # Get total size from stored file sizes
+        cursor.execute("SELECT SUM(file_size) FROM processed_files WHERE file_size IS NOT NULL")
+        result = cursor.fetchone()
+        total_size = result[0] if result and result[0] is not None else 0
+
+        # Get count of files with stored sizes
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NOT NULL")
+        files_with_size = cursor.fetchone()[0]
+
+        # Get total file count
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''")
+        total_files = cursor.fetchone()[0]
+
+        log_message(f"Storage calculation: {files_with_size}/{total_files} files have stored sizes, total: {total_size} bytes ({total_size/(1024*1024*1024):.2f} GB)", level="INFO")
+
+        return total_size, files_with_size, total_files
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_total_storage_size: {e}", level="ERROR")
+        return 0, 0, 0
+
+
+def track_file_addition(source_path, dest_path, tmdb_id=None, season_number=None):
+    """Track file addition in WebDavHub"""
+    try:
+        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
+
+        payload = {
+            'operation': 'add',
+            'sourcePath': source_path,
+            'destinationPath': dest_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else ''
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        response = requests.post(url, json=payload, timeout=2)
+        if response.status_code != 200:
+            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Error tracking addition: {e}", level="DEBUG")
 
 def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
     """Track file deletion in WebDavHub"""
@@ -585,6 +801,7 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
         from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
 
         payload = {
+            'operation': 'delete',
             'sourcePath': source_path,
             'destinationPath': dest_path,
             'tmdbId': str(tmdb_id) if tmdb_id else '',
@@ -594,12 +811,16 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
 
         cinesync_ip = get_cinesync_ip()
         cinesync_port = get_cinesync_api_port()
-        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations/track-deletion"
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
 
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, timeout=2)
+        if response.status_code != 200:
+            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
 
+    except requests.exceptions.RequestException as e:
+        log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
     except Exception as e:
-        log_message(f"Error tracking deletion: {e}", level="WARNING")
+        log_message(f"Error tracking deletion: {e}", level="DEBUG")
 
 
 @throttle
@@ -821,7 +1042,7 @@ def search_database(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, reason
+            SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
             FROM processed_files
             WHERE file_path LIKE ?
             OR destination_path LIKE ?
@@ -833,12 +1054,25 @@ def search_database(conn, pattern):
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
             for row in results:
-                file_path, dest_path, tmdb_id, season_number, reason = row
+                file_path, dest_path, tmdb_id, season_number, reason, file_size = row
                 log_message(f"TMDB ID: {tmdb_id}", level="INFO")
                 if season_number is not None:
                     log_message(f"Season Number: {season_number}", level="INFO")
                 log_message(f"Source: {file_path}", level="INFO")
                 log_message(f"Destination: {dest_path if dest_path else 'None'}", level="INFO")
+                if file_size is not None:
+                    # Format file size in human-readable format
+                    if file_size >= 1024*1024*1024:  # GB
+                        size_str = f"{file_size/(1024*1024*1024):.2f} GB"
+                    elif file_size >= 1024*1024:  # MB
+                        size_str = f"{file_size/(1024*1024):.2f} MB"
+                    elif file_size >= 1024:  # KB
+                        size_str = f"{file_size/1024:.2f} KB"
+                    else:  # Bytes
+                        size_str = f"{file_size} bytes"
+                    log_message(f"File Size: {size_str}", level="INFO")
+                else:
+                    log_message(f"File Size: Not available", level="INFO")
                 if reason:
                     log_message(f"Skip Reason: {reason}", level="INFO")
                 log_message("-" * 50, level="INFO")
@@ -858,7 +1092,7 @@ def search_database_silent(conn, pattern):
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, reason
+            SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
             FROM processed_files
             WHERE file_path LIKE ?
             OR destination_path LIKE ?
