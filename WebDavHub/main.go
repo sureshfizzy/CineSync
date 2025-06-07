@@ -98,6 +98,8 @@ func main() {
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
 	apiMux.HandleFunc("/api/mediahub/message", api.HandleMediaHubMessage)
 	apiMux.HandleFunc("/api/recent-media", api.HandleRecentMedia)
+	apiMux.HandleFunc("/api/file-operations", api.HandleFileOperations)
+	apiMux.HandleFunc("/api/file-operations/track-deletion", api.HandleTrackDeletion)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 

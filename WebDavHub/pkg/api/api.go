@@ -1172,13 +1172,6 @@ func handleSymlinkCreated(data map[string]interface{}) {
 		logger.Warn("Failed to add recent media to database: %v", err)
 		return
 	}
-
-	if mediaType == "tvshow" {
-		logger.Info("Added recent TV show: %s S%02dE%02d - %s",
-			newMedia.ShowName, newMedia.SeasonNumber, newMedia.EpisodeNumber, newMedia.EpisodeTitle)
-	} else {
-		logger.Info("Added recent media: %s (%s)", mediaName, mediaType)
-	}
 }
 
 // HandleRecentMedia returns the recent media list from database

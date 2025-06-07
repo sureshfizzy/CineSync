@@ -13,6 +13,7 @@ from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
 import traceback
+import requests
 
 # Define color constants for terminal output
 RED_COLOR = "\033[91m"
@@ -542,6 +543,7 @@ def cleanup_database(conn):
         deleted_count = 0
         for file_path, dest_path in rows:
             if not os.path.exists(file_path) and not os.path.exists(dest_path):
+                track_file_deletion(file_path, dest_path, reason="Both source and destination files missing")
                 cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                 deleted_count += 1
 
@@ -575,6 +577,73 @@ def vacuum_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error during database vacuum: {e}", level="ERROR")
         return False
+
+
+def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
+    """Track file deletion in WebDavHub"""
+    try:
+        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
+
+        payload = {
+            'sourcePath': source_path,
+            'destinationPath': dest_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else '',
+            'reason': reason
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations/track-deletion"
+
+        response = requests.post(url, json=payload, timeout=5)
+
+    except Exception as e:
+        log_message(f"Error tracking deletion: {e}", level="WARNING")
+
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def track_and_remove_file_record(conn, file_path, dest_path=None, reason="File no longer exists"):
+    """Track file deletion and then remove from processed_files table"""
+    try:
+        cursor = conn.cursor()
+
+        # If dest_path not provided, try to get it from database
+        if not dest_path:
+            cursor.execute("SELECT destination_path, tmdb_id, season_number FROM processed_files WHERE file_path = ?", (file_path,))
+            result = cursor.fetchone()
+            if result:
+                dest_path, tmdb_id, season_number = result
+            else:
+                tmdb_id, season_number = None, None
+        else:
+            # Get additional metadata if available
+            cursor.execute("SELECT tmdb_id, season_number FROM processed_files WHERE file_path = ? OR destination_path = ?", (file_path, dest_path))
+            result = cursor.fetchone()
+            if result:
+                tmdb_id, season_number = result
+            else:
+                tmdb_id, season_number = None, None
+
+        # Track the deletion before removing from database
+        if dest_path:
+            track_file_deletion(file_path, dest_path, tmdb_id, season_number, reason)
+
+        # Now remove from database
+        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+        affected_rows = cursor.rowcount
+
+        if affected_rows > 0:
+            conn.commit()
+
+        return affected_rows
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in track_and_remove_file_record: {e}", level="ERROR")
+        conn.rollback()
+        return 0
 
 @throttle
 @retry_on_db_lock
@@ -649,6 +718,7 @@ def get_database_stats(conn):
                 log_message(f"Both paths missing for entry - Source: {file_path}, Dest: {dest_path}", level="DEBUG")
 
             if should_delete:
+                track_file_deletion(file_path, dest_path, reason="Both source and destination paths missing")
                 cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                 deleted_count += 1
 

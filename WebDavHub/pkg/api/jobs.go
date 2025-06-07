@@ -310,8 +310,6 @@ func HandleJobEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
-			// Client disconnected
-			logger.Debug("SSE client disconnected")
 			return
 		case update := <-subscriber:
 			data, err := json.Marshal(map[string]interface{}{

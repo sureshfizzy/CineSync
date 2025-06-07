@@ -4,6 +4,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
 import SettingsIcon from '@mui/icons-material/Settings';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import WifiIcon from '@mui/icons-material/Wifi';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -15,6 +16,7 @@ import axios from 'axios';
 const navItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Browse', icon: <FolderIcon />, path: '/browse' },
+  { text: 'File Operations', icon: <AssignmentIcon />, path: '/file-operations' },
   { text: 'Favorites', icon: <StarIcon />, path: '/favorites' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
