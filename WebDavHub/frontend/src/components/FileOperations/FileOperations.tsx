@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider } from '@mui/material';
 import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
 const MotionCard = motion(Card);
 const MotionFab = motion(Fab);
@@ -77,11 +78,8 @@ function FileOperations() {
   const fetchFileOperations = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/file-operations');
-      if (!response.ok) {
-        throw new Error('Failed to fetch file operations');
-      }
-      const data = await response.json();
+      const response = await axios.get('/api/file-operations');
+      const data = response.data;
 
       const operations = data.operations || [];
 
@@ -101,7 +99,11 @@ function FileOperations() {
     fetchFileOperations();
 
     // Set up real-time updates using Server-Sent Events
-    const eventSource = new EventSource('/api/file-operations/events');
+    const token = localStorage.getItem('cineSyncJWT');
+    const eventSourceUrl = token
+      ? `/api/file-operations/events?token=${encodeURIComponent(token)}`
+      : '/api/file-operations/events';
+    const eventSource = new EventSource(eventSourceUrl);
 
     eventSource.onmessage = (event) => {
       try {

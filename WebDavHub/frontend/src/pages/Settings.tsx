@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
+import axios from 'axios';
 import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
@@ -44,10 +45,26 @@ const Settings: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
+  const [configStatus, setConfigStatus] = useState<{
+    isPlaceholder: boolean;
+    destinationDir: string;
+    effectiveRootDir: string;
+    needsConfiguration: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetchConfig();
+    checkConfigStatus();
   }, []);
+
+  const checkConfigStatus = async () => {
+    try {
+      const response = await axios.get('/api/config-status');
+      setConfigStatus(response.data);
+    } catch (err) {
+      console.error('Failed to check config status:', err);
+    }
+  };
 
   const getCategoryInfo = (category: string, items: ConfigValue[]): CategoryInfo => {
     const modifiedCount = items.filter(item => pendingChanges[item.key] !== undefined).length;
@@ -153,17 +170,13 @@ const Settings: React.FC = () => {
     try {
       setLoading(true);
       // Add cache-busting parameter to ensure fresh data
-      const response = await fetch(`/api/config?t=${Date.now()}`, {
-        cache: 'no-cache',
+      const response = await axios.get(`/api/config?t=${Date.now()}`, {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
         }
       });
-      if (!response.ok) {
-        throw new Error('Failed to fetch configuration');
-      }
-      const data: ConfigResponse = await response.json();
+      const data: ConfigResponse = response.data;
       setConfig(data.config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration');
@@ -197,17 +210,10 @@ const Settings: React.FC = () => {
         };
       });
 
-      const response = await fetch('/api/config/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ updates }),
-      });
+      const response = await axios.post('/api/config/update', { updates });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(errorData || 'Failed to save configuration');
+      if (response.status !== 200) {
+        throw new Error('Failed to save configuration');
       }
 
       // Refresh configuration from server to ensure we have the latest data
@@ -453,6 +459,52 @@ const Settings: React.FC = () => {
               )}
             </Stack>
           </Stack>
+
+          {/* Configuration Status Alert */}
+          {configStatus?.needsConfiguration && (
+            <Box
+              sx={{
+                p: { xs: 2.5, sm: 3 },
+                bgcolor: alpha(theme.palette.error.main, 0.1),
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: alpha(theme.palette.error.main, 0.3),
+                mb: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  bgcolor: 'error.main',
+                  color: 'error.contrastText',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  flexShrink: 0,
+                }}
+              >
+                !
+              </Box>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.primary',
+                  fontWeight: 500,
+                  fontSize: { xs: '0.875rem', sm: '0.9rem' },
+                  lineHeight: 1.4,
+                }}
+              >
+                Configuration required: DESTINATION_DIR is not properly set. Please update the destination directory path below.
+              </Typography>
+            </Box>
+          )}
 
           {/* Status Alert */}
           {hasChanges && (

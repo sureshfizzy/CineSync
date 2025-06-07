@@ -3,6 +3,7 @@ import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, Ic
 import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
+import axios from 'axios';
 
 const MotionCard = motion(Card);
 
@@ -290,9 +291,8 @@ const RecentlyAddedMedia: React.FC = () => {
   useEffect(() => {
     const fetchRecentMedia = async () => {
       try {
-        const response = await fetch('/api/recent-media');
-        if (!response.ok) throw new Error('Failed to fetch recent media');
-        const data = await response.json();
+        const response = await axios.get('/api/recent-media');
+        const data = response.data;
 
         const mediaItems: RecentMedia[] = data.map((item: any) => ({
           name: item.name,

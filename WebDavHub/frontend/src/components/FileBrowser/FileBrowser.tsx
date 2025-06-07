@@ -25,6 +25,8 @@ import { useTmdb } from '../../contexts/TmdbContext';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
+import ConfigurationPlaceholder from './ConfigurationPlaceholder';
+import axios from 'axios';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -76,6 +78,12 @@ export default function FileBrowser() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [configStatus, setConfigStatus] = useState<{
+    isPlaceholder: boolean;
+    destinationDir: string;
+    effectiveRootDir: string;
+    needsConfiguration: boolean;
+  } | null>(null);
 
   // Dialog states
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -116,11 +124,32 @@ export default function FileBrowser() {
     tmdbProcessingRef.current = {};
   }, [currentPath]);
 
+  // Check configuration status on component mount
+  useEffect(() => {
+    const checkConfigStatus = async () => {
+      try {
+        const response = await axios.get('/api/config-status');
+        setConfigStatus(response.data);
+      } catch (err) {
+        console.error('Failed to check config status:', err);
+      }
+    };
+
+    checkConfigStatus();
+  }, []);
+
   const fetchFiles = async (path: string, pageNum: number = page) => {
     setLoading(true);
     setError('');
     try {
       const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE);
+
+      // Check if the response indicates configuration is needed
+      if (response.headers && response.headers['x-needs-configuration'] === 'true') {
+        setFiles([]);
+        setLoading(false);
+        return;
+      }
 
       if (!Array.isArray(response.data)) {
         // Silent error handling for unexpected response format
@@ -302,6 +331,16 @@ export default function FileBrowser() {
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />
       </Box>
+    );
+  }
+
+  // Show configuration placeholder if needed
+  if (configStatus?.needsConfiguration) {
+    return (
+      <ConfigurationPlaceholder
+        destinationDir={configStatus.destinationDir}
+        effectiveRootDir={configStatus.effectiveRootDir}
+      />
     );
   }
 

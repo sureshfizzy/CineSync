@@ -51,8 +51,8 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        const folderResponse = await fetch(`/api/files${folderPath}`, { headers });
-        const files = await folderResponse.json();
+        const folderResponse = await axios.get(`/api/files${folderPath}`);
+        const files = folderResponse.data;
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {

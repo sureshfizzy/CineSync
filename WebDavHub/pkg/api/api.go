@@ -30,9 +30,19 @@ var statsScanProgress struct {
 	LastUpdate time.Time
 }
 
+var isPlaceholderConfig bool
+
 // SetRootDir sets the root directory for file operations and initializes the DB
 func SetRootDir(dir string) {
 	rootDir = dir
+
+	// Check if we're using a placeholder or fallback configuration
+	originalDestDir := os.Getenv("DESTINATION_DIR")
+	isPlaceholderConfig = (originalDestDir == "" ||
+		originalDestDir == "/path/to/destination" ||
+		originalDestDir == "\\path\\to\\destination" ||
+		dir == ".")
+
 	if err := db.InitDB(rootDir); err != nil {
 		logger.Warn("Failed to initialize SQLite DB: %v", err)
 	}
@@ -144,10 +154,38 @@ func getFileIcon(name string, isDir bool) string {
 	}
 }
 
+// HandleConfigStatus returns the configuration status
+func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	originalDestDir := os.Getenv("DESTINATION_DIR")
+
+	response := map[string]interface{}{
+		"isPlaceholder":        isPlaceholderConfig,
+		"destinationDir":       originalDestDir,
+		"effectiveRootDir":     rootDir,
+		"needsConfiguration":   isPlaceholderConfig,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// If using placeholder configuration, return a special response
+	if isPlaceholderConfig {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Needs-Configuration", "true")
+		json.NewEncoder(w).Encode([]FileInfo{})
 		return
 	}
 

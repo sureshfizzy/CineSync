@@ -11,6 +11,7 @@ interface FileResponse {
   page: number;
   limit: number;
   totalPages: number;
+  headers?: Record<string, string>;
 }
 
 export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100): Promise<FileResponse> => {
@@ -34,7 +35,8 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
     totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
     page: parseInt(response.headers['x-page'] || '1', 10),
     limit: parseInt(response.headers['x-limit'] || '100', 10),
-    totalPages: parseInt(response.headers['x-total-pages'] || '1', 10)
+    totalPages: parseInt(response.headers['x-total-pages'] || '1', 10),
+    headers: response.headers
   };
 };
 

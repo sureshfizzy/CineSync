@@ -24,8 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Add request interceptor to attach JWT
     const interceptor = axios.interceptors.request.use(
       (config) => {
-        // Skip auth header for auth-related endpoints
-        if (config.url?.includes('/api/auth/')) {
+        // Skip auth header for auth-related endpoints and config-status
+        if (config.url?.includes('/api/auth/') || config.url?.includes('/api/config-status')) {
           return config;
         }
         const token = localStorage.getItem('cineSyncJWT');

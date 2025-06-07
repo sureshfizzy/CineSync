@@ -16,6 +16,7 @@ import {
   Switch,
   FormControlLabel,
 } from '@mui/material';
+import axios from 'axios';
 import {
   PlayArrow,
   Stop,
@@ -70,9 +71,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
       setIsRefreshing(true);
     }
     try {
-      const response = await fetch('/api/mediahub/status');
-      if (!response.ok) throw new Error('Failed to fetch status');
-      const data = await response.json();
+      const response = await axios.get('/api/mediahub/status');
+      const data = response.data;
 
       setStatus(data);
       onStatusChange?.(data);
@@ -87,9 +87,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
 
   const fetchActivity = async () => {
     try {
-      const response = await fetch('/api/mediahub/logs');
-      if (!response.ok) throw new Error('Failed to fetch activity');
-      const data = await response.json();
+      const response = await axios.get('/api/mediahub/logs');
+      const data = response.data;
       setActivity(data);
     } catch (err) {
       console.error('Failed to fetch activity:', err);
@@ -136,15 +135,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     }
 
     try {
-      const response = await fetch(`/api/mediahub/${action}`, {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${action} MediaHub service`);
-      }
-
-      const result = await response.json();
+      const response = await axios.post(`/api/mediahub/${action}`);
+      const result = response.data;
 
       if (result.success) {
         setSuccess(result.message || `MediaHub service ${action}ed successfully`);
@@ -152,15 +144,13 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         // Multiple refreshes to ensure we catch the status change
         const refreshStatus = async (attempt = 1, maxAttempts = 5) => {
           try {
-            const response = await fetch('/api/mediahub/status');
-            if (response.ok) {
-              const data = await response.json();
+            const response = await axios.get('/api/mediahub/status');
+            const data = response.data;
 
-              if (action === 'start' && (!data.isRunning || !data.monitorRunning) && attempt < maxAttempts) {
-                setTimeout(() => refreshStatus(attempt + 1, maxAttempts), 1000);
-              } else {
-                setStatus(data);
-              }
+            if (action === 'start' && (!data.isRunning || !data.monitorRunning) && attempt < maxAttempts) {
+              setTimeout(() => refreshStatus(attempt + 1, maxAttempts), 1000);
+            } else {
+              setStatus(data);
             }
           } catch (error) {
             console.error('Failed to refresh status:', error);
@@ -172,11 +162,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         setError(result.message || `Failed to ${action} MediaHub service`);
         // Revert optimistic update on error
         try {
-          const response = await fetch('/api/mediahub/status');
-          if (response.ok) {
-            const data = await response.json();
-            setStatus(data);
-          }
+          const response = await axios.get('/api/mediahub/status');
+          setStatus(response.data);
         } catch (error) {
           console.error('Failed to refresh status:', error);
         }
@@ -185,11 +172,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
       setError(err instanceof Error ? err.message : `Failed to ${action} service`);
       // Revert optimistic update on error
       try {
-        const response = await fetch('/api/mediahub/status');
-        if (response.ok) {
-          const data = await response.json();
-          setStatus(data);
-        }
+        const response = await axios.get('/api/mediahub/status');
+        setStatus(response.data);
       } catch (error) {
         console.error('Failed to refresh status:', error);
       }
@@ -215,15 +199,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     }
 
     try {
-      const response = await fetch(`/api/mediahub/monitor/${action}`, {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${action} monitor`);
-      }
-
-      const result = await response.json();
+      const response = await axios.post(`/api/mediahub/monitor/${action}`);
+      const result = response.data;
 
       if (result.success) {
         setSuccess(result.message || `Monitor ${action}ed successfully`);
@@ -231,17 +208,15 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         // Multiple refreshes to ensure we catch the status change
         const refreshStatus = async (attempt = 1, maxAttempts = 4) => {
           try {
-            const response = await fetch('/api/mediahub/status');
-            if (response.ok) {
-              const data = await response.json();
+            const response = await axios.get('/api/mediahub/status');
+            const data = response.data;
 
-              // For monitor actions, keep trying until monitor status matches expected state
-              const expectedMonitorState = action === 'start';
-              if (data.monitorRunning !== expectedMonitorState && attempt < maxAttempts) {
-                setTimeout(() => refreshStatus(attempt + 1, maxAttempts), 1000);
-              } else {
-                setStatus(data);
-              }
+            // For monitor actions, keep trying until monitor status matches expected state
+            const expectedMonitorState = action === 'start';
+            if (data.monitorRunning !== expectedMonitorState && attempt < maxAttempts) {
+              setTimeout(() => refreshStatus(attempt + 1, maxAttempts), 1000);
+            } else {
+              setStatus(data);
             }
           } catch (error) {
             console.error('Failed to refresh status:', error);
@@ -253,11 +228,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         setError(result.message || `Failed to ${action} monitor`);
         // Revert optimistic update on error
         try {
-          const response = await fetch('/api/mediahub/status');
-          if (response.ok) {
-            const data = await response.json();
-            setStatus(data);
-          }
+          const response = await axios.get('/api/mediahub/status');
+          setStatus(response.data);
         } catch (error) {
           console.error('Failed to refresh status:', error);
         }
@@ -266,11 +238,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
       setError(err instanceof Error ? err.message : `Failed to ${action} monitor`);
       // Revert optimistic update on error
       try {
-        const response = await fetch('/api/mediahub/status');
-        if (response.ok) {
-          const data = await response.json();
-          setStatus(data);
-        }
+        const response = await axios.get('/api/mediahub/status');
+        setStatus(response.data);
       } catch (error) {
         console.error('Failed to refresh status:', error);
       }

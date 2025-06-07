@@ -3,6 +3,7 @@ import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead
 import { PlayArrow, Stop, Edit, Schedule, CheckCircle, Error as ErrorIcon, Cancel, Pause, Refresh } from '@mui/icons-material';
 import { Job, JobStatus, getJobStatusColor, getJobTypeColor } from '../../types/jobs';
 import CountdownTimer from './CountdownTimer';
+import axios from 'axios';
 
 interface JobsTableProps {
   onRefresh?: () => void;
@@ -20,11 +21,8 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
   const fetchJobs = useCallback(async (isInitialLoad = false) => {
     try {
       if (isInitialLoad) setLoading(true);
-      const response = await fetch('/api/jobs');
-      if (!response.ok) {
-        throw new Error('Failed to fetch jobs');
-      }
-      const data = await response.json();
+      const response = await axios.get('/api/jobs');
+      const data = response.data;
       const newJobs = data.jobs || [];
 
       // Update job status tracking for future reference
@@ -47,12 +45,7 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
   const runJob = async (jobId: string) => {
     try {
       setRunningJobs(prev => new Set(prev).add(jobId));
-      const response = await fetch(`/api/jobs/${jobId}/run`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to run job');
-      }
+      await axios.post(`/api/jobs/${jobId}/run`);
       await fetchJobs(false); // Single refresh to update status
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to run job');
@@ -67,12 +60,7 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
 
   const cancelJob = async (jobId: string) => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}/cancel`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to cancel job');
-      }
+      await axios.post(`/api/jobs/${jobId}/cancel`);
       await fetchJobs(false); // Single refresh to update status
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to cancel job');
@@ -111,7 +99,11 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
     fetchJobs(true); // Initial load only
 
     // Set up Server-Sent Events for real-time job updates
-    const eventSource = new EventSource('/api/jobs/events');
+    const token = localStorage.getItem('cineSyncJWT');
+    const eventSourceUrl = token
+      ? `/api/jobs/events?token=${encodeURIComponent(token)}`
+      : '/api/jobs/events';
+    const eventSource = new EventSource(eventSourceUrl);
 
     eventSource.onmessage = (event) => {
       try {

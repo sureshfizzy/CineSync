@@ -29,13 +29,17 @@ func main() {
 	dotenvPath := filepath.Join("..", ".env")
 	_ = godotenv.Load(dotenvPath)
 
-	rootDir := os.Getenv("DESTINATION_DIR")
-	if rootDir == "" {
-		log.Fatal("DESTINATION_DIR not set in .env")
-	}
-
+	// Initialize logger early so we can use it for warnings
 	logger.Init()
 	env.LoadEnv()
+
+	rootDir := os.Getenv("DESTINATION_DIR")
+	if rootDir == "" {
+		logger.Warn("DESTINATION_DIR not set in .env file")
+		logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
+		logger.Warn("Consider setting DESTINATION_DIR in your .env file")
+		rootDir = "."
+	}
 
 	// Check if WebDAV should be enabled
 	if !env.IsWebDAVEnabled() {
@@ -53,7 +57,24 @@ func main() {
 
 	// Ensure the directory exists and is accessible
 	if _, err := os.Stat(*dir); os.IsNotExist(err) {
-		logger.Fatal("Directory %s does not exist", *dir)
+		// Check if this is a placeholder path
+		if *dir == "/path/to/destination" || *dir == "\\path\\to\\destination" {
+			logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
+			logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
+			logger.Warn("Please set DESTINATION_DIR to a valid path in your .env file")
+			*dir = "."
+		} else {
+			// Try to create the directory
+			logger.Info("Directory %s does not exist, attempting to create it", *dir)
+			if err := os.MkdirAll(*dir, 0755); err != nil {
+				logger.Warn("Failed to create directory %s: %v", *dir, err)
+				logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
+				logger.Warn("Please ensure DESTINATION_DIR is set to a valid path in your .env file")
+				*dir = "."
+			} else {
+				logger.Info("Successfully created directory: %s", *dir)
+			}
+		}
 	}
 
 	// Always use DESTINATION_DIR as the effective root
@@ -76,6 +97,7 @@ func main() {
 
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/config-status", api.HandleConfigStatus)
 	apiMux.HandleFunc("/api/files/", api.HandleFiles)
 	apiMux.HandleFunc("/api/stream/", api.HandleStream)
 	apiMux.HandleFunc("/api/stats", api.HandleStats)
@@ -124,11 +146,7 @@ func main() {
 
 	// API handling
 	apiRouter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/enabled" {
-			apiMux.ServeHTTP(w, r)
-			return
-		}
-		// For other /api/ paths, apply JWT middleware if WEBDAV_AUTH_ENABLED is true
+		// For all /api/ paths, apply JWT middleware if WEBDAV_AUTH_ENABLED is true
 		authRequired := env.IsBool("WEBDAV_AUTH_ENABLED", true)
 		if authRequired {
 			auth.JWTMiddleware(apiMux).ServeHTTP(w, r) // JWTMiddleware wraps the entire apiMux for protected routes

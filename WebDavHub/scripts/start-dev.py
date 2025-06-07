@@ -132,11 +132,12 @@ class WebDavHubDevelopmentServer:
             print("⚠️  Warning: CINESYNC_WEBDAV is not set to 'true'")
             print("   WebDavHub will not start properly without this setting")
             print("   Please set CINESYNC_WEBDAV=true in your .env file")
-            
-        # Check if DESTINATION_DIR is set
+
+        # Check if DESTINATION_DIR is set (warning only, not fatal)
         if not self.env_vars.get('DESTINATION_DIR'):
-            print("❌ DESTINATION_DIR not set in .env file")
-            sys.exit(1)
+            print("⚠️  Warning: DESTINATION_DIR not set in .env file")
+            print("   Some WebDAV functionality may not work properly")
+            print("   Consider setting DESTINATION_DIR in your .env file")
             
     def start_backend_server(self):
         """Start the Go backend server"""

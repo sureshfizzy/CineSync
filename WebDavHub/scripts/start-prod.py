@@ -137,6 +137,20 @@ class WebDavHubProductionServer:
         # Silently check database directory without verbose output
         pass
 
+    def validate_environment(self):
+        """Validate environment variables"""
+        # Check if WebDAV is enabled
+        if self.env_vars.get('CINESYNC_WEBDAV', 'false').lower() != 'true':
+            print("⚠️  Warning: CINESYNC_WEBDAV is not set to 'true'")
+            print("   WebDavHub will not start properly without this setting")
+            print("   Please set CINESYNC_WEBDAV=true in your .env file")
+
+        # Check if DESTINATION_DIR is set (warning only, not fatal)
+        if not self.env_vars.get('DESTINATION_DIR'):
+            print("⚠️  Warning: DESTINATION_DIR is not set")
+            print("   Some WebDAV functionality may not work properly")
+            print("   Consider setting DESTINATION_DIR in your .env file")
+
     def validate_docker_environment(self):
         """Validate Docker-specific environment variables if running in Docker"""
         # Check if we're running in Docker (presence of /.dockerenv file)
@@ -145,17 +159,8 @@ class WebDavHubProductionServer:
 
         print("🐳 Docker environment detected, validating configuration...")
 
-        # Check if WebDAV is enabled
-        if self.env_vars.get('CINESYNC_WEBDAV', 'false').lower() != 'true':
-            print("⚠️  Warning: CINESYNC_WEBDAV is not set to 'true'")
-            print("   WebDavHub will not start properly without this setting")
-            print("   Please set CINESYNC_WEBDAV=true in your .env file")
-
-        # Check if DESTINATION_DIR is set
-        if not self.env_vars.get('DESTINATION_DIR'):
-            print("❌ Error: DESTINATION_DIR is not set")
-            print("   Please set DESTINATION_DIR in your .env file")
-            sys.exit(1)
+        # Use the general validation method
+        self.validate_environment()
 
         print("✅ Docker environment validation passed")
 
@@ -286,8 +291,13 @@ class WebDavHubProductionServer:
             # Load environment variables
             self.load_environment_variables()
 
-            # Validate Docker environment if applicable
-            self.validate_docker_environment()
+            # Validate environment variables
+            if Path("/.dockerenv").exists():
+                # Running in Docker - use Docker-specific validation
+                self.validate_docker_environment()
+            else:
+                # Not in Docker - use general validation
+                self.validate_environment()
 
             # Check database directory
             self.check_database_directory()

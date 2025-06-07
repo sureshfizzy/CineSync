@@ -12,6 +12,7 @@ import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
 import { searchTmdb, getTmdbPosterUrlDirect } from '../../api/tmdbApi';
 import { processStructuredMessage } from '../../../utils/symlinkUpdates';
+import axios from 'axios';
 
 // Import the modular components
 import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';
@@ -221,7 +222,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       const response = await fetch('/api/python-bridge', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
         },
         body: JSON.stringify(requestPayload)
       });
@@ -430,7 +432,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       const response = await fetch('/api/python-bridge/input', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
         },
         body: JSON.stringify({ input: input + '\n' })
       });
