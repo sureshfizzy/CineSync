@@ -1120,6 +1120,24 @@ def get_skip_reason(conn, source_path):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
+def remove_processed_file(conn, source_path):
+    """Remove a processed file entry from the database."""
+    source_path = normalize_file_path(source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (source_path,))
+        conn.commit()
+        if cursor.rowcount > 0:
+            log_message(f"Removed existing database entry for: {source_path}", level="INFO")
+        return cursor.rowcount > 0
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in remove_processed_file: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
 def optimize_database(conn):
     """Optimize database indexes and analyze tables."""
     try:

@@ -44,25 +44,75 @@ def process_file(args, processed_files_log, force=False):
     if skip:
         force = True
 
-        existing_symlink_path = get_existing_symlink_info(src_file)
-        if existing_symlink_path:
-            log_message(f"Skip mode: Found existing symlink at {existing_symlink_path}", level="INFO")
+        # Get existing destination path from database
+        existing_dest_path = get_destination_path(src_file)
+        remove_processed_file(src_file)
+
+        # Clean up existing symlink and directories if they exist
+        if existing_dest_path and os.path.exists(existing_dest_path):
+            log_message(f"Skip mode: Found existing symlink at {existing_dest_path}", level="INFO")
             try:
-                os.remove(existing_symlink_path)
+                # Store the old symlink info for comprehensive cleanup
+                old_symlink_info = {
+                    'path': existing_dest_path,
+                    'parent_dir': os.path.dirname(existing_dest_path),
+                    'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path)),
+                    'tmdb_file_path': None
+                }
+
+                # Get .tmdb file path if it exists
+                parts = os.path.normpath(existing_dest_path).split(os.sep)
+                if any(part.lower().startswith('season ') for part in parts):
+                    for i, part in enumerate(parts):
+                        if part.lower().startswith('season '):
+                            show_root = os.sep.join(parts[:i])
+                            break
+                    old_symlink_info['tmdb_file_path'] = os.path.join(show_root, ".tmdb")
+                else:
+                    old_symlink_info['tmdb_file_path'] = os.path.join(os.path.dirname(existing_dest_path), ".tmdb")
+
+                # Remove the symlink
+                os.remove(existing_dest_path)
                 log_message(f"Skip mode: Removed existing symlink for {file}", level="INFO")
 
-                parent_dir = os.path.dirname(existing_symlink_path)
-                parent_parent_dir = os.path.dirname(parent_dir)
+                # Delete .tmdb file if it exists
+                if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
+                    should_delete_tmdb = True
+                    if any(part.lower().startswith('season ') for part in parts):
+                        show_root = os.path.dirname(old_symlink_info['tmdb_file_path'])
+                        if os.path.exists(show_root):
+                            remaining_episodes = 0
+                            for root_dir, dirs, files in os.walk(show_root):
+                                for file_name in files:
+                                    file_path = os.path.join(root_dir, file_name)
+                                    if os.path.islink(file_path) and file_path != existing_dest_path:
+                                        remaining_episodes += 1
 
-                if os.path.exists(parent_dir) and not os.listdir(parent_dir):
-                    log_message(f"Deleting empty directory: {parent_dir}", level="INFO")
-                    os.rmdir(parent_dir)
+                            # Only delete .tmdb if no other episodes remain
+                            should_delete_tmdb = remaining_episodes == 0
+                            if not should_delete_tmdb:
+                                log_message(f"Skip mode: Keeping .tmdb file - {remaining_episodes} other episodes remain in show", level="INFO")
 
-                    if os.path.exists(parent_parent_dir) and not os.listdir(parent_parent_dir):
-                        log_message(f"Deleting empty directory: {parent_parent_dir}", level="INFO")
-                        os.rmdir(parent_parent_dir)
+                    if should_delete_tmdb:
+                        try:
+                            os.remove(old_symlink_info['tmdb_file_path'])
+                            log_message(f"Skip mode: Deleted .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
+                        except Exception as e:
+                            log_message(f"Error deleting .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
+
+                # Delete empty directories
+                if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
+                    log_message(f"Skip mode: Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
+                    os.rmdir(old_symlink_info['parent_dir'])
+
+                    if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
+                        log_message(f"Skip mode: Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
+                        os.rmdir(old_symlink_info['parent_parent_dir'])
+
             except OSError as e:
                 log_message(f"Error during skip cleanup: {e}", level="WARNING")
+        else:
+            log_message(f"Skip mode: No existing symlink found for {file}", level="INFO")
 
         reason = "Skipped by user"
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
