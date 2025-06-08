@@ -100,10 +100,8 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		tokenStr := ""
 		if strings.HasPrefix(header, "Bearer ") {
 			tokenStr = strings.TrimPrefix(header, "Bearer ")
-			logger.Debug("JWT found in Authorization header")
 		} else if token := r.URL.Query().Get("token"); token != "" {
 			tokenStr = token
-			logger.Debug("JWT found in query parameter")
 		}
 
 		if tokenStr == "" {

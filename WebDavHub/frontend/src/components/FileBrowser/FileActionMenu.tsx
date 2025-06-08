@@ -33,6 +33,7 @@ interface FileActionMenuProps {
   onError: (msg: string) => void;
   onDeleted?: () => void;
   variant?: 'menu' | 'buttons';
+  onNavigateBack?: () => void;
 }
 
 function joinPaths(...parts: string[]): string {
@@ -64,7 +65,7 @@ function getRelativePath(absPath: string): string {
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu' }) => {
+const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu', onNavigateBack }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -357,6 +358,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         open={modifyDialogOpen}
         onClose={() => setModifyDialogOpen(false)}
         onSubmit={handleModifySubmit}
+        onNavigateBack={onNavigateBack}
         currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
       />
       <IconButton onClick={handleMenuOpen} size="small">
@@ -449,6 +451,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         open={modifyDialogOpen}
         onClose={() => setModifyDialogOpen(false)}
         onSubmit={handleModifySubmit}
+        onNavigateBack={onNavigateBack}
         currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
       />
     </>

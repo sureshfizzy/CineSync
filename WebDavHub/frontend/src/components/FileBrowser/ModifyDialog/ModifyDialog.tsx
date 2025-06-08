@@ -19,9 +19,11 @@ import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';
 import ActionOptions from './ActionOptions';
 import IDOptions from './IDOptions';
 import ExecutionDialog from './ExecutionDialog';
+import SkipConfirmationDialog from './SkipConfirmationDialog';
+import SkipResultDialog from './SkipResultDialog';
 import { ModifyDialogProps, ModifyOption, IDOption, MovieOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie' }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -35,6 +37,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [operationComplete, setOperationComplete] = useState(false);
   const [operationSuccess, setOperationSuccess] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
+  const [skipResultOpen, setSkipResultOpen] = useState(false);
   const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,7 +74,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     {
       value: 'skip',
       label: 'Skip Processing',
-      description: 'Skip processing this file',
+      description: 'Remove symlinks and block future processing',
       icon: '⏭️'
     },
   ];
@@ -120,6 +124,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationComplete(false);
     setOperationSuccess(false);
     setIsClosing(false);
+    setSkipConfirmOpen(false);
 
     // Clear timeouts
     if (inputTimeoutRef.current) {
@@ -150,6 +155,12 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   };
 
   const handleSubmit = () => {
+    // Check if skip is selected and show confirmation dialog
+    if (selectedOption === 'skip') {
+      setSkipConfirmOpen(true);
+      return;
+    }
+
     // Reset execution states
     setExecOutput('');
     setMovieOptions([]);
@@ -488,6 +499,55 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     }
   };
 
+  const handleSkipConfirm = async () => {
+    setSkipConfirmOpen(false);
+    setSkipResultOpen(true);
+
+    if (!currentFilePath) {
+      console.error('No file path provided for skip operation');
+      return;
+    }
+
+    const disableMonitor = true;
+    const requestPayload = {
+      sourcePath: currentFilePath,
+      disableMonitor,
+      selectedOption: 'skip'
+    };
+
+    try {
+      const response = await fetch('/api/python-bridge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+        },
+        body: JSON.stringify(requestPayload)
+      });
+
+      if (!response.ok) {
+        console.error('Skip operation failed:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error during skip operation:', error);
+    }
+  };
+
+  const handleSkipCancel = () => {
+    setSkipConfirmOpen(false);
+  };
+
+  const handleSkipResultClose = () => {
+    setSkipResultOpen(false);
+    handleClose();
+  };
+
+  const handleSkipResultRefresh = () => {
+    if (onClose) {
+      onClose();
+    }
+  };
+
   const handleExecClose = () => {
     setExecOpen(false);
     // Clear timeouts when closing
@@ -648,6 +708,21 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         isClosing={isClosing}
         onOptionClick={handleOptionClick}
         selectedIds={selectedIds}
+      />
+
+      <SkipConfirmationDialog
+        open={skipConfirmOpen}
+        onConfirm={handleSkipConfirm}
+        onCancel={handleSkipCancel}
+        filePath={currentFilePath}
+      />
+
+      <SkipResultDialog
+        open={skipResultOpen}
+        onClose={handleSkipResultClose}
+        onRefresh={handleSkipResultRefresh}
+        onNavigateBack={onNavigateBack}
+        filePath={currentFilePath}
       />
     </>
   );

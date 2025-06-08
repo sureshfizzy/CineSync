@@ -12,9 +12,10 @@ interface ShowHeaderProps {
   onRename?: (file: any) => void;
   onError?: (error: string) => void;
   refreshTrigger?: number;
+  onNavigateBack?: () => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, mediaType, onRename, onError, refreshTrigger }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, mediaType, onRename, onError, refreshTrigger, onNavigateBack }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
@@ -43,6 +44,7 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           onRename={onRename}
           onError={onError}
           refreshTrigger={refreshTrigger}
+          onNavigateBack={onNavigateBack}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' }, textAlign: { xs: 'center', md: 'left' } }}>
           {genres.map((g: { id: number; name: string }) => (
@@ -72,6 +74,7 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           onRename={onRename}
           onError={onError}
           refreshTrigger={refreshTrigger}
+          onNavigateBack={onNavigateBack}
         />
       </Box>
     </Box>

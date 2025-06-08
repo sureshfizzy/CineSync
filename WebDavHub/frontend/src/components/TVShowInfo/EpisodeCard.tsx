@@ -126,6 +126,7 @@ const EpisodeCard: React.FC<EpisodeCardProps> = ({
               onRename={fetchSeasonFolders}
               onDeleted={handleDeleted}
               onError={handleError}
+              onNavigateBack={undefined}
             />
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1, minHeight: 30, maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', fontSize: { xs: '0.92rem', md: '1rem' } }}>{ep.overview}</Typography>

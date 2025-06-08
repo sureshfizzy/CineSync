@@ -15,6 +15,10 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  const handleNavigateBack = () => {
+    navigate(-1);
+  };
+
   useEffect(() => {
     async function fetchFile() {
       try {
@@ -93,7 +97,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Box sx={{ flex: 1 }}>
-              <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} />
+              <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} onNavigateBack={handleNavigateBack} />
             </Box>
           </Box>
           <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />

@@ -58,7 +58,6 @@ func ReloadEnv() error {
 func GetString(key string, defaultValue string) string {
 	value, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %s", key, defaultValue)
 		return defaultValue
 	}
 
@@ -69,7 +68,6 @@ func GetString(key string, defaultValue string) string {
 func GetInt(key string, defaultValue int) int {
 	valueStr, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %d", key, defaultValue)
 		return defaultValue
 	}
 
@@ -86,7 +84,6 @@ func GetInt(key string, defaultValue int) int {
 func IsBool(key string, defaultValue bool) bool {
 	value, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %t", key, defaultValue)
 		return defaultValue
 	}
 

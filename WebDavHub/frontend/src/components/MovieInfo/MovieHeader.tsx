@@ -9,9 +9,10 @@ interface MovieHeaderProps {
   fileInfo: any;
   folderName: string;
   currentPath: string;
+  onNavigateBack?: () => void;
 }
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -73,7 +74,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
           >
             {data.title} {releaseYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({releaseYear})</span>}
           </Typography>
-          <MovieFileActions data={data} folderName={folderName} currentPath={currentPath} placement="belowTitle" fileInfo={fileInfo} />
+          <MovieFileActions data={data} folderName={folderName} currentPath={currentPath} placement="belowTitle" fileInfo={fileInfo} onNavigateBack={onNavigateBack} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' } }}>
             {genres.map((g: { id: number; name: string }) => (
               <Chip key={g.id} label={g.name} color="primary" variant="outlined" size={isMobile ? "small" : "medium"} />
@@ -114,7 +115,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
           >
             {data.overview}
           </Typography>
-          <MovieFileActions data={data} folderName={folderName} currentPath={currentPath} placement="belowDescription" fileInfo={fileInfo} />
+          <MovieFileActions data={data} folderName={folderName} currentPath={currentPath} placement="belowDescription" fileInfo={fileInfo} onNavigateBack={onNavigateBack} />
         </motion.div>
       </Box>
     </Box>

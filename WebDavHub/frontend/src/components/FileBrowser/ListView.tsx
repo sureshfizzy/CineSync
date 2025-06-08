@@ -25,6 +25,7 @@ interface ListViewProps {
   onRename: () => void;
   onDeleted: () => void;
   onError: (error: string) => void;
+  onNavigateBack?: () => void;
 }
 
 export default function ListView({
@@ -36,6 +37,7 @@ export default function ListView({
   onRename,
   onDeleted,
   onError,
+  onNavigateBack,
 }: ListViewProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -73,6 +75,7 @@ export default function ListView({
                 onRename={onRename}
                 onDeleted={onDeleted}
                 onError={onError}
+                onNavigateBack={onNavigateBack}
               />
             }
           />
@@ -147,6 +150,7 @@ export default function ListView({
                   onRename={onRename}
                   onDeleted={onDeleted}
                   onError={onError}
+                  onNavigateBack={onNavigateBack}
                 />
               </TableCell>
             </TableRow>

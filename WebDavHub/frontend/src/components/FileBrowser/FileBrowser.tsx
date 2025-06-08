@@ -230,6 +230,17 @@ export default function FileBrowser() {
     navigate(`/files${urlPath}`);
   };
 
+  const handleNavigateBack = () => {
+    const pathParts = currentPath.split('/').filter(Boolean);
+    if (pathParts.length > 0) {
+      pathParts.pop();
+      const parentPath = pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
+      navigate(`/files${parentPath === '/' ? '' : parentPath}`);
+    } else {
+      navigate('/files');
+    }
+  };
+
   const handleUpClick = () => {
     const parts = currentPath.split('/').filter(Boolean);
     if (parts.length === 0) return;
@@ -408,6 +419,7 @@ export default function FileBrowser() {
             onRename={() => fetchFiles(currentPath)}
             onDeleted={() => fetchFiles(currentPath)}
             onError={setError}
+            onNavigateBack={handleNavigateBack}
           />
           <PaginationComponent
             totalPages={totalPages}

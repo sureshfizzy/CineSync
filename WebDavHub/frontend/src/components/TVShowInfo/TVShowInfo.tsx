@@ -33,6 +33,10 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
+  const handleNavigateBack = () => {
+    navigate(-1);
+  };
+
   const {
     seasonFolders,
     loadingFiles,
@@ -84,6 +88,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               onRename={handleRefresh}
               onError={(error) => setSnackbar({ open: true, message: error, severity: 'error' })}
               refreshTrigger={refreshTrigger}
+              onNavigateBack={handleNavigateBack}
             />
           </Box>
         </Box>

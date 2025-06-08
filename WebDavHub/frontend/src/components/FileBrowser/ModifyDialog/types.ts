@@ -4,6 +4,7 @@ export interface ModifyDialogProps {
   onSubmit?: (selectedOption: string, selectedIds: Record<string, string>) => void;
   currentFilePath?: string;
   mediaType?: 'movie' | 'tv';
+  onNavigateBack?: () => void;
 }
 
 export interface ModifyOption {

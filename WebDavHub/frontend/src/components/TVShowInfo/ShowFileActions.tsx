@@ -15,6 +15,7 @@ interface ShowFileActionsProps {
   onRename?: (file: any) => void;
   onError?: (error: string) => void;
   refreshTrigger?: number; // Add refresh trigger prop
+  onNavigateBack?: () => void;
 }
 
 const ShowFileActions: React.FC<ShowFileActionsProps> = ({
@@ -25,7 +26,8 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
   fileInfo: fileInfoProp,
   onRename,
   onError,
-  refreshTrigger
+  refreshTrigger,
+  onNavigateBack
 }) => {
   const [fileInfo, setFileInfo] = useState<any>(fileInfoProp || null);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
@@ -141,12 +143,14 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
           onRename={handleRename}
           onModify={handleModify}
           onError={handleError}
+          onNavigateBack={onNavigateBack}
           variant="buttons"
         />
         <ModifyDialog
           open={modifyDialogOpen}
           onClose={handleModifyClose}
           onSubmit={handleModifySubmit}
+          onNavigateBack={onNavigateBack}
           currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
           mediaType={mediaType}
         />

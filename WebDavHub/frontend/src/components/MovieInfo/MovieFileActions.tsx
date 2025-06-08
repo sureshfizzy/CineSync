@@ -13,6 +13,7 @@ interface MovieFileActionsProps {
   fileInfo?: any;
   onRename?: (file: any) => void;
   onError?: (error: string) => void;
+  onNavigateBack?: () => void;
 }
 
 // Module-level cache to prevent duplicate fetches
@@ -24,7 +25,8 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
   placement,
   fileInfo: fileInfoProp,
   onRename,
-  onError
+  onError,
+  onNavigateBack
 }) => {
   const [fileInfo, setFileInfo] = useState<any>(fileInfoProp || null);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
@@ -126,12 +128,14 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
           onRename={handleRename}
           onModify={handleModify}
           onError={handleError}
+          onNavigateBack={onNavigateBack}
           variant="buttons"
         />
         <ModifyDialog
           open={modifyDialogOpen}
           onClose={handleModifyClose}
           onSubmit={handleModifySubmit}
+          onNavigateBack={onNavigateBack}
           currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
           mediaType="movie"
         />
