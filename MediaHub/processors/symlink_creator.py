@@ -38,7 +38,7 @@ def process_file(args, processed_files_log, force=False):
         return
 
     # Normalize path
-    src_file = os.path.normpath(src_file)
+    src_file = normalize_file_path(src_file)
 
     # Handle skip flag
     if skip:
@@ -46,6 +46,7 @@ def process_file(args, processed_files_log, force=False):
 
         # Get existing destination path from database
         existing_dest_path = get_destination_path(src_file)
+        existing_dest_path = normalize_file_path(existing_dest_path)
         remove_processed_file(src_file)
 
         # Clean up existing symlink and directories if they exist
@@ -61,7 +62,7 @@ def process_file(args, processed_files_log, force=False):
                 }
 
                 # Get .tmdb file path if it exists
-                parts = os.path.normpath(existing_dest_path).split(os.sep)
+                parts = existing_dest_path.split(os.sep)
                 if any(part.lower().startswith('season ') for part in parts):
                     for i, part in enumerate(parts):
                         if part.lower().startswith('season '):
@@ -141,7 +142,7 @@ def process_file(args, processed_files_log, force=False):
             }
 
             # Get .tmdb file path if it exists
-            parts = os.path.normpath(existing_symlink_path).split(os.sep)
+            parts = existing_symlink_path.split(os.sep)
             if any(part.lower().startswith('season ') for part in parts):
                 for i, part in enumerate(parts):
                     if part.lower().startswith('season '):
@@ -154,6 +155,8 @@ def process_file(args, processed_files_log, force=False):
             log_message(f"Force mode: Will process {file} and cleanup old symlink after successful creation", level="INFO")
 
     existing_dest_path = get_destination_path(src_file)
+    existing_dest_path = normalize_file_path(existing_dest_path)
+
     if existing_dest_path and not force:
         return
         if not os.path.exists(existing_dest_path):
@@ -161,10 +164,12 @@ def process_file(args, processed_files_log, force=False):
             if os.path.exists(dir_path):
                 for filename in os.listdir(dir_path):
                     potential_new_path = os.path.join(dir_path, filename)
-                    if os.path.islink(potential_new_path) and os.readlink(potential_new_path) == src_file:
-                        log_message(f"Detected renamed file: {existing_dest_path} -> {potential_new_path}", level="INFO")
-                        update_renamed_file(existing_dest_path, potential_new_path)
-                        return
+                    if os.path.islink(potential_new_path):
+                        link_target = normalize_file_path(os.readlink(potential_new_path))
+                        if link_target == src_file:
+                            log_message(f"Detected renamed file: {existing_dest_path} -> {potential_new_path}", level="INFO")
+                            update_renamed_file(existing_dest_path, potential_new_path)
+                            return
 
             log_message(f"Destination file missing. Re-processing: {src_file}", level="INFO")
         else:
@@ -179,7 +184,7 @@ def process_file(args, processed_files_log, force=False):
 
     # Check if a symlink already exists
     existing_symlink = next((full_dest_file for full_dest_file in dest_index
-                             if os.path.islink(full_dest_file) and os.readlink(full_dest_file) == src_file), None)
+                             if os.path.islink(full_dest_file) and normalize_file_path(os.readlink(full_dest_file)) == src_file), None)
 
     if existing_symlink and not force:
         log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
@@ -282,7 +287,7 @@ def process_file(args, processed_files_log, force=False):
 
     # Check if symlink already exists
     if os.path.islink(dest_file):
-        existing_src = os.readlink(dest_file)
+        existing_src = normalize_file_path(os.readlink(dest_file))
         if existing_src == src_file:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             save_processed_file(src_file, dest_file, tmdb_id)
@@ -342,8 +347,8 @@ def process_file(args, processed_files_log, force=False):
         # Cleanup old symlink if it exists (force mode)
         if force and 'old_symlink_info' in locals():
             # Normalize paths for comparison to handle different path separators
-            old_path_normalized = os.path.normpath(old_symlink_info['path'])
-            new_path_normalized = os.path.normpath(dest_file)
+            old_path_normalized = normalize_file_path(old_symlink_info['path'])
+            new_path_normalized = normalize_file_path(dest_file)
 
             # Only cleanup if the old symlink path is different from the new one
             if old_path_normalized != new_path_normalized:
@@ -378,7 +383,7 @@ def process_file(args, processed_files_log, force=False):
 
             # Determine media type based on whether it was processed as show or movie
             # Check if this is a show by looking at the destination path structure
-            parts = os.path.normpath(dest_file).split(os.sep)
+            parts = normalize_file_path(dest_file).split(os.sep)
             is_tv_show = any(part.lower().startswith('season ') for part in parts)
             media_type = "tv" if is_tv_show else "movie"
 
@@ -391,9 +396,9 @@ def process_file(args, processed_files_log, force=False):
                     if part.lower().startswith('season '):
                         show_root = os.sep.join(parts[:i])
                         break
-                tmdb_file_path = os.path.normpath(os.path.join(show_root, ".tmdb"))
+                tmdb_file_path = normalize_file_path(os.path.join(show_root, ".tmdb"))
             else:
-                tmdb_file_path = os.path.normpath(os.path.join(os.path.dirname(dest_file), ".tmdb"))
+                tmdb_file_path = normalize_file_path(os.path.join(os.path.dirname(dest_file), ".tmdb"))
 
             try:
                 # Ensure the directory exists before creating the file
@@ -513,7 +518,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     tasks.append(executor.submit(process_file, args, processed_files_log, force))
                 else:
                     # Handle directory
-                    actual_dir = os.path.basename(os.path.normpath(src_dir))
+                    actual_dir = os.path.basename(normalize_file_path(src_dir))
                     log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
                     # Get appropriate destination index based on mode
@@ -575,7 +580,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             update_single_file_index(dest_file, is_symlink, target_path)
                 else:
                     # Handle directory
-                    actual_dir = os.path.basename(os.path.normpath(src_dir))
+                    actual_dir = os.path.basename(normalize_file_path(src_dir))
                     log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
                     # Get appropriate destination index based on mode
