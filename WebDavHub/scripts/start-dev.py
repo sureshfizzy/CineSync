@@ -127,16 +127,10 @@ class WebDavHubDevelopmentServer:
 
     def validate_environment(self):
         """Validate environment variables"""
-        # Check if WebDAV is enabled
-        if self.env_vars.get('CINESYNC_WEBDAV', 'false').lower() != 'true':
-            print("⚠️  Warning: CINESYNC_WEBDAV is not set to 'true'")
-            print("   WebDavHub will not start properly without this setting")
-            print("   Please set CINESYNC_WEBDAV=true in your .env file")
-
         # Check if DESTINATION_DIR is set (warning only, not fatal)
         if not self.env_vars.get('DESTINATION_DIR'):
             print("⚠️  Warning: DESTINATION_DIR not set in .env file")
-            print("   Some WebDAV functionality may not work properly")
+            print("   Some CineSync functionality may not work properly")
             print("   Consider setting DESTINATION_DIR in your .env file")
             
     def start_backend_server(self):

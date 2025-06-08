@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface ConfigUpdateEvent {
-  type: 'config_changed' | 'connected' | 'ping';
+  type: 'config_changed' | 'auth_settings_changed' | 'server_restart_required' | 'connected' | 'ping';
   timestamp: number;
 }
 
 interface UseConfigUpdatesOptions {
   onConfigChange?: () => void;
+  onAuthSettingsChange?: () => void;
+  onServerRestartRequired?: () => void;
   enabled?: boolean;
 }
 
 export function useConfigUpdates(options: UseConfigUpdatesOptions = {}) {
-  const { onConfigChange, enabled = true } = options;
+  const { onConfigChange, onAuthSettingsChange, onServerRestartRequired, enabled = true } = options;
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -47,6 +49,18 @@ export function useConfigUpdates(options: UseConfigUpdatesOptions = {}) {
               setLastUpdate(data.timestamp);
               if (onConfigChange) {
                 onConfigChange();
+              }
+              break;
+            case 'auth_settings_changed':
+              setLastUpdate(data.timestamp);
+              if (onAuthSettingsChange) {
+                onAuthSettingsChange();
+              }
+              break;
+            case 'server_restart_required':
+              setLastUpdate(data.timestamp);
+              if (onServerRestartRequired) {
+                onServerRestartRequired();
               }
               break;
             case 'connected':

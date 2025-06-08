@@ -41,12 +41,6 @@ func main() {
 		rootDir = "."
 	}
 
-	// Check if WebDAV should be enabled
-	if !env.IsWebDAVEnabled() {
-		logger.Info("WebDAV is disabled. Set CINESYNC_WEBDAV=true in your .env file to enable it.")
-		return
-	}
-
 	// Define command-line flags with fallbacks from .env or hardcoded defaults
 	dir := flag.String("dir", env.GetString("DESTINATION_DIR", "."), "Directory to serve over WebDAV")
 	port := flag.Int("port", env.GetInt("CINESYNC_API_PORT", 8082), "Port to run the CineSync API server on")
@@ -128,6 +122,7 @@ func main() {
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
+	apiMux.HandleFunc("/api/restart", api.HandleRestart)
 
 	// MediaHub service endpoints
 	apiMux.HandleFunc("/api/mediahub/status", api.HandleMediaHubStatus)
@@ -150,8 +145,8 @@ func main() {
 
 	// API handling
 	apiRouter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// For all /api/ paths, apply JWT middleware if WEBDAV_AUTH_ENABLED is true
-		authRequired := env.IsBool("WEBDAV_AUTH_ENABLED", true)
+		// For all /api/ paths, apply JWT middleware if CINESYNC_AUTH_ENABLED is true
+		authRequired := env.IsBool("CINESYNC_AUTH_ENABLED", true)
 		if authRequired {
 			auth.JWTMiddleware(apiMux).ServeHTTP(w, r) // JWTMiddleware wraps the entire apiMux for protected routes
 		} else {
@@ -205,12 +200,11 @@ func main() {
 	logger.Info("Server Dashboard http://%s/", addr)
 
 	// In your main function, add this information after starting the server
-	if env.IsBool("WEBDAV_AUTH_ENABLED", true) {
+	if env.IsBool("CINESYNC_AUTH_ENABLED", true) {
 		credentials := auth.GetCredentials()
-		logger.Info("WebDAV authentication enabled (username: %s)", credentials.Username)
-		logger.Info("To disable authentication, set WEBDAV_AUTH_ENABLED=false in your .env file")
+		logger.Info("CineSync authentication enabled (username: %s)", credentials.Username)
 	} else {
-		logger.Warn("WebDAV authentication is disabled")
+		logger.Warn("CineSync authentication is disabled")
 	}
 
 	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)

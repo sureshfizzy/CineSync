@@ -151,14 +151,13 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "PLEX_URL", Category: "Plex Integration Configuration", Type: "string", Required: false, Description: "URL for your Plex Media Server"},
 		{Key: "PLEX_TOKEN", Category: "Plex Integration Configuration", Type: "string", Required: false, Description: "Token for your Plex Media Server"},
 
-		// WebDAV Configuration
-		{Key: "CINESYNC_WEBDAV", Category: "WebDAV Configuration", Type: "boolean", Required: false, Description: "Enable or disable WebDAV access for CineSync"},
-		{Key: "CINESYNC_IP", Category: "WebDAV Configuration", Type: "string", Required: false, Description: "The IP address to bind the WebDAV server"},
-		{Key: "CINESYNC_API_PORT", Category: "WebDAV Configuration", Type: "integer", Required: false, Description: "The port on which the API server runs"},
-		{Key: "CINESYNC_UI_PORT", Category: "WebDAV Configuration", Type: "integer", Required: false, Description: "The port on which the UI server runs"},
-		{Key: "WEBDAV_AUTH_ENABLED", Category: "WebDAV Configuration", Type: "boolean", Required: false, Description: "Enable or disable WebDAV authentication"},
-		{Key: "WEBDAV_USERNAME", Category: "WebDAV Configuration", Type: "string", Required: false, Description: "Username for WebDAV authentication"},
-		{Key: "WEBDAV_PASSWORD", Category: "WebDAV Configuration", Type: "string", Required: false, Description: "Password for WebDAV authentication"},
+		// CineSync Configuration
+		{Key: "CINESYNC_IP", Category: "CineSync Configuration", Type: "string", Required: false, Description: "The IP address to bind the CineSync server"},
+		{Key: "CINESYNC_API_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the API server runs"},
+		{Key: "CINESYNC_UI_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the UI server runs"},
+		{Key: "CINESYNC_AUTH_ENABLED", Category: "CineSync Configuration", Type: "boolean", Required: false, Description: "Enable or disable CineSync authentication"},
+		{Key: "CINESYNC_USERNAME", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Username for CineSync authentication"},
+		{Key: "CINESYNC_PASSWORD", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Password for CineSync authentication"},
 
 		// Database Configuration
 		{Key: "DB_THROTTLE_RATE", Category: "Database Configuration", Type: "integer", Required: false, Description: "Throttle rate for database operations (requests per second)"},
@@ -463,19 +462,40 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 
 
-	// Check if DESTINATION_DIR was updated and update the root directory
+	// Check for special configuration updates that require additional actions
+	authSettingsChanged := false
+	serverRestartRequired := false
 	for _, update := range request.Updates {
 		if update.Key == "DESTINATION_DIR" && update.Value != "" {
 			logger.Info("DESTINATION_DIR updated, refreshing root directory")
 			if updateRootDirCallback != nil {
 				updateRootDirCallback()
 			}
-			break
+		}
+		// Check if authentication settings changed
+		if update.Key == "CINESYNC_AUTH_ENABLED" || update.Key == "CINESYNC_USERNAME" || update.Key == "CINESYNC_PASSWORD" {
+			authSettingsChanged = true
+			logger.Info("Authentication settings changed: %s", update.Key)
+		}
+		// Check if server restart is required
+		if update.Key == "CINESYNC_IP" || update.Key == "CINESYNC_API_PORT" || update.Key == "CINESYNC_UI_PORT" {
+			serverRestartRequired = true
+			logger.Info("Server restart required for setting: %s", update.Key)
 		}
 	}
 
 	// Notify all connected clients about configuration changes
 	notifyConfigChange()
+
+	// If auth settings changed, notify clients to re-authenticate
+	if authSettingsChanged {
+		notifyAuthSettingsChanged()
+	}
+
+	// If server restart is required, notify clients
+	if serverRestartRequired {
+		notifyServerRestartRequired()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Configuration updated successfully"})
@@ -487,6 +507,36 @@ func notifyConfigChange() {
 	defer configMutex.RUnlock()
 
 	message := fmt.Sprintf("data: %s\n\n", `{"type":"config_changed","timestamp":`+fmt.Sprintf("%d", time.Now().Unix())+`}`)
+
+	for client := range configClients {
+		select {
+		case client <- message:
+		default:
+		}
+	}
+}
+
+// notifyAuthSettingsChanged sends auth settings change notifications to all connected SSE clients
+func notifyAuthSettingsChanged() {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+
+	message := fmt.Sprintf("data: %s\n\n", `{"type":"auth_settings_changed","timestamp":`+fmt.Sprintf("%d", time.Now().Unix())+`}`)
+
+	for client := range configClients {
+		select {
+		case client <- message:
+		default:
+		}
+	}
+}
+
+// notifyServerRestartRequired sends server restart required notifications to all connected SSE clients
+func notifyServerRestartRequired() {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+
+	message := fmt.Sprintf("data: %s\n\n", `{"type":"server_restart_required","timestamp":`+fmt.Sprintf("%d", time.Now().Unix())+`}`)
 
 	for client := range configClients {
 		select {

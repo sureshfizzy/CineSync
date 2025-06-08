@@ -25,8 +25,8 @@ type Credentials struct {
 // GetCredentials retrieves credentials from environment variables
 func GetCredentials() Credentials {
 	return Credentials{
-		Username: env.GetString("WEBDAV_USERNAME", "admin"),
-		Password: env.GetString("WEBDAV_PASSWORD", "password"),
+		Username: env.GetString("CINESYNC_USERNAME", "admin"),
+		Password: env.GetString("CINESYNC_PASSWORD", "admin"),
 	}
 }
 
@@ -88,7 +88,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 
 		// Check if auth is enabled
 		enabled := true
-		if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
+		if v := os.Getenv("CINESYNC_AUTH_ENABLED"); v == "false" || v == "0" {
 			enabled = false
 		}
 		if !enabled {
@@ -176,7 +176,7 @@ func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
 func BasicAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if auth is enabled via environment variable
-		if !env.IsBool("WEBDAV_AUTH_ENABLED", false) { // Default to false if not set, or if explicitly set to false
+		if !env.IsBool("CINESYNC_AUTH_ENABLED", false) { // Default to false if not set, or if explicitly set to false
 			next.ServeHTTP(w, r)
 			return
 		}

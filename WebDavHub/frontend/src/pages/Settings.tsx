@@ -140,19 +140,19 @@ const Settings: React.FC = () => {
         color: '#06b6d4',
         gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
       },
-      'WebDAV Configuration': {
-        name: 'WebDAV Server',
-        description: 'WebDAV API & file access',
+      'CineSync Configuration': {
+        name: 'CineSync',
+        description: 'Server settings & authentication',
         icon: <ApiRounded sx={{ fontSize: 28 }} />,
-        color: '#f59e0b',
-        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+        color: '#3b82f6',
+        gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
       },
       'System Configuration': {
         name: 'Advanced',
         description: 'Advanced system settings',
         icon: <SettingsApplicationsRounded sx={{ fontSize: 28 }} />,
-        color: '#ef4444',
-        gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        color: '#6b7280',
+        gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
       },
       'Services': {
         name: 'Services',
@@ -199,10 +199,22 @@ const Settings: React.FC = () => {
   };
 
   const handleFieldChange = (key: string, value: string) => {
-    setPendingChanges(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    // Find the original value from config
+    const originalItem = config.find(item => item.key === key);
+    const originalValue = originalItem?.value || '';
+
+    setPendingChanges(prev => {
+      const newChanges = { ...prev };
+
+      // If the new value equals the original value, remove it from pending changes
+      if (value === originalValue) {
+        delete newChanges[key];
+      } else {
+        newChanges[key] = value;
+      }
+
+      return newChanges;
+    });
   };
 
   const handleSave = async () => {
@@ -289,6 +301,7 @@ const Settings: React.FC = () => {
   // Define category order for General tab (configuration categories)
   const generalCategoryOrder = [
     'Directory Paths', // General - must be first
+    'CineSync Configuration', // CineSync - core CineSync settings
     'Media Folders Configuration', // Media Folders - custom folder organization
     'Resolution Folder Mappings Configuration', // Resolution Mappings - quality-based folders
     'TMDb/IMDB Configuration', // TMDB Configuration - movie & TV metadata
@@ -296,7 +309,6 @@ const Settings: React.FC = () => {
     'Plex Integration Configuration', // Plex Integration
     'Database Configuration', // Database
     'Real-Time Monitoring Configuration', // Monitoring
-    'WebDAV Configuration', // WebDAV Server
     'System Configuration', // Advanced
   ];
 
@@ -317,6 +329,19 @@ const Settings: React.FC = () => {
         const sourceDestOrder = ['SOURCE_DIR', 'DESTINATION_DIR'];
         const aIndex = sourceDestOrder.indexOf(a.key);
         const bIndex = sourceDestOrder.indexOf(b.key);
+
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+      }
+
+      // For CineSync Configuration category, prioritize server settings then auth
+      if (category === 'CineSync Configuration') {
+        const cinesyncOrder = ['CINESYNC_IP', 'CINESYNC_API_PORT', 'CINESYNC_UI_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'];
+        const aIndex = cinesyncOrder.indexOf(a.key);
+        const bIndex = cinesyncOrder.indexOf(b.key);
 
         if (aIndex !== -1 && bIndex !== -1) {
           return aIndex - bIndex;
@@ -402,10 +427,10 @@ const Settings: React.FC = () => {
             direction="row"
             alignItems="flex-start"
             justifyContent="space-between"
-            spacing={2}
-            sx={{ mb: { xs: 2, sm: 4 } }}
+            spacing={1}
+            sx={{ mb: { xs: 1, sm: 4 } }}
           >
-            <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, mr: 1 }}>
               <Typography
                 variant="h3"
                 fontWeight="600"
@@ -417,13 +442,6 @@ const Settings: React.FC = () => {
                 }}
               >
                 Settings
-              </Typography>
-              <Typography
-                variant="body1"
-                color="text.secondary"
-                sx={{ fontWeight: 400 }}
-              >
-                Configure your CineSync environment variables
               </Typography>
             </Box>
             <Stack
@@ -483,6 +501,21 @@ const Settings: React.FC = () => {
               )}
             </Stack>
           </Stack>
+
+          {/* Subtitle on its own line */}
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{
+              fontWeight: { xs: 400, sm: 500 },
+              fontSize: { xs: '0.875rem', sm: '1.125rem' },
+              lineHeight: { xs: 1.4, sm: 1.6 },
+              mb: { xs: 2, sm: 3 },
+              letterSpacing: { xs: 'normal', sm: '0.01em' }
+            }}
+          >
+            Configure your CineSync environment variables
+          </Typography>
 
           {/* Configuration Status Alert */}
           {configStatus?.needsConfiguration && (

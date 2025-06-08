@@ -9,6 +9,7 @@ export function ConfigStatusIndicator({}: ConfigStatusIndicatorProps) {
   const { isConnected, lastUpdate, error } = useConfig();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isVerySmall = useMediaQuery('(max-width:400px)');
 
   const getStatusColor = () => {
     if (error) return 'error';
@@ -23,12 +24,11 @@ export function ConfigStatusIndicator({}: ConfigStatusIndicatorProps) {
   };
 
   const getStatusText = () => {
+    if (isVerySmall) return null;
     if (error) return isMobile ? 'Error' : 'Configuration Error';
     if (!isConnected) return 'Offline';
     return isMobile ? 'Live' : 'Live Updates';
   };
-
-
 
   return (
     <Stack direction="row" alignItems="center" spacing={1}>
@@ -67,18 +67,21 @@ export function ConfigStatusIndicator({}: ConfigStatusIndicatorProps) {
           size="medium"
           sx={{
             fontSize: isMobile ? '0.8rem' : '0.875rem',
-            height: isMobile ? 40 : 40,
-            minWidth: isMobile ? 'auto' : 'auto',
+            height: 40,
+            minWidth: isVerySmall ? 40 : 'auto',
+            width: isVerySmall ? 40 : 'auto',
             bgcolor: 'background.paper',
             border: '1px solid',
             borderColor: 'divider',
             '& .MuiChip-label': {
-              px: isMobile ? 1.5 : 2,
+              px: isVerySmall ? 0 : (isMobile ? 1.5 : 2),
               fontWeight: 600,
-              fontSize: isMobile ? '0.8rem' : '0.875rem'
+              fontSize: isMobile ? '0.8rem' : '0.875rem',
+              display: isVerySmall ? 'none' : 'block'
             },
             '& .MuiChip-icon': {
-              ml: isMobile ? 1 : 1.25,
+              ml: isVerySmall ? 0 : (isMobile ? 1 : 1.25),
+              mr: isVerySmall ? 0 : undefined,
               fontSize: isMobile ? '1.1rem' : '1.25rem'
             },
             '&:hover': {

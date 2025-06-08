@@ -332,35 +332,35 @@ def start_webdav_server():
     """Start WebDavHub server if enabled."""
     global background_processes
 
-    if cinesync_webdav():
-        webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
-        if platform.system() == 'Windows':
-            webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
-        else:
-            webdav_script = os.path.join(webdav_dir, 'cinesync')
-        webdav_port = int(os.getenv('CINESYNC_API_PORT'))
+    # Always start CineSync server
+    webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
+    if platform.system() == 'Windows':
+        webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
+    else:
+        webdav_script = os.path.join(webdav_dir, 'cinesync')
+    webdav_port = int(os.getenv('CINESYNC_API_PORT'))
 
-        # Check if the WebDAV server is already running on the specified port
-        if is_port_in_use(webdav_port):
-            log_message(f"WebDavHub server is already running on port {webdav_port}", level="INFO")
-            return
+    # Check if the CineSync server is already running on the specified port
+    if is_port_in_use(webdav_port):
+        log_message(f"CineSync server is already running on port {webdav_port}", level="INFO")
+        return
 
-        if os.path.exists(webdav_script):
-            log_message("Starting WebDavHub server...", level="INFO")
+    if os.path.exists(webdav_script):
+        log_message("Starting CineSync server...", level="INFO")
 
-            try:
-                # Change to the WebDavHub directory and execute the script
-                current_dir = os.getcwd()
-                os.chdir(webdav_dir)
-                webdav_process = subprocess.Popen(["./" + os.path.basename(webdav_script)])
-                background_processes.append(webdav_process)
-                os.chdir(current_dir)
+        try:
+            # Change to the WebDavHub directory and execute the script
+            current_dir = os.getcwd()
+            os.chdir(webdav_dir)
+            webdav_process = subprocess.Popen(["./" + os.path.basename(webdav_script)])
+            background_processes.append(webdav_process)
+            os.chdir(current_dir)
 
-                log_message(f"WebDavHub server started with PID: {webdav_process.pid}", level="INFO")
-            except Exception as e:
-                log_message(f"Failed to start WebDavHub server: {e}", level="ERROR")
-        else:
-            log_message(f"WebDavHub executable not found at: {webdav_script}", level="ERROR")
+            log_message(f"CineSync server started with PID: {webdav_process.pid}", level="INFO")
+        except Exception as e:
+            log_message(f"Failed to start CineSync server: {e}", level="ERROR")
+    else:
+        log_message(f"CineSync executable not found at: {webdav_script}", level="ERROR")
 
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")

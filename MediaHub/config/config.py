@@ -115,9 +115,6 @@ def get_rename_tags():
 def plex_update():
     return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
 
-def cinesync_webdav():
-    return os.getenv('CINESYNC_WEBDAV', 'false').lower() == 'true'
-
 def plex_token():
     token = os.getenv('PLEX_TOKEN', None)
     return token

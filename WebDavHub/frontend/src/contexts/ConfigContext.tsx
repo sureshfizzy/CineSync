@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useConfigUpdates } from '../hooks/useConfigUpdates';
+import RestartRequiredPopup from '../components/RestartRequiredPopup';
+import axios from 'axios';
 
 interface RuntimeConfig {
   tmdbApiKey?: string;
@@ -31,6 +33,7 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
   const [config, setConfig] = useState<RuntimeConfig>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showRestartPopup, setShowRestartPopup] = useState(false);
 
   const refreshConfig = async () => {
     try {
@@ -68,9 +71,7 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
             case 'CINESYNC_IP':
               newConfig.ip = item.value;
               break;
-            case 'CINESYNC_WEBDAV':
-              newConfig.webdavEnabled = item.value?.toLowerCase() === 'true';
-              break;
+
             case 'DESTINATION_DIR':
               newConfig.destinationDir = item.value;
               break;
@@ -105,9 +106,36 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
     triggerConfigStatusRefresh();
   };
 
+  // Handle authentication settings changes via SSE
+  const handleAuthSettingsChange = () => {
+    refreshConfig();
+    triggerConfigStatusRefresh();
+    localStorage.removeItem('cineSyncJWT');
+    window.location.reload();
+  };
+
+  // Handle server restart required via SSE
+  const handleServerRestartRequired = () => {
+    refreshConfig();
+    triggerConfigStatusRefresh();
+    setShowRestartPopup(true);
+  };
+
+  // Handle server restart action
+  const handleRestart = async () => {
+    try {
+      await axios.post('/api/restart');
+    } catch (error) {
+      console.error('Failed to restart server:', error);
+      throw error;
+    }
+  };
+
   // Use the configuration updates hook
   const { isConnected, lastUpdate } = useConfigUpdates({
     onConfigChange: handleConfigChange,
+    onAuthSettingsChange: handleAuthSettingsChange,
+    onServerRestartRequired: handleServerRestartRequired,
     enabled: true
   });
 
@@ -129,6 +157,13 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
   return (
     <ConfigContext.Provider value={contextValue}>
       {children}
+      <RestartRequiredPopup
+        open={showRestartPopup}
+        onClose={() => setShowRestartPopup(false)}
+        onRestart={handleRestart}
+        newApiPort={config.apiPort?.toString()}
+        newUiPort={config.uiPort?.toString()}
+      />
     </ConfigContext.Provider>
   );
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -515,7 +516,7 @@ func statsChanged(a, b Stats) bool {
 }
 
 func HandleStats(w http.ResponseWriter, r *http.Request) {
-	// Note: JWT is only required if WEBDAV_AUTH_ENABLED is true (handled by middleware)
+	// Note: JWT is only required if CINESYNC_AUTH_ENABLED is true (handled by middleware)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -580,11 +581,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	if port == "" {
 		port = "8082"
 	}
-	webdavEnabled := os.Getenv("CINESYNC_WEBDAV")
-	webdavStatus := "Inactive"
-	if webdavEnabled == "true" || webdavEnabled == "1" {
-		webdavStatus = "Active"
-	}
+	webdavStatus := "Active"
 	stats := Stats{
 		TotalFiles:   totalFiles,
 		TotalFolders: totalFolders,
@@ -625,7 +622,7 @@ func HandleAuthEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enabled := true
-	if v := os.Getenv("WEBDAV_AUTH_ENABLED"); v == "false" || v == "0" {
+	if v := os.Getenv("CINESYNC_AUTH_ENABLED"); v == "false" || v == "0" {
 		enabled = false
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1256,4 +1253,41 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// HandleRestart handles server restart requests
+func HandleRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	logger.Info("Server restart requested")
+
+	// Send success response before restarting
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Server restart initiated",
+	})
+
+	// Flush the response to ensure it's sent
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	// Give a moment for the response to be sent
+	go func() {
+		time.Sleep(1 * time.Second)
+		logger.Info("Initiating server restart...")
+
+		// Cross-platform graceful shutdown
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt)
+		c <- os.Interrupt
+
+		time.Sleep(5 * time.Second)
+		logger.Warn("Graceful shutdown timeout, forcing exit")
+		os.Exit(0)
+	}()
 }

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/joho/godotenv"
 	"cinesync/pkg/logger"
@@ -53,18 +52,7 @@ func ReloadEnv() error {
     return nil
 }
 
-// IsWebDAVEnabled checks if WebDAV is enabled in the environment
-func IsWebDAVEnabled() bool {
-	value, exists := os.LookupEnv("CINESYNC_WEBDAV")
-	if !exists {
-		logger.Debug("WEBDAV environment variable not set, defaulting to false")
-		return false
-	}
 
-	enabled := strings.ToLower(value) == "true"
-	logger.Debug("WEBDAV environment variable set to %s", value)
-	return enabled
-}
 
 // GetString returns the environment variable value or a default if not set
 func GetString(key string, defaultValue string) string {
