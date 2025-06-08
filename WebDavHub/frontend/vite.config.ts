@@ -12,11 +12,20 @@ const apiPort = process.env.CINESYNC_API_PORT ? parseInt(process.env.CINESYNC_AP
 const host = process.env.CINESYNC_IP || true;
 const tmdbApiKey = process.env.TMDB_API_KEY;
 
+const getAllowedHosts = (): true | string[] => {
+  const envHosts = process.env.VITE_ALLOWED_HOSTS;
+  if (envHosts) {
+    return envHosts.split(',').map(host => host.trim());
+  }
+  return true;
+};
+
 export default defineConfig({
   plugins: [react()],
   server: {
     host,
     port: uiPort,
+    allowedHosts: getAllowedHosts(),
     proxy: {
       '/api': {
         target: `http://localhost:${apiPort}`,
@@ -28,6 +37,7 @@ export default defineConfig({
   preview: {
     host,
     port: uiPort,
+    allowedHosts: getAllowedHosts(),
     proxy: {
       '/api': {
         target: `http://localhost:${apiPort}`,
