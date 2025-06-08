@@ -15,6 +15,7 @@ import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
 import FileOperations from './pages/FileOperations';
 import { TmdbProvider } from './contexts/TmdbContext';
+import { ConfigProvider } from './contexts/ConfigContext';
 
 // Loading component
 function LoadingScreen() {
@@ -328,13 +329,15 @@ function App() {
         html: { height: '100%', backgroundColor: theme.palette.background.default },
         body: { minHeight: '100vh', height: '100%', backgroundColor: theme.palette.background.default }
       }} />
-      <AuthProvider>
-        <TmdbProvider>
-          <Router>
-            <AppContent toggleTheme={toggleTheme} mode={mode} />
-          </Router>
-        </TmdbProvider>
-      </AuthProvider>
+      <ConfigProvider>
+        <AuthProvider>
+          <TmdbProvider>
+            <Router>
+              <AppContent toggleTheme={toggleTheme} mode={mode} />
+            </Router>
+          </TmdbProvider>
+        </AuthProvider>
+      </ConfigProvider>
     </ThemeProvider>
   );
 }

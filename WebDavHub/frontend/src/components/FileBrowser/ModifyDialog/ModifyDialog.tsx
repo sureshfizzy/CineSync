@@ -12,7 +12,7 @@ import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
 import { searchTmdb, getTmdbPosterUrlDirect } from '../../api/tmdbApi';
 import { processStructuredMessage } from '../../../utils/symlinkUpdates';
-import axios from 'axios';
+
 
 // Import the modular components
 import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';

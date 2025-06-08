@@ -85,6 +85,7 @@ export default function FileBrowser() {
     needsConfiguration: boolean;
   } | null>(null);
 
+
   // Dialog states
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsData, setDetailsData] = useState<FileItem | null>(null);
@@ -136,7 +137,20 @@ export default function FileBrowser() {
     };
 
     checkConfigStatus();
+
+    // Listen for config status refresh events
+    const handleConfigStatusRefresh = () => {
+      checkConfigStatus();
+    };
+
+    window.addEventListener('config-status-refresh', handleConfigStatusRefresh);
+
+    return () => {
+      window.removeEventListener('config-status-refresh', handleConfigStatusRefresh);
+    };
   }, []);
+
+
 
   const fetchFiles = async (path: string, pageNum: number = page) => {
     setLoading(true);
@@ -333,6 +347,8 @@ export default function FileBrowser() {
       </Box>
     );
   }
+
+
 
   // Show configuration placeholder if needed
   if (configStatus?.needsConfiguration) {

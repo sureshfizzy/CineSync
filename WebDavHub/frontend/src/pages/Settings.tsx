@@ -7,6 +7,7 @@ import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
 import MediaHubService from '../components/Settings/MediaHubService';
 import JobsTable from '../components/Jobs/JobsTable';
+import ConfigStatusIndicator from '../components/Settings/ConfigStatusIndicator';
 
 interface ConfigValue {
   key: string;
@@ -55,6 +56,18 @@ const Settings: React.FC = () => {
   useEffect(() => {
     fetchConfig();
     checkConfigStatus();
+
+    // Listen for config status refresh events
+    const handleConfigStatusRefresh = () => {
+      checkConfigStatus();
+      fetchConfig();
+    };
+
+    window.addEventListener('config-status-refresh', handleConfigStatusRefresh);
+
+    return () => {
+      window.removeEventListener('config-status-refresh', handleConfigStatusRefresh);
+    };
   }, []);
 
   const checkConfigStatus = async () => {
@@ -218,6 +231,16 @@ const Settings: React.FC = () => {
 
       // Refresh configuration from server to ensure we have the latest data
       await fetchConfig();
+
+      // Small delay to ensure backend has processed the changes
+      setTimeout(async () => {
+        await checkConfigStatus();
+
+        // Trigger config status refresh event for other components
+        window.dispatchEvent(new CustomEvent('config-status-refresh', {
+          detail: { timestamp: Date.now() }
+        }));
+      }, 500);
 
       setPendingChanges({});
       setSuccess('Configuration saved successfully');
@@ -408,10 +431,11 @@ const Settings: React.FC = () => {
               spacing={1}
               sx={{
                 flexShrink: 0,
-                alignItems: 'flex-start',
-                pt: { xs: 0.5, sm: 0 }
+                alignItems: 'center',
+                pt: { xs: 0, sm: 0 }
               }}
             >
+              <ConfigStatusIndicator />
               <IconButton
                 onClick={fetchConfig}
                 disabled={loading || saving}

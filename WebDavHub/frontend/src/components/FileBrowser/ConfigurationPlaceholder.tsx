@@ -19,7 +19,7 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
     navigate('/settings');
   };
 
-  const isPlaceholder = destinationDir === '/path/to/destination' || 
+  const isPlaceholder = destinationDir === '/path/to/destination' ||
                        destinationDir === '\\path\\to\\destination' ||
                        !destinationDir;
 
@@ -161,13 +161,13 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
           </Typography>
           <Stack spacing={1} sx={{ textAlign: 'left' }}>
             <Typography variant="body2" color="text.secondary">
-              • Set <code>DESTINATION_DIR</code> to a valid directory path in your .env file
+              • Set <code>DESTINATION_DIR</code> to a valid directory path in Settings
             </Typography>
             <Typography variant="body2" color="text.secondary">
               • Ensure the directory exists and is accessible
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              • Restart the server after making changes
+              • Changes take effect immediately without restart
             </Typography>
           </Stack>
         </Box>

@@ -1,0 +1,149 @@
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useConfigUpdates } from '../hooks/useConfigUpdates';
+
+interface RuntimeConfig {
+  tmdbApiKey?: string;
+  apiPort?: number;
+  uiPort?: number;
+  ip?: string;
+  webdavEnabled?: boolean;
+  destinationDir?: string;
+  sourceDir?: string;
+}
+
+interface ConfigContextType {
+  config: RuntimeConfig;
+  isLoading: boolean;
+  error: string | null;
+  refreshConfig: () => Promise<void>;
+  isConnected: boolean;
+  lastUpdate: number | null;
+  triggerConfigStatusRefresh: () => void;
+}
+
+const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
+
+interface ConfigProviderProps {
+  children: ReactNode;
+}
+
+export function ConfigProvider({ children }: ConfigProviderProps) {
+  const [config, setConfig] = useState<RuntimeConfig>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshConfig = async () => {
+    try {
+      setError(null);
+
+      // Fetch current configuration from the API
+      const response = await fetch('/api/config', {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch configuration');
+      }
+
+      const data = await response.json();
+      
+      // Extract relevant configuration values
+      const newConfig: RuntimeConfig = {};
+      
+      if (data.config && Array.isArray(data.config)) {
+        data.config.forEach((item: any) => {
+          switch (item.key) {
+            case 'TMDB_API_KEY':
+              newConfig.tmdbApiKey = item.value;
+              break;
+            case 'CINESYNC_API_PORT':
+              newConfig.apiPort = item.value ? parseInt(item.value, 10) : undefined;
+              break;
+            case 'CINESYNC_UI_PORT':
+              newConfig.uiPort = item.value ? parseInt(item.value, 10) : undefined;
+              break;
+            case 'CINESYNC_IP':
+              newConfig.ip = item.value;
+              break;
+            case 'CINESYNC_WEBDAV':
+              newConfig.webdavEnabled = item.value?.toLowerCase() === 'true';
+              break;
+            case 'DESTINATION_DIR':
+              newConfig.destinationDir = item.value;
+              break;
+            case 'SOURCE_DIR':
+              newConfig.sourceDir = item.value;
+              break;
+          }
+        });
+      }
+
+      setConfig(newConfig);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration';
+      setError(errorMessage);
+      console.error('Failed to refresh configuration:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to trigger config status refresh in other components
+  const triggerConfigStatusRefresh = () => {
+    window.dispatchEvent(new CustomEvent('config-status-refresh', {
+      detail: { timestamp: Date.now() }
+    }));
+  };
+
+  // Handle configuration changes via SSE
+  const handleConfigChange = () => {
+    refreshConfig();
+    triggerConfigStatusRefresh();
+  };
+
+  // Use the configuration updates hook
+  const { isConnected, lastUpdate } = useConfigUpdates({
+    onConfigChange: handleConfigChange,
+    enabled: true
+  });
+
+  // Initial configuration load
+  useEffect(() => {
+    refreshConfig();
+  }, []);
+
+  const contextValue: ConfigContextType = {
+    config,
+    isLoading,
+    error,
+    refreshConfig,
+    isConnected,
+    lastUpdate,
+    triggerConfigStatusRefresh
+  };
+
+  return (
+    <ConfigContext.Provider value={contextValue}>
+      {children}
+    </ConfigContext.Provider>
+  );
+}
+
+export function useConfig() {
+  const context = useContext(ConfigContext);
+  if (context === undefined) {
+    throw new Error('useConfig must be used within a ConfigProvider');
+  }
+  return context;
+}
+
+// Hook for getting specific configuration values with fallbacks
+export function useConfigValue<T>(key: keyof RuntimeConfig, fallback: T): T {
+  const { config } = useConfig();
+  const value = config[key];
+  return value !== undefined ? (value as T) : fallback;
+}

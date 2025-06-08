@@ -39,6 +39,9 @@ func isAuthEndpoint(path string) bool {
 		"/api/auth/check",
 		"/api/download",
 		"/api/config-status",
+		"/api/config",
+		"/api/config/update",
+		"/api/config/events",
 	}
 	for _, endpoint := range authEndpoints {
 		if path == endpoint {

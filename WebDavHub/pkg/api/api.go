@@ -3,6 +3,7 @@ package api
 import (
 	"cinesync/pkg/logger"
 	"cinesync/pkg/db"
+	"cinesync/pkg/env"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -49,6 +50,23 @@ func SetRootDir(dir string) {
 	if err := db.InitTmdbCacheTable(); err != nil {
 		logger.Warn("Failed to initialize TMDB cache table: %v", err)
 	}
+}
+
+// UpdateRootDir updates the root directory when configuration changes
+func UpdateRootDir() {
+	newDestDir := env.GetString("DESTINATION_DIR", ".")
+
+	// Check if the directory exists
+	if _, err := os.Stat(newDestDir); os.IsNotExist(err) {
+		logger.Warn("Directory %s does not exist. Please create it manually before using it as DESTINATION_DIR", newDestDir)
+		return
+	}
+
+	// Update the root directory only if it exists
+	oldRootDir := rootDir
+	SetRootDir(newDestDir)
+
+	logger.Info("Root directory updated from %s to %s", oldRootDir, newDestDir)
 }
 
 // InitializeImageCache initializes the image cache service with project directory
@@ -161,14 +179,31 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	originalDestDir := os.Getenv("DESTINATION_DIR")
+	// Get the current destination directory from environment (which may have been reloaded)
+	currentDestDir := env.GetString("DESTINATION_DIR", ".")
+
+	// Check if the current destination directory is a placeholder or invalid
+	currentIsPlaceholder := currentDestDir == "/path/to/destination" ||
+		currentDestDir == "\\path\\to\\destination" ||
+		currentDestDir == "." ||
+		currentDestDir == ""
+
+	// Also check if the directory actually exists
+	if !currentIsPlaceholder {
+		if _, err := os.Stat(currentDestDir); os.IsNotExist(err) {
+			logger.Warn("DESTINATION_DIR %s does not exist", currentDestDir)
+			currentIsPlaceholder = true
+		}
+	}
 
 	response := map[string]interface{}{
-		"isPlaceholder":        isPlaceholderConfig,
-		"destinationDir":       originalDestDir,
+		"isPlaceholder":        currentIsPlaceholder,
+		"destinationDir":       currentDestDir,
 		"effectiveRootDir":     rootDir,
-		"needsConfiguration":   isPlaceholderConfig,
+		"needsConfiguration":   currentIsPlaceholder,
 	}
+
+	logger.Debug("Config status: destDir=%s, isPlaceholder=%v, effectiveRoot=%s", currentDestDir, currentIsPlaceholder, rootDir)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)

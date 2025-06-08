@@ -11,9 +11,24 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"cinesync/pkg/logger"
 )
+
+// SSE client management for configuration change notifications
+var (
+	configClients = make(map[chan string]bool)
+	configMutex   sync.RWMutex
+	// Callback function to update root directory when DESTINATION_DIR changes
+	updateRootDirCallback func()
+)
+
+// SetUpdateRootDirCallback sets the callback function for updating root directory
+func SetUpdateRootDirCallback(callback func()) {
+	updateRootDirCallback = callback
+}
 
 // ConfigValue represents a configuration value with metadata
 type ConfigValue struct {
@@ -213,6 +228,7 @@ func writeEnvFile(envVars map[string]string) error {
 	var lines []string
 	scanner := bufio.NewScanner(originalFile)
 	updatedKeys := make(map[string]bool)
+	originalQuoting := make(map[string]bool)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -229,10 +245,25 @@ func writeEnvFile(envVars map[string]string) error {
 			parts := strings.SplitN(trimmedLine, "=", 2)
 			if len(parts) == 2 {
 				key := strings.TrimSpace(parts[0])
+				originalValue := strings.TrimSpace(parts[1])
+
+				// Check if the original value was quoted
+				wasQuoted := (strings.HasPrefix(originalValue, "\"") && strings.HasSuffix(originalValue, "\"")) ||
+							(strings.HasPrefix(originalValue, "'") && strings.HasSuffix(originalValue, "'"))
+				originalQuoting[key] = wasQuoted
+
 				if newValue, exists := envVars[key]; exists {
-					// Quote the value if it contains spaces or special characters
+					// Determine how to quote the new value
 					quotedValue := newValue
-					if strings.Contains(newValue, " ") || strings.Contains(newValue, "#") {
+					shouldQuote := wasQuoted ||
+								  strings.Contains(newValue, " ") ||
+								  strings.Contains(newValue, "#") ||
+								  strings.Contains(newValue, "\\") ||
+								  strings.Contains(newValue, "{") ||
+								  strings.Contains(newValue, "}") ||
+								  newValue == ""
+
+					if shouldQuote {
 						quotedValue = fmt.Sprintf("\"%s\"", newValue)
 					}
 					lines = append(lines, fmt.Sprintf("%s=%s", key, quotedValue))
@@ -257,7 +288,14 @@ func writeEnvFile(envVars map[string]string) error {
 	for key, value := range envVars {
 		if !updatedKeys[key] {
 			quotedValue := value
-			if strings.Contains(value, " ") || strings.Contains(value, "#") {
+			shouldQuote := strings.Contains(value, " ") ||
+						  strings.Contains(value, "#") ||
+						  strings.Contains(value, "\\") ||
+						  strings.Contains(value, "{") ||
+						  strings.Contains(value, "}") ||
+						  value == ""
+
+			if shouldQuote {
 				quotedValue = fmt.Sprintf("\"%s\"", value)
 			}
 			lines = append(lines, fmt.Sprintf("%s=%s", key, quotedValue))
@@ -408,7 +446,6 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		} else {
 			envVars[update.Key] = update.Value
 		}
-		logger.Info("Configuration updated successfully")
 	}
 
 	// Write back to file
@@ -418,6 +455,85 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set environment variables directly instead of reloading from file
+	// This avoids issues with godotenv parsing backslashes as escape characters
+	for key, value := range envVars {
+		os.Setenv(key, value)
+	}
+
+
+
+	// Check if DESTINATION_DIR was updated and update the root directory
+	for _, update := range request.Updates {
+		if update.Key == "DESTINATION_DIR" && update.Value != "" {
+			logger.Info("DESTINATION_DIR updated, refreshing root directory")
+			if updateRootDirCallback != nil {
+				updateRootDirCallback()
+			}
+			break
+		}
+	}
+
+	// Notify all connected clients about configuration changes
+	notifyConfigChange()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Configuration updated successfully"})
+}
+
+// notifyConfigChange sends configuration change notifications to all connected SSE clients
+func notifyConfigChange() {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+
+	message := fmt.Sprintf("data: %s\n\n", `{"type":"config_changed","timestamp":`+fmt.Sprintf("%d", time.Now().Unix())+`}`)
+
+	for client := range configClients {
+		select {
+		case client <- message:
+		default:
+		}
+	}
+}
+
+// HandleConfigEvents handles Server-Sent Events for configuration changes
+func HandleConfigEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+
+	// Create a channel for this client
+	clientChan := make(chan string, 10)
+
+	// Register the client
+	configMutex.Lock()
+	configClients[clientChan] = true
+	configMutex.Unlock()
+
+	// Handle client disconnect
+	defer func() {
+		configMutex.Lock()
+		delete(configClients, clientChan)
+		configMutex.Unlock()
+		close(clientChan)
+	}()
+
+	// Keep connection alive and send messages
+	for {
+		select {
+		case message := <-clientChan:
+			fmt.Fprint(w, message)
+			w.(http.Flusher).Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }

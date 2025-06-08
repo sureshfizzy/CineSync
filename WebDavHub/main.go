@@ -89,6 +89,9 @@ func main() {
 	// Set the root directory for file operations
 	api.SetRootDir(effectiveRootDir)
 
+	// Set up callback for updating root directory when configuration changes
+	config.SetUpdateRootDirCallback(api.UpdateRootDir)
+
 	projectDir := ".."
 	api.InitializeImageCache(projectDir)
 
@@ -124,6 +127,7 @@ func main() {
 	apiMux.HandleFunc("/api/dashboard/events", api.HandleDashboardEvents)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
+	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
 
 	// MediaHub service endpoints
 	apiMux.HandleFunc("/api/mediahub/status", api.HandleMediaHubStatus)

@@ -23,7 +23,7 @@ import {
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import RecentlyAddedMedia from './RecentlyAddedMedia';
-import ConfigurationPlaceholder from '../FileBrowser/ConfigurationPlaceholder';
+import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 
 const MotionCard = motion(Card);
 
@@ -62,12 +62,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [configStatus, setConfigStatus] = useState<{
-    isPlaceholder: boolean;
-    destinationDir: string;
-    effectiveRootDir: string;
-    needsConfiguration: boolean;
-  } | null>(null);
+
   const theme = useTheme();
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
@@ -89,17 +84,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetchStats();
 
-    // Check configuration status
-    const checkConfigStatus = async () => {
-      try {
-        const response = await axios.get('/api/config-status');
-        setConfigStatus(response.data);
-      } catch (err) {
-        console.error('Failed to check config status:', err);
-      }
-    };
 
-    checkConfigStatus();
 
     // Set up Server-Sent Events for real-time updates
     const token = localStorage.getItem('cineSyncJWT');
@@ -150,16 +135,6 @@ export default function Dashboard() {
           Loading dashboard data...
         </Typography>
       </Box>
-    );
-  }
-
-  // Show configuration placeholder if needed
-  if (configStatus?.needsConfiguration) {
-    return (
-      <ConfigurationPlaceholder
-        destinationDir={configStatus.destinationDir}
-        effectiveRootDir={configStatus.effectiveRootDir}
-      />
     );
   }
 
@@ -221,7 +196,8 @@ export default function Dashboard() {
   ];
 
   return (
-    <Box sx={{ px: { xs: 0.8, sm: 1, md: 0 }, maxWidth: 1400, mx: 'auto' }}>
+    <ConfigurationWrapper>
+      <Box sx={{ px: { xs: 0.8, sm: 1, md: 0 }, maxWidth: 1400, mx: 'auto' }}>
       <Box sx={{
         display: 'flex',
         alignItems: 'center',
@@ -368,5 +344,6 @@ export default function Dashboard() {
         <RecentlyAddedMedia />
       </Box>
     </Box>
+    </ConfigurationWrapper>
   );
 }

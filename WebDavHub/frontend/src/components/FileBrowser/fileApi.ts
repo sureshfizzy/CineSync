@@ -36,7 +36,7 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
     page: parseInt(response.headers['x-page'] || '1', 10),
     limit: parseInt(response.headers['x-limit'] || '100', 10),
     totalPages: parseInt(response.headers['x-total-pages'] || '1', 10),
-    headers: response.headers
+    headers: response.headers as Record<string, string>
   };
 };
 

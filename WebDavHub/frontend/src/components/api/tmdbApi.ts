@@ -196,7 +196,11 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 export function getTmdbPosterUrl(posterPath: string | null, size: string = 'w342'): string | null {
   if (!posterPath) return null;
 
-  return `/api/image-cache?poster=${encodeURIComponent(posterPath)}&size=${size}`;
+  // Include JWT token as query parameter for image requests
+  const token = localStorage.getItem('cineSyncJWT');
+  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+
+  return `/api/image-cache?poster=${encodeURIComponent(posterPath)}&size=${size}${tokenParam}`;
 }
 
 // Direct TMDB URL function (fallback)

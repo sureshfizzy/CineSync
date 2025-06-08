@@ -2,9 +2,9 @@ package env
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-        "path/filepath"
 
 	"github.com/joho/godotenv"
 	"cinesync/pkg/logger"
@@ -27,6 +27,30 @@ func LoadEnv() {
     } else {
         logger.Debug("Environment variables loaded from %s", envPath)
     }
+}
+
+
+
+// ReloadEnv reloads environment variables from .env file at runtime
+func ReloadEnv() error {
+    cwd, err := os.Getwd()
+    if err != nil {
+        logger.Warn("Could not determine current working directory.")
+        return err
+    }
+
+    parentDir := filepath.Dir(cwd)
+    envPath := filepath.Join(parentDir, ".env")
+
+    // Load new environment variables - use Overload to override existing values
+    err = godotenv.Overload(envPath)
+    if err != nil {
+        logger.Warn("Could not reload .env from %s", envPath)
+        return err
+    }
+
+    logger.Info("Environment variables reloaded successfully from %s", envPath)
+    return nil
 }
 
 // IsWebDAVEnabled checks if WebDAV is enabled in the environment
@@ -80,4 +104,9 @@ func IsBool(key string, defaultValue bool) bool {
 
 	enabled := value == "1" || value == "true" || value == "yes" || value == "y"
 	return enabled
+}
+
+// SetEnvVar sets an environment variable
+func SetEnvVar(key, value string) {
+	os.Setenv(key, value)
 }
