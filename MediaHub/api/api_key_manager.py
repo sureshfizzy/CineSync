@@ -16,7 +16,8 @@ def get_api_key():
     if api_key is not None:
         return api_key
 
-    api_key = os.getenv('TMDB_API_KEY')
+    from MediaHub.config.config import get_tmdb_api_key
+    api_key = get_tmdb_api_key()
 
     if not is_valid_api_key(api_key):
         log_message("TMDB API key is invalid. Exiting script.", level="ERROR")

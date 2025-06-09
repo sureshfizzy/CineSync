@@ -10,7 +10,29 @@ dotenv.config({ path: envPath });
 const uiPort = process.env.CINESYNC_UI_PORT ? parseInt(process.env.CINESYNC_UI_PORT, 10) : 5173;
 const apiPort = process.env.CINESYNC_API_PORT ? parseInt(process.env.CINESYNC_API_PORT, 10) : 8082;
 const host = process.env.CINESYNC_IP || true;
-const tmdbApiKey = process.env.TMDB_API_KEY;
+
+// TMDB API key with fallback mechanism
+function getTmdbApiKey(): string {
+  const envKey = (process.env.TMDB_API_KEY || '').trim();
+
+  const placeholderValues = [
+    '',
+    'your_tmdb_api_key_here',
+    'your-tmdb-api-key',
+    'placeholder',
+    'none',
+    'null'
+  ];
+
+  if (!envKey || placeholderValues.includes(envKey.toLowerCase())) {
+    console.log('TMDB_API_KEY is missing or placeholder, using fallback key');
+    return 'a4f28c50ae81b7529a05b61910d64398';
+  }
+
+  return envKey;
+}
+
+const tmdbApiKey = getTmdbApiKey();
 
 const getAllowedHosts = (): true | string[] => {
   const envHosts = process.env.VITE_ALLOWED_HOSTS;

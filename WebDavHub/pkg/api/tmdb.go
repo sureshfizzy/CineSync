@@ -15,6 +15,28 @@ import (
 	"cinesync/pkg/db"
 )
 
+// getTmdbApiKey returns the TMDB API key with fallback mechanism
+func getTmdbApiKey() string {
+	envKey := strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
+
+	placeholderValues := []string{
+		"",
+		"your_tmdb_api_key_here",
+		"your-tmdb-api-key",
+		"placeholder",
+		"none",
+		"null",
+	}
+
+	for _, placeholder := range placeholderValues {
+		if strings.ToLower(envKey) == placeholder {
+			return "a4f28c50ae81b7529a05b61910d64398"
+		}
+	}
+
+	return envKey
+}
+
 var tmdbRateLimit = 35
 var tmdbRateWindow = 10 * time.Second
 var tmdbRateMap = make(map[string][]time.Time)
@@ -129,7 +151,7 @@ func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	waitForRateLimit(ip)
 
-	tmdbApiKey := os.Getenv("TMDB_API_KEY")
+	tmdbApiKey := getTmdbApiKey()
 	if tmdbApiKey == "" {
 		logger.Warn("TMDB_API_KEY not set in environment")
 		http.Error(w, "TMDB API key not configured", http.StatusInternalServerError)
@@ -188,7 +210,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	}
 	waitForRateLimit(ip)
 
-	tmdbApiKey := os.Getenv("TMDB_API_KEY")
+	tmdbApiKey := getTmdbApiKey()
 	if tmdbApiKey == "" {
 		logger.Warn("TMDB_API_KEY not set in environment")
 		http.Error(w, "TMDB API key not configured", http.StatusInternalServerError)

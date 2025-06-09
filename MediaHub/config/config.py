@@ -4,7 +4,6 @@ import re
 import requests
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.api.api_key_manager import get_api_key
 
 api_key = None
 api_warning_logged = False
@@ -262,3 +261,26 @@ def get_cinesync_ip():
 def get_cinesync_api_port():
     """Get CineSync API port from environment variable"""
     return os.getenv('CINESYNC_API_PORT', '8082')
+
+def get_tmdb_api_key():
+    """
+    Get TMDB API key with fallback mechanism.
+    First tries to get from environment variable, then falls back to default key
+    if the environment key is missing, placeholder, or invalid.
+    """
+    env_key = os.getenv('TMDB_API_KEY', '').strip()
+
+    # Check if the environment key is missing, empty, or a placeholder
+    placeholder_values = [
+        '',
+        'your_tmdb_api_key_here',
+        'your-tmdb-api-key',
+        'placeholder',
+        'none',
+        'null'
+    ]
+
+    if not env_key or env_key.lower() in placeholder_values:
+        return 'a4f28c50ae81b7529a05b61910d64398'
+
+    return env_key

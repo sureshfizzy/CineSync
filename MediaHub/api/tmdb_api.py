@@ -8,7 +8,7 @@ import unicodedata
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query, sanitize_windows_filename
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
