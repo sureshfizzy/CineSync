@@ -189,7 +189,13 @@ func getFileOperationsFromMediaHub() ([]FileOperation, error) {
 			}
 		} else if op.Reason != "" && op.Reason != "NULL" {
 			reasonLower := strings.ToLower(op.Reason)
-			if strings.Contains(reasonLower, "error") || strings.Contains(reasonLower, "exception") || strings.Contains(reasonLower, "failed") {
+			if strings.Contains(reasonLower, "skipped") ||
+			   strings.Contains(reasonLower, "extra") ||
+			   strings.Contains(reasonLower, "special content") ||
+			   strings.Contains(reasonLower, "unsupported file type") ||
+			   strings.Contains(reasonLower, "adult content") {
+				op.Status = "skipped"
+			} else if strings.Contains(reasonLower, "error") || strings.Contains(reasonLower, "exception") || strings.Contains(reasonLower, "failed") {
 				op.Status = "error"
 				op.Error = op.Reason
 			} else {

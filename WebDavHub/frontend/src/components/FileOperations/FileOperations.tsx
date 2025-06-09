@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
@@ -12,7 +12,7 @@ interface FileOperation {
   filePath: string;
   destinationPath?: string;
   fileName: string;
-  status: 'created' | 'failed' | 'error' | 'deleted';
+  status: 'created' | 'failed' | 'error' | 'deleted' | 'skipped';
   timestamp: string;
   reason?: string;
   error?: string;
@@ -140,6 +140,8 @@ function FileOperations() {
         return theme.palette.error.main;
       case 'deleted':
         return theme.palette.info.main;
+      case 'skipped':
+        return theme.palette.secondary.main;
       default:
         return theme.palette.text.secondary;
     }
@@ -155,6 +157,8 @@ function FileOperations() {
         return <ErrorIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       case 'deleted':
         return <DeleteIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
+      case 'skipped':
+        return <SkipIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       default:
         return <CheckCircle sx={{ fontSize: 16, color: getStatusColor(status) }} />;
     }
@@ -167,6 +171,7 @@ function FileOperations() {
   const createdFiles = filterOperations('created');
   const failedFiles = filterOperations('failed');
   const errorFiles = filterOperations('error');
+  const skippedFiles = filterOperations('skipped');
   const deletedFiles = filterOperations('deleted');
 
   const formatTimestamp = (timestamp: string) => {
@@ -614,6 +619,27 @@ function FileOperations() {
           />
           <Tab
             label={
+              <Badge badgeContent={skippedFiles.length} color="secondary" max={999}>
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: { xs: 0.5, sm: 1 },
+                  flexDirection: { xs: 'column', sm: 'row' }
+                }}>
+                  <SkipIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
+                  <Typography variant="caption" sx={{
+                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' }
+                  }}>
+                    {isSmallMobile ? 'Skipped' : 'Skipped Files'}
+                  </Typography>
+                </Box>
+              </Badge>
+            }
+            {...a11yProps(3)}
+          />
+          <Tab
+            label={
               <Badge badgeContent={deletedFiles.length} color="info" max={999}>
                 <Box sx={{
                   display: 'flex',
@@ -631,7 +657,7 @@ function FileOperations() {
                 </Box>
               </Badge>
             }
-            {...a11yProps(3)}
+            {...a11yProps(4)}
           />
         </Tabs>
       </Box>
@@ -650,6 +676,10 @@ function FileOperations() {
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
+        {renderFileTable(skippedFiles, 'No skipped files')}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={4}>
         {renderFileTable(deletedFiles, 'No deleted files')}
       </TabPanel>
 
