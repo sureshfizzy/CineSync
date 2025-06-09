@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import axios from 'axios';
+import { getGlobalSSEInstanceSafe } from '../hooks/useCentralizedSSE';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -17,6 +18,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState(true);
   const [user, setUser] = useState<{ username: string } | null>(null);
+
+  // Function to trigger SSE reconnection when auth state changes
+  const triggerSSEReconnection = () => {
+    const sseInstance = getGlobalSSEInstanceSafe();
+    if (sseInstance) {
+      console.log('Triggering SSE reconnection due to auth state change');
+      sseInstance.reconnect();
+    }
+  };
 
   // Configure axios defaults and interceptors
   useEffect(() => {
@@ -44,11 +54,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           config.headers['Authorization'] = `Bearer ${token}`;
         } else {
           const authDisabledEndpoints = [
+            '/api/auth/enabled',
+            '/api/auth/test',
+            '/api/auth/login',
+            '/api/auth/check',
+            '/api/download',
+            '/api/config-status',
+            '/api/config',
+            '/api/config/update',
+            '/api/config/events',
             '/api/mediahub/message',
+            '/api/mediahub/events',
             '/api/file-operations',
-            '/api/database/',
-            '/api/stats',
-            '/api/config'
+            '/api/file-operations/events',
+            '/api/dashboard/events',
+            '/api/database/stats',
+            '/api/database/search',
+            '/api/database/export',
+            '/api/stats'
           ];
 
           const isAuthOptional = authDisabledEndpoints.some(endpoint =>
@@ -70,11 +93,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error.response && error.response.status === 401) {
           // Check if this is an endpoint where auth might be optional
           const authOptionalEndpoints = [
+            '/api/auth/enabled',
+            '/api/auth/test',
+            '/api/auth/login',
+            '/api/auth/check',
+            '/api/download',
+            '/api/config-status',
+            '/api/config',
+            '/api/config/update',
+            '/api/config/events',
             '/api/mediahub/message',
+            '/api/mediahub/events',
             '/api/file-operations',
-            '/api/database/',
-            '/api/stats',
-            '/api/config'
+            '/api/file-operations/events',
+            '/api/dashboard/events',
+            '/api/database/stats',
+            '/api/database/search',
+            '/api/database/export',
+            '/api/stats'
           ];
 
           const isAuthOptional = authOptionalEndpoints.some(endpoint =>
@@ -85,6 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('cineSyncJWT');
             setIsAuthenticated(false);
             setUser(null);
+            // Trigger SSE reconnection when token becomes invalid
+            triggerSSEReconnection();
           }
         }
         return Promise.reject(error);
@@ -120,10 +158,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           setUser(meRes.data);
           setIsAuthenticated(true);
+          // Trigger SSE reconnection with existing token
+          triggerSSEReconnection();
         } catch {
           setIsAuthenticated(false);
           setUser(null);
           localStorage.removeItem('cineSyncJWT');
+          // Trigger SSE reconnection without token
+          triggerSSEReconnection();
         }
       } else {
         setIsAuthenticated(false);
@@ -146,6 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         setUser(meRes.data);
         setIsAuthenticated(true);
+        // Trigger SSE reconnection with new token
+        triggerSSEReconnection();
       } else {
         throw new Error('Login failed');
       }
@@ -164,6 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('cineSyncJWT');
     setIsAuthenticated(false);
     setUser(null);
+    // Trigger SSE reconnection without token
+    triggerSSEReconnection();
   };
 
   return (

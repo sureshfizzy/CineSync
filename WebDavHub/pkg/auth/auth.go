@@ -42,6 +42,15 @@ func isAuthEndpoint(path string) bool {
 		"/api/config",
 		"/api/config/update",
 		"/api/config/events",
+		"/api/mediahub/message",
+		"/api/mediahub/events",
+		"/api/file-operations",
+		"/api/file-operations/events",
+		"/api/dashboard/events",
+		"/api/database/stats",
+		"/api/database/search",
+		"/api/database/export",
+		"/api/stats",
 	}
 	for _, endpoint := range authEndpoints {
 		if path == endpoint {

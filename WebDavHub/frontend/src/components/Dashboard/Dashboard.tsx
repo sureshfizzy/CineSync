@@ -24,6 +24,7 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import RecentlyAddedMedia from './RecentlyAddedMedia';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
+import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
 const MotionCard = motion(Card);
 
@@ -83,36 +84,19 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-
-
-
-    // Set up Server-Sent Events for real-time updates
-    const token = localStorage.getItem('cineSyncJWT');
-    const eventSourceUrl = token
-      ? `/api/dashboard/events?token=${encodeURIComponent(token)}`
-      : '/api/dashboard/events';
-    const eventSource = new EventSource(eventSourceUrl);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'stats_changed') {
-          fetchStats(false);
-        }
-      } catch (err) {
-        console.warn('Failed to parse SSE message:', err);
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      console.warn('SSE connection error:', error);
-    };
-
-    // Cleanup on unmount
-    return () => {
-      eventSource.close();
-    };
   }, [fetchStats]);
+
+  // Listen for dashboard stats changes through centralized SSE
+  useSSEEventListener(
+    ['stats_changed'],
+    () => {
+      fetchStats(false);
+    },
+    {
+      source: 'dashboard',
+      dependencies: [fetchStats]
+    }
+  );
 
   const handleRefresh = () => {
     fetchStats(true);
@@ -340,9 +324,11 @@ export default function Dashboard() {
       </Grid>
 
       {/* Recently Added Media Section */}
-      <Box sx={{ mt: { xs: 2, sm: 3 } }}>
-        <RecentlyAddedMedia />
-      </Box>
+      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: { xs: 1, sm: 2 } }}>
+        <Grid item xs={12}>
+          <RecentlyAddedMedia />
+        </Grid>
+      </Grid>
     </Box>
     </ConfigurationWrapper>
   );

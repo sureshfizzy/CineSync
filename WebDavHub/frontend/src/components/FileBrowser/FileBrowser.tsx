@@ -22,6 +22,7 @@ import { getFileIcon, joinPaths, formatDate } from './fileUtils';
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
+import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
@@ -210,7 +211,14 @@ export default function FileBrowser() {
     fetchFiles(currentPath);
   }, [currentPath]);
 
-  // Listen for page refresh events from symlink cleanup
+  // Listen for real-time symlink creation events from MediaHub
+  useSymlinkCreatedListener((data) => {
+    console.log('Symlink created, refreshing file browser:', data);
+    // Refresh the current directory when a new symlink is created
+    fetchFiles(currentPath);
+  }, [currentPath]);
+
+  // Listen for page refresh events from symlink cleanup (legacy support)
   useEffect(() => {
     const handlePageRefresh = () => {
       // Refresh the current directory

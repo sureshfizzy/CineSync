@@ -8,6 +8,7 @@ import { MediaDetailsData } from '../types/MediaTypes';
 import axios from 'axios';
 import CircularProgress from '@mui/material/CircularProgress';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSymlinkCreatedListener } from '../hooks/useMediaHubUpdates';
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -157,6 +158,20 @@ export default function MediaDetails() {
       window.removeEventListener('symlink-folder-update', handleCustomEvent as EventListener);
     };
   }, [folderName, handleFolderNameChange]);
+
+  // Listen for real-time symlink creation events from MediaHub
+  useSymlinkCreatedListener((data) => {
+    const newFolderName = data.new_folder_name;
+    const mediaName = data.media_name;
+
+    if (newFolderName && (
+      newFolderName === folderName ||
+      mediaName === folderName ||
+      (data.destination_file && currentPath && data.destination_file.includes(currentPath))
+    )) {
+      handleFolderNameChange(newFolderName, data.tmdb_id);
+    }
+  }, [folderName, currentPath, handleFolderNameChange]);
 
   useEffect(() => {
 

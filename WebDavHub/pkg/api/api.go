@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,12 @@ var statsScanProgress struct {
 }
 
 var isPlaceholderConfig bool
+
+// MediaHub SSE variables for real-time updates
+var (
+	mediaHubClients      = make(map[chan string]bool)
+	mediaHubClientsMutex sync.RWMutex
+)
 
 // SetRootDir sets the root directory for file operations and initializes the DB
 func SetRootDir(dir string) {
@@ -1036,7 +1043,7 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleMediaHubMessage handles structured messages
+// HandleMediaHubMessage handles structured messages and broadcasts real-time updates
 func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1059,6 +1066,9 @@ func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	forwardToPythonBridge(message)
+
+	// Broadcast real-time update to all connected SSE clients
+	broadcastMediaHubUpdate(message)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
@@ -1202,6 +1212,99 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	// Notify dashboard about stats change (file was added)
 	db.NotifyDashboardStatsChanged()
+}
+
+// broadcastMediaHubUpdate sends real-time updates to all connected SSE clients
+func broadcastMediaHubUpdate(message struct {
+	Type      string                 `json:"type"`
+	Timestamp float64                `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"`
+}) {
+	mediaHubClientsMutex.RLock()
+	defer mediaHubClientsMutex.RUnlock()
+
+	if len(mediaHubClients) == 0 {
+		return
+	}
+
+	// Create SSE message
+	sseMessage := map[string]interface{}{
+		"type":      message.Type,
+		"timestamp": message.Timestamp,
+		"data":      message.Data,
+	}
+
+	messageData, err := json.Marshal(sseMessage)
+	if err != nil {
+		logger.Warn("Failed to marshal MediaHub SSE message: %v", err)
+		return
+	}
+
+	sseData := fmt.Sprintf("data: %s\n\n", string(messageData))
+
+	// Send to all connected clients
+	for client := range mediaHubClients {
+		select {
+		case client <- sseData:
+		default:
+		}
+	}
+}
+
+// subscribeToMediaHubUpdates adds a client to the MediaHub SSE broadcast list
+func subscribeToMediaHubUpdates() chan string {
+	mediaHubClientsMutex.Lock()
+	defer mediaHubClientsMutex.Unlock()
+
+	client := make(chan string, 10)
+	mediaHubClients[client] = true
+	return client
+}
+
+// unsubscribeFromMediaHubUpdates removes a client from the MediaHub SSE broadcast list
+func unsubscribeFromMediaHubUpdates(client chan string) {
+	mediaHubClientsMutex.Lock()
+	defer mediaHubClientsMutex.Unlock()
+
+	delete(mediaHubClients, client)
+	close(client)
+}
+
+// HandleMediaHubEvents provides Server-Sent Events for MediaHub real-time updates
+func HandleMediaHubEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Subscribe to MediaHub notifications
+	notificationCh := subscribeToMediaHubUpdates()
+	defer unsubscribeFromMediaHubUpdates(notificationCh)
+
+	// Send initial connection message
+	fmt.Fprintf(w, "data: {\"type\":\"connected\",\"timestamp\":%f}\n\n", float64(time.Now().Unix()))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	// Keep connection alive and send messages
+	for {
+		select {
+		case message := <-notificationCh:
+			fmt.Fprint(w, message)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // HandleRecentMedia returns the recent media list from database

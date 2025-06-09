@@ -4,6 +4,7 @@ import { PlayArrow, Stop, Edit, Schedule, CheckCircle, Error as ErrorIcon, Cance
 import { Job, JobStatus, getJobStatusColor, getJobTypeColor } from '../../types/jobs';
 import CountdownTimer from './CountdownTimer';
 import axios from 'axios';
+import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
 interface JobsTableProps {
   onRefresh?: () => void;
@@ -97,46 +98,35 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
 
   useEffect(() => {
     fetchJobs(true); // Initial load only
-
-    // Set up Server-Sent Events for real-time job updates
-    const token = localStorage.getItem('cineSyncJWT');
-    const eventSourceUrl = token
-      ? `/api/jobs/events?token=${encodeURIComponent(token)}`
-      : '/api/jobs/events';
-    const eventSource = new EventSource(eventSourceUrl);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        if (data.type === 'job_update') {
-          // Update the specific job in the list
-          setJobs(prevJobs =>
-            prevJobs.map(job =>
-              job.id === data.jobId
-                ? { ...job, status: data.status, updatedAt: data.timestamp }
-                : job
-            )
-          );
-
-          // If job completed or failed, refresh the full job list to get updated timers
-          if (data.status === 'completed' || data.status === 'failed') {
-            setTimeout(() => fetchJobs(false), 1000);
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error);
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-    };
-
-    return () => {
-      eventSource.close();
-    };
   }, [fetchJobs]);
+
+  // Listen for job updates through centralized SSE
+  useSSEEventListener(
+    ['job_update'],
+    (event) => {
+      const data = event.data;
+
+      if (data.jobId) {
+        // Update the specific job in the list
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? { ...job, status: data.status, updatedAt: data.timestamp }
+              : job
+          )
+        );
+
+        // If job completed or failed, refresh the full job list to get updated timers
+        if (data.status === 'completed' || data.status === 'failed') {
+          setTimeout(() => fetchJobs(false), 1000);
+        }
+      }
+    },
+    {
+      source: 'jobs',
+      dependencies: [fetchJobs]
+    }
+  );
 
   if (loading && jobs.length === 0) {
     return (

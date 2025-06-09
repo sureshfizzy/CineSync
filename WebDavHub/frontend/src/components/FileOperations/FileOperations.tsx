@@ -4,6 +4,7 @@ import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as Dele
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
+import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
 const MotionCard = motion(Card);
 const MotionFab = motion(Fab);
@@ -129,35 +130,19 @@ function FileOperations() {
     fetchFileOperations();
   }, [fetchFileOperations]);
 
-  useEffect(() => {
-    // Set up real-time updates using Server-Sent Events
-    const token = localStorage.getItem('cineSyncJWT');
-    const eventSourceUrl = token
-      ? `/api/file-operations/events?token=${encodeURIComponent(token)}`
-      : '/api/file-operations/events';
-    const eventSource = new EventSource(eventSourceUrl);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'file_operation_update') {
-          // Refresh data when new operations are detected
-          setCurrentPage(1);
-          fetchFileOperations();
-        }
-      } catch (error) {
-
-      }
-    };
-
-    eventSource.onerror = () => {
-      // SSE connection error handled silently
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, []);
+  // Listen for file operation updates through centralized SSE
+  useSSEEventListener(
+    ['file_operation_update'],
+    () => {
+      // Refresh data when new operations are detected
+      setCurrentPage(1);
+      fetchFileOperations();
+    },
+    {
+      source: 'file-operations',
+      dependencies: [fetchFileOperations]
+    }
+  );
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);

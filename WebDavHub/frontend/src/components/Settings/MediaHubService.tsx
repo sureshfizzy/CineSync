@@ -31,6 +31,8 @@ import {
   Circle,
 } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
+import { MediaHubActivity } from '../MediaHub/MediaHubActivity';
+import { MediaHubTestPanel } from '../MediaHub/MediaHubTestPanel';
 
 interface MediaHubStatus {
   isRunning: boolean;
@@ -853,6 +855,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         </Box>
       )}
 
+      {/* Real-time Activity Feed */}
+      <Box sx={{ mt: 3 }}>
+        <MediaHubActivity maxItems={15} showConnectionStatus={true} />
+      </Box>
+
       {/* Logs Section */}
       <Collapse in={showLogs}>
         <Box
@@ -934,6 +941,13 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           )}
         </Box>
       </Collapse>
+
+      {/* Development Test Panel - Only show in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <Box sx={{ mt: 3 }}>
+          <MediaHubTestPanel />
+        </Box>
+      )}
     </Box>
   );
 };

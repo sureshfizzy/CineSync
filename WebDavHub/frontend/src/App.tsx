@@ -16,6 +16,7 @@ import Settings from './pages/Settings';
 import FileOperations from './pages/FileOperations';
 import { TmdbProvider } from './contexts/TmdbContext';
 import { ConfigProvider } from './contexts/ConfigContext';
+import { SSEProvider } from './components/SSEProvider';
 
 // Loading component
 function LoadingScreen() {
@@ -331,11 +332,13 @@ function App() {
       }} />
       <ConfigProvider>
         <AuthProvider>
-          <TmdbProvider>
-            <Router>
-              <AppContent toggleTheme={toggleTheme} mode={mode} />
-            </Router>
-          </TmdbProvider>
+          <SSEProvider>
+            <TmdbProvider>
+              <Router>
+                <AppContent toggleTheme={toggleTheme} mode={mode} />
+              </Router>
+            </TmdbProvider>
+          </SSEProvider>
         </AuthProvider>
       </ConfigProvider>
     </ThemeProvider>

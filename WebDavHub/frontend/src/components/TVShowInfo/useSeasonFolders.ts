@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { SeasonFolderInfo, MediaDetailsData } from './types';
+import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 
 interface UseSeasonFoldersProps {
   data: MediaDetailsData;
@@ -96,6 +97,17 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
     }
     // eslint-disable-next-line
   }, [folderName, currentPath, mediaType, data.seasons, data.id]);
+
+  useSymlinkCreatedListener((data) => {
+    if (mediaType === 'tv' && (
+      data.media_name === folderName ||
+      data.show_name === folderName ||
+      (data.destination_file && currentPath && folderName &&
+       data.destination_file.includes(`${currentPath}/${folderName}`))
+    )) {
+      fetchSeasonFolders();
+    }
+  }, [mediaType, folderName, currentPath, fetchSeasonFolders]);
 
   // Handlers for FileActionMenu
   const handleViewDetails = async (file: any, details: any) => {

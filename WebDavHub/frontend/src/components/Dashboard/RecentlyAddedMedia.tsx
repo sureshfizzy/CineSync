@@ -4,6 +4,7 @@ import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
 import axios from 'axios';
+import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 
 const MotionCard = motion(Card);
 
@@ -287,38 +288,46 @@ const RecentlyAddedMedia: React.FC = () => {
   // Theme hook
   const theme = useTheme();
 
+  // Fetch recent media function
+  const fetchRecentMedia = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/recent-media');
+      const data = response.data;
+
+      const mediaItems: RecentMedia[] = data.map((item: any) => ({
+        name: item.name,
+        path: item.path,
+        folderName: item.folderName,
+        updatedAt: item.updatedAt,
+        type: item.type,
+        tmdbId: item.tmdbId,
+        showName: item.showName,
+        seasonNumber: item.seasonNumber,
+        episodeNumber: item.episodeNumber,
+        episodeTitle: item.episodeTitle,
+        filename: item.filename
+      }));
+
+      setRecentMedia(mediaItems);
+    } catch (err) {
+      console.error('Failed to fetch recent media:', err);
+      setRecentMedia([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Initial data fetching effect
   useEffect(() => {
-    const fetchRecentMedia = async () => {
-      try {
-        const response = await axios.get('/api/recent-media');
-        const data = response.data;
-
-        const mediaItems: RecentMedia[] = data.map((item: any) => ({
-          name: item.name,
-          path: item.path,
-          folderName: item.folderName,
-          updatedAt: item.updatedAt,
-          type: item.type,
-          tmdbId: item.tmdbId,
-          showName: item.showName,
-          seasonNumber: item.seasonNumber,
-          episodeNumber: item.episodeNumber,
-          episodeTitle: item.episodeTitle,
-          filename: item.filename
-        }));
-
-        setRecentMedia(mediaItems);
-      } catch (err) {
-        console.error('Failed to fetch recent media:', err);
-        setRecentMedia([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchRecentMedia();
-  }, []);
+  }, [fetchRecentMedia]);
+
+  // Listen for real-time symlink creation events
+  useSymlinkCreatedListener((data) => {
+    console.log('New symlink created, refreshing recent media:', data);
+    // Refresh the recent media list when a new symlink is created
+    fetchRecentMedia();
+  }, [fetchRecentMedia]);
 
   // Optimized TMDB data fetching with debouncing and better batching
   useEffect(() => {
