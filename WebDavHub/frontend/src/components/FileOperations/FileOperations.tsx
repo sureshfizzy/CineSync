@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon } from '@mui/icons-material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination } from '@mui/material';
+import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import DatabaseSearch from './DatabaseSearch';
 
 const MotionCard = motion(Card);
 const MotionFab = motion(Fab);
@@ -64,11 +65,22 @@ const cardVariants = {
 };
 
 function FileOperations() {
+  const [mainTabValue, setMainTabValue] = useState(0);
   const [tabValue, setTabValue] = useState(0);
   const [operations, setOperations] = useState<FileOperation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage] = useState(50);
+  const [totalOperations, setTotalOperations] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({
+    created: 0,
+    failed: 0,
+    error: 0,
+    skipped: 0,
+    deleted: 0,
+  });
 
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const theme = useTheme();
@@ -78,26 +90,46 @@ function FileOperations() {
   const fetchFileOperations = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/file-operations');
+      const offset = (currentPage - 1) * recordsPerPage;
+
+      const statusMap = ['created', 'failed', 'error', 'skipped', 'deleted'];
+      const statusFilter = statusMap[tabValue];
+
+      const response = await axios.get('/api/file-operations', {
+        params: {
+          limit: recordsPerPage,
+          offset: offset,
+          status: statusFilter,
+        },
+      });
       const data = response.data;
 
       const operations = data.operations || [];
-
-
       setOperations(operations);
+      setTotalOperations(data.total || 0);
+      setStatusCounts(data.statusCounts || {
+        created: 0,
+        failed: 0,
+        error: 0,
+        skipped: 0,
+        deleted: 0,
+      });
       setError('');
       setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch file operations');
       setOperations([]);
+      setTotalOperations(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, recordsPerPage, tabValue]);
 
   useEffect(() => {
     fetchFileOperations();
+  }, [fetchFileOperations]);
 
+  useEffect(() => {
     // Set up real-time updates using Server-Sent Events
     const token = localStorage.getItem('cineSyncJWT');
     const eventSourceUrl = token
@@ -110,6 +142,7 @@ function FileOperations() {
         const data = JSON.parse(event.data);
         if (data.type === 'file_operation_update') {
           // Refresh data when new operations are detected
+          setCurrentPage(1);
           fetchFileOperations();
         }
       } catch (error) {
@@ -124,10 +157,16 @@ function FileOperations() {
     return () => {
       eventSource.close();
     };
-  }, [fetchFileOperations]);
+  }, []);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    setCurrentPage(1);
+  };
+
+  const handleMainTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setMainTabValue(newValue);
+    setTabValue(0);
   };
 
   const getStatusColor = (status: string) => {
@@ -163,16 +202,6 @@ function FileOperations() {
         return <CheckCircle sx={{ fontSize: 16, color: getStatusColor(status) }} />;
     }
   };
-
-  const filterOperations = (status: string) => {
-    return operations.filter(op => op.status === status);
-  };
-
-  const createdFiles = filterOperations('created');
-  const failedFiles = filterOperations('failed');
-  const errorFiles = filterOperations('error');
-  const skippedFiles = filterOperations('skipped');
-  const deletedFiles = filterOperations('deleted');
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -525,7 +554,127 @@ function FileOperations() {
         </Alert>
       )}
 
-      {/* Tabs */}
+      {/* Main Tab Navigation */}
+      <Box sx={{ mb: 4 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 0.5,
+            p: 0.5,
+            bgcolor: alpha(theme.palette.background.paper, 0.8),
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: alpha(theme.palette.divider, 0.5),
+            width: { xs: '100%', sm: 'fit-content' },
+            maxWidth: '100%',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            overflowX: { xs: 'auto', sm: 'visible' },
+            '&::-webkit-scrollbar': {
+              display: 'none',
+            },
+            scrollbarWidth: 'none',
+          }}
+        >
+          {[
+            { name: 'Operations', icon: <OperationsIcon />, color: '#3b82f6' },
+            { name: 'Database', icon: <DatabaseIcon />, color: '#10b981' }
+          ].map((tab, index) => {
+            const isSelected = mainTabValue === index;
+            return (
+              <Box
+                key={tab.name}
+                onClick={() => handleMainTabChange({} as React.SyntheticEvent, index)}
+                sx={{
+                  cursor: 'pointer',
+                  px: { xs: 2.5, sm: 4 },
+                  py: { xs: 1.5, sm: 2 },
+                  borderRadius: 2.5,
+                  bgcolor: isSelected
+                    ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                    : 'transparent',
+                  background: isSelected
+                    ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                    : 'transparent',
+                  color: isSelected ? 'white' : 'text.primary',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  flex: { xs: '1 1 0', sm: '0 0 auto' },
+                  minWidth: { xs: 0, sm: 'auto' },
+                  whiteSpace: 'nowrap',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&:hover': {
+                    bgcolor: isSelected
+                      ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                      : alpha(tab.color, 0.1),
+                    background: isSelected
+                      ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
+                      : alpha(tab.color, 0.1),
+                    transform: 'translateY(-1px)',
+                    boxShadow: isSelected
+                      ? `0 12px 24px ${alpha(tab.color, 0.3)}`
+                      : `0 4px 12px ${alpha(tab.color, 0.2)}`,
+                  },
+                  '&:active': {
+                    transform: 'translateY(0px)',
+                  },
+                  '&::before': isSelected ? {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: `linear-gradient(135deg, ${alpha('#ffffff', 0.1)} 0%, transparent 50%)`,
+                    borderRadius: 'inherit',
+                    pointerEvents: 'none',
+                  } : {},
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
+                  <Box
+                    sx={{
+                      width: { xs: 20, sm: 24 },
+                      height: { xs: 20, sm: 24 },
+                      borderRadius: 1,
+                      bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : alpha(tab.color, 0.15),
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: isSelected ? 'white' : tab.color,
+                      transition: 'all 0.3s ease',
+                      flexShrink: 0,
+                      '& svg': {
+                        fontSize: { xs: 16, sm: 18 },
+                      },
+                    }}
+                  >
+                    {tab.icon}
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    fontWeight="600"
+                    sx={{
+                      fontSize: { xs: '0.9rem', sm: '1rem' },
+                      letterSpacing: '0.02em',
+                      flexShrink: 0,
+                      minWidth: 0,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {tab.name}
+                  </Typography>
+                </Stack>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+
+      {/* Operations Tab Content */}
+      {mainTabValue === 0 && (
+        <>
+          {/* Sub-Tabs for Operations */}
       <Box sx={{
         borderBottom: 1,
         borderColor: 'divider',
@@ -556,7 +705,7 @@ function FileOperations() {
         >
           <Tab
             label={
-              <Badge badgeContent={createdFiles.length} color="success" max={999}>
+              <Badge badgeContent={statusCounts.created} color="success" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -577,7 +726,7 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={failedFiles.length} color="warning" max={999}>
+              <Badge badgeContent={statusCounts.failed} color="warning" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -598,7 +747,7 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={errorFiles.length} color="error" max={999}>
+              <Badge badgeContent={statusCounts.error} color="error" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -619,7 +768,7 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={skippedFiles.length} color="secondary" max={999}>
+              <Badge badgeContent={statusCounts.skipped} color="secondary" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -640,7 +789,7 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={deletedFiles.length} color="info" max={999}>
+              <Badge badgeContent={statusCounts.deleted} color="info" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -664,59 +813,85 @@ function FileOperations() {
 
       {/* Tab Panels */}
       <TabPanel value={tabValue} index={0}>
-        {renderFileTable(createdFiles, 'No files created yet')}
+        {renderFileTable(operations, 'No files created yet')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        {renderFileTable(failedFiles, 'No failed file operations')}
+        {renderFileTable(operations, 'No failed file operations')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        {renderFileTable(errorFiles, 'No error files')}
+        {renderFileTable(operations, 'No error files')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        {renderFileTable(skippedFiles, 'No skipped files')}
+        {renderFileTable(operations, 'No skipped files')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={4}>
-        {renderFileTable(deletedFiles, 'No deleted files')}
+        {renderFileTable(operations, 'No deleted files')}
       </TabPanel>
 
-      {/* Mobile Floating Action Button */}
-      {isMobile && (
-        <MotionFab
-          color="primary"
-          aria-label="refresh"
-          onClick={fetchFileOperations}
-          disabled={loading}
-          sx={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            zIndex: 1000,
-            background: 'linear-gradient(45deg, #6366F1 30%, #8B5CF6 90%)',
-            boxShadow: '0 8px 16px 0 rgba(99, 102, 241, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(45deg, #5B5FE8 30%, #7C3AED 90%)',
-              boxShadow: '0 12px 20px 0 rgba(99, 102, 241, 0.4)',
-            },
-            '&:disabled': {
-              background: 'rgba(99, 102, 241, 0.3)',
-            },
-          }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <RefreshIcon sx={{
-            fontSize: 24,
-            animation: loading ? 'spin 1s linear infinite' : 'none',
-            '@keyframes spin': {
-              '0%': { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' },
-            },
-          }} />
-        </MotionFab>
+      {/* Pagination and Summary for Operations */}
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+        {Math.ceil(totalOperations / recordsPerPage) > 1 && (
+          <Pagination
+            count={Math.ceil(totalOperations / recordsPerPage)}
+            page={currentPage}
+            onChange={(_, page) => setCurrentPage(page)}
+            sx={{
+              '& .MuiPaginationItem-root': {
+                borderRadius: 2,
+              },
+            }}
+          />
+        )}
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+          Showing {operations.length} of {totalOperations.toLocaleString()} operations
+        </Typography>
+      </Box>
+
+          {/* Mobile Floating Action Button for Operations */}
+          {isMobile && (
+            <MotionFab
+              color="primary"
+              aria-label="refresh"
+              onClick={fetchFileOperations}
+              disabled={loading}
+              sx={{
+                position: 'fixed',
+                bottom: 24,
+                right: 24,
+                zIndex: 1000,
+                background: 'linear-gradient(45deg, #6366F1 30%, #8B5CF6 90%)',
+                boxShadow: '0 8px 16px 0 rgba(99, 102, 241, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #5B5FE8 30%, #7C3AED 90%)',
+                  boxShadow: '0 12px 20px 0 rgba(99, 102, 241, 0.4)',
+                },
+                '&:disabled': {
+                  background: 'rgba(99, 102, 241, 0.3)',
+                },
+              }}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <RefreshIcon sx={{
+                fontSize: 24,
+                animation: loading ? 'spin 1s linear infinite' : 'none',
+                '@keyframes spin': {
+                  '0%': { transform: 'rotate(0deg)' },
+                  '100%': { transform: 'rotate(360deg)' },
+                },
+              }} />
+            </MotionFab>
+          )}
+        </>
+      )}
+
+      {/* Database Tab Content */}
+      {mainTabValue === 1 && (
+        <DatabaseSearch />
       )}
     </Box>
   );

@@ -28,10 +28,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (config.url?.includes('/api/auth/') || config.url?.includes('/api/config-status')) {
           return config;
         }
+
+        // For SSE endpoints, add token as query parameter instead of header
+        if (config.url?.includes('/events')) {
+          const token = localStorage.getItem('cineSyncJWT');
+          if (token && !config.url.includes('token=')) {
+            const separator = config.url.includes('?') ? '&' : '?';
+            config.url = `${config.url}${separator}token=${encodeURIComponent(token)}`;
+          }
+          return config;
+        }
         const token = localStorage.getItem('cineSyncJWT');
         if (token) {
           config.headers = config.headers || {};
           config.headers['Authorization'] = `Bearer ${token}`;
+        } else {
+          const authDisabledEndpoints = [
+            '/api/mediahub/message',
+            '/api/file-operations',
+            '/api/database/',
+            '/api/stats',
+            '/api/config'
+          ];
+
+          const isAuthOptional = authDisabledEndpoints.some(endpoint =>
+            config.url?.includes(endpoint)
+          );
+
+          if (!isAuthOptional) {
+            config.headers = config.headers || {};
+          }
         }
         return config;
       },
@@ -42,8 +68,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          localStorage.removeItem('cineSyncJWT');
-          setIsAuthenticated(false);
+          // Check if this is an endpoint where auth might be optional
+          const authOptionalEndpoints = [
+            '/api/mediahub/message',
+            '/api/file-operations',
+            '/api/database/',
+            '/api/stats',
+            '/api/config'
+          ];
+
+          const isAuthOptional = authOptionalEndpoints.some(endpoint =>
+            error.config?.url?.includes(endpoint)
+          );
+
+          if (!isAuthOptional) {
+            localStorage.removeItem('cineSyncJWT');
+            setIsAuthenticated(false);
+            setUser(null);
+          }
         }
         return Promise.reject(error);
       }

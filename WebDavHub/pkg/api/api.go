@@ -204,8 +204,6 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 		"needsConfiguration":   currentIsPlaceholder,
 	}
 
-	logger.Debug("Config status: destDir=%s, isPlaceholder=%v, effectiveRoot=%s", currentDestDir, currentIsPlaceholder, rootDir)
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -1203,7 +1201,7 @@ func handleSymlinkCreated(data map[string]interface{}) {
 	}
 
 	// Notify dashboard about stats change (file was added)
-	NotifyDashboardStatsChanged()
+	db.NotifyDashboardStatsChanged()
 }
 
 // HandleRecentMedia returns the recent media list from database

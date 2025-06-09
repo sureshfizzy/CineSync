@@ -1,4 +1,4 @@
-package api
+package db
 
 import (
 	"cinesync/pkg/logger"
@@ -44,18 +44,44 @@ func HandleFileOperations(w http.ResponseWriter, r *http.Request) {
 
 // handleGetFileOperations returns file operations data from MediaHub database
 func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+	statusFilter := r.URL.Query().Get("status")
+
+	limit := 50
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	offset := 0
+	if offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
 	// Get file operations from MediaHub database
-	operations, err := getFileOperationsFromMediaHub()
+	operations, total, err := getFileOperationsFromMediaHub(limit, offset, statusFilter)
 	if err != nil {
 		logger.Warn("Failed to get file operations: %v", err)
 		http.Error(w, "Failed to retrieve file operations", http.StatusInternalServerError)
 		return
 	}
 
+	// Get status counts
+	statusCounts, err := getStatusCounts(operations, total)
+	if err != nil {
+		logger.Warn("Failed to get status counts: %v", err)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"operations": operations,
-		"status":     "success",
+		"operations":   operations,
+		"total":        total,
+		"statusCounts": statusCounts,
+		"status":       "success",
 	})
 }
 
@@ -109,6 +135,9 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	// Notify dashboard about stats change
 	NotifyDashboardStatsChanged()
 
+	// Notify file operations subscribers about the change
+	NotifyFileOperationChanged()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
@@ -119,21 +148,20 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 
 
 // getFileOperationsFromMediaHub reads file operations from MediaHub database
-func getFileOperationsFromMediaHub() ([]FileOperation, error) {
+func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]FileOperation, int, error) {
 	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	
+
 	// Check if database exists
 	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
 		logger.Warn("MediaHub database not found at %s", mediaHubDBPath)
-		return []FileOperation{}, nil
+		return []FileOperation{}, 0, nil
 	}
 
-	// Open MediaHub database
-	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	// Get database connection from pool
+	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open MediaHub database: %w", err)
+		return nil, 0, fmt.Errorf("failed to get database connection: %w", err)
 	}
-	defer mediaHubDB.Close()
 
 	// Ensure deletion tracking table exists
 	err = createDeletionTrackingTable(mediaHubDB)
@@ -141,22 +169,68 @@ func getFileOperationsFromMediaHub() ([]FileOperation, error) {
 		// Table creation failed, but continue silently
 	}
 
-	// Query processed files
+	// Build WHERE clause for status filtering
+	var whereClause string
+	var args []interface{}
+
+	if statusFilter == "deleted" {
+		// Handle deletions separately
+		var totalDeletions int
+		err = mediaHubDB.QueryRow("SELECT COUNT(*) FROM file_deletions").Scan(&totalDeletions)
+		if err != nil {
+			logger.Warn("Failed to get total deletions count: %v", err)
+			totalDeletions = 0
+		}
+
+		deletions, err := getDeletionRecordsWithPagination(mediaHubDB, limit, offset)
+		if err != nil {
+			logger.Warn("Failed to get deletion records: %v", err)
+			return []FileOperation{}, 0, nil
+		}
+
+		return deletions, totalDeletions, nil
+	}
+
+	// Build status filter for processed files
+	if statusFilter != "" {
+		switch statusFilter {
+		case "created":
+			whereClause = "WHERE destination_path IS NOT NULL AND destination_path != ''"
+		case "failed":
+			whereClause = "WHERE (destination_path IS NULL OR destination_path = '') AND (reason IS NULL OR reason = '' OR (LOWER(reason) NOT LIKE '%skipped%' AND LOWER(reason) NOT LIKE '%extra%' AND LOWER(reason) NOT LIKE '%special content%' AND LOWER(reason) NOT LIKE '%unsupported%' AND LOWER(reason) NOT LIKE '%adult content%' AND LOWER(reason) NOT LIKE '%error%' AND LOWER(reason) NOT LIKE '%exception%' AND LOWER(reason) NOT LIKE '%failed%'))"
+		case "error":
+			whereClause = "WHERE reason IS NOT NULL AND reason != '' AND (LOWER(reason) LIKE '%error%' OR LOWER(reason) LIKE '%exception%' OR LOWER(reason) LIKE '%failed%')"
+		case "skipped":
+			whereClause = "WHERE reason IS NOT NULL AND reason != '' AND (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR LOWER(reason) LIKE '%adult content%')"
+		}
+	}
+
+	// Get total count for filtered results
+	countQuery := "SELECT COUNT(*) FROM processed_files " + whereClause
+	var totalCount int
+	err = mediaHubDB.QueryRow(countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		logger.Warn("Failed to get total count: %v", err)
+		totalCount = 0
+	}
+
+	// Query processed files with pagination and filtering
 	query := `
-		SELECT 
+		SELECT
 			file_path,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason
-		FROM processed_files 
-		ORDER BY rowid DESC 
-		LIMIT 1000
+		FROM processed_files ` + whereClause + `
+		ORDER BY rowid DESC
+		LIMIT ? OFFSET ?
 	`
+	args = append(args, limit, offset)
 
-	rows, err := mediaHubDB.Query(query)
+	rows, err := mediaHubDB.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query processed files: %w", err)
+		return nil, 0, fmt.Errorf("failed to query processed files: %w", err)
 	}
 	defer rows.Close()
 
@@ -253,15 +327,151 @@ func getFileOperationsFromMediaHub() ([]FileOperation, error) {
 		operations = append(operations, op)
 	}
 
-	// Also get deletion records
-	deletions, err := getDeletionRecords(mediaHubDB)
-	if err != nil {
-		logger.Warn("Failed to get deletion records: %v", err)
-	} else {
-		operations = append(operations, deletions...)
+	return operations, totalCount, nil
+}
+
+// getStatusCounts gets the count of operations by status from the database
+func getStatusCounts(operations []FileOperation, total int) (map[string]int, error) {
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+
+	// Check if database exists
+	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
+		return map[string]int{}, nil
 	}
 
-	return operations, nil
+	// Get database connection from pool
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	counts := map[string]int{
+		"created":  0,
+		"failed":   0,
+		"error":    0,
+		"skipped":  0,
+		"deleted":  0,
+	}
+
+	// Count processed files by status
+	query := `
+		SELECT
+			CASE
+				WHEN destination_path IS NOT NULL AND destination_path != '' THEN 'created'
+				WHEN reason IS NOT NULL AND reason != '' THEN
+					CASE
+						WHEN LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+							 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+							 LOWER(reason) LIKE '%adult content%' THEN 'skipped'
+						WHEN LOWER(reason) LIKE '%error%' OR LOWER(reason) LIKE '%exception%' OR
+							 LOWER(reason) LIKE '%failed%' THEN 'error'
+						ELSE 'failed'
+					END
+				ELSE 'failed'
+			END as status,
+			COUNT(*) as count
+		FROM processed_files
+		GROUP BY status
+	`
+
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		logger.Warn("Failed to query status counts: %v", err)
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var status string
+			var count int
+			if err := rows.Scan(&status, &count); err == nil {
+				counts[status] = count
+			}
+		}
+	}
+
+	// Count deletions
+	var deletionCount int
+	err = mediaHubDB.QueryRow("SELECT COUNT(*) FROM file_deletions").Scan(&deletionCount)
+	if err != nil {
+		logger.Warn("Failed to get deletion count: %v", err)
+	} else {
+		counts["deleted"] = deletionCount
+	}
+
+	return counts, nil
+}
+
+// Global variables to track file operation notification subscribers
+var fileOperationNotificationChannels = make(map[chan bool]bool)
+var fileOperationChannelMutex = make(chan bool, 1)
+
+// NotifyFileOperationChanged sends a notification to all file operation subscribers
+func NotifyFileOperationChanged() {
+	fileOperationChannelMutex <- true
+	defer func() { <-fileOperationChannelMutex }()
+
+	for ch := range fileOperationNotificationChannels {
+		select {
+		case ch <- true:
+		default:
+			delete(fileOperationNotificationChannels, ch)
+		}
+	}
+}
+
+// subscribeToFileOperationNotifications adds a channel to receive file operation notifications
+func subscribeToFileOperationNotifications() chan bool {
+	fileOperationChannelMutex <- true
+	defer func() { <-fileOperationChannelMutex }()
+
+	ch := make(chan bool, 1)
+	fileOperationNotificationChannels[ch] = true
+	return ch
+}
+
+// unsubscribeFromFileOperationNotifications removes a channel from file operation notifications
+func unsubscribeFromFileOperationNotifications(ch chan bool) {
+	fileOperationChannelMutex <- true
+	defer func() { <-fileOperationChannelMutex }()
+
+	delete(fileOperationNotificationChannels, ch)
+	close(ch)
+}
+
+// HandleFileOperationEvents provides Server-Sent Events for file operation updates
+func HandleFileOperationEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Subscribe to file operation notifications
+	notificationCh := subscribeToFileOperationNotifications()
+	defer unsubscribeFromFileOperationNotifications(notificationCh)
+
+	// Send initial connection message
+	fmt.Fprintf(w, "data: {\"type\":\"connected\"}\n\n")
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	// Listen for notifications or client disconnect
+	for {
+		select {
+		case <-notificationCh:
+			fmt.Fprintf(w, "data: {\"type\":\"file_operation_update\"}\n\n")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // createDeletionTrackingTable creates the deletion tracking table if it doesn't exist
@@ -365,6 +575,80 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 	return operations, nil
 }
 
+// getDeletionRecordsWithPagination retrieves deletion records with pagination
+func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int) ([]FileOperation, error) {
+	query := `
+		SELECT
+			source_path,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(reason, '') as reason,
+			deleted_at
+		FROM file_deletions
+		ORDER BY deleted_at DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := db.Query(query, limit, offset)
+	if err != nil {
+		logger.Warn("Failed to query file_deletions table: %v", err)
+		return []FileOperation{}, nil
+	}
+	defer rows.Close()
+
+	var operations []FileOperation
+	for rows.Next() {
+		var op FileOperation
+		var seasonStr, deletedAt string
+
+		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason, &deletedAt)
+		if err != nil {
+			logger.Warn("Failed to scan deletion row: %v", err)
+			continue
+		}
+
+		// Generate ID from file path hash with deletion prefix
+		op.ID = fmt.Sprintf("del_%x", sha256.Sum256([]byte(op.FilePath+deletedAt)))
+		op.FileName = filepath.Base(op.FilePath)
+		op.Status = "deleted"
+		op.Operation = "delete"
+		op.Timestamp = deletedAt
+
+		// Parse season number
+		if seasonStr != "" && seasonStr != "NULL" {
+			if seasonNum, err := strconv.Atoi(seasonStr); err == nil {
+				op.SeasonNumber = seasonNum
+			}
+		}
+
+		// Determine media type
+		op.Type = "other"
+		if op.TmdbID != "" && op.TmdbID != "NULL" {
+			if op.SeasonNumber > 0 {
+				op.Type = "tvshow"
+			} else {
+				op.Type = "movie"
+			}
+		} else {
+			// Try to determine from file extension and path
+			ext := strings.ToLower(filepath.Ext(op.FileName))
+			if ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".mov" {
+				pathLower := strings.ToLower(op.FilePath)
+				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") {
+					op.Type = "tvshow"
+				} else if strings.Contains(pathLower, "movie") {
+					op.Type = "movie"
+				}
+			}
+		}
+
+		operations = append(operations, op)
+	}
+
+	return operations, nil
+}
+
 // TrackFileDeletion records a file deletion event
 func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason string) error {
 	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
@@ -374,12 +658,11 @@ func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason
 		return fmt.Errorf("MediaHub database not found")
 	}
 
-	// Open MediaHub database
-	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	// Get database connection from pool
+	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		return fmt.Errorf("failed to open MediaHub database: %w", err)
+		return fmt.Errorf("failed to get database connection: %w", err)
 	}
-	defer mediaHubDB.Close()
 
 	// Ensure table exists
 	err = createDeletionTrackingTable(mediaHubDB)

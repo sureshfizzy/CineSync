@@ -1,0 +1,399 @@
+package db
+
+import (
+	"database/sql"
+	"encoding/csv"
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"cinesync/pkg/logger"
+	_ "modernc.org/sqlite"
+)
+
+// DatabaseRecord represents a record from the processed_files table
+type DatabaseRecord struct {
+	FilePath        string `json:"file_path"`
+	DestinationPath string `json:"destination_path,omitempty"`
+	TmdbID          string `json:"tmdb_id,omitempty"`
+	SeasonNumber    string `json:"season_number,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	FileSize        *int64 `json:"file_size,omitempty"`
+}
+
+// DatabaseStats represents statistics about the database
+type DatabaseStats struct {
+	TotalRecords   int   `json:"totalRecords"`
+	ProcessedFiles int   `json:"processedFiles"`
+	SkippedFiles   int   `json:"skippedFiles"`
+	Movies         int   `json:"movies"`
+	TvShows        int   `json:"tvShows"`
+	TotalSize      int64 `json:"totalSize"`
+}
+
+// DatabaseSearchResponse represents the response for database search
+type DatabaseSearchResponse struct {
+	Records []DatabaseRecord `json:"records"`
+	Stats   DatabaseStats    `json:"stats"`
+	Total   int              `json:"total"`
+}
+
+// HandleDatabaseSearch handles database search requests
+func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters
+	query := r.URL.Query().Get("query")
+	filterType := r.URL.Query().Get("type")
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	limit := 50
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	offset := 0
+	if offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Open MediaHub database
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
+		http.Error(w, "MediaHub database not found", http.StatusNotFound)
+		return
+	}
+
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+
+	// Build WHERE clause for both count and data queries
+	var whereClause strings.Builder
+	var whereArgs []interface{}
+
+	whereClause.WriteString(`WHERE 1=1`)
+
+	// Add search filter
+	if query != "" {
+		whereClause.WriteString(` AND (
+			file_path LIKE ? OR
+			destination_path LIKE ? OR
+			tmdb_id LIKE ? OR
+			reason LIKE ?
+		)`)
+		searchPattern := "%" + query + "%"
+		whereArgs = append(whereArgs, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+
+	// Add type filter
+	switch filterType {
+	case "movies":
+		whereClause.WriteString(` AND tmdb_id IS NOT NULL AND tmdb_id != '' AND (season_number IS NULL OR season_number = '')`)
+	case "tvshows":
+		whereClause.WriteString(` AND tmdb_id IS NOT NULL AND tmdb_id != '' AND season_number IS NOT NULL AND season_number != ''`)
+	case "processed":
+		whereClause.WriteString(` AND destination_path IS NOT NULL AND destination_path != '' AND (reason IS NULL OR reason = '')`)
+	case "skipped":
+		whereClause.WriteString(` AND reason IS NOT NULL AND reason != ''`)
+	}
+
+	// First, get the total count
+	countQuery := "SELECT COUNT(*) FROM processed_files " + whereClause.String()
+	var totalCount int
+	err = mediaHubDB.QueryRow(countQuery, whereArgs...).Scan(&totalCount)
+	if err != nil {
+		logger.Error("Failed to get total count: %v", err)
+		http.Error(w, "Failed to get total count", http.StatusInternalServerError)
+		return
+	}
+
+	// Build data query with pagination
+	dataQuery := `
+		SELECT
+			file_path,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(reason, '') as reason,
+			file_size
+		FROM processed_files ` + whereClause.String() + `
+		ORDER BY rowid DESC LIMIT ? OFFSET ?`
+
+	dataArgs := append(whereArgs, limit, offset)
+
+	// Execute data query
+	rows, err := mediaHubDB.Query(dataQuery, dataArgs...)
+	if err != nil {
+		logger.Error("Failed to execute search query: %v", err)
+		http.Error(w, "Failed to search database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var records []DatabaseRecord
+	for rows.Next() {
+		var record DatabaseRecord
+		var fileSize sql.NullInt64
+
+		err := rows.Scan(
+			&record.FilePath,
+			&record.DestinationPath,
+			&record.TmdbID,
+			&record.SeasonNumber,
+			&record.Reason,
+			&fileSize,
+		)
+		if err != nil {
+			logger.Warn("Failed to scan database record: %v", err)
+			continue
+		}
+
+		if fileSize.Valid {
+			record.FileSize = &fileSize.Int64
+		}
+
+		records = append(records, record)
+	}
+
+	// Get database statistics
+	stats, err := getDatabaseStats(mediaHubDB)
+	if err != nil {
+		logger.Warn("Failed to get database stats: %v", err)
+		stats = DatabaseStats{}
+	}
+
+	response := DatabaseSearchResponse{
+		Records: records,
+		Stats:   stats,
+		Total:   totalCount,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// HandleDatabaseStats handles database statistics requests
+func HandleDatabaseStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Open MediaHub database
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
+		http.Error(w, "MediaHub database not found", http.StatusNotFound)
+		return
+	}
+
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+
+	stats, err := getDatabaseStats(mediaHubDB)
+	if err != nil {
+		logger.Error("Failed to get database stats: %v", err)
+		http.Error(w, "Failed to get database statistics", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// HandleDatabaseExport handles database export requests
+func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters
+	query := r.URL.Query().Get("query")
+	filterType := r.URL.Query().Get("type")
+
+	// Open MediaHub database
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
+		http.Error(w, "MediaHub database not found", http.StatusNotFound)
+		return
+	}
+
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+
+	// Build export query (similar to search but without limit)
+	var sqlQuery strings.Builder
+	var args []interface{}
+
+	sqlQuery.WriteString(`
+		SELECT 
+			file_path,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(reason, '') as reason,
+			COALESCE(file_size, 0) as file_size
+		FROM processed_files
+		WHERE 1=1
+	`)
+
+	// Add search filter
+	if query != "" {
+		sqlQuery.WriteString(` AND (
+			file_path LIKE ? OR 
+			destination_path LIKE ? OR 
+			tmdb_id LIKE ? OR
+			reason LIKE ?
+		)`)
+		searchPattern := "%" + query + "%"
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+
+	// Add type filter
+	switch filterType {
+	case "movies":
+		sqlQuery.WriteString(` AND tmdb_id IS NOT NULL AND tmdb_id != '' AND (season_number IS NULL OR season_number = '')`)
+	case "tvshows":
+		sqlQuery.WriteString(` AND tmdb_id IS NOT NULL AND tmdb_id != '' AND season_number IS NOT NULL AND season_number != ''`)
+	case "processed":
+		sqlQuery.WriteString(` AND destination_path IS NOT NULL AND destination_path != '' AND (reason IS NULL OR reason = '')`)
+	case "skipped":
+		sqlQuery.WriteString(` AND reason IS NOT NULL AND reason != ''`)
+	}
+
+	sqlQuery.WriteString(` ORDER BY rowid DESC`)
+
+	// Execute export query
+	rows, err := mediaHubDB.Query(sqlQuery.String(), args...)
+	if err != nil {
+		logger.Error("Failed to execute export query: %v", err)
+		http.Error(w, "Failed to export database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Set CSV headers
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=database_export.csv")
+
+	// Create CSV writer
+	csvWriter := csv.NewWriter(w)
+	defer csvWriter.Flush()
+
+	// Write CSV header
+	csvWriter.Write([]string{
+		"File Path",
+		"Destination Path",
+		"TMDB ID",
+		"Season Number",
+		"Reason",
+		"File Size",
+	})
+
+	// Write CSV data
+	for rows.Next() {
+		var filePath, destPath, tmdbID, seasonNumber, reason string
+		var fileSize int64
+
+		err := rows.Scan(&filePath, &destPath, &tmdbID, &seasonNumber, &reason, &fileSize)
+		if err != nil {
+			logger.Warn("Failed to scan export record: %v", err)
+			continue
+		}
+
+		csvWriter.Write([]string{
+			filePath,
+			destPath,
+			tmdbID,
+			seasonNumber,
+			reason,
+			strconv.FormatInt(fileSize, 10),
+		})
+	}
+}
+
+// getDatabaseStats calculates database statistics
+func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
+	var stats DatabaseStats
+
+	// Total records
+	err := db.QueryRow("SELECT COUNT(*) FROM processed_files").Scan(&stats.TotalRecords)
+	if err != nil {
+		return stats, err
+	}
+
+	// Processed files (have destination_path and no reason)
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM processed_files 
+		WHERE destination_path IS NOT NULL AND destination_path != '' 
+		AND (reason IS NULL OR reason = '')
+	`).Scan(&stats.ProcessedFiles)
+	if err != nil {
+		return stats, err
+	}
+
+	// Skipped files (have reason)
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM processed_files 
+		WHERE reason IS NOT NULL AND reason != ''
+	`).Scan(&stats.SkippedFiles)
+	if err != nil {
+		return stats, err
+	}
+
+	// Movies (have tmdb_id but no season_number)
+	err = db.QueryRow(`
+		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files 
+		WHERE tmdb_id IS NOT NULL AND tmdb_id != '' 
+		AND (season_number IS NULL OR season_number = '')
+	`).Scan(&stats.Movies)
+	if err != nil {
+		return stats, err
+	}
+
+	// TV Shows (have tmdb_id and season_number)
+	err = db.QueryRow(`
+		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files 
+		WHERE tmdb_id IS NOT NULL AND tmdb_id != '' 
+		AND season_number IS NOT NULL AND season_number != ''
+	`).Scan(&stats.TvShows)
+	if err != nil {
+		return stats, err
+	}
+
+	// Get database file size
+	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+	if fileInfo, err := os.Stat(mediaHubDBPath); err == nil {
+		stats.TotalSize = fileInfo.Size()
+	} else {
+		logger.Warn("Failed to get database file size: %v", err)
+		stats.TotalSize = 0
+	}
+
+	return stats, nil
+}
+
+
