@@ -40,6 +40,34 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
   };
 };
 
+export const fetchSourceFiles = async (path: string, sourceIndex?: number, page: number = 1, limit: number = 100): Promise<FileResponse> => {
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+
+  if (sourceIndex !== undefined) {
+    params.append('source', sourceIndex.toString());
+  }
+
+  const response = await axios.get<FileItem[]>('/api/source-browse' + path + '?' + params.toString());
+
+  return {
+    data: response.data,
+    totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
+    page: parseInt(response.headers['x-page'] || '1', 10),
+    limit: parseInt(response.headers['x-limit'] || '100', 10),
+    totalPages: parseInt(response.headers['x-total-pages'] || '1', 10),
+    hasAllowed: false,
+    hasSeasonFolders: false,
+    headers: {
+      ...response.headers as Record<string, string>,
+      'x-source-directories': response.headers['x-source-directories'] || '',
+      'x-source-index': response.headers['x-source-index'] || '0',
+      'x-source-directory': response.headers['x-source-directory'] || ''
+    }
+  };
+};
+
 export const fetchTmdbInfo = async (path: string) => {
   try {
     const response = await axios.get(`/api/files${path}/.tmdb`, {

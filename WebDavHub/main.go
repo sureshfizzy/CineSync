@@ -96,6 +96,7 @@ func main() {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/config-status", api.HandleConfigStatus)
 	apiMux.HandleFunc("/api/files/", api.HandleFiles)
+	apiMux.HandleFunc("/api/source-browse/", api.HandleSourceFiles)
 	apiMux.HandleFunc("/api/stream/", api.HandleStream)
 	apiMux.HandleFunc("/api/stats", api.HandleStats)
 	apiMux.HandleFunc("/api/auth/test", api.HandleAuthTest)
@@ -120,6 +121,8 @@ func main() {
 	apiMux.HandleFunc("/api/recent-media", api.HandleRecentMedia)
 	apiMux.HandleFunc("/api/file-operations", db.HandleFileOperations)
 	apiMux.HandleFunc("/api/file-operations/events", db.HandleFileOperationEvents)
+	apiMux.HandleFunc("/api/database/source-files", db.HandleSourceFiles)
+	apiMux.HandleFunc("/api/database/source-scans", db.HandleSourceScans)
 	apiMux.HandleFunc("/api/dashboard/events", db.HandleDashboardEvents)
 	apiMux.HandleFunc("/api/database/search", db.HandleDatabaseSearch)
 	apiMux.HandleFunc("/api/database/stats", db.HandleDatabaseStats)
@@ -140,7 +143,6 @@ func main() {
 
 	// Job management endpoints
 	apiMux.HandleFunc("/api/jobs/events", api.HandleJobEvents)
-	apiMux.HandleFunc("/api/jobs/", api.HandleJobsRouter)
 	apiMux.HandleFunc("/api/jobs", api.HandleJobsRouter)
 
 	// Use the new WebDAV handler from pkg/webdav
@@ -187,6 +189,11 @@ func main() {
 			db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
 			db.DB().Exec("PRAGMA optimize;")
 			db.DB().Exec("VACUUM;")
+		}
+		if db.GetSourceDB() != nil {
+			db.GetSourceDB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+			db.GetSourceDB().Exec("PRAGMA optimize;")
+			db.CloseSourceDB()
 		}
 		os.Exit(0)
 	}()

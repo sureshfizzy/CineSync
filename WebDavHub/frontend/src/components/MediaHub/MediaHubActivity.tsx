@@ -65,9 +65,11 @@ export function MediaHubActivity({
       case 'file_processed':
         return `Processed file: ${data.filename || 'Unknown'}`;
       case 'scan_started':
-        return 'Directory scan started';
+        return `Directory scan started (${data.scanType || 'manual'})`;
       case 'scan_completed':
-        return `Directory scan completed (${data.files_found || 0} files found)`;
+        return `Directory scan completed: ${data.totalFiles || 0} total, ${data.filesDiscovered || 0} discovered, ${data.filesUpdated || 0} updated, ${data.filesRemoved || 0} removed`;
+      case 'scan_failed':
+        return `Directory scan failed: ${data.error || 'Unknown error'}`;
       case 'error':
         return `Error: ${data.message || 'Unknown error'}`;
       case 'monitor_started':
@@ -104,6 +106,7 @@ export function MediaHubActivity({
       case 'scan_started':
       case 'scan_completed':
         return '🔍';
+      case 'scan_failed':
       case 'error':
         return '❌';
       case 'monitor_started':
@@ -118,6 +121,7 @@ export function MediaHubActivity({
     switch (type) {
       case 'symlink_created':
         return 'text-green-600 dark:text-green-400';
+      case 'scan_failed':
       case 'error':
         return 'text-red-600 dark:text-red-400';
       case 'scan_started':

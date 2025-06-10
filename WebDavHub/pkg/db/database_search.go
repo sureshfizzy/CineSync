@@ -68,13 +68,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Open MediaHub database
-	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
-		http.Error(w, "MediaHub database not found", http.StatusNotFound)
-		return
-	}
-
+	// Use the database connection pool
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		logger.Error("Failed to get database connection: %v", err)
@@ -194,13 +188,7 @@ func HandleDatabaseStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Open MediaHub database
-	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
-		http.Error(w, "MediaHub database not found", http.StatusNotFound)
-		return
-	}
-
+	// Use the database connection pool
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		logger.Error("Failed to get database connection: %v", err)
@@ -230,13 +218,7 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("query")
 	filterType := r.URL.Query().Get("type")
 
-	// Open MediaHub database
-	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
-		http.Error(w, "MediaHub database not found", http.StatusNotFound)
-		return
-	}
-
+	// Use the database connection pool
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		logger.Error("Failed to get database connection: %v", err)

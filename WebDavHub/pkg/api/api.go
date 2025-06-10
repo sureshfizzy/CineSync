@@ -58,6 +58,23 @@ func SetRootDir(dir string) {
 	if err := db.InitTmdbCacheTable(); err != nil {
 		logger.Warn("Failed to initialize TMDB cache table: %v", err)
 	}
+	if err := db.InitSourceDB(); err != nil {
+		logger.Warn("Failed to initialize source files DB: %v", err)
+	} else {
+		// Set the broadcast callback to avoid circular dependency
+		db.BroadcastEventCallback = BroadcastMediaHubEvent
+
+		// Check if this is a new database and trigger initial scan
+		if db.IsNewDatabase() {
+			logger.Info("New source database detected, scheduling initial scan")
+			go func() {
+				time.Sleep(3 * time.Second) // Give the system time to fully initialize
+				if err := db.ScanSourceDirectories("startup"); err != nil {
+					logger.Error("Failed to perform initial scan: %v", err)
+				}
+			}()
+		}
+	}
 }
 
 // UpdateRootDir updates the root directory when configuration changes
@@ -77,6 +94,56 @@ func UpdateRootDir() {
 	logger.Info("Root directory updated from %s to %s", oldRootDir, newDestDir)
 }
 
+// getSourceDirectories returns the configured source directories
+func getSourceDirectories() []string {
+	sourceDirStr := env.GetString("SOURCE_DIR", "")
+	if sourceDirStr == "" {
+		return []string{}
+	}
+
+	// Split by comma and clean up paths
+	dirs := strings.Split(sourceDirStr, ",")
+	var validDirs []string
+	for _, dir := range dirs {
+		dir = strings.TrimSpace(dir)
+		if dir != "" && dir != "/path/to/files" { // Skip placeholder values
+			validDirs = append(validDirs, dir)
+		}
+	}
+	return validDirs
+}
+
+// getProcessedFilesMap gets all processed files for a directory to avoid repeated database queries
+func getProcessedFilesMap(sourceDir string) map[string]struct{} {
+	processedFiles := make(map[string]struct{})
+
+	// Try to get database connection
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for processed files check: %v", err)
+		return processedFiles
+	}
+
+	// Query the processed_files table for files in this source directory
+	query := `SELECT file_path FROM processed_files WHERE file_path LIKE ? AND destination_path IS NOT NULL AND destination_path != ''`
+	rows, err := mediaHubDB.Query(query, sourceDir+"%")
+	if err != nil {
+		logger.Warn("Error querying processed files: %v", err)
+		return processedFiles
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var filePath string
+		if err := rows.Scan(&filePath); err != nil {
+			continue
+		}
+		processedFiles[filePath] = struct{}{}
+	}
+
+	return processedFiles
+}
+
 // InitializeImageCache initializes the image cache service with project directory
 func InitializeImageCache(projectDir string) {
 	InitImageCache(projectDir)
@@ -88,11 +155,15 @@ type FileInfo struct {
 	Size     string `json:"size,omitempty"`
 	Modified string `json:"modified,omitempty"`
 	Path     string `json:"path,omitempty"`
+	FullPath string `json:"fullPath,omitempty"`
 	Icon     string `json:"icon,omitempty"`
 	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
 	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
 	TmdbId   string `json:"tmdbId,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
+	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
+	IsSourceFile bool `json:"isSourceFile,omitempty"`
+	IsMediaFile  bool `json:"isMediaFile,omitempty"`
 }
 
 type Stats struct {
@@ -363,6 +434,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			Type:     "file",
 			Modified: info.ModTime().Format(time.RFC3339),
 			Path:     filePath,
+			FullPath: filePath,
 			Icon:     getFileIcon(entry.Name(), entry.IsDir()),
 		}
 
@@ -484,6 +556,234 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Page", fmt.Sprintf("%d", page))
 	w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
 	w.Header().Set("X-Total-Pages", fmt.Sprintf("%d", (totalFiles+limit-1)/limit))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
+}
+
+// HandleSourceFiles handles requests for browsing source directories
+func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get source directories from configuration
+	sourceDirs := getSourceDirectories()
+	logger.Info("Source directories configured: %v", sourceDirs)
+	if len(sourceDirs) == 0 {
+		logger.Warn("No source directories configured")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Needs-Configuration", "true")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "No source directories configured",
+			"data": []FileInfo{},
+		})
+		return
+	}
+
+	path := r.URL.Path
+	if path == "/api/source-browse" {
+		path = "/"
+	} else {
+		path = strings.TrimPrefix(path, "/api/source-browse")
+	}
+
+	// Parse pagination parameters
+	page := 1
+	limit := 100
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if parsedPage, err := strconv.Atoi(pageStr); err == nil && parsedPage > 0 {
+			page = parsedPage
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+			limit = parsedLimit
+		}
+	}
+
+	// Parse source directory index (for multiple source dirs)
+	sourceIndex := 0
+	if indexStr := r.URL.Query().Get("source"); indexStr != "" {
+		if parsedIndex, err := strconv.Atoi(indexStr); err == nil && parsedIndex >= 0 && parsedIndex < len(sourceDirs) {
+			sourceIndex = parsedIndex
+		}
+	}
+
+	// If path is root, show source directories list
+	if path == "/" && sourceIndex == 0 && len(sourceDirs) > 1 {
+		var files []FileInfo
+		for i, sourceDir := range sourceDirs {
+			if stat, err := os.Stat(sourceDir); err == nil {
+				// Get directory name for better display
+				dirName := filepath.Base(sourceDir)
+
+				files = append(files, FileInfo{
+					Name:     dirName,
+					Type:     "directory",
+					Size:     "",
+					Modified: stat.ModTime().Format("2006-01-02 15:04:05"),
+					FullPath: fmt.Sprintf("/?source=%d", i),
+					Path:     sourceDir, // Store full path for reference
+					IsSourceRoot: true,
+				})
+			} else {
+				logger.Warn("Source directory %s is not accessible: %v", sourceDir, err)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Source-Directories", strings.Join(sourceDirs, ","))
+		json.NewEncoder(w).Encode(files)
+		return
+	}
+
+	// If only one source directory or specific source selected, browse it directly
+	if path == "/" && len(sourceDirs) == 1 {
+		sourceIndex = 0
+	}
+
+	// Browse specific source directory
+	sourceDir := sourceDirs[sourceIndex]
+
+	// Clean the path and handle Windows paths properly
+	cleanPath := strings.ReplaceAll(path, "/", string(filepath.Separator))
+	if cleanPath == string(filepath.Separator) {
+		cleanPath = ""
+	}
+
+	dir := filepath.Join(sourceDir, cleanPath)
+	logger.Info("Listing source directory: %s (API path: %s, sourceDir: %s, cleanPath: %s)", dir, path, sourceDir, cleanPath)
+
+	// Security check - ensure we're within the source directory
+	absSourceDir, err := filepath.Abs(sourceDir)
+	if err != nil {
+		logger.Warn("Failed to get absolute source directory path: %v", err)
+		http.Error(w, "Server configuration error", http.StatusInternalServerError)
+		return
+	}
+
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		logger.Warn("Failed to get absolute directory path: %v", err)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	if !strings.HasPrefix(absDir, absSourceDir) {
+		logger.Warn("Path outside source directory: %s", absDir)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		logger.Warn("Failed to read source directory: %s - %v", dir, err)
+		http.Error(w, fmt.Sprintf("Failed to read directory: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info("Found %d entries in source directory: %s", len(entries), dir)
+
+	// Get processed files map for this source directory to filter them out
+	processedFiles := getProcessedFilesMap(sourceDir)
+
+	var files []FileInfo
+	allowedExts := []string{".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".3gp", ".ogv"}
+
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Skip hidden files and directories
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		// Use forward slashes for API paths regardless of OS
+		apiPath := path
+		if apiPath == "/" {
+			apiPath = "/" + entry.Name()
+		} else {
+			apiPath = apiPath + "/" + entry.Name()
+		}
+
+		// Get the full file system path for processing status check
+		fullFilePath := filepath.Join(sourceDir, cleanPath, entry.Name())
+
+		// Skip files that have already been processed (have symlinks created)
+		if _, isProcessed := processedFiles[fullFilePath]; isProcessed && !entry.IsDir() {
+			logger.Info("Skipping already processed file: %s", fullFilePath)
+			continue
+		}
+
+		fileInfo := FileInfo{
+			Name:     entry.Name(),
+			Type:     "file",
+			Size:     formatFileSize(info.Size()),
+			Modified: info.ModTime().Format("2006-01-02 15:04:05"),
+			FullPath: fmt.Sprintf("%s?source=%d", apiPath, sourceIndex),
+			Path:     apiPath,
+			IsSourceFile: true,
+		}
+
+		if entry.IsDir() {
+			fileInfo.Type = "directory"
+			fileInfo.Size = ""
+			logger.Info("Found source directory: %s", apiPath)
+		} else {
+			// Check if it's a media file
+			ext := strings.ToLower(filepath.Ext(entry.Name()))
+			isMediaFile := false
+			for _, allowed := range allowedExts {
+				if ext == allowed {
+					isMediaFile = true
+					break
+				}
+			}
+			fileInfo.IsMediaFile = isMediaFile
+			logger.Info("Found source file: %s (Size: %s, Media: %v)", apiPath, fileInfo.Size, isMediaFile)
+		}
+
+		files = append(files, fileInfo)
+	}
+
+	// Sort files: directories first, then alphabetically
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].Type == "directory" && files[j].Type != "directory" {
+			return true
+		}
+		if files[i].Type != "directory" && files[j].Type == "directory" {
+			return false
+		}
+		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
+	})
+
+	// Apply pagination
+	totalFiles := len(files)
+	startIndex := (page - 1) * limit
+	endIndex := startIndex + limit
+
+	if startIndex >= totalFiles {
+		files = []FileInfo{}
+	} else {
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+		files = files[startIndex:endIndex]
+	}
+
+	// Add pagination headers
+	w.Header().Set("X-Total-Count", fmt.Sprintf("%d", totalFiles))
+	w.Header().Set("X-Page", fmt.Sprintf("%d", page))
+	w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
+	w.Header().Set("X-Total-Pages", fmt.Sprintf("%d", (totalFiles+limit-1)/limit))
+	w.Header().Set("X-Source-Index", fmt.Sprintf("%d", sourceIndex))
+	w.Header().Set("X-Source-Directory", sourceDir)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
@@ -1123,6 +1423,7 @@ func handleSymlinkCreated(data map[string]interface{}) {
 	mediaType, _ := data["media_type"].(string)
 	destinationFile, _ := data["destination_file"].(string)
 	filename, _ := data["filename"].(string)
+	sourceFile, _ := data["source_file"].(string)
 	tmdbIdInterface := data["tmdb_id"]
 
 	var tmdbId string
@@ -1136,6 +1437,37 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	if mediaName == "" || mediaType == "" {
 		return
+	}
+
+	// Immediately update source file processing status if source file is provided
+	if sourceFile != "" {
+		// Extract season number if it's a TV show
+		var seasonNumber *int
+		if seasonInterface, exists := data["season_number"]; exists {
+			if season, ok := seasonInterface.(float64); ok {
+				seasonInt := int(season)
+				seasonNumber = &seasonInt
+			}
+		}
+
+		// Update the source file status to "processed"
+		err := db.UpdateSourceFileProcessingStatus(sourceFile, "processed", tmdbId, seasonNumber)
+		if err != nil {
+			logger.Error("Failed to update source file processing status: %v", err)
+		} else {
+			logger.Info("Updated source file processing status for: %s", sourceFile)
+
+			// Broadcast file processing event for real-time UI updates
+			BroadcastMediaHubEvent("file_processed", map[string]interface{}{
+				"source_file":      sourceFile,
+				"destination_file": destinationFile,
+				"media_name":       mediaName,
+				"media_type":       mediaType,
+				"tmdb_id":          tmdbId,
+				"season_number":    seasonNumber,
+				"filename":         filename,
+			})
+		}
 	}
 
 	// Determine folder name based on media type
@@ -1249,6 +1581,21 @@ func broadcastMediaHubUpdate(message struct {
 		default:
 		}
 	}
+}
+
+// BroadcastMediaHubEvent is an exported wrapper for broadcasting MediaHub events
+func BroadcastMediaHubEvent(eventType string, data map[string]interface{}) {
+	message := struct {
+		Type      string                 `json:"type"`
+		Timestamp float64                `json:"timestamp"`
+		Data      map[string]interface{} `json:"data"`
+	}{
+		Type:      eventType,
+		Timestamp: float64(time.Now().UnixMilli()),
+		Data:      data,
+	}
+
+	broadcastMediaHubUpdate(message)
 }
 
 // subscribeToMediaHubUpdates adds a client to the MediaHub SSE broadcast list

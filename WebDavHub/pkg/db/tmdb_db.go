@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	_ "modernc.org/sqlite"
+	"cinesync/pkg/logger"
 )
 
 var db *sql.DB
@@ -494,34 +495,10 @@ func GetMediaCounts(rootDir string) (movieCount int, showCount int, err error) {
 
 // GetAllStatsFromDB returns all stats from MediaHub database - no file system scanning
 func GetAllStatsFromDB() (totalFiles int, totalFolders int, totalSize int64, movieCount int, showCount int, err error) {
-	// Connect to MediaHub database with fresh connection
-	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-
-	// Check if database file exists
-	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
-		return 0, 0, 0, 0, 0, nil
-	}
-
-	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	// Use the database connection pool
+	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		return 0, 0, 0, 0, 0, nil
-	}
-	defer mediaHubDB.Close()
-
-	// Set connection parameters for fresh data
-	mediaHubDB.SetMaxOpenConns(1)
-	mediaHubDB.SetMaxIdleConns(0)
-	mediaHubDB.SetConnMaxLifetime(0)
-
-	// Enable WAL mode for better concurrent access
-	_, err = mediaHubDB.Exec("PRAGMA journal_mode=WAL;")
-	if err != nil {
-		return 0, 0, 0, 0, 0, nil
-	}
-
-	// Test database connection
-	err = mediaHubDB.Ping()
-	if err != nil {
+		logger.Warn("Failed to get database connection: %v", err)
 		return 0, 0, 0, 0, 0, nil
 	}
 

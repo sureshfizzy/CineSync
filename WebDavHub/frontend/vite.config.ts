@@ -25,7 +25,6 @@ function getTmdbApiKey(): string {
   ];
 
   if (!envKey || placeholderValues.includes(envKey.toLowerCase())) {
-    console.log('TMDB_API_KEY is missing or placeholder, using fallback key');
     return 'a4f28c50ae81b7529a05b61910d64398';
   }
 

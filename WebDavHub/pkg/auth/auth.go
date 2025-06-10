@@ -46,6 +46,9 @@ func isAuthEndpoint(path string) bool {
 		"/api/mediahub/events",
 		"/api/file-operations",
 		"/api/file-operations/events",
+		"/api/source-browse",
+		"/api/database/source-files",
+		"/api/database/source-scans",
 		"/api/dashboard/events",
 		"/api/database/stats",
 		"/api/database/search",
@@ -54,6 +57,10 @@ func isAuthEndpoint(path string) bool {
 	}
 	for _, endpoint := range authEndpoints {
 		if path == endpoint {
+			return true
+		}
+		// Also check if path starts with endpoint followed by "/"
+		if strings.HasPrefix(path, endpoint+"/") {
 			return true
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -18,6 +19,15 @@ import (
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+// getPythonCommand determines the correct Python executable based on the OS
+func getPythonCommand() string {
+	// Default platform-specific behavior
+	if runtime.GOOS == "windows" {
+		return "python"
+	}
+	return "python3"
 }
 
 // JobStatusUpdate represents a job status change event
@@ -48,12 +58,9 @@ type Manager struct {
 // NewManager creates a new job manager
 func NewManager() *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
-	// Determine Python command and MediaHub directory
-	pythonCmd := "python3"
-	if _, err := exec.LookPath("python3"); err != nil {
-		pythonCmd = "python"
-	}
+
+	// Determine Python command based on OS and MediaHub directory
+	pythonCmd := getPythonCommand()
 	
 	// Get MediaHub directory
 	currentDir, _ := os.Getwd()
@@ -137,6 +144,25 @@ func (m *Manager) initializeDefaultJobs() {
 			Category:     "Metadata",
 			Tags:         []string{"tmdb", "metadata", "refresh"},
 			MaxRetries:   2,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+		{
+			ID:           "source-files-scan",
+			Name:         "Source Files Scan",
+			Description:  "Scan source directories for new and updated media files",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeInterval,
+			IntervalSeconds: 24 * 60 * 60, // 24 hours
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "source_scan_job.py")},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Files",
+			Tags:         []string{"source", "scan", "files", "discovery"},
+			MaxRetries:   3,
 			LogOutput:    true,
 			CreatedAt:    time.Now(),
 			UpdatedAt:    time.Now(),

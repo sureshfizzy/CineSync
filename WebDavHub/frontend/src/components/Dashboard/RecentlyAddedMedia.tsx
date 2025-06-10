@@ -294,18 +294,24 @@ const RecentlyAddedMedia: React.FC = () => {
       const response = await axios.get('/api/recent-media');
       const data = response.data;
 
+      if (!data || !Array.isArray(data)) {
+        console.error('Recent media API returned invalid data:', data);
+        setRecentMedia([]);
+        return;
+      }
+
       const mediaItems: RecentMedia[] = data.map((item: any) => ({
-        name: item.name,
-        path: item.path,
-        folderName: item.folderName,
-        updatedAt: item.updatedAt,
-        type: item.type,
-        tmdbId: item.tmdbId,
-        showName: item.showName,
-        seasonNumber: item.seasonNumber,
-        episodeNumber: item.episodeNumber,
-        episodeTitle: item.episodeTitle,
-        filename: item.filename
+        name: item.name || 'Unknown',
+        path: item.path || '',
+        folderName: item.folderName || '',
+        updatedAt: item.updatedAt || new Date().toISOString(),
+        type: item.type || 'unknown',
+        tmdbId: item.tmdbId || '',
+        showName: item.showName || '',
+        seasonNumber: item.seasonNumber || null,
+        episodeNumber: item.episodeNumber || null,
+        episodeTitle: item.episodeTitle || '',
+        filename: item.filename || ''
       }));
 
       setRecentMedia(mediaItems);

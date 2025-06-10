@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon } from '@mui/icons-material';
+import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, Build as ProcessIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
+import ProcessingAnimation from './ProcessingAnimation';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
+import { FileItem } from '../FileBrowser/types';
+import ModifyDialog from '../FileBrowser/ModifyDialog/ModifyDialog';
 
 const MotionCard = motion(Card);
 const MotionFab = motion(Fab);
@@ -65,6 +68,8 @@ const cardVariants = {
   }),
 };
 
+// Remove unused interface
+
 function FileOperations() {
   const [mainTabValue, setMainTabValue] = useState(0);
   const [tabValue, setTabValue] = useState(0);
@@ -83,18 +88,166 @@ function FileOperations() {
     deleted: 0,
   });
 
+  // Source File Browser state
+  const [sourceFiles, setSourceFiles] = useState<FileItem[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState('');
+  const [sourceIndex] = useState<number | undefined>(undefined);
+  const [sourcePage, setSourcePage] = useState(1);
+  const [sourceTotalPages, setSourceTotalPages] = useState(1);
+  const [sourceTotalFiles, setSourceTotalFiles] = useState(0);
+  const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
+  const [currentFileForProcessing, setCurrentFileForProcessing] = useState<string>('');
+  const [hasSourceDirectories, setHasSourceDirectories] = useState<boolean | null>(null);
+
+  // Processing animation state
+  const [processingFiles, setProcessingFiles] = useState<Map<string, {
+    fileName: string;
+    mediaName?: string;
+    mediaType?: string;
+  }>>(new Map());
+
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
   const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const ITEMS_PER_PAGE = 50;
+
+  const fetchSourceFilesData = useCallback(async (pageNum: number = 1, sourceIndexFilter?: number) => {
+    setSourceLoading(true);
+    setSourceError('');
+    try {
+      const params = new URLSearchParams({
+        limit: ITEMS_PER_PAGE.toString(),
+        offset: ((pageNum - 1) * ITEMS_PER_PAGE).toString(),
+        activeOnly: 'true',
+        mediaOnly: 'false'
+      });
+
+      if (sourceIndexFilter !== undefined) {
+        params.append('sourceIndex', sourceIndexFilter.toString());
+      }
+
+      const response = await axios.get(`/api/database/source-files?${params.toString()}`);
+
+      if (response.status === 200) {
+        const data = response.data;
+
+        // Add comprehensive null/undefined checks
+        if (!data) {
+          console.error('Source files API returned null/undefined data');
+          setSourceError('Invalid response from server');
+          setSourceFiles([]);
+          return;
+        }
+
+        // Handle both null and empty array cases for files
+        let filesArray = data.files;
+        if (filesArray === null || filesArray === undefined) {
+          filesArray = [];
+        } else if (!Array.isArray(filesArray)) {
+          setSourceError('Invalid file data from server');
+          setSourceFiles([]);
+          return;
+        }
+
+        // Empty files array is valid - it means all files are processed or no files found
+        if (filesArray.length === 0) {
+          console.log('No source files found - all files may be processed or directory is empty');
+          setSourceFiles([]);
+          setSourceTotalPages(data.totalPages || 1);
+          setSourceTotalFiles(data.total || 0);
+          setHasSourceDirectories(true);
+          setError('');
+          return;
+        }
+
+        // Convert database format to FileItem format for compatibility
+        const convertedFiles: FileItem[] = filesArray.map((dbFile: any) => ({
+          name: dbFile.fileName || 'Unknown',
+          path: dbFile.relativePath || '',
+          fullPath: dbFile.filePath || '',
+          type: 'file',
+          size: dbFile.fileSizeFormatted || '0 B',
+          modified: dbFile.modifiedTime ? new Date(dbFile.modifiedTime * 1000).toISOString() : new Date().toISOString(),
+          isMediaFile: dbFile.isMediaFile || false,
+          isSourceRoot: false,
+          processingStatus: dbFile.processingStatus || 'unprocessed',
+          tmdbId: dbFile.tmdbId || '',
+          seasonNumber: dbFile.seasonNumber || null,
+          lastProcessedAt: dbFile.lastProcessedAt || null
+        }));
+
+        setSourceFiles(convertedFiles);
+        setSourceTotalPages(data.totalPages || 1);
+        setSourceTotalFiles(data.total || 0);
+        setHasSourceDirectories(true);
+
+        setError('');
+      } else {
+        console.error('Source files API returned non-200 status:', response.status, response.statusText);
+        setSourceError(`Server error: ${response.status} ${response.statusText}`);
+        setSourceFiles([]);
+      }
+
+    } catch (err) {
+      console.error('Source files fetch error:', err);
+
+      if (axios.isAxiosError(err)) {
+        if (err.response) {
+          const status = err.response.status;
+          const message = err.response.data?.message || err.response.statusText || 'Unknown server error';
+
+          if (status === 503 || (message && message.toLowerCase().includes('source'))) {
+            setHasSourceDirectories(false);
+          } else {
+            setHasSourceDirectories(true);
+          }
+
+          setSourceError(`Server error (${status}): ${message}`);
+        } else if (err.request) {
+          setSourceError('No response from server - check if WebDavHub service is running');
+          setHasSourceDirectories(null);
+        } else {
+          setSourceError(`Request error: ${err.message}`);
+          setHasSourceDirectories(null);
+        }
+      } else {
+        setSourceError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setHasSourceDirectories(null);
+      }
+
+      setSourceFiles([]);
+    } finally {
+      setSourceLoading(false);
+    }
+  }, []);
 
   const fetchFileOperations = useCallback(async () => {
     try {
       setLoading(true);
       const offset = (currentPage - 1) * recordsPerPage;
 
+      if (tabValue === 0) {
+        setOperations([]);
+        setTotalOperations(0);
+        setStatusCounts({
+          created: 0,
+          failed: 0,
+          error: 0,
+          skipped: 0,
+          deleted: 0,
+        });
+        setError('');
+        setLastUpdated(new Date());
+        setLoading(false);
+        fetchSourceFilesData(sourcePage, sourceIndex);
+        return;
+      }
+
       const statusMap = ['created', 'failed', 'error', 'skipped', 'deleted'];
-      const statusFilter = statusMap[tabValue];
+      const statusFilter = statusMap[tabValue - 1];
 
       const response = await axios.get('/api/file-operations', {
         params: {
@@ -130,6 +283,12 @@ function FileOperations() {
     fetchFileOperations();
   }, [fetchFileOperations]);
 
+  useEffect(() => {
+    if (tabValue === 0) {
+      fetchSourceFilesData(sourcePage, sourceIndex);
+    }
+  }, [fetchSourceFilesData, sourceIndex, sourcePage, tabValue]);
+
   // Listen for file operation updates through centralized SSE
   useSSEEventListener(
     ['file_operation_update'],
@@ -137,10 +296,51 @@ function FileOperations() {
       // Refresh data when new operations are detected
       setCurrentPage(1);
       fetchFileOperations();
+      if (tabValue === 0) {
+        fetchSourceFilesData(sourcePage, sourceIndex);
+      }
     },
     {
       source: 'file-operations',
-      dependencies: [fetchFileOperations]
+      dependencies: [fetchFileOperations, fetchSourceFilesData]
+    }
+  );
+
+  // Listen for file processing events for real-time animations
+  useSSEEventListener(
+    ['file_processed'],
+    (event) => {
+      const data = event.data;
+      if (data.source_file) {
+        setProcessingFiles(prev => new Map(prev.set(data.source_file, {
+          fileName: data.filename || data.source_file.split('/').pop() || 'Unknown',
+          mediaName: data.media_name,
+          mediaType: data.media_type
+        })));
+
+        // Remove file from source files list after animation completes
+        setTimeout(() => {
+          setProcessingFiles(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(data.source_file);
+            return newMap;
+          });
+
+          // Refresh source files to reflect the change
+          if (tabValue === 0) {
+            fetchSourceFilesData(sourcePage, sourceIndex);
+          }
+
+          // Also refresh created files tab
+          if (tabValue === 1) {
+            fetchFileOperations();
+          }
+        }, 3500);
+      }
+    },
+    {
+      source: 'mediahub',
+      dependencies: [tabValue, sourcePage, sourceIndex, fetchSourceFilesData, fetchFileOperations]
     }
   );
 
@@ -152,6 +352,43 @@ function FileOperations() {
   const handleMainTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setMainTabValue(newValue);
     setTabValue(0);
+  };
+
+  // Source File Browser handlers
+  const handleSourceFileClick = (file: FileItem) => {
+    if (file.isMediaFile && file.fullPath) {
+      handleProcessFile(file);
+    }
+  };
+
+  const handleProcessFile = (file: FileItem) => {
+    if (file.fullPath) {
+      setCurrentFileForProcessing(file.fullPath);
+      setModifyDialogOpen(true);
+    }
+  };
+
+  const handleModifyDialogClose = () => {
+    setModifyDialogOpen(false);
+    setCurrentFileForProcessing('');
+    setTimeout(() => {
+      fetchSourceFilesData(sourcePage, sourceIndex);
+    }, 1000);
+  };
+
+  const getProcessingStatus = (file: any): any => {
+    if (!file.isMediaFile) return null;
+
+    if (file.processingStatus && file.processingStatus !== 'unprocessed') {
+      return {
+        status: file.processingStatus,
+        tmdbId: file.tmdbId,
+        seasonNumber: file.seasonNumber,
+        lastProcessedAt: file.lastProcessedAt
+      };
+    }
+
+    return null;
   };
 
   const getStatusColor = (status: string) => {
@@ -185,6 +422,221 @@ function FileOperations() {
         return <SkipIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       default:
         return <CheckCircle sx={{ fontSize: 16, color: getStatusColor(status) }} />;
+    }
+  };
+
+  // Source File Browser helper functions
+  const getFileIcon = (file: FileItem) => {
+    if (file.isSourceRoot) {
+      return <DatabaseIcon sx={{ color: 'primary.main', fontSize: 28 }} />;
+    }
+    if (file.type === 'directory') {
+      return <FolderOpenIcon sx={{ color: 'warning.main', fontSize: 24 }} />;
+    }
+    if (file.isMediaFile) {
+      const status = getProcessingStatus(file);
+      const fileName = file.name.toLowerCase();
+      const isProcessed = status?.status === 'processed' || status?.status === 'created';
+
+      const iconStyle = {
+        fontSize: 24,
+        color: isProcessed ? 'success.main' : 'text.secondary',
+        opacity: isProcessed ? 1 : 0.7,
+        position: 'relative' as const,
+      };
+
+      if (fileName.includes('s0') || fileName.includes('season') || fileName.includes('episode') || fileName.includes('e0')) {
+        return (
+          <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <TvIcon sx={iconStyle} />
+            {isProcessed && (
+              <LinkIcon sx={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                fontSize: 12,
+                color: 'success.main',
+                bgcolor: 'background.paper',
+                borderRadius: '50%',
+                p: 0.2
+              }} />
+            )}
+          </Box>
+        );
+      } else {
+        return (
+          <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <MovieIcon sx={iconStyle} />
+            {isProcessed && (
+              <LinkIcon sx={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                fontSize: 12,
+                color: 'success.main',
+                bgcolor: 'background.paper',
+                borderRadius: '50%',
+                p: 0.2
+              }} />
+            )}
+          </Box>
+        );
+      }
+    }
+    return <FileIcon sx={{ color: 'text.secondary', fontSize: 20 }} />;
+  };
+
+  const getFileTypeChip = (file: FileItem) => {
+    if (file.isSourceRoot) {
+      return (
+        <Chip
+          label="Source Directory"
+          size="small"
+          color="primary"
+          variant="outlined"
+          icon={<DatabaseIcon />}
+        />
+      );
+    }
+    return null;
+  };
+
+  const getStatusTooltip = (file: any): string => {
+    const status = getProcessingStatus(file);
+    if (!status) {
+      return file.isMediaFile ? 'This file has not been processed yet' : '';
+    }
+
+    let tooltip = `Status: ${status.status.toUpperCase()}`;
+
+    if (status.lastProcessedAt) {
+      const timestamp = new Date(status.lastProcessedAt * 1000).toLocaleString();
+      tooltip += `\nProcessed: ${timestamp}`;
+    }
+
+    if (status.tmdbId) {
+      tooltip += `\nTMDB ID: ${status.tmdbId}`;
+    }
+
+    if (status.seasonNumber) {
+      tooltip += `\nSeason: ${status.seasonNumber}`;
+    }
+
+    return tooltip;
+  };
+
+  const getProcessingStatusChip = (file: FileItem) => {
+    const status = getProcessingStatus(file);
+
+    if (!status) {
+      if (file.isMediaFile) {
+        return (
+          <Chip
+            label="Not Processed"
+            size="small"
+            color="default"
+            variant="outlined"
+            icon={<UnprocessedIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              bgcolor: alpha(theme.palette.grey[500], 0.1),
+              color: 'text.secondary',
+              fontWeight: 500,
+              border: `1px solid ${alpha(theme.palette.grey[500], 0.3)}`,
+              '& .MuiChip-icon': {
+                color: 'text.secondary'
+              }
+            }}
+          />
+        );
+      }
+      return null;
+    }
+
+    switch (status.status) {
+      case 'processed':
+      case 'created':
+        return (
+          <Chip
+            label="Processed"
+            size="small"
+            color="success"
+            variant="filled"
+            icon={<ProcessedIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              bgcolor: alpha(theme.palette.success.main, 0.15),
+              color: 'success.main',
+              fontWeight: 600,
+              border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+              '& .MuiChip-icon': {
+                color: 'success.main'
+              }
+            }}
+          />
+        );
+
+      case 'failed':
+      case 'error':
+        return (
+          <Chip
+            label={status.status === 'failed' ? 'Failed' : 'Error'}
+            size="small"
+            color="error"
+            variant="filled"
+            icon={<WarningIcon2 sx={{ fontSize: 16 }} />}
+            sx={{
+              bgcolor: alpha(theme.palette.error.main, 0.15),
+              color: 'error.main',
+              fontWeight: 600,
+              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+              '& .MuiChip-icon': {
+                color: 'error.main'
+              }
+            }}
+          />
+        );
+
+      case 'skipped':
+        return (
+          <Chip
+            label="Skipped"
+            size="small"
+            color="warning"
+            variant="filled"
+            icon={<WarningIcon2 sx={{ fontSize: 16 }} />}
+            sx={{
+              bgcolor: alpha(theme.palette.warning.main, 0.15),
+              color: 'warning.main',
+              fontWeight: 600,
+              border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+              '& .MuiChip-icon': {
+                color: 'warning.main'
+              }
+            }}
+          />
+        );
+
+      case 'deleted':
+        return (
+          <Chip
+            label="Deleted"
+            size="small"
+            color="info"
+            variant="filled"
+            icon={<DeleteIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              bgcolor: alpha(theme.palette.info.main, 0.15),
+              color: 'info.main',
+              fontWeight: 600,
+              border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+              '& .MuiChip-icon': {
+                color: 'info.main'
+              }
+            }}
+          />
+        );
+
+      default:
+        return null;
     }
   };
 
@@ -678,16 +1130,39 @@ function FileOperations() {
             '& .MuiTab-root': {
               textTransform: 'none',
               fontWeight: 600,
-              fontSize: { xs: '0.75rem', sm: '0.875rem' },
-              minHeight: { xs: 44, sm: 48 },
-              minWidth: { xs: 'auto', sm: 160 },
-              px: { xs: 1, sm: 2 },
+              fontSize: { xs: '0.7rem', sm: '0.875rem' },
+              minHeight: { xs: 40, sm: 48 },
+              minWidth: { xs: 60, sm: 160 },
+              px: { xs: 0.5, sm: 2 },
             },
             '& .MuiTabs-scrollButtons': {
               color: 'primary.main',
             },
+            '& .MuiTabs-flexContainer': {
+              gap: { xs: 0, sm: 1 },
+            },
           }}
         >
+          <Tab
+            label={
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: { xs: 0.5, sm: 1 },
+                flexDirection: { xs: 'column', sm: 'row' }
+              }}>
+                <SourceIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
+                <Typography variant="caption" sx={{
+                  fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                  display: { xs: 'block', sm: 'inline' },
+                  lineHeight: 1.2,
+                }}>
+                  Source
+                </Typography>
+              </Box>
+            }
+            {...a11yProps(0)}
+          />
           <Tab
             label={
               <Badge badgeContent={statusCounts.created} color="success" max={999}>
@@ -699,15 +1174,16 @@ function FileOperations() {
                 }}>
                   <CheckCircle sx={{ fontSize: { xs: 16, sm: 18 } }} />
                   <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' }
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' },
+                    lineHeight: 1.2,
                   }}>
-                    {isSmallMobile ? 'Created' : 'Created Files'}
+                    Created
                   </Typography>
                 </Box>
               </Badge>
             }
-            {...a11yProps(0)}
+            {...a11yProps(1)}
           />
           <Tab
             label={
@@ -720,15 +1196,16 @@ function FileOperations() {
                 }}>
                   <WarningIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
                   <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' }
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' },
+                    lineHeight: 1.2,
                   }}>
-                    {isSmallMobile ? 'Failed' : 'Failed Creation'}
+                    Failed
                   </Typography>
                 </Box>
               </Badge>
             }
-            {...a11yProps(1)}
+            {...a11yProps(2)}
           />
           <Tab
             label={
@@ -741,15 +1218,16 @@ function FileOperations() {
                 }}>
                   <ErrorIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
                   <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' }
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' },
+                    lineHeight: 1.2,
                   }}>
-                    {isSmallMobile ? 'Errors' : 'Error Files'}
+                    Errors
                   </Typography>
                 </Box>
               </Badge>
             }
-            {...a11yProps(2)}
+            {...a11yProps(3)}
           />
           <Tab
             label={
@@ -762,15 +1240,16 @@ function FileOperations() {
                 }}>
                   <SkipIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
                   <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' }
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' },
+                    lineHeight: 1.2,
                   }}>
-                    {isSmallMobile ? 'Skipped' : 'Skipped Files'}
+                    Skipped
                   </Typography>
                 </Box>
               </Badge>
             }
-            {...a11yProps(3)}
+            {...a11yProps(4)}
           />
           <Tab
             label={
@@ -783,37 +1262,435 @@ function FileOperations() {
                 }}>
                   <DeleteIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
                   <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' }
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    display: { xs: 'block', sm: 'inline' },
+                    lineHeight: 1.2,
                   }}>
-                    {isSmallMobile ? 'Deleted' : 'Deleted Files'}
+                    Deleted
                   </Typography>
                 </Box>
               </Badge>
             }
-            {...a11yProps(4)}
+            {...a11yProps(5)}
           />
         </Tabs>
       </Box>
 
       {/* Tab Panels */}
       <TabPanel value={tabValue} index={0}>
-        {renderFileTable(operations, 'No files created yet')}
+        {/* Modern Source File Browser with Card Layout */}
+        <Box sx={{ px: { xs: 0, sm: 1, md: 2 } }}>
+
+          {/* Loading state */}
+          {sourceLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+              <CircularProgress />
+            </Box>
+          )}
+
+          {/* Error state */}
+          {sourceError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {sourceError}
+            </Alert>
+          )}
+
+          {/* File Cards */}
+          {!sourceLoading && !sourceError && (
+            <>
+              {sourceFiles.length === 0 ? (
+                <Box
+                  sx={{
+                    textAlign: 'center',
+                    py: { xs: 6, sm: 8 },
+                    px: { xs: 3, sm: 4 },
+                    bgcolor: hasSourceDirectories !== false
+                      ? `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.05)} 0%, ${alpha(theme.palette.success.light, 0.02)} 100%)`
+                      : 'background.paper',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: hasSourceDirectories !== false
+                      ? alpha(theme.palette.success.main, 0.2)
+                      : 'divider',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    '&::before': hasSourceDirectories !== false ? {
+                      content: '""',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: `radial-gradient(circle at 30% 20%, ${alpha(theme.palette.success.main, 0.1)} 0%, transparent 50%)`,
+                      pointerEvents: 'none',
+                    } : {},
+                  }}
+                >
+                  {/* Icon based on state */}
+                  <Box sx={{ mb: 3 }}>
+                    {hasSourceDirectories === false ? (
+                      <Box sx={{
+                        p: 2,
+                        borderRadius: '50%',
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        border: `2px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                        display: 'inline-flex'
+                      }}>
+                        <SettingsIcon sx={{ fontSize: 48, color: 'warning.main' }} />
+                      </Box>
+                    ) : (
+                      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                        <Box sx={{
+                          p: 2,
+                          borderRadius: '50%',
+                          bgcolor: alpha(theme.palette.success.main, 0.15),
+                          border: `3px solid ${alpha(theme.palette.success.main, 0.4)}`,
+                          display: 'inline-flex',
+                          animation: 'celebrate 3s ease-in-out infinite',
+                          '@keyframes celebrate': {
+                            '0%, 100%': { transform: 'scale(1) rotate(0deg)' },
+                            '25%': { transform: 'scale(1.05) rotate(2deg)' },
+                            '75%': { transform: 'scale(1.05) rotate(-2deg)' },
+                          },
+                        }}>
+                          <LinkIcon sx={{ fontSize: 48, color: 'success.main' }} />
+                        </Box>
+                        {/* Floating particles effect */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: -10,
+                            right: -5,
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: 'success.light',
+                            animation: 'float1 2s ease-in-out infinite',
+                            '@keyframes float1': {
+                              '0%, 100%': { transform: 'translateY(0px) scale(1)', opacity: 0.7 },
+                              '50%': { transform: 'translateY(-10px) scale(1.2)', opacity: 1 },
+                            },
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            bottom: -5,
+                            left: -10,
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            bgcolor: 'success.main',
+                            animation: 'float2 2.5s ease-in-out infinite',
+                            '@keyframes float2': {
+                              '0%, 100%': { transform: 'translateY(0px) scale(1)', opacity: 0.5 },
+                              '50%': { transform: 'translateY(-15px) scale(1.3)', opacity: 1 },
+                            },
+                          }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+
+                  <Typography variant="h5" sx={{
+                    mb: 2,
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                    fontWeight: 600,
+                    color: hasSourceDirectories === false ? 'text.secondary' : 'success.main'
+                  }}>
+                    {hasSourceDirectories === false
+                      ? '🔧 No Source Directories Configured'
+                      : '🎉 All Source Files Tracked & Symlinked!'}
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{
+                    fontSize: { xs: '0.9rem', sm: '1rem' },
+                    lineHeight: 1.6,
+                    maxWidth: 500,
+                    mx: 'auto',
+                    mb: 1
+                  }}>
+                    {hasSourceDirectories === false
+                      ? 'Please configure SOURCE_DIR in your environment settings to start organizing your media files.'
+                      : 'Perfect! All media files in your source directories have been successfully tracked and symlinked to your organized media library.'}
+                  </Typography>
+                  {hasSourceDirectories !== false && (
+                    <Typography variant="body2" color="text.secondary" sx={{
+                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                      lineHeight: 1.5,
+                      maxWidth: 450,
+                      mx: 'auto',
+                      fontStyle: 'italic',
+                      opacity: 0.8
+                    }}>
+                      Your original files remain in the source directories, while organized symlinks are available in your media library.
+                    </Typography>
+                  )}
+                  {hasSourceDirectories !== false && (
+                    <Box sx={{ mt: 3 }}>
+                      <Box sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        px: 3,
+                        py: 1.5,
+                        borderRadius: 3,
+                        bgcolor: alpha(theme.palette.success.main, 0.1),
+                        border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+                      }}>
+                        <LinkIcon sx={{ fontSize: 20, color: 'success.main' }} />
+                        <Typography variant="body1" color="success.main" sx={{
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          fontWeight: 600
+                        }}>
+                          {sourceTotalFiles > 0
+                            ? `${sourceTotalFiles.toLocaleString()} files tracked & symlinked`
+                            : 'All source files tracked & symlinked'}
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{
+                        mt: 2,
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        fontStyle: 'italic'
+                      }}>
+                        Your media library is fully organized and up to date!
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <>
+                  {/* Processing animations */}
+                  <AnimatePresence>
+                    {Array.from(processingFiles.entries()).map(([filePath, fileData]) => (
+                      <Box key={`processing-${filePath}`} sx={{ mb: 1.5 }}>
+                        <ProcessingAnimation
+                          fileName={fileData.fileName}
+                          mediaName={fileData.mediaName}
+                          mediaType={fileData.mediaType}
+                          onComplete={() => {
+                            setProcessingFiles(prev => {
+                              const newMap = new Map(prev);
+                              newMap.delete(filePath);
+                              return newMap;
+                            });
+                          }}
+                          duration={3000}
+                        />
+                      </Box>
+                    ))}
+                  </AnimatePresence>
+
+                  {/* Source files list */}
+                  <AnimatePresence>
+                    {sourceFiles.map((file, index) => (
+                    <MotionCard
+                      key={file.name}
+                      custom={index}
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      sx={{
+                        mb: 1.5,
+                        borderRadius: 3,
+                        border: '1px solid',
+                        borderColor: getProcessingStatus(file)?.status === 'processed' || getProcessingStatus(file)?.status === 'created'
+                          ? alpha(theme.palette.success.main, 0.3)
+                          : 'divider',
+                        bgcolor: 'background.paper',
+                        overflow: 'hidden',
+                        cursor: file.type === 'directory' || file.isSourceRoot ? 'pointer' : 'default',
+                        '&:hover': {
+                          borderColor: getProcessingStatus(file)?.status === 'processed' || getProcessingStatus(file)?.status === 'created'
+                            ? alpha(theme.palette.success.main, 0.5)
+                            : 'primary.main',
+                          transform: 'translateY(-2px)',
+                          boxShadow: getProcessingStatus(file)?.status === 'processed' || getProcessingStatus(file)?.status === 'created'
+                            ? `0 4px 20px ${alpha(theme.palette.success.main, 0.15)}`
+                            : '0 8px 25px rgba(0, 0, 0, 0.15)',
+                        },
+                        transition: 'all 0.3s ease',
+                      }}
+                      onClick={() => handleSourceFileClick(file)}
+                    >
+                      <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                        <Box sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, minWidth: 0, flex: 1 }}>
+                            <Box sx={{
+                              p: { xs: 0.75, sm: 1 },
+                              borderRadius: 2,
+                              bgcolor: alpha(
+                                file.isSourceRoot ? theme.palette.primary.main :
+                                file.type === 'directory' ? theme.palette.warning.main :
+                                file.isMediaFile ? (getProcessingStatus(file)?.status === 'processed' || getProcessingStatus(file)?.status === 'created'
+                                  ? theme.palette.success.main
+                                  : theme.palette.info.main) :
+                                theme.palette.grey[500], 0.1
+                              ),
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}>
+                              {getFileIcon(file)}
+                            </Box>
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <Typography variant="body2" fontWeight="600" sx={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                color: file.isSourceRoot ? 'primary.main' : 'text.primary',
+                                mb: 0.5,
+                                fontSize: { xs: '0.875rem', sm: '1rem' },
+                              }}>
+                                {file.name}
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, flexWrap: 'wrap' }}>
+                                {getFileTypeChip(file)}
+                                {getProcessingStatusChip(file) && (
+                                  <Tooltip title={getStatusTooltip(file)} arrow placement="top">
+                                    <Box>{getProcessingStatusChip(file)}</Box>
+                                  </Tooltip>
+                                )}
+                                {!getProcessingStatusChip(file) && file.isMediaFile && (
+                                  <Tooltip title="This file has not been processed yet" arrow placement="top">
+                                    <Box>{getProcessingStatusChip(file)}</Box>
+                                  </Tooltip>
+                                )}
+                                {file.type === 'directory' && !file.isSourceRoot && (
+                                  <Chip
+                                    label="Folder"
+                                    size="small"
+                                    color="warning"
+                                    variant="outlined"
+                                    icon={<FolderIcon />}
+                                    sx={{
+                                      borderRadius: 2,
+                                      fontWeight: 500,
+                                      fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                    }}
+                                  />
+                                )}
+                              </Box>
+
+                              {/* File details */}
+                              <Stack direction="row" spacing={{ xs: 1, sm: 2 }} sx={{ mt: { xs: 0.5, sm: 1 }, flexWrap: 'wrap', gap: { xs: 0.5, sm: 1 } }}>
+                                {file.isSourceRoot && file.path && (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <InfoIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary' }} />
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                      {file.path}
+                                    </Typography>
+                                  </Box>
+                                )}
+                                {file.size && (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <DatabaseIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary' }} />
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                      {file.size}
+                                    </Typography>
+                                  </Box>
+                                )}
+                                {file.modified && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                    Modified: {new Date(file.modified).toLocaleDateString()}
+                                  </Typography>
+                                )}
+                                {file.isMediaFile && (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <PlayCircleIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'success.main' }} />
+                                    <Typography variant="caption" color="success.main" sx={{ fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                      Original Media File
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Stack>
+                            </Box>
+                          </Box>
+
+                          {/* Action buttons for media files */}
+                          {file.isMediaFile && (
+                            <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+                              <Tooltip title="Process File">
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleProcessFile(file);
+                                  }}
+                                  sx={{
+                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                    color: 'primary.main',
+                                    '&:hover': {
+                                      bgcolor: alpha(theme.palette.primary.main, 0.2),
+                                      transform: 'scale(1.1)',
+                                    },
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  <ProcessIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </MotionCard>
+                    ))}
+                  </AnimatePresence>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Pagination */}
+          {sourceTotalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Pagination
+                count={sourceTotalPages}
+                page={sourcePage}
+                onChange={(_, newPage) => setSourcePage(newPage)}
+                color="primary"
+                size={isMobile ? "small" : "medium"}
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    borderRadius: 2,
+                  },
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Summary */}
+          {sourceFiles.length > 0 && (
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                Showing {sourceFiles.length} of {sourceTotalFiles.toLocaleString()} items
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        {renderFileTable(operations, 'No failed file operations')}
+        {renderFileTable(operations, 'No files created yet')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        {renderFileTable(operations, 'No error files')}
+        {renderFileTable(operations, 'No failed file operations')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        {renderFileTable(operations, 'No skipped files')}
+        {renderFileTable(operations, 'No error files')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={4}>
+        {renderFileTable(operations, 'No skipped files')}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={5}>
         {renderFileTable(operations, 'No deleted files')}
       </TabPanel>
 
@@ -878,6 +1755,16 @@ function FileOperations() {
       {mainTabValue === 1 && (
         <DatabaseSearch />
       )}
+
+      {/* ModifyDialog for file processing */}
+      <ModifyDialog
+        open={modifyDialogOpen}
+        onClose={handleModifyDialogClose}
+        currentFilePath={currentFileForProcessing}
+        mediaType="movie"
+        onNavigateBack={() => {
+        }}
+      />
     </Box>
   );
 }

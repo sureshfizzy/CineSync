@@ -176,25 +176,31 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Join with root directory to get absolute path
-	absPath := filepath.Join(rootDir, cleanPath)
+	var finalAbsPath string
 
-	// Verify the path exists and is within rootDir
-	absRoot, err := filepath.Abs(rootDir)
-	if err != nil {
-		http.Error(w, "Server configuration error", http.StatusInternalServerError)
-		return
-	}
+	// Check if the path is already absolute (source files from database)
+	if filepath.IsAbs(cleanPath) {
+		finalAbsPath = cleanPath
+	} else {
+		absPath := filepath.Join(rootDir, cleanPath)
 
-	finalAbsPath, err := filepath.Abs(absPath)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+		// Verify the path exists and is within rootDir
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			http.Error(w, "Server configuration error", http.StatusInternalServerError)
+			return
+		}
 
-	if !strings.HasPrefix(finalAbsPath, absRoot) {
-		http.Error(w, "Path outside root directory", http.StatusBadRequest)
-		return
+		finalAbsPath, err = filepath.Abs(absPath)
+		if err != nil {
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
+
+		if !strings.HasPrefix(finalAbsPath, absRoot) {
+			http.Error(w, "Path outside root directory", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Check if file exists

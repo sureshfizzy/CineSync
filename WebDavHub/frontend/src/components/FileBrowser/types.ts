@@ -13,6 +13,12 @@ export interface FileItem {
   isSeasonFolder?: boolean;
   tmdbId?: string;
   mediaType?: 'movie' | 'tv';
+  isSourceRoot?: boolean;
+  isSourceFile?: boolean;
+  isMediaFile?: boolean;
+  processingStatus?: string;
+  seasonNumber?: number | null;
+  lastProcessedAt?: number | null;
 }
 
 export interface MobileListItemProps {

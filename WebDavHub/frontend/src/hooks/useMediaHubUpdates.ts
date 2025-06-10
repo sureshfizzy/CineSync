@@ -32,6 +32,7 @@ export function useMediaHubUpdates(): MediaHubUpdateHook {
         'file_processed',
         'scan_started',
         'scan_completed',
+        'scan_failed',
         'error',
         'monitor_started',
         'monitor_stopped'
