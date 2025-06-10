@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, Build as ProcessIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
+import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -110,7 +110,6 @@ function FileOperations() {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
-  const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const ITEMS_PER_PAGE = 50;
 
@@ -374,6 +373,33 @@ function FileOperations() {
     setTimeout(() => {
       fetchSourceFilesData(sourcePage, sourceIndex);
     }, 1000);
+  };
+
+  const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
+    try {
+      const params = new URLSearchParams();
+
+      if (selectedOption && selectedOption !== 'id') {
+        params.append(selectedOption, 'true');
+      }
+
+      Object.entries(selectedIds).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+
+      const response = await axios.post(`/api/process-file?${params.toString()}`, {
+        path: currentFileForProcessing
+      });
+
+      console.log('File processing completed:', response.data.message || 'File processing completed');
+
+      setTimeout(() => {
+        fetchFileOperations();
+        fetchSourceFilesData(sourcePage, sourceIndex);
+      }, 1000);
+    } catch (error: any) {
+      console.error(`Failed to process file: ${error.response?.data?.error || error.message}`);
+    }
   };
 
   const getProcessingStatus = (file: any): any => {
@@ -660,6 +686,8 @@ function FileOperations() {
     });
   };
 
+
+
   const renderMobileCard = (file: FileOperation, index: number) => {
     const isExpanded = expandedCards.has(file.id);
 
@@ -734,9 +762,46 @@ function FileOperations() {
                 </Box>
               </Box>
             </Box>
-            <IconButton size="small" sx={{ color: 'text.secondary' }}>
-              {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {/* Action buttons for created and skipped files */}
+              {(file.status === 'created' || file.status === 'skipped') && (
+                <Tooltip title={file.status === 'created' ? 'File Actions' : 'Reprocess File'}>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Open the modify dialog for file processing
+                      setCurrentFileForProcessing(file.filePath || '');
+                      setModifyDialogOpen(true);
+                    }}
+                    sx={{
+                      bgcolor: alpha(
+                        file.status === 'created'
+                          ? theme.palette.success.main
+                          : theme.palette.warning.main,
+                        0.1
+                      ),
+                      color: file.status === 'created' ? 'success.main' : 'warning.main',
+                      '&:hover': {
+                        bgcolor: alpha(
+                          file.status === 'created'
+                            ? theme.palette.success.main
+                            : theme.palette.warning.main,
+                          0.2
+                        ),
+                        transform: 'scale(1.1)',
+                      },
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <SettingsIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <IconButton size="small" sx={{ color: 'text.secondary' }}>
+                {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            </Box>
           </Box>
 
           <AnimatePresence>
@@ -1630,7 +1695,7 @@ function FileOperations() {
                                     transition: 'all 0.2s ease'
                                   }}
                                 >
-                                  <ProcessIcon sx={{ fontSize: 18 }} />
+                                  <SettingsIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                               </Tooltip>
                             </Box>
@@ -1760,6 +1825,7 @@ function FileOperations() {
       <ModifyDialog
         open={modifyDialogOpen}
         onClose={handleModifyDialogClose}
+        onSubmit={handleModifySubmit}
         currentFilePath={currentFileForProcessing}
         mediaType="movie"
         onNavigateBack={() => {
