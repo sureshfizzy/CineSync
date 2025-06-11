@@ -1,5 +1,7 @@
 // Type definitions for FileBrowser
 
+export type SortOption = 'name-asc' | 'name-desc' | 'modified-desc' | 'modified-asc' | 'size-desc' | 'size-asc';
+
 export interface FileItem {
   name: string;
   type: 'file' | 'directory';
@@ -27,4 +29,10 @@ export interface MobileListItemProps {
   onMenuClick?: (event: React.MouseEvent<HTMLElement>) => void;
   formatDate: (date?: string) => string;
   menu?: React.ReactNode;
-} 
+}
+
+export interface AlphabetIndexProps {
+  files: FileItem[];
+  selectedLetter: string | null;
+  onLetterClick: (letter: string | null) => void;
+}

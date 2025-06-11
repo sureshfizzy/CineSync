@@ -53,6 +53,7 @@ export default function PosterView({
         return (
           <Paper
             key={file.name}
+            data-file-name={file.name}
             sx={{
               display: 'flex',
               flexDirection: 'column',
@@ -67,6 +68,15 @@ export default function PosterView({
                 transform: 'translateY(-4px)',
                 boxShadow: 6,
                 background: theme.palette.action.selected
+              },
+              '&.alphabet-highlight': {
+                backgroundColor: theme.palette.primary.main + '20',
+                animation: 'pulse 2s ease-in-out',
+              },
+              '@keyframes pulse': {
+                '0%': { backgroundColor: theme.palette.primary.main + '40' },
+                '50%': { backgroundColor: theme.palette.primary.main + '20' },
+                '100%': { backgroundColor: 'transparent' },
               }
             }}
             onClick={() => onFileClick(file, tmdb)}

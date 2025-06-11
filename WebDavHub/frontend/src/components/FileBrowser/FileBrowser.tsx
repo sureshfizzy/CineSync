@@ -17,8 +17,8 @@ import { Close as CloseIcon } from '@mui/icons-material';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
-import { FileItem } from './types';
-import { getFileIcon, joinPaths, formatDate } from './fileUtils';
+import { FileItem, SortOption } from './types';
+import { getFileIcon, joinPaths, formatDate, sortFiles, filterFilesByLetter } from './fileUtils';
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
@@ -26,6 +26,7 @@ import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
+import AlphabetIndex from './AlphabetIndex';
 import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
 
@@ -79,6 +80,8 @@ export default function FileBrowser() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sortOption, setSortOption] = useState<SortOption>('name-asc');
+  const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const [configStatus, setConfigStatus] = useState<{
     isPlaceholder: boolean;
     destinationDir: string;
@@ -97,36 +100,45 @@ export default function FileBrowser() {
 
   // TMDB related states (folderHasAllowed removed - no longer needed)
 
-  // Memoized filtered and sorted files
   const filteredFiles = useMemo(() => {
-    const searchTerm = search.trim().toLowerCase();
-    return searchTerm
-      ? files.filter(f => f.name.toLowerCase().includes(searchTerm))
-      : files;
-  }, [files, search]);
+    let result = files;
 
-  // Use backend pagination data
+    const searchTerm = search.trim().toLowerCase();
+    if (searchTerm) {
+      result = result.filter(f => f.name.toLowerCase().includes(searchTerm));
+    }
+
+    if (selectedLetter) {
+      result = filterFilesByLetter(result, selectedLetter);
+    }
+
+    return sortFiles(result, sortOption);
+  }, [files, search, selectedLetter, sortOption]);
+
   const [totalPages, setTotalPages] = useState(1);
 
-  // Reset to page 1 when files change
   useEffect(() => {
     if (page > totalPages) {
       setPage(1);
     }
   }, [totalPages, page]);
 
-  // Clear folder fetch reference when page changes for progressive loading
   useEffect(() => {
     folderFetchRef.current = {};
   }, [page]);
 
-  // Clear folder fetch reference when changing directories
   useEffect(() => {
     folderFetchRef.current = {};
     tmdbProcessingRef.current = {};
+    setSelectedLetter(null);
   }, [currentPath]);
 
-  // Check configuration status on component mount
+  useEffect(() => {
+    if (search.trim()) {
+      setSelectedLetter(null);
+    }
+  }, [search]);
+
   useEffect(() => {
     const checkConfigStatus = async () => {
       try {
@@ -139,7 +151,6 @@ export default function FileBrowser() {
 
     checkConfigStatus();
 
-    // Listen for config status refresh events
     const handleConfigStatusRefresh = () => {
       checkConfigStatus();
     };
@@ -159,7 +170,6 @@ export default function FileBrowser() {
     try {
       const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE);
 
-      // Check if the response indicates configuration is needed
       if (response.headers && response.headers['x-needs-configuration'] === 'true') {
         setFiles([]);
         setLoading(false);
@@ -167,16 +177,15 @@ export default function FileBrowser() {
       }
 
       if (!Array.isArray(response.data)) {
-        // Silent error handling for unexpected response format
+
         setError('Unexpected response format from server');
         setFiles([]);
         return;
       }
 
-      // Add TMDB info to files based on response headers
       const filesWithTmdb = response.data.map(file => {
         if (file.type === 'directory') {
-          // If the file already has a tmdbId from the backend, use that
+
           if (!file.tmdbId && response.tmdbId) {
             return {
               ...file,
@@ -191,7 +200,6 @@ export default function FileBrowser() {
       setFiles(filesWithTmdb);
       setTotalPages(response.totalPages);
 
-      // If we have TMDB info, fetch the poster
       if (response.tmdbId && response.mediaType) {
         searchTmdb(response.tmdbId, undefined, response.mediaType).then(result => {
           if (result) {
@@ -211,17 +219,14 @@ export default function FileBrowser() {
     fetchFiles(currentPath);
   }, [currentPath]);
 
-  // Listen for real-time symlink creation events from MediaHub
   useSymlinkCreatedListener((data) => {
     console.log('Symlink created, refreshing file browser:', data);
-    // Refresh the current directory when a new symlink is created
+
     fetchFiles(currentPath);
   }, [currentPath]);
 
-  // Listen for page refresh events from symlink cleanup (legacy support)
   useEffect(() => {
     const handlePageRefresh = () => {
-      // Refresh the current directory
       fetchFiles(currentPath);
     };
 
@@ -268,6 +273,10 @@ export default function FileBrowser() {
     fetchFiles(currentPath, value);
   };
 
+  const handleLetterClick = (letter: string | null) => {
+    setSelectedLetter(letter);
+  };
+
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
       if (tmdb?.poster_path) {
@@ -292,11 +301,9 @@ export default function FileBrowser() {
     }
   };
 
-  // Simple TMDB fetching with delays to avoid rate limiting
   useEffect(() => {
     if (view !== 'poster') return;
 
-    // Process all items but with increasing delays
     const itemsToProcess = filteredFiles.filter((file: any) =>
       file.type === 'directory' &&
       file.tmdbId && // Only check directories with TMDB IDs
@@ -307,7 +314,6 @@ export default function FileBrowser() {
 
     if (itemsToProcess.length === 0) return;
 
-    // Process items sequentially instead of all at once to avoid overwhelming the backend
     const processSequentially = async () => {
       for (let index = 0; index < itemsToProcess.length; index++) {
         const file = itemsToProcess[index];
@@ -367,8 +373,6 @@ export default function FileBrowser() {
     );
   }
 
-
-
   // Show configuration placeholder if needed
   if (configStatus?.needsConfiguration) {
     return (
@@ -388,16 +392,25 @@ export default function FileBrowser() {
   }
 
   return (
-    <Box sx={{ flexGrow: 1 }}>
+    <Box sx={{ flexGrow: 1, position: 'relative' }}>
       <Header
         currentPath={currentPath}
         search={search}
         view={view}
+        sortOption={sortOption}
         onPathClick={handlePathClick}
         onUpClick={handleUpClick}
         onSearchChange={setSearch}
         onViewChange={setView}
+        onSortChange={setSortOption}
         onRefresh={handleRefresh}
+      />
+
+      {/* Alphabet Index */}
+      <AlphabetIndex
+        files={files}
+        selectedLetter={selectedLetter}
+        onLetterClick={handleLetterClick}
       />
 
       {view === 'poster' ? (

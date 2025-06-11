@@ -115,12 +115,22 @@ export default function ListView({
           {files.map((file) => (
             <TableRow
               key={file.name}
+              data-file-name={file.name}
               hover
               onClick={() => onItemClick(file)}
-              sx={{ 
+              sx={{
                 cursor: file.type === 'directory' ? 'pointer' : 'default',
                 transition: 'background-color 0.2s',
-                '&:hover': { bgcolor: 'action.hover' }
+                '&:hover': { bgcolor: 'action.hover' },
+                '&.alphabet-highlight': {
+                  backgroundColor: theme.palette.primary.main + '20',
+                  animation: 'pulse 2s ease-in-out',
+                },
+                '@keyframes pulse': {
+                  '0%': { backgroundColor: theme.palette.primary.main + '40' },
+                  '50%': { backgroundColor: theme.palette.primary.main + '20' },
+                  '100%': { backgroundColor: 'transparent' },
+                }
               }}
             >
               <TableCell>

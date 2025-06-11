@@ -1,5 +1,6 @@
 // Utility functions for FileBrowser
 import { FolderOpen as FolderOpenIcon, InsertDriveFile as FileIcon, Image as ImageIcon, Movie as MovieIcon, Description as DescriptionIcon } from '@mui/icons-material';
+import { FileItem, SortOption } from './types';
 
 export function getFileIcon(name: string, type: string) {
   if (type === 'directory') return <FolderOpenIcon color="primary" />;
@@ -46,4 +47,100 @@ export function getMimeType(ext: string): string {
     'txt': 'text/plain', 'md': 'text/markdown', 'rtf': 'application/rtf',
   };
   return map[ext.toLowerCase()] || 'application/octet-stream';
-} 
+}
+
+// Helper function to parse file size string to bytes for comparison
+function parseSizeToBytes(sizeStr?: string): number {
+  if (!sizeStr || sizeStr === '--') return 0;
+
+  const units: Record<string, number> = {
+    'B': 1,
+    'KB': 1024,
+    'MB': 1024 * 1024,
+    'GB': 1024 * 1024 * 1024,
+    'TB': 1024 * 1024 * 1024 * 1024,
+  };
+
+  const match = sizeStr.match(/^([\d.]+)\s*([A-Z]+)$/i);
+  if (!match) return 0;
+
+  const value = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+
+  return value * (units[unit] || 1);
+}
+
+// Sort files with directories first, then by specified criteria
+export function sortFiles(files: FileItem[], sortOption: SortOption): FileItem[] {
+  return [...files].sort((a, b) => {
+    // Always keep directories first
+    if (a.type === 'directory' && b.type !== 'directory') return -1;
+    if (a.type !== 'directory' && b.type === 'directory') return 1;
+
+    // Both are same type, sort by specified criteria
+    switch (sortOption) {
+      case 'name-asc':
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      case 'name-desc':
+        return b.name.toLowerCase().localeCompare(a.name.toLowerCase());
+      case 'modified-desc':
+        if (!a.modified && !b.modified) return 0;
+        if (!a.modified) return 1;
+        if (!b.modified) return -1;
+        return new Date(b.modified).getTime() - new Date(a.modified).getTime();
+      case 'modified-asc':
+        if (!a.modified && !b.modified) return 0;
+        if (!a.modified) return 1;
+        if (!b.modified) return -1;
+        return new Date(a.modified).getTime() - new Date(b.modified).getTime();
+      case 'size-desc':
+        return parseSizeToBytes(b.size) - parseSizeToBytes(a.size);
+      case 'size-asc':
+        return parseSizeToBytes(a.size) - parseSizeToBytes(b.size);
+      default:
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+  });
+}
+
+// Filter files by starting letter
+export function filterFilesByLetter(files: FileItem[], letter: string | null): FileItem[] {
+  if (!letter) return files;
+
+  const isNumeric = letter === '#';
+  const lowerLetter = letter.toLowerCase();
+
+  return files.filter(file => {
+    const firstChar = file.name.charAt(0);
+    return isNumeric
+      ? /^[0-9]/.test(firstChar)
+      : firstChar.toLowerCase() === lowerLetter;
+  });
+}
+
+// Scroll to first file starting with specified letter (kept for potential future use)
+export function scrollToLetter(letter: string, files: FileItem[]) {
+  const targetIndex = files.findIndex(file => {
+    if (letter === '#') {
+      return /^[0-9]/.test(file.name);
+    }
+    return file.name.toLowerCase().startsWith(letter.toLowerCase());
+  });
+
+  if (targetIndex !== -1) {
+    // Create a unique identifier for the file row
+    const fileElement = document.querySelector(`[data-file-name="${CSS.escape(files[targetIndex].name)}"]`);
+    if (fileElement) {
+      fileElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+
+      // Add a brief highlight effect
+      fileElement.classList.add('alphabet-highlight');
+      setTimeout(() => {
+        fileElement.classList.remove('alphabet-highlight');
+      }, 2000);
+    }
+  }
+}

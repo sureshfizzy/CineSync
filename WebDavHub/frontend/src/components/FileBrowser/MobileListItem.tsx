@@ -6,6 +6,7 @@ import { MobileListItemProps } from './types';
 const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, formatDate, menu }) => {
   return (
     <Box
+      data-file-name={file.name}
       onClick={onItemClick}
       sx={{
         display: 'flex',
@@ -22,6 +23,16 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
         '&:hover': {
           bgcolor: 'action.hover',
         },
+        '&.alphabet-highlight': {
+          backgroundColor: 'primary.main',
+          opacity: 0.2,
+          animation: 'pulse 2s ease-in-out',
+        },
+        '@keyframes pulse': {
+          '0%': { opacity: 0.4 },
+          '50%': { opacity: 0.2 },
+          '100%': { opacity: 0 },
+        }
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
