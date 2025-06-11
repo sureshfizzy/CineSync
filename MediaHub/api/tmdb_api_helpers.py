@@ -29,12 +29,19 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 preferred_language = tmdb_api_language()
 language_iso = get_iso_code(preferred_language)
 
+# Create a session for connection pooling and better performance
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'MediaHub/1.0',
+    'Accept': 'application/json'
+})
+
 def get_external_ids(item_id, media_type):
     url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
     params = {'api_key': api_key, 'language': language_iso}
 
     try:
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -58,7 +65,7 @@ def get_movie_genres(movie_id):
     params = {'api_key': api_key, 'language': language_iso}
 
     try:
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         movie_details = response.json()
 
@@ -66,7 +73,7 @@ def get_movie_genres(movie_id):
         language = movie_details.get('original_language', '')
 
         keywords_url = f"https://api.themoviedb.org/3/movie/{movie_id}/keywords"
-        keywords_response = requests.get(keywords_url, params=params)
+        keywords_response = session.get(keywords_url, params=params, timeout=10)
         keywords_response.raise_for_status()
         keywords = [kw['name'].lower() for kw in keywords_response.json().get('keywords', [])]
 
@@ -105,7 +112,7 @@ def get_show_genres(show_id):
 
     try:
         # Get show details including genres
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         show_details = response.json()
 
@@ -114,7 +121,7 @@ def get_show_genres(show_id):
 
         # Get keywords for the show
         keywords_url = f"https://api.themoviedb.org/3/tv/{show_id}/keywords"
-        keywords_response = requests.get(keywords_url, params=params)
+        keywords_response = session.get(keywords_url, params=params, timeout=10)
         keywords_response.raise_for_status()
         keywords = [kw['name'].lower() for kw in keywords_response.json().get('results', [])]
 
@@ -168,7 +175,7 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         # First try direct episode lookup
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
         params = {'api_key': api_key, 'language': language_iso}
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
@@ -214,7 +221,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
     show_params = {'api_key': api_key}
 
     try:
-        show_response = requests.get(show_url, params=show_params)
+        show_response = session.get(show_url, params=show_params, timeout=10)
         show_response.raise_for_status()
         show_data = show_response.json()
 
@@ -229,7 +236,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         for season in range(1, total_seasons + 1):
             try:
                 season_detail_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}"
-                season_detail_response = requests.get(season_detail_url, params={'api_key': api_key})
+                season_detail_response = session.get(season_detail_url, params={'api_key': api_key}, timeout=10)
                 season_detail_response.raise_for_status()
                 season_detail = season_detail_response.json()
 
@@ -254,7 +261,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 try:
                     # Try to get episode with the exact absolute number
                     direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{absolute_episode}"
-                    direct_response = requests.get(direct_url, params={'api_key': api_key})
+                    direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
                     # If successful, we found our episode!
                     if direct_response.status_code == 200:
@@ -295,7 +302,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 # Get the episode name
                 try:
                     mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{current_episode}"
-                    mapped_response = requests.get(mapped_url, params={'api_key': api_key})
+                    mapped_response = session.get(mapped_url, params={'api_key': api_key}, timeout=10)
                     mapped_response.raise_for_status()
                     mapped_episode_data = mapped_response.json()
                     mapped_episode_name = mapped_episode_data.get('name')
@@ -321,7 +328,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         for season in range(total_seasons, 0, -1):
             try:
                 direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{absolute_episode}"
-                direct_response = requests.get(direct_url, params={'api_key': api_key})
+                direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
                 if direct_response.status_code == 200:
                     direct_episode_data = direct_response.json()
@@ -356,7 +363,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         # Try to get episode name for final fallback
         try:
             mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{last_season}/episode/{fallback_episode}"
-            mapped_response = requests.get(mapped_url, params={'api_key': api_key})
+            mapped_response = session.get(mapped_url, params={'api_key': api_key}, timeout=10)
             mapped_response.raise_for_status()
             mapped_episode_data = mapped_response.json()
             mapped_episode_name = mapped_episode_data.get('name', 'Unknown Episode')
@@ -379,7 +386,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         try:
             # Try with season 1 as default
             direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/1/episode/{absolute_episode}"
-            direct_response = requests.get(direct_url, params={'api_key': api_key})
+            direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
             if direct_response.status_code == 200:
                 direct_episode_data = direct_response.json()
@@ -410,7 +417,7 @@ def get_movie_collection(movie_id=None, movie_title=None, year=None):
             'primary_release_year': year
         }
         try:
-            search_response = requests.get(search_url, params=search_params)
+            search_response = session.get(search_url, params=search_params, timeout=10)
             search_response.raise_for_status()
             search_results = search_response.json().get('results', [])
 
@@ -429,7 +436,7 @@ def get_movie_collection(movie_id=None, movie_title=None, year=None):
         return None
 
     try:
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         movie_data = response.json()
         collection = movie_data.get('belongs_to_collection')
@@ -521,7 +528,7 @@ def get_show_seasons(tmdb_id):
     params = {'api_key': api_key}
 
     try:
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         show_data = response.json()
         return show_data.get('seasons', [])
@@ -612,7 +619,7 @@ def get_available_episodes(tmdb_id, season_number, api_key):
     episodes_params = {'api_key': api_key}
 
     try:
-        episodes_response = requests.get(episodes_url, params=episodes_params)
+        episodes_response = session.get(episodes_url, params=episodes_params, timeout=10)
         episodes_response.raise_for_status()
         season_data = episodes_response.json()
         return season_data.get('episodes', [])
