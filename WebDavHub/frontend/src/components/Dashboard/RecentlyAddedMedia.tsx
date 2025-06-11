@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, IconButton } from '@mui/material';
-import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, IconButton, Dialog, DialogTitle, DialogContent, List, ListItem, ListItemText, Divider, Button, DialogActions } from '@mui/material';
+import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, ChevronRight, PlaylistPlay as PlaylistIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
 import axios from 'axios';
@@ -17,7 +17,9 @@ const MediaCard = React.memo(({
   subtitle,
   description,
   formatTimeAgo,
-  theme
+  theme,
+  episodeCount = 1,
+  onClick
 }: {
   media: RecentMedia;
   index: number;
@@ -27,6 +29,8 @@ const MediaCard = React.memo(({
   description?: string;
   formatTimeAgo: (date: string) => string;
   theme: any;
+  episodeCount?: number;
+  onClick?: () => void;
 }) => (
   <MotionCard
     key={`${media.path}-${media.updatedAt}`}
@@ -37,6 +41,7 @@ const MediaCard = React.memo(({
     tabIndex={0}
     role="button"
     aria-label={`${displayTitle} - ${media.type === 'movie' ? 'Movie' : 'TV Show'}`}
+    onClick={onClick}
     sx={{
       minWidth: { xs: 140, sm: 160 },
       maxWidth: { xs: 140, sm: 160 },
@@ -50,34 +55,14 @@ const MediaCard = React.memo(({
       border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
 
       '&:hover': {
-        transform: 'translateY(-6px) scale(1.05)',
-        boxShadow: `
-          0 4px 16px ${alpha(theme.palette.primary.main, 0.25)},
-          0 2px 8px ${alpha(theme.palette.primary.main, 0.15)},
-          0 1px 4px ${alpha(theme.palette.common.black, 0.1)},
-          inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}
-        `,
-        zIndex: 5,
-        // Add a subtle border glow effect
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+        transform: 'translateY(-4px) scale(1.02)',
+        boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.15)}`,
         '& .poster-overlay': {
           opacity: 1,
         },
-        '& .media-chip': {
-          transform: 'scale(1.1)',
-        },
         '& .poster-image': {
-          transform: 'scale(1.08)',
+          transform: 'scale(1.05)',
         },
-      },
-      // Touch device support
-      '&:active': {
-        transform: 'translateY(-2px) scale(1.02)',
-      },
-      // Focus for keyboard navigation
-      '&:focus-visible': {
-        outline: `2px solid ${theme.palette.primary.main}`,
-        outlineOffset: 2,
       },
     }}
   >
@@ -86,18 +71,8 @@ const MediaCard = React.memo(({
       sx={{
         height: { xs: 200, sm: 220 },
         background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.08)} 100%)`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         position: 'relative',
         overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          inset: 0,
-          background: `linear-gradient(180deg, transparent 0%, ${alpha(theme.palette.common.black, 0.1)} 100%)`,
-          zIndex: 1,
-        },
       }}
     >
       {/* TMDB Poster */}
@@ -113,17 +88,8 @@ const MediaCard = React.memo(({
             objectFit: 'cover',
             position: 'absolute',
             inset: 0,
-            zIndex: 0,
-            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            imageRendering: 'high-quality',
-            filter: 'contrast(1.05) saturate(1.1)',
-            backfaceVisibility: 'hidden',
-            transform: 'translateZ(0)',
+            transition: 'transform 0.3s ease',
           }}
-          style={{
-            WebkitImageSmoothing: true,
-            WebkitBackfaceVisibility: 'hidden',
-          } as React.CSSProperties}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
           }}
@@ -131,53 +97,59 @@ const MediaCard = React.memo(({
       )}
 
       {/* Media Type Icon */}
-      <Box
+      <Chip
+        icon={media.type === 'movie' ? <MovieIcon sx={{ fontSize: 14 }} /> : <TvIcon sx={{ fontSize: 14 }} />}
+        label={media.type === 'movie' ? 'Movie' : 'TV'}
+        size="small"
         sx={{
           position: 'absolute',
           top: 8,
           right: 8,
           zIndex: 3,
+          bgcolor: alpha(theme.palette.background.paper, 0.9),
+          backdropFilter: 'blur(8px)',
+          fontSize: '0.7rem',
+          fontWeight: 600,
         }}
-      >
+      />
+
+
+
+      {/* Multi-Episode Indicator */}
+      {episodeCount > 1 && (
         <Chip
-          className="media-chip"
-          icon={media.type === 'movie' ? <MovieIcon sx={{ fontSize: 14 }} /> : <TvIcon sx={{ fontSize: 14 }} />}
-          label={media.type === 'movie' ? 'Movie' : 'TV'}
+          icon={<PlaylistIcon sx={{ fontSize: 12 }} />}
+          label={episodeCount > 99 ? '99+ episodes' : `${episodeCount} episodes`}
           size="small"
           sx={{
-            bgcolor: alpha(theme.palette.background.paper, 0.95),
-            backdropFilter: 'blur(12px)',
-            fontSize: '0.7rem',
-            fontWeight: 700,
-            height: 24,
-            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
-            boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.1)}`,
-            transition: 'all 0.2s ease',
-            '& .MuiChip-label': {
-              px: 0.5,
-            },
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            zIndex: 3,
+            bgcolor: alpha(theme.palette.info.main, 0.9),
+            color: 'white',
+            fontSize: '0.6rem',
+            fontWeight: 600,
           }}
         />
-      </Box>
+      )}
 
       {/* Description Overlay */}
-      <Box
-        className="poster-overlay"
-        sx={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-end',
-          background: `linear-gradient(180deg, transparent 0%, ${alpha(theme.palette.common.black, 0.85)} 100%)`,
-          backdropFilter: 'blur(2px)',
-          opacity: 0,
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: 2,
-          p: 1.5,
-        }}
-      >
-        {description && description.trim() && (
+      {description && (
+        <Box
+          className="poster-overlay"
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'flex-end',
+            background: `linear-gradient(180deg, transparent 50%, ${alpha(theme.palette.common.black, 0.8)} 100%)`,
+            opacity: 0,
+            transition: 'opacity 0.3s ease',
+            zIndex: 2,
+            p: 1.5,
+          }}
+        >
           <Typography
             variant="body2"
             sx={{
@@ -185,16 +157,15 @@ const MediaCard = React.memo(({
               fontSize: '0.75rem',
               lineHeight: 1.3,
               display: '-webkit-box',
-              WebkitLineClamp: 4,
+              WebkitLineClamp: 3,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              textShadow: '0 1px 2px rgba(0,0,0,0.8)',
             }}
           >
             {description}
           </Typography>
-        )}
-      </Box>
+        </Box>
+      )}
     </Box>
 
     {/* Content */}
@@ -222,7 +193,7 @@ const MediaCard = React.memo(({
           sx={{
             fontSize: { xs: '0.7rem', sm: '0.75rem' },
             fontWeight: 500,
-            color: 'primary.main',
+            color: 'text.secondary',
             display: 'block',
             mb: 0.3,
           }}
@@ -270,6 +241,13 @@ interface RecentMedia {
   filename?: string;
 }
 
+interface GroupedMedia {
+  media: RecentMedia;
+  episodes?: RecentMedia[];
+  episodeCount: number;
+  latestEpisode: RecentMedia;
+}
+
 const RecentlyAddedMedia: React.FC = () => {
   // All state hooks at the top
   const [recentMedia, setRecentMedia] = useState<RecentMedia[]>([]);
@@ -279,6 +257,9 @@ const RecentlyAddedMedia: React.FC = () => {
   const [posterUrls, setPosterUrls] = useState<Record<string, string>>({});
   const [tmdbTitles, setTmdbTitles] = useState<Record<string, string>>({});
   const [tmdbDescriptions, setTmdbDescriptions] = useState<Record<string, string>>({});
+  const [episodeDialogOpen, setEpisodeDialogOpen] = useState(false);
+  const [selectedShowEpisodes, setSelectedShowEpisodes] = useState<RecentMedia[]>([]);
+  const [selectedShowTitle, setSelectedShowTitle] = useState('');
 
   // All refs at the top
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -535,15 +516,86 @@ const RecentlyAddedMedia: React.FC = () => {
     return media.name;
   }, [tmdbTitles]);
 
-  const getSubtitle = useCallback((media: RecentMedia) => {
+  const getSubtitle = useCallback((media: RecentMedia, episodeCount?: number) => {
     if ((media.type === 'tvshow' || media.type === 'tv') && media.seasonNumber && media.episodeNumber) {
       const seasonEpisode = `S${String(media.seasonNumber).padStart(2, '0')}E${String(media.episodeNumber).padStart(2, '0')}`;
+      if (episodeCount && episodeCount > 1) {
+        const moreCount = episodeCount - 1;
+        const displayMoreCount = moreCount > 98 ? '98+' : moreCount.toString();
+        return `Latest: ${seasonEpisode} (+${displayMoreCount} more)`;
+      }
       if (media.episodeTitle && media.episodeTitle.trim() !== '') {
         return `${seasonEpisode} • ${media.episodeTitle}`;
       }
       return seasonEpisode;
     }
     return null;
+  }, []);
+
+  // Group media by show for TV shows, keep movies separate
+  const groupedMedia = useMemo(() => {
+    const groups: GroupedMedia[] = [];
+    const processedShows = new Set<string>();
+
+    const sortedMedia = [...recentMedia].sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+
+    for (const media of sortedMedia) {
+      if ((media.type === 'tvshow' || media.type === 'tv') && media.tmdbId && media.tmdbId.trim() !== '') {
+        const showKey = `${media.tmdbId}-${media.type}`;
+
+        if (processedShows.has(showKey)) continue;
+
+        const showEpisodes = recentMedia.filter(m =>
+          m.tmdbId === media.tmdbId &&
+          (m.type === 'tvshow' || m.type === 'tv') &&
+          m.tmdbId && m.tmdbId.trim() !== ''
+        );
+
+        // Sort episodes by creation date (newest first)
+        showEpisodes.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+        groups.push({
+          media: showEpisodes[0],
+          episodes: showEpisodes,
+          episodeCount: showEpisodes.length,
+          latestEpisode: showEpisodes[0]
+        });
+
+        processedShows.add(showKey);
+      } else {
+        const itemKey = `${media.path}-${media.updatedAt}`;
+        if (!processedShows.has(itemKey)) {
+          groups.push({
+            media,
+            episodeCount: 1,
+            latestEpisode: media
+          });
+          processedShows.add(itemKey);
+        }
+      }
+    }
+
+    // Sort groups by the latest episode date
+    groups.sort((a, b) => new Date(b.latestEpisode.updatedAt).getTime() - new Date(a.latestEpisode.updatedAt).getTime());
+
+    return groups;
+  }, [recentMedia]);
+
+  // Handle show episode dialog
+  const handleShowEpisodes = useCallback((group: GroupedMedia) => {
+    if (group.episodes && group.episodes.length > 1) {
+      setSelectedShowEpisodes(group.episodes);
+      setSelectedShowTitle(getDisplayTitle(group.media));
+      setEpisodeDialogOpen(true);
+    }
+  }, [getDisplayTitle]);
+
+  const handleCloseDialog = useCallback(() => {
+    setEpisodeDialogOpen(false);
+    setSelectedShowEpisodes([]);
+    setSelectedShowTitle('');
   }, []);
 
   // Memoized loading skeleton to prevent unnecessary re-renders
@@ -745,25 +797,116 @@ const RecentlyAddedMedia: React.FC = () => {
           }}
         >
         <AnimatePresence>
-          {recentMedia.map((media, index) => {
-            const cacheKey = `${media.tmdbId}-${media.type}`;
+          {groupedMedia.map((group, index) => {
+            const cacheKey = `${group.media.tmdbId}-${group.media.type}`;
+
             return (
               <MediaCard
-                key={`${media.path}-${media.updatedAt}`}
-                media={media}
+                key={`${group.media.path}-${group.media.updatedAt}`}
+                media={group.media}
                 index={index}
                 posterUrl={posterUrls[cacheKey]}
-                displayTitle={getDisplayTitle(media)}
-                subtitle={getSubtitle(media)}
+                displayTitle={getDisplayTitle(group.media)}
+                subtitle={getSubtitle(group.media, group.episodeCount)}
                 description={tmdbDescriptions[cacheKey]}
                 formatTimeAgo={formatTimeAgo}
                 theme={theme}
+                episodeCount={group.episodeCount}
+                onClick={group.episodeCount > 1 ? () => handleShowEpisodes(group) : undefined}
               />
             );
           })}
         </AnimatePresence>
         </Box>
       </Box>
+
+      {/* Episode Details Dialog */}
+      <Dialog
+        open={episodeDialogOpen}
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            backgroundImage: 'none',
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          pb: 1
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TvIcon sx={{ color: 'primary.main' }} />
+            <Typography variant="h6" fontWeight="600">
+              {selectedShowTitle}
+            </Typography>
+          </Box>
+          <IconButton onClick={handleCloseDialog} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Recently added episodes ({selectedShowEpisodes.length})
+          </Typography>
+
+          <List sx={{ p: 0 }}>
+            {selectedShowEpisodes.map((episode, index) => (
+              <React.Fragment key={`${episode.path}-${episode.updatedAt}`}>
+                <ListItem sx={{
+                  px: 0,
+                  py: 1.5,
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  gap: 1
+                }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <Chip
+                            label={`S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`}
+                            size="small"
+                            sx={{
+                              bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                              color: 'secondary.main',
+                              fontWeight: 700,
+                              fontSize: '0.7rem'
+                            }}
+                          />
+                          <Typography variant="subtitle2" fontWeight="600">
+                            {episode.episodeTitle || 'Episode'}
+                          </Typography>
+                        </Box>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          Added {formatTimeAgo(episode.updatedAt)}
+                        </Typography>
+                      }
+                    />
+                  </Box>
+                </ListItem>
+                {index < selectedShowEpisodes.length - 1 && (
+                  <Divider sx={{ my: 0.5 }} />
+                )}
+              </React.Fragment>
+            ))}
+          </List>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseDialog} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

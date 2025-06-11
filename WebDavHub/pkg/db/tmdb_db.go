@@ -450,8 +450,23 @@ type RecentMedia struct {
 	CreatedAt     int64  `json:"createdAt"`
 }
 
-// AddRecentMedia adds a new recent media item to the database
+// AddRecentMedia adds a new recent media item to the database, replacing duplicates
 func AddRecentMedia(media RecentMedia) error {
+	if (media.Type == "tvshow" || media.Type == "tv") && media.TmdbId != "" && media.SeasonNumber > 0 && media.EpisodeNumber > 0 {
+		deleteQuery := `DELETE FROM recent_media WHERE tmdb_id = ? AND type IN ('tvshow', 'tv') AND season_number = ? AND episode_number = ?`
+		_, err := db.Exec(deleteQuery, media.TmdbId, media.SeasonNumber, media.EpisodeNumber)
+		if err != nil {
+			return fmt.Errorf("failed to remove duplicate episode: %w", err)
+		}
+	} else if media.Type == "movie" && media.TmdbId != "" {
+		deleteQuery := `DELETE FROM recent_media WHERE tmdb_id = ? AND type = 'movie'`
+		_, err := db.Exec(deleteQuery, media.TmdbId)
+		if err != nil {
+			return fmt.Errorf("failed to remove duplicate movie: %w", err)
+		}
+	}
+
+	// Insert the new entry
 	query := `INSERT INTO recent_media (name, path, folder_name, updated_at, type, tmdb_id, show_name, season_number, episode_number, episode_title, filename)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -549,16 +564,17 @@ func GetAllStatsFromDB() (totalFiles int, totalFolders int, totalSize int64, mov
 	return totalFiles, totalFolders, totalSize, movieCount, showCount, nil
 }
 
-// GetRecentMedia retrieves the most recent media items
+// GetRecentMedia retrieves recent media items with dynamic limit for proper show grouping
 func GetRecentMedia(limit int) ([]RecentMedia, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
+	// Get all recent media items
 	query := `SELECT id, name, path, folder_name, updated_at, type, tmdb_id, show_name, season_number, episode_number, episode_title, filename, created_at
-		FROM recent_media ORDER BY created_at DESC LIMIT ?`
+		FROM recent_media ORDER BY created_at DESC`
 
-	rows, err := db.Query(query, limit)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query recent media: %w", err)
 	}
@@ -602,13 +618,44 @@ func GetRecentMedia(limit int) ([]RecentMedia, error) {
 	return results, nil
 }
 
-// cleanupRecentMedia removes old entries to keep only the most recent 20
+// cleanupRecentMedia dynamically adjusts limit based on show episodes - no artificial caps
 func cleanupRecentMedia() error {
+	var uniqueShows int
+	showCountQuery := `SELECT COUNT(DISTINCT CASE
+		WHEN (type = 'tvshow' OR type = 'tv') AND tmdb_id IS NOT NULL AND tmdb_id != ''
+		THEN tmdb_id || '-' || type
+		ELSE 'movie-' || id
+	END) FROM recent_media`
+
+	err := db.QueryRow(showCountQuery).Scan(&uniqueShows)
+	if err != nil {
+		return fmt.Errorf("failed to count unique shows: %w", err)
+	}
+
+	// Get total count
+	var totalCount int
+	err = db.QueryRow(`SELECT COUNT(*) FROM recent_media`).Scan(&totalCount)
+	if err != nil {
+		return fmt.Errorf("failed to count total entries: %w", err)
+	}
+
+	dynamicLimit := 20 + (totalCount - uniqueShows)
+
+	const MAX_REASONABLE_ENTRIES = 100
+	if totalCount <= MAX_REASONABLE_ENTRIES {
+		return nil
+	}
+
+	entriesToKeep := dynamicLimit
+	if entriesToKeep > MAX_REASONABLE_ENTRIES {
+		entriesToKeep = MAX_REASONABLE_ENTRIES
+	}
+
 	query := `DELETE FROM recent_media WHERE id NOT IN (
-		SELECT id FROM recent_media ORDER BY created_at DESC LIMIT 20
+		SELECT id FROM recent_media ORDER BY created_at DESC LIMIT ?
 	)`
 
-	_, err := db.Exec(query)
+	_, err = db.Exec(query, entriesToKeep)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup recent media: %w", err)
 	}

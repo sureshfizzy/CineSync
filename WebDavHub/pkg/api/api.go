@@ -1654,7 +1654,7 @@ func HandleMediaHubEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleRecentMedia returns the recent media list from database
+// HandleRecentMedia returns the recent media list from database with dynamic episode support
 func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
