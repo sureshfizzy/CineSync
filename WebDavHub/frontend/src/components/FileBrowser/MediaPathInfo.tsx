@@ -7,6 +7,7 @@ interface MediaPathInfoProps {
   folderName: string;
   currentPath: string;
   mediaType: 'movie' | 'tv';
+  selectedFile?: any;
 }
 
 interface PathInfo {
@@ -38,7 +39,7 @@ interface EpisodeInfo {
   path: string;
 }
 
-export default function MediaPathInfo({ folderName, currentPath, mediaType }: MediaPathInfoProps) {
+export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile }: MediaPathInfoProps) {
   const [pathInfo, setPathInfo] = useState<PathInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
   useEffect(() => {
     const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
     const folderPath = `${normalizedPath}/${folderName}`;
-    const requestKey = `${folderPath}|${mediaType}`;
+    const requestKey = `${folderPath}|${mediaType}|${selectedFile?.name || 'auto'}`;
     if (lastRequestKeyRef.current === requestKey) {
       // Already requested, skip
       return;
@@ -110,15 +111,19 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
           }
           setSeasons(seasonsData);
         } else {
-          // Existing movie logic
-          const folderResponse = await axios.get(`/api/files${folderPath}`);
-          const files: FileItem[] = folderResponse.data;
+          // Movie logic - use selectedFile if provided, otherwise find first media file
+          let mediaFile = selectedFile;
 
-          const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
-          const mediaFile = files.find(file =>
-            file.type === 'file' &&
-            videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
-          );
+          if (!mediaFile) {
+            const folderResponse = await axios.get(`/api/files${folderPath}`);
+            const files: FileItem[] = folderResponse.data;
+
+            const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
+            mediaFile = files.find(file =>
+              file.type === 'file' &&
+              videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+            );
+          }
 
           if (!mediaFile) {
             throw new Error('No media file found in folder');
@@ -145,7 +150,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType }: Me
     if (folderName) {
       findMediaFile();
     }
-  }, [folderName, currentPath, mediaType]);
+  }, [folderName, currentPath, mediaType, selectedFile]);
 
   if (loading) {
     return (

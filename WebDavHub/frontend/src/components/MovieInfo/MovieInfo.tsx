@@ -11,16 +11,26 @@ import { MovieInfoProps } from './types';
 
 export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
+  const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Handle both single file (legacy) and multiple files (new)
+  const files = Array.isArray(fileInfo) ? fileInfo : (fileInfo ? [fileInfo] : []);
+  const selectedFile = files[selectedVersionIndex] || files[0];
+
+  // Reset selected version when fileInfo changes
+  useEffect(() => {
+    setSelectedVersionIndex(0);
+  }, [fileInfo]);
 
   const handleNavigateBack = () => {
     navigate(-1);
   };
 
   useEffect(() => {
-    async function fetchFile() {
+    async function fetchFiles() {
       try {
         const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
         const folderPath = `${normalizedPath}/${folderName}`;
@@ -29,18 +39,28 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        const folderResponse = await axios.get(`/api/files${folderPath}`);
+        const folderResponse = await axios.get(`/api/files${folderPath}`, { headers });
         const files = folderResponse.data;
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
-        const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
-        if (mediaFile) {
-          setFileInfo({ ...mediaFile, type: 'file' });
+        const mediaFiles = files.filter((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
+        if (mediaFiles.length > 0) {
+          // Ensure each file has all required properties for FileActionMenu
+          const processedFiles = mediaFiles.map((file: any) => ({
+            ...file,
+            type: 'file' as const,
+            fullPath: file.fullPath || `${folderPath}/${file.name}`,
+            sourcePath: file.sourcePath || file.path || `${folderPath}/${file.name}`,
+            webdavPath: file.webdavPath || `${folderPath}/${file.name}`,
+            size: file.size || '0 B',
+            modified: file.modified || new Date().toISOString()
+          }));
+          setFileInfo(processedFiles);
         }
       } catch (e) {
         setFileInfo(null);
       }
     }
-    fetchFile();
+    fetchFiles();
   }, [folderName, currentPath]);
 
   return (
@@ -97,10 +117,19 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Box sx={{ flex: 1 }}>
-              <MovieHeader data={data} getPosterUrl={getPosterUrl} fileInfo={fileInfo} folderName={folderName} currentPath={currentPath} onNavigateBack={handleNavigateBack} />
+              <MovieHeader
+                data={data}
+                getPosterUrl={getPosterUrl}
+                fileInfo={fileInfo}
+                folderName={folderName}
+                currentPath={currentPath}
+                onNavigateBack={handleNavigateBack}
+                selectedVersionIndex={selectedVersionIndex}
+                onVersionChange={setSelectedVersionIndex}
+              />
             </Box>
           </Box>
-          <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} />
+          <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} selectedFile={selectedFile} />
           <CastList data={data} getPosterUrl={getPosterUrl} />
         </motion.div>
       </Box>

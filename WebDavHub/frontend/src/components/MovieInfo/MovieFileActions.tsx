@@ -36,7 +36,9 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
 
   useEffect(() => {
     if (fileInfoProp) {
-      setFileInfo(fileInfoProp);
+      // Handle both single file and array of files - for this component we just need one file
+      const singleFile = Array.isArray(fileInfoProp) ? fileInfoProp[0] : fileInfoProp;
+      setFileInfo(singleFile);
       return;
     }
     const requestKey = `${folderName}|${currentPath}`;
@@ -53,12 +55,21 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        const folderResponse = await axios.get(`/api/files${folderPath}`);
+        const folderResponse = await axios.get(`/api/files${folderPath}`, { headers });
         const files = folderResponse.data;
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {
-          setFileInfo({ ...mediaFile, type: 'file' });
+          // Ensure the file has all required properties
+          setFileInfo({
+            ...mediaFile,
+            type: 'file' as const,
+            fullPath: mediaFile.fullPath || `${folderPath}/${mediaFile.name}`,
+            sourcePath: mediaFile.sourcePath || mediaFile.path || `${folderPath}/${mediaFile.name}`,
+            webdavPath: mediaFile.webdavPath || `${folderPath}/${mediaFile.name}`,
+            size: mediaFile.size || '0 B',
+            modified: mediaFile.modified || new Date().toISOString()
+          });
         }
       } catch (e) {
         setFileInfo(null);
@@ -69,9 +80,8 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
 
   if (!fileInfo) return null;
 
-  // Placement logic: only render if matches current screen size
+  // Placement logic: render on all screen sizes for belowDescription
   if (placement === 'belowTitle' && isDesktop) return null;
-  if (placement === 'belowDescription' && !isDesktop) return null;
 
   const handleError = (error: string) => {
     onError?.(error);
@@ -120,8 +130,13 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
         <FileActionMenu
           file={{
             ...fileInfo,
-            fullPath: fullFilePath,
-            sourcePath: fullFilePath,
+            type: 'file' as const,
+            fullPath: fileInfo.fullPath || fullFilePath,
+            sourcePath: fileInfo.sourcePath || fullFilePath,
+            webdavPath: fileInfo.webdavPath || fullFilePath,
+            path: fileInfo.path || fullFilePath,
+            size: fileInfo.size || '0 B',
+            modified: fileInfo.modified || new Date().toISOString()
           }}
           currentPath={filePath}
           onViewDetails={() => {}}
