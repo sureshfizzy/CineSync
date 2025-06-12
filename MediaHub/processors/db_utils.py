@@ -819,6 +819,30 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
 
     except requests.exceptions.RequestException as e:
         log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
+
+def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
+    """Track file processing failure in WebDavHub"""
+    try:
+        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
+
+        payload = {
+            'operation': 'failed',
+            'sourcePath': source_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else '',
+            'reason': reason,
+            'error': error_message
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        response = requests.post(url, json=payload, timeout=2)
+        if response.status_code != 200:
+            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Failed to track file failure: {e}", level="DEBUG")
     except Exception as e:
         log_message(f"Error tracking deletion: {e}", level="DEBUG")
 

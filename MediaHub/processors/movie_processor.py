@@ -11,6 +11,7 @@ from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_movie_collection
 from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
+from MediaHub.processors.db_utils import track_file_failure
 
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
@@ -20,8 +21,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
 
-    # Check if folder should be skipped
     if should_skip_file(parent_folder_name):
+        track_file_failure(src_file, None, None, "File skipped", f"File skipped based on skip patterns: {parent_folder_name}")
         return None, None
 
     movie_name, year = extract_movie_name_and_year(parent_folder_name)
@@ -30,6 +31,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         movie_name, year = clean_query_movie(parent_folder_name)
         if not movie_name:
             log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
+            track_file_failure(src_file, None, None, "Name extraction failed", f"Unable to extract movie name and year from: {parent_folder_name}")
             return None, None
 
     movie_name = standardize_title(movie_name)
@@ -42,9 +44,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     if is_movie_collection_enabled():
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
-        # Check if result is None (API connection issues)
         if result is None:
             log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDb API failure", f"API returned None for movie: {movie_name} ({year})")
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
@@ -68,9 +70,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             proper_movie_name = f"{movie_name} ({year})"
     else:
         result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
-        # Check if result is None (API connection issues)
         if result is None:
             log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDb API failure", f"API returned None for movie: {movie_name} ({year})")
             return None, None
 
         elif isinstance(result, tuple) and len(result) == 5:

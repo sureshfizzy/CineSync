@@ -7,6 +7,7 @@ from MediaHub.api.tmdb_api import search_tv_show
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name
+from MediaHub.processors.db_utils import track_file_failure
 
 def is_anime_file(filename):
     """
@@ -190,6 +191,7 @@ def extract_anime_episode_info(filename):
 def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select, season_number, episode_number):
     anime_info = extract_anime_episode_info(file)
     if not anime_info:
+        track_file_failure(src_file, None, None, "Anime info extraction failed", f"Unable to extract anime episode info from: {file}")
         return None
 
     # Prepare variables
@@ -249,17 +251,18 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     # Check final result after all retries
     if search_result is None:
         log_message(f"TMDb API failed after {max_retries} attempts for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
+        track_file_failure(src_file, None, None, "TMDb API failure", f"TMDb API failed after {max_retries} attempts for anime show: {show_name} ({year})")
         return None
     elif isinstance(search_result, tuple):
         proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
     else:
-        # If result is not None but also not a proper tuple, it means TMDb returned invalid data
         log_message(f"TMDb returned invalid data for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
+        track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for anime show: {show_name} ({year})")
         return None
 
-    # Validate that we got a proper show name from TMDb
     if not proper_show_name or proper_show_name.strip() == "" or "TMDb API error" in str(proper_show_name):
         log_message(f"TMDb could not provide valid show name for anime: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
+        track_file_failure(src_file, None, None, "TMDb invalid show name", f"TMDb could not provide valid show name for anime: {show_name} ({year})")
         return None
 
     tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)

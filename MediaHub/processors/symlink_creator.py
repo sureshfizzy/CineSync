@@ -466,11 +466,14 @@ def process_file(args, processed_files_log, force=False):
 
     except FileExistsError:
         log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
+        track_file_failure(src_file, tmdb_id, season_number, "File already exists", f"File already exists: {dest_file}")
     except OSError as e:
         log_message(f"Error creating symlink for {src_file}: {e}", level="ERROR")
+        track_file_failure(src_file, tmdb_id, season_number, "Symlink creation error", f"Error creating symlink: {e}")
     except Exception as e:
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
         log_message(error_message, level="ERROR")
+        track_file_failure(src_file, tmdb_id, season_number, "Unexpected error", error_message)
 
     return None
 

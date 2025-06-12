@@ -10,6 +10,7 @@ from MediaHub.processors.anime_processor import is_anime_file, process_anime_sho
 from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name
+from MediaHub.processors.db_utils import track_file_failure
 
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
@@ -243,13 +244,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         # Check final result after all retries
         if result is None:
             log_message(f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
+            track_file_failure(src_file, None, None, "TMDb API failure", f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year})")
             return None, None, None, None
         elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
         else:
-            # If result is not None but also not a proper tuple, it means TMDb returned invalid data
             log_message(f"TMDb returned invalid data for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
+            track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for show: {show_folder} ({year})")
             return None, None, None, None
 
         # Validate that we got a proper show name from TMDb

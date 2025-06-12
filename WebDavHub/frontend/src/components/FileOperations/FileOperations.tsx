@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -17,7 +17,7 @@ interface FileOperation {
   filePath: string;
   destinationPath?: string;
   fileName: string;
-  status: 'created' | 'failed' | 'error' | 'deleted' | 'skipped';
+  status: 'created' | 'failed' | 'deleted' | 'skipped';
   timestamp: string;
   reason?: string;
   error?: string;
@@ -83,7 +83,6 @@ function FileOperations() {
   const [statusCounts, setStatusCounts] = useState({
     created: 0,
     failed: 0,
-    error: 0,
     skipped: 0,
     deleted: 0,
   });
@@ -234,7 +233,6 @@ function FileOperations() {
         setStatusCounts({
           created: 0,
           failed: 0,
-          error: 0,
           skipped: 0,
           deleted: 0,
         });
@@ -245,7 +243,7 @@ function FileOperations() {
         return;
       }
 
-      const statusMap = ['created', 'failed', 'error', 'skipped', 'deleted'];
+      const statusMap = ['created', 'failed', 'skipped', 'deleted'];
       const statusFilter = statusMap[tabValue - 1];
 
       const response = await axios.get('/api/file-operations', {
@@ -263,7 +261,6 @@ function FileOperations() {
       setStatusCounts(data.statusCounts || {
         created: 0,
         failed: 0,
-        error: 0,
         skipped: 0,
         deleted: 0,
       });
@@ -422,8 +419,6 @@ function FileOperations() {
       case 'created':
         return theme.palette.success.main;
       case 'failed':
-        return theme.palette.warning.main;
-      case 'error':
         return theme.palette.error.main;
       case 'deleted':
         return theme.palette.info.main;
@@ -440,8 +435,6 @@ function FileOperations() {
         return <CheckCircle sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       case 'failed':
         return <WarningIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
-      case 'error':
-        return <ErrorIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       case 'deleted':
         return <DeleteIcon sx={{ fontSize: 16, color: getStatusColor(status) }} />;
       case 'skipped':
@@ -601,10 +594,9 @@ function FileOperations() {
         );
 
       case 'failed':
-      case 'error':
         return (
           <Chip
-            label={status.status === 'failed' ? 'Failed' : 'Error'}
+            label="Failed"
             size="small"
             color="error"
             variant="filled"
@@ -763,9 +755,13 @@ function FileOperations() {
               </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {/* Action buttons for created and skipped files */}
-              {(file.status === 'created' || file.status === 'skipped') && (
-                <Tooltip title={file.status === 'created' ? 'File Actions' : 'Reprocess File'}>
+              {/* Action buttons for created, skipped, and failed files */}
+              {(file.status === 'created' || file.status === 'skipped' || file.status === 'failed') && (
+                <Tooltip title={
+                  file.status === 'created' ? 'File Actions' :
+                  file.status === 'failed' ? 'Retry Processing' :
+                  'Reprocess File'
+                }>
                   <IconButton
                     size="small"
                     onClick={(e) => {
@@ -778,14 +774,19 @@ function FileOperations() {
                       bgcolor: alpha(
                         file.status === 'created'
                           ? theme.palette.success.main
+                          : file.status === 'failed'
+                          ? theme.palette.error.main
                           : theme.palette.warning.main,
                         0.1
                       ),
-                      color: file.status === 'created' ? 'success.main' : 'warning.main',
+                      color: file.status === 'created' ? 'success.main' :
+                             file.status === 'failed' ? 'error.main' : 'warning.main',
                       '&:hover': {
                         bgcolor: alpha(
                           file.status === 'created'
                             ? theme.palette.success.main
+                            : file.status === 'failed'
+                            ? theme.palette.error.main
                             : theme.palette.warning.main,
                           0.2
                         ),
@@ -1252,7 +1253,7 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={statusCounts.failed} color="warning" max={999}>
+              <Badge badgeContent={statusCounts.failed} color="error" max={999}>
                 <Box sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1274,28 +1275,6 @@ function FileOperations() {
           />
           <Tab
             label={
-              <Badge badgeContent={statusCounts.error} color="error" max={999}>
-                <Box sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: { xs: 0.5, sm: 1 },
-                  flexDirection: { xs: 'column', sm: 'row' }
-                }}>
-                  <ErrorIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                  <Typography variant="caption" sx={{
-                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                    display: { xs: 'block', sm: 'inline' },
-                    lineHeight: 1.2,
-                  }}>
-                    Errors
-                  </Typography>
-                </Box>
-              </Badge>
-            }
-            {...a11yProps(3)}
-          />
-          <Tab
-            label={
               <Badge badgeContent={statusCounts.skipped} color="secondary" max={999}>
                 <Box sx={{
                   display: 'flex',
@@ -1314,7 +1293,7 @@ function FileOperations() {
                 </Box>
               </Badge>
             }
-            {...a11yProps(4)}
+            {...a11yProps(3)}
           />
           <Tab
             label={
@@ -1336,7 +1315,7 @@ function FileOperations() {
                 </Box>
               </Badge>
             }
-            {...a11yProps(5)}
+            {...a11yProps(4)}
           />
         </Tabs>
       </Box>
@@ -1748,14 +1727,10 @@ function FileOperations() {
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        {renderFileTable(operations, 'No error files')}
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={4}>
         {renderFileTable(operations, 'No skipped files')}
       </TabPanel>
 
-      <TabPanel value={tabValue} index={5}>
+      <TabPanel value={tabValue} index={4}>
         {renderFileTable(operations, 'No deleted files')}
       </TabPanel>
 
