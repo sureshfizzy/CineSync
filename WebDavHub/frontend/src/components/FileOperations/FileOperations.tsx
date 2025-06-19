@@ -318,17 +318,38 @@ function FileOperations() {
     }
   }, [fetchSourceFilesData, sourceIndex, sourcePage, tabValue]);
 
-  // Helper function to add new operation to the appropriate tab
-  const addNewOperation = useCallback((newOperation: FileOperation) => {
+  // Helper function to handle operation updates (add, update, or move between tabs)
+  const handleOperationUpdate = useCallback((newOperation: FileOperation) => {
+    const statusMap = ['created', 'failed', 'skipped', 'deleted'];
+    const newOperationTabIndex = statusMap.indexOf(newOperation.status) + 1;
+
     setStatusCounts(prev => ({
       ...prev,
       [newOperation.status]: prev[newOperation.status] + 1
     }));
 
-    const statusMap = ['created', 'failed', 'skipped', 'deleted'];
-    const operationTabIndex = statusMap.indexOf(newOperation.status) + 1;
+    setOperations(prev => {
+      const existingIndex = prev.findIndex(op =>
+        op.id === newOperation.id ||
+        (op.filePath === newOperation.filePath && op.filePath)
+      );
 
-    if (tabValue === operationTabIndex) {
+      if (existingIndex !== -1) {
+        const existingOperation = prev[existingIndex];
+
+        setStatusCounts(prevCounts => ({
+          ...prevCounts,
+          [existingOperation.status]: Math.max(0, prevCounts[existingOperation.status] - 1)
+        }));
+
+        setTotalOperations(prevTotal => Math.max(0, prevTotal - 1));
+        return prev.filter((_, index) => index !== existingIndex);
+      }
+
+      return prev;
+    });
+
+    if (tabValue === newOperationTabIndex) {
       setOperations(prev => [newOperation, ...prev.slice(0, recordsPerPage - 1)]);
       setTotalOperations(prev => prev + 1);
     }
@@ -365,12 +386,12 @@ function FileOperations() {
           operation: data.operation.operation || 'process'
         };
 
-        addNewOperation(newOperation);
+        handleOperationUpdate(newOperation);
       }
     },
     {
       source: 'file-operations',
-      dependencies: [addNewOperation]
+      dependencies: [handleOperationUpdate]
     }
   );
 
@@ -431,6 +452,14 @@ function FileOperations() {
   const handleModifyDialogClose = () => {
     setModifyDialogOpen(false);
     setCurrentFileForProcessing('');
+    // Refresh data after a short delay to ensure SSE events are processed
+    setTimeout(() => {
+      if (tabValue === 0) {
+        fetchSourceFilesData(sourcePage, sourceIndex);
+      } else {
+        fetchFileOperations();
+      }
+    }, 1500);
   };
 
   const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
@@ -450,6 +479,15 @@ function FileOperations() {
       });
 
       console.log('File processing completed:', response.data.message || 'File processing completed');
+
+      // Trigger a refresh after processing to ensure UI is updated
+      setTimeout(() => {
+        if (tabValue === 0) {
+          fetchSourceFilesData(sourcePage, sourceIndex);
+        } else {
+          fetchFileOperations();
+        }
+      }, 2000);
 
     } catch (error: any) {
       console.error(`Failed to process file: ${error.response?.data?.error || error.message}`);
