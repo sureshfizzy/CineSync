@@ -132,29 +132,16 @@ def _remove_website_patterns(filename: str) -> str:
     if not filename:
         return filename
 
-    # Common website patterns to remove
-    website_patterns = [
-        r'^www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\s*[-–—|:]*\s*',
-        r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\s*[-–—|:]*\s*',
-        r'^WWW\.[A-Z0-9.-]+\.[A-Z]{2,6}\.?',
-        r'^[A-Z0-9.-]+\.[A-Z]{2,6}\.?',
-        r'^(www\.)?torrent[a-zA-Z0-9]*\.[a-zA-Z]{2,6}\.?',
-        r'^(www\.)?download[a-zA-Z0-9]*\.[a-zA-Z]{2,6}\.?',
-        r'^(www\.)?movies?[a-zA-Z0-9]*\.[a-zA-Z]{2,6}\.?',
-        r'^(www\.)?films?[a-zA-Z0-9]*\.[a-zA-Z]{2,6}\.?',
-        r'^(www\.)?series[a-zA-Z0-9]*\.[a-zA-Z]{2,6}\.?',
-    ]
+    # Only match filenames that start with www. (actual websites)
+    website_pattern = r'^www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\s*[-–—|:]*\s*'
 
-    cleaned_filename = filename
+    match = re.match(website_pattern, filename, re.IGNORECASE)
+    if match:
+        cleaned_filename = filename[match.end():].strip()
+        cleaned_filename = re.sub(r'^[-–—|:\s.]+', '', cleaned_filename)
+        return cleaned_filename
 
-    for pattern in website_patterns:
-        match = re.match(pattern, cleaned_filename, re.IGNORECASE)
-        if match:
-            cleaned_filename = cleaned_filename[match.end():].strip()
-            cleaned_filename = re.sub(r'^[-–—|:\s.]+', '', cleaned_filename)
-            break
-
-    return cleaned_filename
+    return filename
 
 def _parse_filename_structure(filename: str) -> ParsedFilename:
     """
