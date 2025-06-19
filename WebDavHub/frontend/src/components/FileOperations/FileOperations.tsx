@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination } from '@mui/material';
-import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon } from '@mui/icons-material';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment } from '@mui/material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -107,10 +107,43 @@ function FileOperations() {
   }>>(new Map());
 
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
   const ITEMS_PER_PAGE = 50;
+
+  // Filtered operations
+  const filteredOperations = useMemo(() => {
+    if (!searchQuery.trim() || tabValue === 0) return operations;
+
+    const query = searchQuery.toLowerCase();
+    return operations.filter(op =>
+      op.fileName.toLowerCase().includes(query) ||
+      op.filePath.toLowerCase().includes(query) ||
+      (op.destinationPath && op.destinationPath.toLowerCase().includes(query)) ||
+      (op.reason && op.reason.toLowerCase().includes(query)) ||
+      (op.error && op.error.toLowerCase().includes(query)) ||
+      op.type.toLowerCase().includes(query)
+    );
+  }, [operations, searchQuery, tabValue]);
+
+  // Filtered source files
+  const filteredSourceFiles = useMemo(() => {
+    if (!sourceSearchQuery.trim() || tabValue !== 0) return sourceFiles;
+
+    const query = sourceSearchQuery.toLowerCase();
+    return sourceFiles.filter(file =>
+      file.name.toLowerCase().includes(query) ||
+      (file.path && file.path.toLowerCase().includes(query)) ||
+      (file.fullPath && file.fullPath.toLowerCase().includes(query)) ||
+      file.type.toLowerCase().includes(query)
+    );
+  }, [sourceFiles, sourceSearchQuery, tabValue]);
 
   const fetchSourceFilesData = useCallback(async (pageNum: number = 1, sourceIndexFilter?: number) => {
     setSourceLoading(true);
@@ -246,13 +279,13 @@ function FileOperations() {
       const statusMap = ['created', 'failed', 'skipped', 'deleted'];
       const statusFilter = statusMap[tabValue - 1];
 
-      const response = await axios.get('/api/file-operations', {
-        params: {
-          limit: recordsPerPage,
-          offset: offset,
-          status: statusFilter,
-        },
-      });
+      const params: any = {
+        limit: recordsPerPage,
+        offset: offset,
+        status: statusFilter,
+      };
+
+      const response = await axios.get('/api/file-operations', { params });
       const data = response.data;
 
       const operations = data.operations || [];
@@ -1350,6 +1383,152 @@ function FileOperations() {
         </Tabs>
       </Box>
 
+      {/* Search Input for each tab */}
+      <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
+        {tabValue === 0 ? (
+          // Source Files Search
+          <TextField
+            fullWidth
+            size={isMobile ? "medium" : "small"}
+            placeholder={isMobile ? "🔍 Search files..." : "🔍 Search source files by name, path, or type..."}
+            value={sourceSearchQuery}
+            onChange={(e) => setSourceSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{
+                    color: sourceSearchQuery ? 'primary.main' : 'text.secondary',
+                    fontSize: { xs: 18, sm: 20 },
+                    transition: 'color 0.2s ease'
+                  }} />
+                </InputAdornment>
+              ),
+              sx: {
+                fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                height: { xs: 48, sm: 40 },
+              }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: { xs: 2, sm: 3 },
+                bgcolor: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: 'blur(10px)',
+                border: '1px solid',
+                borderColor: sourceSearchQuery ? 'primary.main' : alpha(theme.palette.divider, 0.3),
+                transition: 'all 0.3s ease',
+                minHeight: { xs: 48, sm: 40 },
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  bgcolor: 'background.paper',
+                  transform: isMobile ? 'none' : 'translateY(-1px)',
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                },
+                '&.Mui-focused': {
+                  borderColor: 'primary.main',
+                  borderWidth: 2,
+                  bgcolor: 'background.paper',
+                  boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.2)}`,
+                  transform: 'none',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  border: 'none',
+                },
+                '& .MuiInputBase-input': {
+                  padding: { xs: '12px 14px', sm: '8.5px 14px' },
+                  fontSize: { xs: '1rem', sm: '0.875rem' },
+                  '&::placeholder': {
+                    fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                    opacity: 0.7,
+                  },
+                },
+              },
+            }}
+          />
+        ) : (
+          // File Operations Search
+          <TextField
+            fullWidth
+            size={isMobile ? "medium" : "small"}
+            placeholder={isMobile
+              ? `🔍 Search ${['', 'created', 'failed', 'skipped', 'deleted'][tabValue]}...`
+              : `🔍 Search ${['', 'created', 'failed', 'skipped', 'deleted'][tabValue]} operations by filename, path, or error message...`
+            }
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{
+                    color: searchQuery ? 'primary.main' : 'text.secondary',
+                    fontSize: { xs: 18, sm: 20 },
+                    transition: 'color 0.2s ease'
+                  }} />
+                </InputAdornment>
+              ),
+              sx: {
+                fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                height: { xs: 48, sm: 40 },
+              }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: { xs: 2, sm: 3 },
+                bgcolor: alpha(theme.palette.background.paper, 0.8),
+                backdropFilter: 'blur(10px)',
+                border: '1px solid',
+                borderColor: searchQuery ? 'primary.main' : alpha(theme.palette.divider, 0.3),
+                transition: 'all 0.3s ease',
+                minHeight: { xs: 48, sm: 40 },
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  bgcolor: 'background.paper',
+                  transform: isMobile ? 'none' : 'translateY(-1px)',
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                },
+                '&.Mui-focused': {
+                  borderColor: 'primary.main',
+                  borderWidth: 2,
+                  bgcolor: 'background.paper',
+                  boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.2)}`,
+                  transform: 'none',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  border: 'none',
+                },
+                '& .MuiInputBase-input': {
+                  padding: { xs: '12px 14px', sm: '8.5px 14px' },
+                  fontSize: { xs: '1rem', sm: '0.875rem' },
+                  '&::placeholder': {
+                    fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                    opacity: 0.7,
+                  },
+                },
+              },
+            }}
+          />
+        )}
+
+        {/* Search results count for mobile */}
+        {isMobile && (searchQuery || sourceSearchQuery) && (
+          <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center' }}>
+            <Chip
+              size="small"
+              label={
+                tabValue === 0
+                  ? `${filteredSourceFiles.length} files found`
+                  : `${filteredOperations.length} operations found`
+              }
+              sx={{
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: 'primary.main',
+                fontSize: '0.75rem',
+                height: 24,
+              }}
+            />
+          </Box>
+        )}
+      </Box>
+
       {/* Tab Panels */}
       <TabPanel value={tabValue} index={0}>
         {/* Modern Source File Browser with Card Layout */}
@@ -1556,7 +1735,7 @@ function FileOperations() {
 
                   {/* Source files list */}
                   <AnimatePresence>
-                    {sourceFiles.map((file, index) => (
+                    {filteredSourceFiles.map((file, index) => (
                     <MotionCard
                       key={file.name}
                       custom={index}
@@ -1738,10 +1917,11 @@ function FileOperations() {
           )}
 
           {/* Summary */}
-          {sourceFiles.length > 0 && (
+          {filteredSourceFiles.length > 0 && (
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                Showing {sourceFiles.length} of {sourceTotalFiles.toLocaleString()} items
+                Showing {filteredSourceFiles.length} of {sourceTotalFiles.toLocaleString()} items
+                {sourceSearchQuery && ` (filtered)`}
               </Typography>
             </Box>
           )}
@@ -1749,19 +1929,19 @@ function FileOperations() {
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        {renderFileTable(operations, 'No files created yet')}
+        {renderFileTable(filteredOperations, searchQuery ? 'No created files match your search' : 'No files created yet')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        {renderFileTable(operations, 'No failed file operations')}
+        {renderFileTable(filteredOperations, searchQuery ? 'No failed operations match your search' : 'No failed file operations')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        {renderFileTable(operations, 'No skipped files')}
+        {renderFileTable(filteredOperations, searchQuery ? 'No skipped files match your search' : 'No skipped files')}
       </TabPanel>
 
       <TabPanel value={tabValue} index={4}>
-        {renderFileTable(operations, 'No deleted files')}
+        {renderFileTable(filteredOperations, searchQuery ? 'No deleted files match your search' : 'No deleted files')}
       </TabPanel>
 
       {/* Pagination and Summary for Operations */}
@@ -1779,7 +1959,8 @@ function FileOperations() {
           />
         )}
         <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-          Showing {operations.length} of {totalOperations.toLocaleString()} operations
+          Showing {filteredOperations.length} of {totalOperations.toLocaleString()} operations
+          {searchQuery && ` (filtered)`}
         </Typography>
       </Box>
 
