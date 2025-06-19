@@ -285,20 +285,59 @@ function FileOperations() {
     }
   }, [fetchSourceFilesData, sourceIndex, sourcePage, tabValue]);
 
+  // Helper function to add new operation to the appropriate tab
+  const addNewOperation = useCallback((newOperation: FileOperation) => {
+    setStatusCounts(prev => ({
+      ...prev,
+      [newOperation.status]: prev[newOperation.status] + 1
+    }));
+
+    const statusMap = ['created', 'failed', 'skipped', 'deleted'];
+    const operationTabIndex = statusMap.indexOf(newOperation.status) + 1;
+
+    if (tabValue === operationTabIndex) {
+      setOperations(prev => [newOperation, ...prev.slice(0, recordsPerPage - 1)]);
+      setTotalOperations(prev => prev + 1);
+    }
+
+    setLastUpdated(new Date());
+  }, [tabValue, recordsPerPage]);
+
+  const removeSourceFile = useCallback((filePath: string) => {
+    if (tabValue === 0) {
+      setSourceFiles(prev => prev.filter(file => file.fullPath !== filePath));
+      setSourceTotalFiles(prev => Math.max(0, prev - 1));
+    }
+  }, [tabValue]);
+
   // Listen for file operation updates through centralized SSE
   useSSEEventListener(
     ['file_operation_update'],
-    () => {
-      // Refresh data when new operations are detected
-      setCurrentPage(1);
-      fetchFileOperations();
-      if (tabValue === 0) {
-        fetchSourceFilesData(sourcePage, sourceIndex);
+    (event) => {
+      const data = event.data;
+
+      if (data && data.operation) {
+        const newOperation: FileOperation = {
+          id: data.operation.id || `${Date.now()}-${Math.random()}`,
+          filePath: data.operation.filePath || '',
+          destinationPath: data.operation.destinationPath,
+          fileName: data.operation.fileName || data.operation.filePath?.split('/').pop() || 'Unknown',
+          status: data.operation.status || 'created',
+          timestamp: data.operation.timestamp || new Date().toISOString(),
+          reason: data.operation.reason,
+          error: data.operation.error,
+          tmdbId: data.operation.tmdbId,
+          seasonNumber: data.operation.seasonNumber,
+          type: data.operation.type || 'other',
+          operation: data.operation.operation || 'process'
+        };
+
+        addNewOperation(newOperation);
       }
     },
     {
       source: 'file-operations',
-      dependencies: [fetchFileOperations, fetchSourceFilesData]
+      dependencies: [addNewOperation]
     }
   );
 
@@ -314,7 +353,7 @@ function FileOperations() {
           mediaType: data.media_type
         })));
 
-        // Remove file from source files list after animation completes
+        // Remove file from source files list and clear animation after delay
         setTimeout(() => {
           setProcessingFiles(prev => {
             const newMap = new Map(prev);
@@ -322,21 +361,13 @@ function FileOperations() {
             return newMap;
           });
 
-          // Refresh source files to reflect the change
-          if (tabValue === 0) {
-            fetchSourceFilesData(sourcePage, sourceIndex);
-          }
-
-          // Also refresh created files tab
-          if (tabValue === 1) {
-            fetchFileOperations();
-          }
+          removeSourceFile(data.source_file);
         }, 3500);
       }
     },
     {
       source: 'mediahub',
-      dependencies: [tabValue, sourcePage, sourceIndex, fetchSourceFilesData, fetchFileOperations]
+      dependencies: [removeSourceFile]
     }
   );
 
@@ -367,9 +398,6 @@ function FileOperations() {
   const handleModifyDialogClose = () => {
     setModifyDialogOpen(false);
     setCurrentFileForProcessing('');
-    setTimeout(() => {
-      fetchSourceFilesData(sourcePage, sourceIndex);
-    }, 1000);
   };
 
   const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
@@ -390,10 +418,6 @@ function FileOperations() {
 
       console.log('File processing completed:', response.data.message || 'File processing completed');
 
-      setTimeout(() => {
-        fetchFileOperations();
-        fetchSourceFilesData(sourcePage, sourceIndex);
-      }, 1000);
     } catch (error: any) {
       console.error(`Failed to process file: ${error.response?.data?.error || error.message}`);
     }
@@ -1030,7 +1054,13 @@ function FileOperations() {
           {!isMobile && (
             <Tooltip title="Refresh">
               <IconButton
-                onClick={fetchFileOperations}
+                onClick={() => {
+                  if (tabValue === 0) {
+                    fetchSourceFilesData(sourcePage, sourceIndex);
+                  } else {
+                    fetchFileOperations();
+                  }
+                }}
                 disabled={loading}
                 sx={{
                   bgcolor: 'action.hover',
