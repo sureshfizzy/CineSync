@@ -16,7 +16,7 @@ from MediaHub.processors.db_utils import track_file_failure
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None):
+def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None):
 
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
@@ -25,18 +25,28 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         track_file_failure(src_file, None, None, "File skipped", f"File skipped based on skip patterns: {parent_folder_name}")
         return None, None
 
-    movie_name, year = extract_movie_name_and_year(parent_folder_name)
+    # Use passed metadata if available, otherwise parse (avoid redundant parsing)
+    if file_metadata:
+        movie_result = file_metadata
+    else:
+        movie_result = clean_query(parent_folder_name)
+
+    # Extract movie information
+    movie_name = movie_result.get('title', '')
+    year = movie_result.get('year') or extract_year(parent_folder_name)
+    episode_info = movie_result.get('episode_identifier')
+
+    # If episode_info is found, this might be a TV show misclassified as movie
+    if episode_info:
+        print(f"DEBUG: WARNING - Movie processor detected episode info: {episode_info}. This might be a TV show!")
+
     if not movie_name:
-        log_message(f"Attempting secondary extraction: {parent_folder_name}", level="DEBUG")
-        movie_name, year = clean_query_movie(parent_folder_name)
-        if not movie_name:
-            log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
-            track_file_failure(src_file, None, None, "Name extraction failed", f"Unable to extract movie name and year from: {parent_folder_name}")
-            return None, None
+        log_message(f"Unable to extract movie name from: {parent_folder_name}", level="ERROR")
+        track_file_failure(src_file, None, None, "Name extraction failed", f"Unable to extract movie name from: {parent_folder_name}")
+        return None, None
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
-    movie_name, none = clean_query(movie_name)
 
     collection_info = None
     proper_name = movie_name
@@ -95,8 +105,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')
 
-    # Determine resolution-specific folder
-    resolution = extract_resolution_from_filename(file)
+    # Extract resolution from filename and parent folder
+    file_resolution = extract_resolution_from_filename(file)
+    folder_resolution = extract_resolution_from_folder(root)
+    resolution = file_resolution or folder_resolution
 
     # Resolution folder determination logic
     resolution_folder = get_movie_resolution_folder(file, resolution)
@@ -235,6 +247,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             # Fall back to filename-based media info extraction
             media_info = extract_media_info(file, keywords)
+            # Include folder-based resolution if not already present
+            if resolution and 'Resolution' not in media_info:
+                media_info['Resolution'] = resolution
             tags_to_use = get_rename_tags()
 
         # Remove ID tag from the movie name and extract ID tag if needed

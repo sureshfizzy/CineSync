@@ -2,7 +2,17 @@ from datetime import datetime
 import sys
 import os
 import platform
+import urllib3
+import warnings
+import logging
 from dotenv import load_dotenv
+
+# Suppress urllib3 connection pool warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore", message="Connection pool is full, discarding connection")
+
+# Suppress specific urllib3 logging
+logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -103,7 +113,7 @@ def log_message(message, level="INFO", output="stdout"):
             sys.stderr.flush()
 
         # Always write to the log file without color codes
-        with open(LOG_FILE, 'a') as log_file:
+        with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
             log_file.write(log_entry)
 
 def log_unsupported_file_type(file_type):

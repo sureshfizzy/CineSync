@@ -1,172 +1,384 @@
 import re
 import os
 import json
-import inspect
-import requests
-from typing import Tuple, Optional
+import builtins
+import unicodedata
+from typing import Tuple, Optional, Dict, List, Set, Union, Any
+from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
+from MediaHub.utils.parser.extractor import extract_all_metadata
+from MediaHub.utils.parser.parse_anime import is_anime_filename
 
-def fetch_json(url):
-    """Fetch JSON data from the provided URL."""
+# ============================================================================
+# MAIN STRUCTURED PARSING FUNCTIONS
+# ============================================================================
+
+def parse_media_file(filename: str) -> Dict[str, Any]:
+    """
+    Parse a media filename and return comprehensive structured information.
+    This is the main function to use for new code.
+
+    Args:
+        filename: The filename to parse
+
+    Returns:
+        Dictionary with parsed information including:
+        - title: Cleaned title
+        - year: Release year
+        - resolution: Video resolution (1080p, 720p, etc.)
+        - quality_source: Source quality (BluRay, WEB-DL, etc.)
+        - video_codec: Video codec (x264, x265, etc.)
+        - audio_codecs: List of audio codecs
+        - audio_channels: List of audio channels
+        - release_group: Release group
+        - is_dubbed: Whether it's dubbed
+        - season: Season number (for TV shows)
+        - episode: Episode number (for TV shows)
+        - episode_title: Episode title (for TV shows)
+        - languages: List of languages
+        - is_repack: Whether it's a repack
+        - is_anime: Whether it's anime content
+        - container: File container format
+        - hdr: HDR information
+        - is_proper: Whether it's a proper release
+
+    Examples:
+        >>> parse_media_file("1923.S02E05.Only.Gunshots.to.GuideUs.1080p.Webrip.10bit.DDP5.1.x265-HODL.mkv")
+        {
+            "title": "1923",
+            "year": None,
+            "season": 2,
+            "episode": 5,
+            "episode_title": "Only Gunshots to GuideUs",
+            "resolution": "1080p",
+            "quality_source": "Webrip",
+            "video_codec": "X265",
+            "audio_codecs": ["DDP"],
+            "audio_channels": ["5.1"],
+            "release_group": "HODL",
+            "container": "mkv",
+            "is_anime": false
+        }
+    """
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        log_message(f"HTTP request failed: {e}", level="ERROR")
-        return {}
+        # Use the unified parser
+        metadata = extract_all_metadata(filename)
+        result = metadata.to_dict()
 
-def extract_year(query):
-    match = re.search(r'\((\d{4})\)$', query.strip())
-    if match and int(match.group(1)) >= 1900:
-        return int(match.group(1))
+        # Normalize Unicode characters in the title for better API compatibility
+        if 'title' in result and result['title']:
+            result['title'] = normalize_unicode_characters(result['title'])
 
-    match = re.search(r'(\d{4})$', query.strip())
-    if match and int(match.group(1)) >= 1900:
-        return int(match.group(1))
-
-    return None
-
-def extract_resolution(filename):
-    patterns = [
-        r'(\d{3,4}p)',
-        r'(\d{3,4}x\d{3,4})'
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, filename, re.IGNORECASE)
-        if match:
-            return match.group(1)
-    return None
-
-def extract_resolution_from_folder(folder_name):
-    patterns = [
-        r'(\d{3,4}p)',
-        r'(\d{3,4}x\d{3,4})'
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, folder_name, re.IGNORECASE)
-        if match:
-            return match.group(1)
-    return None
-
-def extract_folder_year(folder_name):
-    resolutions = {'1080', '480', '720', '2160'}
-
-    match = re.search(r'\((\d{4})\)', folder_name)
-    if match:
-        year = match.group(1)
-        if year not in resolutions and int(year) >= 1900:
-            return int(year)
-
-    match = re.search(r'\.(\d{4})\.', folder_name)
-    if match:
-        year = match.group(1)
-        if year not in resolutions and int(year) >= 1900:
-            return int(year)
-
-    return None
-
-def extract_movie_name_and_year(filename):
-    if re.match(r'^\d{1,2}\.\s+', filename):
-        filename = re.sub(r'^\d{1,2}\.\s*', '', filename)
-
-    patterns = [
-        r'(.+?)\s*\[(\d{4})\]',
-        r'(.+?)\s*\((\d{4})\)',
-        r'(.+?)\s*(\d{4})'
-    ]
-
-    resolution_match = re.search(r'(2160p|1080p|720p|480p|2160|1080|720|480)', filename, re.IGNORECASE)
-    resolution = resolution_match.group(0) if resolution_match else None
-
-    for pattern in patterns:
-        match = re.search(pattern, filename)
-        if match:
-            name = match.group(1).replace('.', ' ').replace('-', ' ').strip()
-            name = re.sub(r'[\[\]]', '', name).strip()
-            name = sanitize_windows_filename(name)
-            year = match.group(2)
-
-            if resolution and year == resolution.split('p')[0]:
-                year = None
-
-            # Ensure the extracted year is 1900 or later
-            if year and int(year) >= 1900:
-                return name, year
-            else:
-                return name, None
-
-    return None, None
-
-def extract_resolution_from_filename(filename):
-    resolution_match = re.search(r'\b(2160p|1080p|720p|480p|2160|1080|720|480|4k)\b', filename, re.IGNORECASE)
-    remux_match = re.search(r'(Remux)', filename, re.IGNORECASE)
-
-    if resolution_match:
-        resolution = resolution_match.group(1).lower()
-        if remux_match:
-            resolution += 'Remux'
-        return resolution
-    return None
-
-def load_keywords(file_name, key="keywords"):
-    file_path = os.path.join(os.path.dirname(__file__), file_name)
-    with open(file_path, 'r') as file:
-        data = json.load(file)
-    return data.get(key, [])
-
-def load_mediainfo_terms(file_name: str) -> set:
-    """Load and flatten all terms from mediainfo.json into a single set."""
-    mediainfo_file = os.path.join(os.path.dirname(__file__), file_name)
-    try:
-        with open(mediainfo_file, 'r') as file:
-            data = json.load(file)
-
-        terms = set()
-        for category in data.values():
-            terms.update([term.lower() for term in category])
-
-        return terms
+        return result
     except Exception as e:
-        log_message(f"Error loading mediainfo terms: {e}", level="ERROR")
-        return set()
+        log_message(f"Error parsing media file '{filename}': {e}", "ERROR")
+        return {"title": filename, "error": str(e)}
 
-def clean_query(query, keywords_file='keywords.json'):
+def parse_media_file_json(filename: str, indent: int = 2) -> str:
+    """
+    Parse a media filename and return JSON string with structured information.
+
+    Args:
+        filename: The filename to parse
+        indent: JSON indentation (None for compact)
+
+    Returns:
+        JSON string with parsed information
+    """
+    try:
+        result = parse_media_file(filename)
+        return json.dumps(result, indent=indent, default=str)
+    except Exception as e:
+        log_message(f"Error parsing media file to JSON '{filename}': {e}", "ERROR")
+        return json.dumps({"title": filename, "error": str(e)}, indent=indent)
+
+# ============================================================================
+# LEGACY COMPATIBILITY FUNCTIONS (Updated to use structured parser)
+# ============================================================================
+
+def extract_year(query: str) -> Optional[int]:
+    """Extract year from query string using the unified parser."""
+    if not isinstance(query, str):
+        return None
+    try:
+        metadata = extract_all_metadata(query)
+        return metadata.year
+    except Exception:
+        return None
+
+def extract_movie_name_and_year(filename: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract movie name and year from filename using the unified parser."""
+    if not isinstance(filename, str) or not filename.strip():
+        return None, None
+    try:
+        metadata = extract_all_metadata(filename)
+        title = metadata.title
+        year = metadata.year
+        return title, str(year) if year else None
+    except Exception:
+        return None, None
+
+def extract_resolution_from_filename(filename: str) -> Optional[str]:
+    """Extract resolution from filename using the unified parser."""
+    if not isinstance(filename, str) or not filename.strip():
+        return None
+    try:
+        metadata = extract_all_metadata(filename)
+        return metadata.resolution
+    except Exception:
+        return None
+
+def extract_title(filename: str) -> str:
+    """Extract title from filename using the unified parser with Unicode normalization."""
+    if not isinstance(filename, str) or not filename.strip():
+        return ""
+    try:
+        metadata = extract_all_metadata(filename)
+        title = metadata.title
+        if title:
+            # Normalize Unicode characters for better API compatibility
+            title = normalize_unicode_characters(title)
+            return title
+        return "Unknown Title"
+    except Exception:
+        return "Unknown Title"
+
+def _is_clean_title(query: str) -> bool:
+    """
+    Check if a query string appears to be already a clean title.
+
+    A clean title typically:
+    - Contains only letters, numbers, spaces, and basic punctuation
+    - Has no file extensions
+    - Has no technical terms like resolution, codecs, etc.
+    - Has no years in parentheses or brackets
+    - Has no dots used as separators (except in abbreviations)
+    """
+    if not query or not query.strip():
+        return False
+
+    query = query.strip()
+
+    # Check for file extensions
+    if re.search(r'\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts)$', query, re.IGNORECASE):
+        return False
+
+    # Check for technical terms that indicate it's a filename
+    technical_terms = [
+        r'\b\d{3,4}p\b',  # Resolution like 1080p, 720p
+        r'\b(BluRay|WEB-DL|WEBRip|HDTV|x264|x265|H264|H265|HEVC|AAC|AC3|DTS)\b',  # Technical terms
+        r'\b(MULTI|DUAL|REPACK|PROPER|EXTENDED|UNCUT|DIRECTORS|THEATRICAL)\b',  # Release terms
+        r'\b[A-Z]{2,}-[A-Z0-9]+\b',  # Release group patterns like "RARBG", "LOST"
+        r'\bS\d{1,2}\.E\d{1,2}\b',  # Season/episode patterns like S01.E01
+        r'\bS\d{1,2}E\d{1,2}\b',    # Season/episode patterns like S01E01
+        r'\bS\d{1,2}\b',            # Season patterns like S01, S02, S03
+        r'\bE\d{1,3}\b',            # Episode patterns like E01, E02
+        r'\bSeason\s+\d+\b',        # Season patterns like "Season 1"
+    ]
+
+    for pattern in technical_terms:
+        if re.search(pattern, query, re.IGNORECASE):
+            return False
+
+    # Check for years in brackets/parentheses (common in filenames)
+    if re.search(r'[\[\(]\d{4}[\]\)]', query):
+        return False
+
+    # Check for excessive dots (indicating dot-separated filename format)
+    if query.count('.') > 2:  # Allow some dots for abbreviations like "U.S.A."
+        return False
+
+    # Check for patterns that look like filename separators
+    if re.search(r'[._-]{2,}', query):  # Multiple consecutive separators
+        return False
+
+    # If none of the filename indicators are found, it's likely a clean title
+    return True
+
+def clean_query(query: str) -> Dict[str, Any]:
+    """
+    Parse media filename and return comprehensive structured information.
+
+    Returns:
+        Dictionary with complete parsing results including:
+        - title: Cleaned title
+        - year: Release year
+        - resolution: Video resolution
+        - quality_source: Source quality
+        - video_codec: Video codec
+        - audio_codecs: Audio codecs
+        - audio_channels: Audio channels
+        - languages: Languages
+        - season: Season number (for TV shows)
+        - episode: Episode number (for TV shows)
+        - episode_title: Episode title (for TV shows)
+        - release_group: Release group
+        - And all other attributes from the unified parser
+    """
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
-        return "", None
+        return {"title": "", "error": "Invalid input type"}
 
     log_message(f"Original query: '{query}'", "DEBUG", "stdout")
 
-    query = re.sub(r'(?:www\.\S+\.\S+\s*-?)', '', query)
+    # Check if the query is already a clean title (no file extensions, technical terms, or complex patterns)
+    # If it looks like a clean title, return it as-is to avoid unnecessary parsing
+    if _is_clean_title(query):
+        log_message(f"Query appears to be already clean, returning as-is: '{query}'", level="DEBUG")
+        return {"title": query, "episodes": [], "seasons": [], "episode_identifier": None}
 
-    remove_keywords = load_keywords(keywords_file, key="keywords")
-    remove_countries = load_keywords(keywords_file, key="countries")
+    try:
+        # Use the unified parser
+        metadata = extract_all_metadata(query)
+        result = metadata.to_dict()
 
-    query = query.replace('.', ' ')
+        # Normalize Unicode characters in the title for better API compatibility
+        if 'title' in result and result['title']:
+            result['title'] = normalize_unicode_characters(result['title'])
 
-    # Combine keywords and countries into a single list
-    remove_terms = remove_keywords + remove_countries
-    terms_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, remove_terms)) + r')\b', re.IGNORECASE)
-    query = terms_pattern.sub('', query)
+        # Add legacy compatibility fields
+        result['episodes'] = [metadata.episode] if metadata.episode else []
+        result['seasons'] = [metadata.season] if metadata.season else []
 
-    query = re.sub(r'\bMINI-SERIES\b.*', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\(\s*\)', '', query)
-    query = re.sub(r'\s+', ' ', query).strip()
-    query = re.sub(r'\bSeason \d+\b.*|\bS\d{1,2}EP?\d+\b.*', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\bS\d{1,2}[EЕP]?\d+\b.*', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\[.*?\]', '', query)
-    query = re.sub(r'\(\d{4}\)', '', query)
-    query = re.sub(r'\.(mkv|mp4|avi)$', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\b(x264|x265|h264|h265|720p|1080p|4K|2160p)\b', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\b\d+MB\b', '', query)
-    query = re.sub(r'\b(ESub|Eng Sub)\b', '', query, flags=re.IGNORECASE)
+        # For episode_identifier, only create if we have actual season info
+        if metadata.episode and metadata.season:
+            result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:02d}"
+        elif metadata.episode:
+            # For anime files without season info, don't create episode_identifier
+            # This prevents defaulting to S01 when there's no actual season information
+            result['episode_identifier'] = None
+        else:
+            result['episode_identifier'] = None
 
-    log_message(f"Final cleaned query: {query}", level="DEBUG")
-    return query, None
+        result['show_name'] = result['title'] if metadata.season or metadata.episode else None
+        result['create_season_folder'] = bool(metadata.season or metadata.episode)
+        result['is_extra'] = False
+        result['dubbed'] = metadata.is_dubbed
+        result['subbed'] = metadata.is_subbed
+        result['repack'] = metadata.is_repack
+        result['proper'] = metadata.is_proper
+        result['quality'] = metadata.quality_source  # Legacy field name
+        result['codec'] = metadata.video_codec  # Legacy field name
+        result['audio'] = metadata.audio_codecs  # Legacy field name
+        result['channels'] = metadata.audio_channels  # Legacy field name
+        result['group'] = metadata.release_group  # Legacy field name
 
-def normalize_query(query):
+        # Add season/episode numbers as strings for compatibility
+        if metadata.season:
+            result['season_number'] = f"{metadata.season:02d}"
+        # Don't default to season 1 if there's no actual season information
+
+        if metadata.episode:
+            result['episode_number'] = f"{metadata.episode:02d}"
+
+        log_message(f"Final parsed result: title='{result.get('title')}', episode='{result.get('episode_identifier')}'", level="DEBUG")
+        return result
+
+    except Exception as e:
+        log_message(f"Error using parser for query cleaning: {e}", "ERROR")
+        return {"title": query, "error": str(e), "episodes": [], "seasons": []}
+
+
+
+
+
+# ============================================================================
+# UNICODE AND CHARACTER NORMALIZATION FUNCTIONS
+# ============================================================================
+
+def normalize_unicode_characters(text: str) -> str:
+    """
+    Normalize Unicode characters to their ASCII equivalents for better TMDB matching.
+
+    This function handles special Unicode characters that might appear in filenames
+    but cause issues with API searches, such as:
+    - Modifier Letter Colon (꞉) -> Regular Colon (:)
+    - Various Unicode punctuation -> ASCII equivalents
+
+    Args:
+        text: Text containing potentially problematic Unicode characters
+
+    Returns:
+        Text with normalized characters
+    """
+    if not isinstance(text, str):
+        return ""
+
+    # First, handle specific problematic characters
+    character_replacements = {
+        '\ua789': ':',  # MODIFIER LETTER COLON -> COLON
+        '\u02d0': ':',  # MODIFIER LETTER TRIANGULAR COLON -> COLON
+        '\uff1a': ':',  # FULLWIDTH COLON -> COLON
+        '\u2236': ':',  # RATIO -> COLON
+        '\u2237': ':',  # PROPORTION -> COLON
+        '\u205a': ':',  # TWO DOT PUNCTUATION -> COLON
+        '\u2009': ' ',  # THIN SPACE -> REGULAR SPACE
+        '\u00a0': ' ',  # NON-BREAKING SPACE -> REGULAR SPACE
+        '\u2013': '-',  # EN DASH -> HYPHEN
+        '\u2014': '-',  # EM DASH -> HYPHEN
+        '\u2015': '-',  # HORIZONTAL BAR -> HYPHEN
+        '\u2212': '-',  # MINUS SIGN -> HYPHEN
+    }
+
+    # Apply specific character replacements
+    for unicode_char, replacement in character_replacements.items():
+        text = text.replace(unicode_char, replacement)
+
+    # Apply Unicode normalization (NFD = decomposed form)
+    # This separates combined characters into base + combining characters
+    text = unicodedata.normalize('NFD', text)
+
+    # Remove combining characters (accents, etc.) and keep only ASCII
+    # This converts characters like é -> e, ñ -> n, etc.
+    ascii_text = ''.join(
+        char for char in text
+        if unicodedata.category(char) != 'Mn'  # Mn = Nonspacing_Mark (combining chars)
+    )
+
+    # Final cleanup: ensure we have clean ASCII
+    try:
+        # Try to encode as ASCII to catch any remaining problematic characters
+        ascii_text.encode('ascii')
+        return ascii_text
+    except UnicodeEncodeError:
+        # If there are still non-ASCII characters, use transliteration
+        # This is a more aggressive approach for stubborn characters
+        return unicodedata.normalize('NFKD', ascii_text).encode('ascii', 'ignore').decode('ascii')
+
+# ============================================================================
+# UTILITY FUNCTIONS (Keep these as they are utility functions)
+# ============================================================================
+
+def sanitize_windows_filename(filename: str) -> str:
+    """Sanitize a filename to be compatible with Windows filesystem."""
+    if not isinstance(filename, str):
+        return ""
+
+    if not filename.strip():
+        return "sanitized_filename"
+
+    # Windows filename restrictions: \ / : * ? " < > |
+    replacements = {
+        ':': ' -', '/': '-', '\\': '-', '*': 'x', '?': '',
+        '"': "'", '<': '(', '>': ')', '|': '-'
+    }
+
+    for char, replacement in replacements.items():
+        filename = filename.replace(char, replacement)
+
+    filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+    filename = filename.strip(' .')
+
+    if not filename:
+        filename = "sanitized_filename"
+
+    return filename
+
+
+
+def normalize_query(query: str) -> str:
+    """Normalize query string for comparison purposes."""
     if not isinstance(query, str):
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
         return ""
@@ -177,43 +389,46 @@ def normalize_query(query):
 
     return normalized_query
 
-def check_existing_variations(name, year, dest_dir):
-    normalized_query = normalize_query(name)
-    log_message(f"Checking existing variations for: {name} ({year})", level="DEBUG")
-    exact_match = None
-    partial_matches = []
+def is_junk_file(file: str, file_path: str) -> bool:
+    """Determine if the file is junk based on size and type."""
+    if not isinstance(file, str) or not isinstance(file_path, str):
+        return False
 
-    for root, dirs, _ in os.walk(dest_dir):
-        for d in dirs:
-            normalized_d = normalize_query(d)
-            d_year = extract_year(d)
+    if not os.path.exists(file_path):
+        return False
 
-            # Prioritize exact matches
-            if normalized_query == normalized_d and (d_year == year or not year or not d_year):
-                log_message(f"Found exact matching variation: {d}", level="DEBUG")
-                return d
+    if os.path.islink(file_path):
+        return False
 
-            # Collect partial matches with stricter criteria
-            if (normalized_query in normalized_d or normalized_d in normalized_query) and abs(len(normalized_query) - len(normalized_d)) < 5:
-                partial_matches.append((d, d_year))
+    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt')):
+        return False
 
-    if partial_matches:
-        # Select the best partial match based on length and year
-        closest_match = min(partial_matches, key=lambda x: (len(x[0]), x[1] != year))
-        log_message(f"Found closest matching variation: {closest_match[0]}", level="DEBUG")
-        return closest_match[0]
+    try:
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        junk_max_size_mb = get_junk_max_size_mb()
+        return file_size_mb <= junk_max_size_mb
+    except (OSError, IOError) as e:
+        log_message(f"Error checking file size for {file_path}: {e}", level="ERROR")
+        return False
 
-    log_message(f"No matching variations found for: {name} ({year})", level="DEBUG")
-    return None
+# ============================================================================
+# ADDITIONAL UTILITY FUNCTIONS (Previously missing)
+# ============================================================================
 
-def build_dest_index(dest_dir):
-    dest_index = set()
-    for root, dirs, files in os.walk(dest_dir):
-        for name in dirs + files:
-            dest_index.add(os.path.join(root, name))
-    return dest_index
+def standardize_title(title: str, check_word_count: bool = True) -> str:
+    """
+    Standardize title by replacing special characters with alternatives.
 
-def standardize_title(title, check_word_count=True):
+    Args:
+        title: Title to standardize
+        check_word_count: Whether to check word count before standardizing
+
+    Returns:
+        Standardized title
+    """
+    if not isinstance(title, str):
+        return ""
+
     replacements = {
         '0': 'o', '1': 'i', '4': 'a', '5': 's', '7': 't', '9': 'g',
         '@': 'a', '#': 'h', '$': 's', '%': 'p', '&': 'and', '*': 'x',
@@ -222,8 +437,7 @@ def standardize_title(title, check_word_count=True):
 
     def replacement_func(match):
         char = match.group(0)
-        standardized_char = replacements.get(char, char)
-        return standardized_char
+        return replacements.get(char, char)
 
     if check_word_count:
         # Count words with non-standard characters
@@ -245,256 +459,198 @@ def standardize_title(title, check_word_count=True):
     standardized_title = re.sub(r'\s+', ' ', standardized_title).strip()
     return standardized_title
 
-def remove_genre_names(query):
+def remove_genre_names(query: str) -> str:
+    """
+    Remove common genre names from query string.
+
+    Args:
+        query: Query string to clean
+
+    Returns:
+        Query with genre names removed
+    """
+    if not isinstance(query, str):
+        return ""
+
     genre_names = [
         'Action', 'Comedy', 'Drama', 'Thriller', 'Horror', 'Romance', 'Adventure', 'Sci-Fi',
         'Fantasy', 'Mystery', 'Crime', 'Documentary', 'Animation', 'Family', 'Music', 'War',
         'Western', 'History', 'Biography'
     ]
+
     for genre in genre_names:
         query = re.sub(r'\b' + re.escape(genre) + r'\b', '', query, flags=re.IGNORECASE)
+
     query = re.sub(r'\s+', ' ', query).strip()
     return query
 
 
-def extract_title(filename):
-    pattern = r'^([^.]*?)\s*(?:[Ss]\d{2}[Ee]\d{2}|S\d{2}|E\d{2}|-\d{2,4}p|\.mkv|\.mp4|\.avi|$)'
-    match = re.match(pattern, filename)
-    if match:
-        title = match.group(1).replace('.', ' ').replace('-', ' ').strip()
-        title = re.sub(r'\s*\d{2,4}p|\s*[Ss]\d{2}[Ee]\d{2}.*$', '', title).strip()
-        title = sanitize_windows_filename(title)
-        return title
-    else:
-        return "", None
 
-def get_anime_patterns(keywords_file='keywords.json'):
+def check_existing_variations(name: str, year: Optional[int], dest_dir: str) -> Optional[str]:
     """
-    Returns a compiled regex pattern for detecting anime files.
-    Includes patterns for common anime release groups, formats, and naming conventions.
-    """
-
-    release_groups = load_keywords(keywords_file, key="release_groups")
-
-    anime_patterns = [
-        r'\[(?:' + '|'.join(map(re.escape, release_groups)) + r')\]',
-        r'\s-\s\d{2,3}\s',
-        r'\[(?:Sub|Dub|Raw)\]',
-        r'\[(?:JAP|JPN|ENG|ITA)(?:-SUB)?\]',
-        r'\[(?:SUB-ITA|VOSTFR|Multi-Subs|Dual Audio)\]',
-        r'\[(?:COMPLETA|Complete)\]',
-        r'\[\d+\.\d+GB\]',
-        r'\(V\d+\)',
-        r'Season_-\d{2}',
-    ]
-
-    combined_pattern = '|'.join(f'(?:{pattern})' for pattern in anime_patterns)
-    return re.compile(combined_pattern, re.IGNORECASE)
-
-def is_junk_file(file, file_path):
-     """
-     Determine if the file is an junk based on size.
-     Skip .srt & .strm files regardless of size.
-     """
-     if os.path.islink(file_path):
-         return False
-
-     # Ignore .srt and .strm files completely
-     if file.lower().endswith(('.srt', '.strm')):
-         return False
-
-     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-
-     junk_max_size_mb = get_junk_max_size_mb()
-
-     if file_size_mb <= junk_max_size_mb:
-         return True
-     else:
-         return False
-
-def clean_query_movie(query: str, keywords_file: str = 'keywords.json') -> tuple[str, Optional[int]]:
-    if not isinstance(query, str):
-        log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
-        return "", None
-
-    log_message(f"Original query: '{query}'", "DEBUG", "stdout")
-    original_query = query
-    website_patterns = [
-        r'^(?:www\.|WWW\.)?\w+\.(?:com|org|net|CO|COM|ORG|NET)(?:\s*-\s*|\s+|\.\s*|\.$)',
-        r'^(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\.[\w\-]+(?:\s*-\s*|\s+|\.$)',
-        r'^(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+(?:\s*-\s*|\s+|\.$)'
-    ]
-
-    for pattern in website_patterns:
-        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
-
-    # Load configurable keywords to remove
-    remove_keywords = load_keywords(keywords_file)
-
-    year_match = re.search(r'(?:19|20)\d{2}', query)
-    year = int(year_match.group(0)) if year_match else None
-
-    query = re.sub(r'^\[[^\]]+\]', '', query)
-    query = re.sub(r'-[\w\.]+-?$', '', query)
-
-    query = re.sub(r'\[(?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\]', '', query, flags=re.IGNORECASE)
-    query = re.sub(r'\((?:www\.|WWW\.)?[\w\-]+\.[\w\-]+\)', '', query, flags=re.IGNORECASE)
-
-    query = re.sub(r'\[[^\]]*(?:Audio|字幕|双语|音轨)[^\]]*\]', '', query)
-
-    tech_patterns = [
-        r'\b\d{3,4}[pi]\b',
-        r'\bWEB-?DL\b',
-        r'\b(?:H|x)(?:264|265)\b',
-        r'\bBlu-?Ray\b',
-        r'\bHDR\d*\b',
-        r'\bDDP?\d\.?\d?\b',
-        r'\b(?:\d+)?Audio\b',
-        r'\b\d+bit\b',
-        r'\[\d+\.\d+GB\]',
-        r'\b(?:AAC|AC3)\b',
-        r'\.\w+$'
-    ]
-    for pattern in tech_patterns:
-        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
-
-    english_match = re.search(r'([A-Za-z][A-Za-z\s\.]+(?:Gone[A-Za-z\s\.]+)?)', query)
-    if english_match:
-        potential_title = english_match.group(1)
-        if not re.search(r'\b(?:WEB|DL|HDR|DDP|AAC)\b', potential_title, re.IGNORECASE):
-            final_title = potential_title
-        else:
-            final_title = query
-    else:
-        parts = re.split(r'[\[\]\(\)]', query)
-        final_title = next((part for part in parts if part and not re.search(r'\b(?:WEB|DL|HDR|DDP|AAC)\b', part, re.IGNORECASE)), parts[0])
-
-    final_title = re.sub(r'\s*\b\d{4}\b\s*', '', final_title)
-    final_title = re.sub(r'\s*\[.*?\]\s*', '', final_title)
-    final_title = re.sub(r'\s*\(.*?\)\s*', '', final_title)
-    final_title = re.sub(r'(?<=\w)\.(?=\w)', ' ', final_title)
-    final_title = re.sub(r'^[\W_]+|[\W_]+$', '', final_title)
-    final_title = re.sub(r'\s+', ' ', final_title)
-    final_title = final_title.strip()
-    final_title = sanitize_windows_filename(final_title)
-
-    log_message(f"Cleaned movie title: '{final_title}'", "DEBUG", "stdout")
-    return final_title, year
-
-def advanced_clean_query(query: str, max_words: int = 4, keywords_file: str = 'keywords.json', mediainfo_file: str = 'mediainfo.json') -> Tuple[str, Optional[str]]:
-    """
-    Enhanced query cleaning function that uses advanced pattern recognition
-    to clean TV show and movie titles, limiting to specified number of words.
+    Check for existing variations of a media title in the destination directory.
 
     Args:
-        query (str): The input query string to clean
-        max_words (int): Maximum number of words to keep in the final output
-        keywords_file (str): Path to keywords JSON file
+        name: Media title to search for
+        year: Optional year for better matching
+        dest_dir: Destination directory to search in
 
     Returns:
-        Tuple[str, Optional[str]]: Cleaned query and episode info if present
+        Matching directory name if found, None otherwise
     """
-    if not isinstance(query, str):
-        return "", None
+    if not isinstance(name, str) or not name.strip():
+        return None
 
-    episode_patterns = [
-        r'(?:\d+of\d+)',
-        r'(?:S\d{1,2}E\d{1,2})',
-        r'(?:Season\s*\d+)',
-        r'(?:Series\s*\d+)',
-        r'(?:\d{1,2}x\d{1,2})',
-        r'(?:E\d{1,2})',
-        r'(?:\d{1,2}\s*-\s*\d{1,2})',
-        r'\bS\d{1,2}\b',
-        r'\bSeason\s*\d{1,2}\b',
-        r'\[S\d{1,2}\]',
-        r'\(S\d{1,2}\)',
-        r'S\d{1,2}$',
-        r'S(\d+)E(\d+)',
-        r'Episode\s+(\d+)\s+(.*)',
-        r'(?i)Episode\s+(\d+)\s+(.*?)\.(\w+)$', 
-        r'Episode\s+(\d+)\s+(.*?)\.(\w+)$',
-    ]
+    if not os.path.exists(dest_dir):
+        log_message(f"Destination directory does not exist: {dest_dir}", level="WARNING")
+        return None
 
-    technical_patterns = [
-        r'\d{3,4}p',
-        r'(?:WEB-DL|HDTV|BluRay|BDRip)',
-        r'(?:x264|x265|h264|h265)',
-        r'(?:AAC|AC3|MP3)',
-        r'(?:HEVC|10bit)',
-        r'\[.*?\]',
-        r'\(.*?\)',
-        r'(?:MVGroup|Forum)',
-        r'\b\d{4}\b',
-        r'(?:mkv|mp4|avi)',
-        r'S\d{1,2}E\d{1,2}',
-        r'-\s*S\d+E\d+E\d+',
-        r'\[\d+\]'
-    ]
+    normalized_query = normalize_query(name)
+    log_message(f"Checking existing variations for: {name} ({year})", level="DEBUG")
 
-    channel_pattern = r'^(?:Ch\d+|BBC\d*|ITV\d*|NBC|CBS|ABC|Fox|A&C)\.'
-    query = re.sub(channel_pattern, '', query, flags=re.IGNORECASE)
+    partial_matches = []
 
-    for pattern in technical_patterns:
-        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
+    try:
+        # Define MAX_WORD_LENGTH_DIFF if not available from config
+        MAX_WORD_LENGTH_DIFF = getattr(builtins, 'MAX_WORD_LENGTH_DIFF', 10)
 
-    episode_info = None
-    for pattern in episode_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
-        if match:
-            episode_info = match.group(0)
-            query = re.sub(pattern, '', query)
-            break
+        for root, dirs, _ in os.walk(dest_dir):
+            for d in dirs:
+                normalized_d = normalize_query(d)
+                d_year = extract_year(d)
 
-    query = query.replace('.', ' ')
-    query = query.replace('_', ' ')
-    query = query.replace('-', ' ')
-    query = re.sub(r'\[.*?\]', '', query)
-    query = re.sub(r'\(.*?\)', '', query)
-    query = re.sub(r'[^\w\s]', '', query)
-    query = re.sub(r'\s+', ' ', query)
-    common_words = set(load_keywords(keywords_file, key="keywords"))
-    query_words = query.split()
-    query_words = [word for word in query_words if word.lower() not in common_words]
-    query_words = query_words[:max_words]
-    query = ' '.join(query_words)
+                # Prioritize exact matches
+                if normalized_query == normalized_d and (d_year == year or not year or not d_year):
+                    log_message(f"Found exact matching variation: {d}", level="DEBUG")
+                    return d
 
-    media_words = load_mediainfo_terms(mediainfo_file)
-    query_words = query.split()
-    query_words = [word for word in query_words if word.lower() not in media_words]
-    query = ' '.join(query_words)
-    query = query.strip()
+                # Collect partial matches with stricter criteria
+                length_diff = abs(len(normalized_query) - len(normalized_d))
+                if (normalized_query in normalized_d or normalized_d in normalized_query) and length_diff < MAX_WORD_LENGTH_DIFF:
+                    partial_matches.append((d, d_year))
 
-    log_message(f"Cleaned show title: '{query}'", "DEBUG", "stdout")
-    return query, None
+        if partial_matches:
+            # Select the best partial match based on length and year
+            closest_match = min(partial_matches, key=lambda x: (len(x[0]), x[1] != year if year else 0))
+            log_message(f"Found closest matching variation: {closest_match[0]}", level="DEBUG")
+            return closest_match[0]
 
-def sanitize_windows_filename(filename):
+    except Exception as e:
+        log_message(f"Error checking existing variations: {e}", level="ERROR")
+        return None
+
+    log_message(f"No matching variations found for: {name} ({year})", level="DEBUG")
+    return None
+
+def build_dest_index(dest_dir: str) -> Set[str]:
     """
-    Sanitize a filename to be compatible with Windows filesystem.
-    Replaces or removes characters that are not allowed in Windows filenames.
+    Build an index of all files and directories in the destination directory.
+
+    Args:
+        dest_dir: Directory to index
+
+    Returns:
+        Set of all file and directory paths
     """
-    # Windows filename restrictions: \ / : * ? " < > |
-    # Replace some characters with alternatives
-    replacements = {
-        ':': ' -',
-        '/': '-',
-        '\\': '-',
-        '*': 'x',
-        '?': '',
-        '"': "'",
-        '<': '(',
-        '>': ')',
-        '|': '-'
-    }
+    if not isinstance(dest_dir, str) or not os.path.exists(dest_dir):
+        log_message(f"Invalid destination directory: {dest_dir}", level="WARNING")
+        return set()
 
-    # Apply replacements
-    for char, replacement in replacements.items():
-        filename = filename.replace(char, replacement)
+    dest_index = set()
+    try:
+        for root, dirs, files in os.walk(dest_dir):
+            for name in dirs + files:
+                dest_index.add(os.path.join(root, name))
+    except Exception as e:
+        log_message(f"Error building destination index: {e}", level="ERROR")
 
-    # Remove any remaining invalid characters
-    filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+    return dest_index
 
-    # Remove leading/trailing spaces and dots (Windows doesn't allow these)
-    filename = filename.strip(' .')
 
-    return filename
+
+def extract_resolution_from_folder(folder_path: str) -> Optional[str]:
+    """
+    Extract resolution from folder path using the unified parser.
+
+    Args:
+        folder_path: Folder path to extract resolution from
+
+    Returns:
+        Resolution string if found, None otherwise
+    """
+    if not isinstance(folder_path, str):
+        return None
+
+    # Try to extract from the folder name itself
+    folder_name = os.path.basename(folder_path)
+    try:
+        metadata = extract_all_metadata(folder_name)
+        if metadata.resolution:
+            return metadata.resolution
+    except Exception:
+        pass
+
+    # Try to extract from parent folder names
+    path_parts = folder_path.split(os.sep)
+    for part in reversed(path_parts):
+        try:
+            metadata = extract_all_metadata(part)
+            if metadata.resolution:
+                return metadata.resolution
+        except Exception:
+            continue
+
+    return None
+
+def fetch_json(url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
+    """
+    Fetch JSON data from a URL.
+
+    Args:
+        url: URL to fetch from
+        timeout: Request timeout in seconds
+
+    Returns:
+        JSON data as dictionary, None on error
+    """
+    try:
+        import requests
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        log_message(f"Error fetching JSON from {url}: {e}", level="ERROR")
+        return None
+
+def is_anime_file(filename):
+    """
+    Detect if the file is likely an anime file using intelligent pattern-based detection.
+
+    This function uses the new anime detection logic that doesn't rely on hardcoded
+    release group lists, but instead uses pattern-based detection for any group
+    in brackets that doesn't match common non-anime patterns.
+
+    Args:
+        filename (str): The filename to check
+
+    Returns:
+        bool: True if the file appears to be anime content, False otherwise
+    """
+    return is_anime_filename(filename)
+
+
+@lru_cache(maxsize=1)
+def get_anime_patterns():
+    """
+    Legacy function for backward compatibility.
+
+    This function is deprecated. Use is_anime_file() instead for intelligent
+    pattern-based anime detection without hardcoded release group lists.
+
+    Returns:
+        Compiled regex pattern that matches nothing (deprecated)
+    """
+    # Return a pattern that matches nothing since this function is deprecated
+    # Any code still using this should migrate to is_anime_file()
+    log_message("Warning: get_anime_patterns() is deprecated. Use is_anime_file() instead.", "WARNING")
+    return re.compile(r'(?!.*)', re.IGNORECASE)  # Pattern that never matches

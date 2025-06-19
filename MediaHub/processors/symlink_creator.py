@@ -17,7 +17,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, is_junk_file
+from MediaHub.utils.file_utils import build_dest_index, is_anime_file, is_junk_file
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.config.config import *
@@ -26,6 +26,7 @@ from MediaHub.utils.plex_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.webdav_api import send_structured_message
+from MediaHub.utils.file_utils import clean_query
 
 error_event = Event()
 log_imported_db = False
@@ -196,7 +197,6 @@ def process_file(args, processed_files_log, force=False):
     is_anime_show = False
     episode_match = None
 
-
     # Skip hash filenames unless they have valid media patterns
     hash_pattern = re.compile(r'^[a-f0-9]{32}(\.[^.]+$|\[.+?\]\.)', re.IGNORECASE)
     is_hash_name = hash_pattern.search(file) is not None
@@ -207,29 +207,70 @@ def process_file(args, processed_files_log, force=False):
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
+    # Initialize file_result to ensure it's always available
+    file_result = None
+    parent_result = None
+
     if force_show:
         is_show = True
         log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
+        file_result = clean_query(file)
     elif force_movie:
         is_show = False
         log_message(f"Processing as movie based on Force Movie flag: {file}", level="INFO")
+        file_result = clean_query(file)
     else:
-        episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|S\d{1,2}\s*\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+)|\b\d{2}x\d{2}\b)|\(S\d{1,2}\)', file, re.IGNORECASE)
-        mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
-        anime_episode_pattern = re.compile(r'\s-\s\d{2,3}\s|\d{2,3}v\d+', re.IGNORECASE)
-        anime_patterns = get_anime_patterns()
-        season_pattern = re.compile(r'\b(s\d{2})\b', re.IGNORECASE)
+        # Parse file first
+        file_result = clean_query(file)
 
-        # Check file path and name for show patterns
-        if season_pattern.search(src_file):
-            is_show = True
-            log_message(f"Processing as show based on directory structure: {src_file}", level="DEBUG")
-        elif episode_match or mini_series_match:
-            is_show = True
-            log_message(f"Processing as show based on file pattern: {src_file}", level="DEBUG")
-        elif anime_episode_pattern.search(file) or anime_patterns.search(file):
-            is_anime_show = True
-            log_message(f"Processing as show based on anime pattern: {src_file}", level="DEBUG")
+        # Check if file has episode information (standard TV format or anime episode number)
+        has_episode_info = file_result.get('episode_identifier') or file_result.get('episode')
+
+        # Only parse parent directory if file doesn't have episode info
+        if not has_episode_info:
+            parent_result = clean_query(os.path.basename(src_file))
+            has_episode_info = parent_result.get('episode_identifier') or parent_result.get('episode')
+
+        # Check for anime patterns using intelligent detection
+        is_anime = (file_result.get('is_anime') or
+                   (parent_result and parent_result.get('is_anime')) or
+                   is_anime_file(file))
+
+        if has_episode_info:
+            if is_anime:
+                is_anime_show = True
+                log_message(f"Processing as anime show based on episode detection: {src_file}", level="DEBUG")
+            else:
+                is_show = True
+                log_message(f"Processing as TV show based on episode detection: {src_file}", level="DEBUG")
+        else:
+            # No episode info found - check other indicators
+            # Enhanced check: if folder name contains TV show indicators OR other files in folder are TV shows
+            folder_name = os.path.basename(root)
+
+            # First check folder name patterns
+            tv_folder_patterns = [
+                r'MINI[- ]?SERIES', r'LIMITED[- ]?SERIES', r'TV[- ]?SERIES',
+                r'S\d{1,2}[EX]', r'Season\s+\d+', r'Complete\s+Series',
+                r'\bS\d{1,2}\b', r'Season\.\d+', r'Series\s+\d+'
+            ]
+            is_tv_folder = any(re.search(pattern, folder_name, re.IGNORECASE) for pattern in tv_folder_patterns)
+
+            if is_tv_folder:
+                is_show = True
+                force_extra = True
+                log_message(f"Processing as show extra based on TV folder pattern: {file}", level="INFO")
+                if file_result:
+                    file_result['is_extra'] = True
+            else:
+                # Fallback to legacy regex patterns for edge cases
+                episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|S\d{1,2}\s*\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+)|\b\d{2}x\d{2}\b)|\(S\d{1,2}\)', file, re.IGNORECASE)
+                mini_series_match = re.search(r'(MINI[- ]SERIES|MINISERIES)', file, re.IGNORECASE)
+                season_pattern = re.compile(r'\b[sS]\d{1,2}[eE]\d{1,2}\b', re.IGNORECASE)
+
+                if season_pattern.search(src_file) or episode_match or mini_series_match:
+                    is_show = True
+                    log_message(f"Processing as show based on legacy pattern detection: {src_file}", level="DEBUG")
 
     # Check if the file should be considered an junk based on size
     if is_junk_file(file, src_file):
@@ -241,22 +282,26 @@ def process_file(args, processed_files_log, force=False):
     # Determine whether to process as show or movie
     show_metadata = None
     if is_show or is_anime_show:
-        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra)
-        # Check if result is None or the first item (dest_file) is None
+        metadata_to_pass = None
+        if file_result and file_result.get('episode_identifier'):
+            metadata_to_pass = file_result
+        elif parent_result:
+            metadata_to_pass = parent_result
+
+        if force_extra and metadata_to_pass:
+            metadata_to_pass['is_extra'] = True
+
+        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass)
         if result is None or result[0] is None:
             log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
             return
 
-        # Handle both old and new return formats
         if len(result) == 5:
             dest_file, tmdb_id, season_number, is_extra, show_metadata = result
-            # Extract episode number from metadata if available
             if show_metadata and 'episode_number' in show_metadata:
                 episode_number = show_metadata['episode_number']
         else:
-            # Fallback for old format
             dest_file, tmdb_id, season_number, is_extra = result
-            # Extract episode number from filename if not already set
             if episode_number is None and season_number is not None:
                 episode_match_result = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
                 if episode_match_result:
@@ -269,7 +314,7 @@ def process_file(args, processed_files_log, force=False):
             save_processed_file(src_file, None, tmdb_id, season_number, reason)
             return
     else:
-        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result)
 
         # Check if result is None or the first item (dest_file) is None
         if result is None or result[0] is None:
@@ -384,19 +429,25 @@ def process_file(args, processed_files_log, force=False):
             # Determine media type based on whether it was processed as show or movie
             # Check if this is a show by looking at the destination path structure
             parts = normalize_file_path(dest_file).split(os.sep)
-            is_tv_show = any(part.lower().startswith('season ') for part in parts)
+            is_tv_show = any(part.lower().startswith('season ') for part in parts) or any(part.lower() == 'extras' for part in parts)
             media_type = "tv" if is_tv_show else "movie"
 
             # Create content in format: tmdb_id:media_type
             tmdb_content = f"{tmdb_id_str}:{media_type}"
 
-            # For shows, place .tmdb in the show root (parent of 'Season xx')
+            # For shows, place .tmdb in the show root (parent of 'Season xx' or 'Extras')
             if is_tv_show:
+                show_root = None
                 for i, part in enumerate(parts):
-                    if part.lower().startswith('season '):
+                    if part.lower().startswith('season ') or part.lower() == 'extras':
                         show_root = os.sep.join(parts[:i])
                         break
-                tmdb_file_path = normalize_file_path(os.path.join(show_root, ".tmdb"))
+
+                if show_root:
+                    tmdb_file_path = normalize_file_path(os.path.join(show_root, ".tmdb"))
+                else:
+                    # Fallback: if no Season or Extras folder found, use parent directory
+                    tmdb_file_path = normalize_file_path(os.path.join(os.path.dirname(dest_file), ".tmdb"))
             else:
                 tmdb_file_path = normalize_file_path(os.path.join(os.path.dirname(dest_file), ".tmdb"))
 

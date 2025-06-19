@@ -2,7 +2,8 @@ import os
 import re
 import requests
 from dotenv import load_dotenv, find_dotenv
-from MediaHub.utils.file_utils import extract_resolution_from_filename, extract_folder_year, clean_query, extract_year, extract_resolution_from_folder
+from MediaHub.utils.file_utils import extract_resolution_from_filename, clean_query, extract_year, extract_resolution_from_folder
+
 from MediaHub.api.tmdb_api import search_tv_show
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
@@ -15,41 +16,75 @@ from MediaHub.processors.db_utils import track_file_failure
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False):
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False, file_metadata=None):
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
-        parent_folder_name = os.path.basename(src_file)
+        parent_folder_name = os.path.basename(root)
         source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
     else:
-        parent_folder_name = os.path.basename(src_file)
+        parent_folder_name = os.path.basename(root)
         source_folder = os.path.basename(os.path.dirname(root))
 
     source_folder = os.path.basename(source_folder)
 
-    clean_folder_name, _ = clean_query(parent_folder_name)
+    # Use passed metadata if available, otherwise parse
+    if file_metadata:
+        file_result = file_metadata
+    else:
+        file_result = clean_query(file)
 
-    # Flag for ambiguous files that should be treated as extras
-    is_extra = False
-    # Initialize variables
-    show_name = ""
-    season_number = season_number if season_number is not None else None
+    # Use file result if it has episode info, otherwise try folder
+    if file_result.get('episode_identifier'):
+        show_name = file_result.get('title', '')
+        episode_identifier = file_result.get('episode_identifier')
+        season_number = file_result.get('season_number')
+        episode_number = file_result.get('episode_number')
+        create_season_folder = file_result.get('create_season_folder', False)
+        is_extra = file_result.get('is_extra', False)
+        print(f"DEBUG: Using file-based extraction: {show_name} - {episode_identifier}")
+    else:
+        # Fallback to folder if file doesn't have episode info
+        folder_result = clean_query(parent_folder_name)
+        print(f"DEBUG: Folder query result:")
+        print(f"  {folder_result}")
+
+        show_name = folder_result.get('title', '')
+        episode_identifier = folder_result.get('episode_identifier')
+        season_number = folder_result.get('season_number')
+        episode_number = folder_result.get('episode_number')
+        create_season_folder = folder_result.get('create_season_folder', False)
+        is_extra = folder_result.get('is_extra', False)
+
+        # Check if file metadata has is_extra flag set
+        if file_result and file_result.get('is_extra'):
+            is_extra = True
+
+        if episode_identifier:
+            print(f"DEBUG: Using folder-based extraction: {show_name} - {episode_identifier}")
+        else:
+            print(f"DEBUG: No episode info found, using folder name: {show_name}")
+
+    # Initialize remaining variables
     new_name = file
     year = None
     show_id = None
     episode_title = None
-    episode_identifier = None
-    episode_number = episode_number if season_number is not None else None
     proper_show_name = None
     anime_result = None
-    create_season_folder = False
     create_extras_folder = False
     resolution = None
     is_anime_genre = False
     season_folder = None
 
+    # Override with function parameters if provided
+    if season_number is not None:
+        season_number = str(season_number).zfill(2)
+    if episode_number is not None:
+        episode_number = str(episode_number).zfill(2)
+
     if is_anime_show or is_anime_scan() and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
-                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number)
+                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number, file_metadata)
 
         if anime_result is None:
             log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
@@ -72,157 +107,38 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         is_extra = anime_result.get('is_extra')
         tmdb_id = anime_result.get('tmdb_id')
 
+        # Update episode info from anime result if available
         episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
         if episode_match:
             season_number = episode_match.group(1)
             episode_identifier = f"S{season_number}E{episode_match.group(2)}"
-        else:
-            episode_identifier = None
+            episode_number = episode_match.group(2)
+            create_season_folder = True
 
-    if (not anime_result or episode_match) and (season_number is None or episode_number is None):
-        if episode_match:
-            # First, try to extract season number directly from the episode identifier
-            season_from_identifier = re.search(r'S(\d{2})|\(S(\d+)\)', file, re.IGNORECASE)
-            if season_from_identifier:
-                season_number = season_from_identifier.group(1)
-                episode_num = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
-                if episode_num:
-                    episode_identifier = f"S{season_number}E{episode_num.group(1)}"
-                    episode_number = f"{episode_num.group(1)}"
-                    show_name = re.sub(r'\s*-?\s*S\d{2}\s*E\d{2}.*$', '', clean_folder_name).strip()
-                    create_season_folder = True
-            else:
-                # If no direct season number, proceed with existing patterns
-                episode_identifier = episode_match.group(2)
-                series_pattern = re.search(r'series\.(\d+)\.(\d+)of\d+', file, re.IGNORECASE)
-                if series_pattern:
-                    season_number = series_pattern.group(1).zfill(2)
-                    episode_number = series_pattern.group(2).zfill(2)
-                    episode_identifier = f"S{season_number}E{episode_number}"
-                    show_name = re.sub(r'\.series\.\d+\.\d+of\d+.*$', '', clean_folder_name, flags=re.IGNORECASE)
-                    show_name = show_name.replace('.', ' ').strip()
-                    create_season_folder = True
-
-                elif re.match(r'S\d{2}[eE]\d{2}', episode_identifier, re.IGNORECASE):
-                    show_name = re.sub(r'\s*(S\d{2}.*|Season \d+).*', '', clean_folder_name).replace('-', ' ').replace('.', ' ').strip()
-                    create_season_folder = True
-                elif re.match(r'[0-9]+[xX][0-9]+', episode_identifier, re.IGNORECASE):
-                    show_name = episode_match.group(1).replace('.', ' ').strip()
-                    season_number = re.search(r'([0-9]+)[xX]', episode_identifier).group(1)
-                    episode_number = re.search(r'[xX]([0-9]+)', episode_identifier).group(1)
-                    episode_identifier = f"S{season_number.zfill(2)}E{episode_number.zfill(2)}"
-                    create_season_folder = True
-                elif re.match(r'S\d{2}[0-9]+', episode_identifier, re.IGNORECASE):
-                    show_name = episode_match.group(1).replace('.', ' ').strip()
-                    episode_identifier = f"S{episode_identifier[1:3]}E{episode_identifier[3:]}"
-                    create_season_folder = True
-                elif re.match(r'[0-9]+e[0-9]+', episode_identifier, re.IGNORECASE):
-                    show_name = episode_match.group(1).replace('.', ' ').strip()
-                    episode_identifier = f"S{episode_identifier[0:2]}E{episode_identifier[2:]}"
-                    create_season_folder = True
-                elif re.search(r'(?:Season|season)\s*(\d{1,2})[\s,]*(?:Episode|episode)\s*(\d{1,2})', file, re.IGNORECASE):
-                    season_episode_match = re.search(r'(?:Season|season)\s*(\d{1,2})[\s,]*(?:Episode|episode)\s*(\d{1,2})', file, re.IGNORECASE)
-                    season_number = season_episode_match.group(1).zfill(2)
-                    episode_number = season_episode_match.group(2).zfill(2)
-                    episode_identifier = f"S{season_number}E{episode_number}"
-                    show_name = re.sub(r'\s*(?:Season|season)\s*\d{1,2}[\s,]*(?:Episode|episode)\s*\d{1,2}.*$', '', clean_folder_name).strip()
-                    create_season_folder = True
-                elif re.match(r'Ep\.?\s*\d+', episode_identifier, re.IGNORECASE):
-                    extracted_filename = episode_match.string
-                    show_name = re.sub(r'^\[.*?\]\s*', '', extracted_filename).replace('.', ' ').strip()
-                    episode_number = re.search(r'Ep\.?\s*(\d+)', episode_identifier, re.IGNORECASE).group(1)
-                    season_number_match = re.search(r'S(\d{1,2})', parent_folder_name, re.IGNORECASE)
-                    season_number = season_number.group(1) if season_number else "01"
-                    episode_identifier = f"S{season_number}E{episode_number}"
-                    if season_number_match:
-                        season_number = season_number_match.group(1)
-                        episode_identifier = f"S{season_number}E{episode_number}"
-                        create_season_folder = True
-                    else:
-                        log_message(f"Unable to determine season for: {file}", level="WARNING")
-                else:
-                    log_message(f"Unable to determine episode pattern for: {file}, using fallback search", level="DEBUG")
-
-            # Extract season number
-            season_match = re.search(r'(?:S|Season)(\d+)', clean_folder_name, re.IGNORECASE)
-            if season_match:
-                season_number = season_match.group(1)
-            else:
-                if episode_identifier and not re.match(r'^E\d+', episode_identifier, re.IGNORECASE):
-                    season_match = re.search(r'([0-9]+)', episode_identifier)
-                    if season_match:
-                        season_number = season_match.group(1)
-                    else:
-                        log_message(f"Unable to determine season number for: {file}", level="WARNING")
-                        season_number = "01"
-                else:
-                    e_match = re.search(r'E(\d+)', file, re.IGNORECASE)
-                    if e_match:
-                        episode_number = e_match.group(1).zfill(2)
-                        season_number = "01"
-                        episode_identifier = f"S{season_number}E{episode_number}"
-                        log_message(f"Detected 'E{episode_number}' pattern with no season specified. Defaulting to Season 01.", level="DEBUG")
-                    else:
-                        log_message(f"Unable to determine season number for: {file}", level="WARNING")
-                        season_number = "01"
-
-        else:
-            # For non-episode files, check if we can extract season information
-            clean_folder_name = os.path.basename(root)
-            show_name = clean_folder_name
-
-            # Try to extract season number from the parent folder name
-            season_match = re.search(r'(?:S(\d{2})|Season\s*(\d+)|(\d{2})x\d{2})', file, re.IGNORECASE)
-            if season_match:
-                season_number = season_match.group(1) or season_match.group(2) or season_match.group(3)
-                episode_match = re.search(r'(?:[Ss]?\d{1,2}[xX](\d{2})|[Ee](\d{2}))', file)
-                if episode_match:
-                    episode = episode_match.group(1) or episode_match.group(2)
-                    episode_number=episode
-                    episode_identifier = f"S{season_number}E{episode_match.group(1)}"
-                else:
-                    log_message(f"Unable to determine episode number for: {file} in season {season_number}", level="DEBUG")
-                    log_message(f"Placing File in Extras folder: {file}", level="DEBUG")
-                    create_extras_folder = True
-                    is_extra = True
-            else:
-                log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
-                create_extras_folder = True
-                is_extra = True
-
-    # Check if this is an ending/opening credit file
-    if re.search(r'NC(?:ED|OP)\s*\d+', file, re.IGNORECASE):
-        log_message(f"Detected credit sequence file: {file}", level="INFO")
+    # If we still don't have episode info and it's not anime, mark as extra
+    if not episode_identifier and not anime_result:
+        log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
         create_extras_folder = True
         is_extra = True
 
-    anime_episode_pattern = re.search(r'[-\s]E(\d+)\s', file)
-    if anime_episode_pattern:
-        episode_number = anime_episode_pattern.group(1)
-        episode_number = episode_number.zfill(2)
-        season_match = re.search(r'Season\s*(\d+)', file, re.IGNORECASE)
-        if season_match:
-            season_number = season_match.group(1).zfill(2)
-        episode_identifier = f"S{season_number}E{episode_number}"
+    # If still no episode info found, mark as extra
+    if not episode_identifier and not anime_result:
+        log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
+        create_extras_folder = True
+        is_extra = True
 
-    # Handle invalid show names by using parent folder name
-    if not show_name or show_name.lower() in ["invalid name", "unknown"]:
-        show_name = clean_folder_name
-        show_name = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name).replace('.', ' ').strip()
+    # Extract year from parent folder or show name for TMDb search
+    year = extract_year(parent_folder_name) or extract_year(show_name)
 
-    # Handle special cases for show names
-    show_folder = re.sub(r'\s+$|_+$|-+$|(\()$', '', show_name).rstrip()
+    # Set initial show_folder for processing
+    show_folder = show_name
 
-    # Handle year extraction and appending if necessary
-    year = extract_folder_year(parent_folder_name) or extract_year(show_folder)
-    if year:
-        show_folder = re.sub(r'\(\d{4}\)$', '', show_folder).strip()
-        show_folder = re.sub(r'\d{4}$', '', show_folder).strip()
+    # Handle anime result override
     if anime_result:
         show_folder = anime_result.get('show_name', '')
         proper_show_name = show_folder
-
-    proper_show_name = show_folder
+    else:
+        proper_show_name = show_folder
     if not anime_result:
         # Retry logic for show name extraction
         max_retries = 2
@@ -245,19 +161,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if result is None:
             log_message(f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDb API failure", f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year})")
-            return None, None, None, None
+            return None
         elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
         else:
             log_message(f"TMDb returned invalid data for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for show: {show_folder} ({year})")
-            return None, None, None, None
+            return None
 
         # Validate that we got a proper show name from TMDb
         if not proper_show_name or proper_show_name.strip() == "" or "TMDb API error" in str(proper_show_name):
             log_message(f"TMDb could not provide valid show name for: {show_folder} ({year}). Skipping show processing.", level="ERROR")
-            return None, None, None, None
+            return None
 
         if is_tmdb_folder_id_enabled():
             show_folder = proper_show_name
@@ -286,7 +202,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
 
     # Modified destination path determination
-    if is_extra and not force_extra:
+    if is_extra:
         if is_cinesync_layout_enabled():
             if custom_show_layout() or custom_4kshow_layout():
                 if is_show_resolution_structure_enabled():

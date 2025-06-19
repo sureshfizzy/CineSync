@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query, sanitize_windows_filename
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
@@ -73,17 +73,26 @@ def set_cached_result(cache_key, result):
     with _cache_lock:
         _api_cache[cache_key] = result
 
-def should_skip_search(query, search_type=""):
-    """Check if we should skip a search based on query characteristics"""
-    if not query or len(query.strip()) <= 1:
-        return True
+def remove_country_suffix(query):
+    """
+    Remove country/region suffixes from a query string.
+    Examples:
+    - "Riverdale US" -> "Riverdale"
+    - "Riverdale (US)" -> "Riverdale"
+    - "The Office UK" -> "The Office"
+    - "Shameless (CA)" -> "Shameless"
 
-    # Skip very short queries that are likely to be noise
-    if len(query.strip()) <= 2 and not query.isalnum():
-        log_message(f"Skipping {search_type} search for very short non-alphanumeric query: '{query}'", "DEBUG", "stdout")
-        return True
+    But preserve legitimate title parts like:
+    - "A P BIO" -> "A P BIO" (not "A P")
+    - "CSI NYC" -> "CSI NYC" (not "CSI")
+    """
+    query = re.sub(r'\s*\([^)]*\)$', '', query)
+    common_country_codes = ['US', 'UK', 'CA', 'AU', 'NZ', 'DE', 'FR', 'IT', 'ES', 'JP', 'KR', 'CN']
 
-    return False
+    country_pattern = r'\s+(' + '|'.join(common_country_codes) + r')$'
+    query = re.sub(country_pattern, '', query, flags=re.IGNORECASE)
+
+    return query.strip()
 
 @lru_cache(maxsize=None)
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
@@ -154,14 +163,6 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             return proper_name, show_name, is_anime_genre
 
-    # Early exit for single-letter queries to avoid unnecessary processing
-    if len(query.strip()) <= 1:
-        log_message(f"Skipping all searches for single-letter query: '{query}'", "DEBUG", "stdout")
-        log_message(f"No results found for single-letter query '{query}'.", level="WARNING")
-        cache_key = (query, year)
-        set_cached_result(cache_key, f"{query}")
-        return f"{query}"
-
     cache_key = (query, year)
     cached_result = get_cached_result(cache_key)
     if cached_result is not None:
@@ -173,14 +174,8 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         if isinstance(query, tuple):
             query = query[0] if query else ""
 
-        # Additional safety check
-        if len(query.strip()) <= 1:
-            log_message(f"Skipping API search for single-letter query: '{query}'", "DEBUG", "stdout")
-            return []
-
+        # Try original query first
         params = {'api_key': api_key, 'query': query, 'language': language_iso}
-
-        # Include year in primary search if available
         if year:
             params['first_air_date_year'] = year
             full_url = f"{url}?{urllib.parse.urlencode(params)}"
@@ -198,6 +193,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 if scored_results:
                     return [r[1] for r in scored_results]
 
+        # Try without year
         params = {'api_key': api_key, 'query': query, 'language': language_iso}
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         log_message(f"Secondary search URL (without year): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
@@ -214,16 +210,31 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             if scored_results:
                 return [r[1] for r in scored_results]
 
+        # Fallback: Try removing country/region suffixes
+        fallback_query = remove_country_suffix(query)
+
+        if fallback_query != query:
+            log_message(f"Trying fallback search with query: '{fallback_query}'", "DEBUG", "stdout")
+            params = {'api_key': api_key, 'query': fallback_query, 'language': language_iso}
+            if year:
+                params['first_air_date_year'] = year
+
+            full_url = f"{url}?{urllib.parse.urlencode(params)}"
+            log_message(f"Fallback search URL: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
+            response = perform_search(params, url)
+
+            if response:
+                scored_results = []
+                for result in response:
+                    score = calculate_score(result, fallback_query, year)
+                    if score >= 40:
+                        scored_results.append((score, result))
+
+                scored_results.sort(reverse=True, key=lambda x: x[0])
+                if scored_results:
+                    return [r[1] for r in scored_results]
+
         return response
-
-    def search_with_extracted_title(query, year=None):
-        title = extract_title(query)
-        return fetch_results(title, year)
-
-    def search_fallback(query, year=None):
-        query = re.sub(r'\s*\(.*$', '', query).strip()
-        log_message(f"Fallback search query: '{query}'", "DEBUG", "stdout")
-        return fetch_results(query, year)
 
     def display_results(results, start_idx=0):
         for idx, show in enumerate(results[start_idx:start_idx + 3], start=start_idx + 1):
@@ -235,69 +246,20 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     results = fetch_results(query, year)
 
-    # Only perform additional searches for meaningful queries (already handled single-letter above)
-    if not results and not should_skip_search(query, "extracted title"):
-        results = search_with_extracted_title(query, year)
-        log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
-
-    if not results and not should_skip_search(query, "fallback TV"):
-        results = perform_fallback_tv_search(query, year)
-        log_message(f"Primary search failed, attempting fallback TV search", "DEBUG", "stdout")
-
-    if not results and year and not should_skip_search(query, "final"):
-        results = search_fallback(query, year)
-        log_message(f"TV search fallback failed, attempting final search", "DEBUG", "stdout")
-
     if not results and episode_match and file:
-        # Search with cleaned query only if the episode pattern matches
-        log_message(f"Searching with Cleaned Query", "DEBUG", "stdout")
-        cleaned_title, _ = clean_query(file)
-        if not should_skip_search(cleaned_title, "cleaned"):
-            results = fetch_results(cleaned_title, year)
+        log_message(f"Primary search failed, attempting with cleaned query from filename", "DEBUG", "stdout")
+        cleaned_result = clean_query(file)
+        cleaned_title = cleaned_result.get('title', '')
+        results = fetch_results(cleaned_title, year)
 
-    if not results and year:
-        fallback_url = f"https://api.themoviedb.org/3/search/tv?api_key={api_key}&query={year}"
-        log_message(f"Fallback search URL: {sanitize_url_for_logging(fallback_url)}", "DEBUG", "stdout")
-        try:
-            response = session.get(fallback_url)
-            response.raise_for_status()
-            results = response.json().get('results', [])
-            if results:
-                # Score and filter year-based results
-                scored_results = []
-                for result in results:
-                    score = calculate_score(result, query, year)
-                    if score >= 40:
-                        scored_results.append((score, result))
-                scored_results.sort(reverse=True, key=lambda x: x[0])
-                results = [r[1] for r in scored_results]
-        except requests.exceptions.RequestException as e:
-            log_message(f"Error during fallback search: {e}", level="ERROR")
-
-    if not results:
-        log_message(f"Attempting with Search with Cleaned Name", "DEBUG", "stdout")
-        cleaned_title, year_from_query = clean_query(query)
-        if cleaned_title != query:
-            log_message(f"Cleaned query: {cleaned_title}", "DEBUG", "stdout")
-            results = fetch_results(cleaned_title, year or year_from_query)
-
+    # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
-        cleaned_dir_query, dir_year = clean_query(dir_based_query)
+        log_message(f"Directory fallback: searching with directory name: '{dir_based_query}'", "DEBUG", "stdout")
+        cleaned_dir_result = clean_query(dir_based_query)
+        cleaned_dir_query = cleaned_dir_result.get('title', '')
+        dir_year = cleaned_dir_result.get('year')
         results = fetch_results(cleaned_dir_query, year or dir_year)
-
-    if not results and root:
-        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
-        dir_based_query = os.path.basename(root)
-        title = advanced_clean_query(dir_based_query, max_words=4)
-        results = fetch_results(title, year)
-
-        # If no results found with max_words=4, try again with max_words=2
-        if not results:
-            log_message(f"No results found. Retrying with more aggressive cleaning", "DEBUG", "stdout")
-            title = advanced_clean_query(dir_based_query, max_words=2)
-            results = fetch_results(title, year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
@@ -357,36 +319,6 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     set_cached_result(cache_key, f"{query}")
     return f"{query}"
 
-@api_retry(max_retries=3, base_delay=5, max_delay=60)
-def perform_fallback_tv_search(query, year=None):
-    cleaned_query = remove_genre_names(query)
-    search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
-
-    response = session.get(search_url, timeout=10)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
-    tv_show_link = soup.find('a', class_='result')
-
-    if tv_show_link:
-        tv_show_id = re.search(r'/tv/(\d+)', tv_show_link['href'])
-        if tv_show_id:
-            tmdb_id = tv_show_id.group(1)
-
-            # Fetch TV show details using the TV show ID
-            details_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
-            params = {'api_key': api_key}
-            details_response = session.get(details_url, params=params, timeout=10)
-            details_response.raise_for_status()
-            tv_show_details = details_response.json()
-
-            if tv_show_details:
-                show_name = tv_show_details.get('name')
-                first_air_date = tv_show_details.get('first_air_date')
-                show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
-                return [{'id': tmdb_id, 'name': show_name, 'first_air_date': first_air_date}]
-
-    return []
-
 def perform_search(params, url):
     try:
         query = params['query']
@@ -395,9 +327,6 @@ def perform_search(params, url):
             query = query[0]
         query = query.lower()
 
-        # Optimize query normalization
-        query = re.sub(r'\b&\b', 'and', query)
-        query = re.sub(r'\band\b', '&', query)
         params['query'] = query
 
         # Use session for connection pooling
@@ -534,55 +463,22 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
         return response
 
-    def search_with_extracted_title(query, year=None):
-        title = extract_title(query)
-        log_message(f"Searching with extracted title: '{title}'", "DEBUG", "stdout")
-        return fetch_results(title, year)
-
-    def search_fallback(query, year=None):
-        fallback_query = re.sub(r'\s*\(.*$', '', query).strip()
-        log_message(f"Primary search failed, attempting with extracted title", "DEBUG", "stdout")
-        return fetch_results(fallback_query, year)
-
     results = fetch_results(query, year)
 
-    if not results:
-        log_message("Primary search failed. Attempting extracted title search.", "DEBUG", "stdout")
-        results = search_with_extracted_title(query, year)
-
     if not results and file:
-        log_message("Attempting search with cleaned movie name.", "DEBUG", "stdout")
-        cleaned_title = clean_query_movie(file)[0]
+        log_message("Primary search failed. Attempting search with cleaned movie name from filename.", "DEBUG", "stdout")
+        cleaned_result = clean_query(file)
+        cleaned_title = cleaned_result.get('title', '')
         results = fetch_results(cleaned_title, year)
 
-    if not results and year:
-        log_message("Performing additional fallback search without query.", "DEBUG", "stdout")
-        results = search_fallback(query, year)
-
-    if not results:
-        log_message(f"Attempting Search with Cleaned Name", "DEBUG", "stdout")
-        cleaned_title, year_from_query = clean_query(query)
-        if cleaned_title != query:
-            log_message(f"Cleaned query: {cleaned_title}", "DEBUG", "stdout")
-            results = fetch_results(cleaned_title, year or year_from_query)
-
+    # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        log_message(f"Attempting search with directory name: '{dir_based_query}'", "DEBUG", "stdout")
-        cleaned_dir_query, dir_year = clean_query(dir_based_query)
+        log_message(f"Directory fallback: searching with directory name: '{dir_based_query}'", "DEBUG", "stdout")
+        cleaned_dir_result = clean_query(dir_based_query)
+        cleaned_dir_query = cleaned_dir_result.get('title', '')
+        dir_year = cleaned_dir_result.get('year')
         results = fetch_results(cleaned_dir_query, year or dir_year)
-
-    if not results:
-        log_message(f"Searching with Advanced Query", "DEBUG", "stdout")
-        dir_based_query = os.path.basename(root) if root else query
-        title = advanced_clean_query(dir_based_query, max_words=4)
-        results = fetch_results(title, year)
-
-        # If no results found with max_words=4, try again with max_words=2
-        if not results:
-            log_message(f"No results found. Retrying with more aggressive cleaning", "DEBUG", "stdout")
-            title = advanced_clean_query(dir_based_query, max_words=2)
-            results = fetch_results(title, year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")
@@ -610,8 +506,6 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 new_results = fetch_results(new_query)
                 if not new_results and year:
                     new_results = fetch_results(new_query, year)
-                if not new_results:
-                    new_results = search_with_extracted_title(new_query, year)
 
                 if new_results:
                     results = new_results
@@ -670,31 +564,3 @@ def process_chosen_movie(chosen_movie):
         return {'id': imdb_id, 'title': movie_name, 'release_date': release_date, 'imdb_id': imdb_id}
     else:
         return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
-
-@api_retry(max_retries=3, base_delay=5, max_delay=60)
-def perform_fallback_search(query, year=None):
-    cleaned_query = remove_genre_names(query)
-    search_url = f"https://www.themoviedb.org/search?query={urllib.parse.quote_plus(cleaned_query)}"
-
-    response = session.get(search_url, timeout=10)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
-    movie_link = soup.find('a', class_='result')
-
-    if movie_link:
-        movie_id = re.search(r'/movie/(\d+)', movie_link['href'])
-        if movie_id:
-            tmdb_id = movie_id.group(1)
-
-            details_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-            params = {'api_key': api_key}
-            details_response = session.get(details_url, params=params, timeout=10)
-            details_response.raise_for_status()
-            movie_details = details_response.json()
-
-            if movie_details:
-                movie_name = movie_details.get('title')
-                release_date = movie_details.get('release_date')
-                return [{'id': tmdb_id, 'title': movie_name, 'release_date': release_date}]
-
-    return []

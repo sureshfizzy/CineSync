@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query, sanitize_windows_filename
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 
@@ -184,6 +184,10 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         if len(episode_name) > max_length:
             episode_name = episode_name[:max_length].rsplit(' ', 1)[0] + '...'
 
+        # Sanitize episode name for Windows compatibility
+        if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
+            episode_name = sanitize_windows_filename(episode_name)
+
         formatted_name = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
         log_message(f"Direct episode lookup successful: {formatted_name}", level="DEBUG")
         return formatted_name, season_number, episode_number
@@ -271,6 +275,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                         if direct_episode_name and len(direct_episode_name) > max_length:
                             direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
 
+                        # Sanitize episode name for Windows compatibility
+                        if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                            direct_episode_name = sanitize_windows_filename(direct_episode_name)
+
                         formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                         log_message(f"Found direct episode match! Episode {absolute_episode} exists in season {season}", level="DEBUG")
                         return formatted_name, season, int(absolute_episode)
@@ -311,6 +319,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     if mapped_episode_name and len(mapped_episode_name) > max_length:
                         mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
 
+                    # Sanitize episode name for Windows compatibility
+                    if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                        mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
+
                     formatted_name = f"S{season:02d}E{current_episode:02d} - {mapped_episode_name}"
                     log_message(f"Mapped to: {formatted_name}", level="DEBUG")
                     return formatted_name, season, current_episode
@@ -336,6 +348,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                     if direct_episode_name and len(direct_episode_name) > max_length:
                         direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+                    # Sanitize episode name for Windows compatibility
+                    if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                        direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
                     formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                     log_message(f"Second attempt found direct episode match! S{season}E{absolute_episode}", level="DEBUG")
@@ -371,6 +387,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             if mapped_episode_name and len(mapped_episode_name) > max_length:
                 mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
 
+            # Sanitize episode name for Windows compatibility
+            if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
+
             formatted_name = f"S{last_season:02d}E{fallback_episode:02d} - {mapped_episode_name}"
             return formatted_name, last_season, fallback_episode
 
@@ -391,6 +411,11 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             if direct_response.status_code == 200:
                 direct_episode_data = direct_response.json()
                 direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
+
+                # Sanitize episode name for Windows compatibility
+                if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                    direct_episode_name = sanitize_windows_filename(direct_episode_name)
+
                 formatted_name = f"S01E{absolute_episode:02d} - {direct_episode_name}"
                 log_message(f"Final attempt found match at S01E{absolute_episode}", level="INFO")
                 return formatted_name, 1, int(absolute_episode)
@@ -457,7 +482,7 @@ def calculate_score(result, query, year=None):
     year (str): Optional year to match against
 
     Returns:
-    float: Match score between 0 and 100
+    float: Match score between 0 and 150 (increased to accommodate better exact match bonuses)
     """
     score = 0
     query = query.lower().strip()
@@ -474,46 +499,54 @@ def calculate_score(result, query, year=None):
         first_air_date = result.get('first_air_date', '')
         result_year = first_air_date.split('-')[0] if first_air_date else None
 
+    # Title matching (80 points total - increased from 60)
+    exact_match_bonus = 0
     if query == title:
-        score += 50
+        score += 50  # Increased from 40
+        exact_match_bonus = 20  # Extra bonus for exact matches
     elif query == original_title:
-        score += 50
+        score += 55  # Increased from 45
+        exact_match_bonus = 20  # Extra bonus for exact matches
     elif query in title or title in query:
-        score += 20
+        score += 25
     elif query in original_title or original_title in query:
-        score += 20
+        score += 30
 
-    # Title similarity calculation
-    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 25
-    score += title_similarity
+    # Title similarity calculation (20 points)
+    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 20
+    original_title_similarity = difflib.SequenceMatcher(None, query, original_title).ratio() * 20
+    score += max(title_similarity, original_title_similarity)
 
-    # Year match scoring
+    # Year match scoring (20 points)
     if year and result_year:
         if result_year == str(year):
-            score += 30
+            score += 20
         elif abs(int(result_year) - int(year)) <= 1:
-            score += 15
+            score += 10
 
-    # Language and country bonus (15 points)
+    # Language and country bonus (10 points)
     if result.get('original_language') == 'en':
-        score += 10
-
+        score += 5
     if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
         score += 5
 
-    # Popularity bonus (up to 15 points)
+    # Popularity bonus (30 points - increased weight for better mainstream movie selection)
     popularity = result.get('popularity', 0)
-    if popularity > 0:
-        # Normalize popularity score (0-15 points)
-        popularity_score = min(15, (popularity / 100) * 15)
-        score += popularity_score
+    if popularity > 100:
+        score += 30
+    elif popularity > 50:
+        score += 25
+    elif popularity > 20:
+        score += 20
+    elif popularity > 10:
+        score += 15
+    elif popularity > 5:
+        score += 10
+    elif popularity > 1:
+        score += 5
 
-    query_words = set(query.split())
-    title_words = set(title.split())
-    matching_words = query_words.intersection(title_words)
-    if matching_words:
-        word_match_score = min(10, (len(matching_words) / len(query_words)) * 10)
-        score += word_match_score
+    # Apply exact match bonus (helps exact matches beat partial matches with higher popularity)
+    score += exact_match_bonus
 
     return score
 
