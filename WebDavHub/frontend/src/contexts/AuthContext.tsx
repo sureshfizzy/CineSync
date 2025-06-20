@@ -67,11 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             '/api/mediahub/events',
             '/api/file-operations',
             '/api/file-operations/events',
+            '/api/source-browse',
+            '/api/database/source-files',
+            '/api/database/source-scans',
             '/api/dashboard/events',
             '/api/database/stats',
             '/api/database/search',
             '/api/database/export',
-            '/api/stats'
+            '/api/stats',
+            '/api/jobs'
           ];
 
           const isAuthOptional = authDisabledEndpoints.some(endpoint =>
@@ -106,11 +110,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             '/api/mediahub/events',
             '/api/file-operations',
             '/api/file-operations/events',
+            '/api/source-browse',
+            '/api/database/source-files',
+            '/api/database/source-scans',
             '/api/dashboard/events',
             '/api/database/stats',
             '/api/database/search',
             '/api/database/export',
-            '/api/stats'
+            '/api/stats',
+            '/api/jobs'
           ];
 
           const isAuthOptional = authOptionalEndpoints.some(endpoint =>

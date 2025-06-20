@@ -142,8 +142,13 @@ func main() {
 	apiMux.HandleFunc("/api/mediahub/monitor/stop", api.HandleMediaHubMonitorStop)
 
 	// Job management endpoints
-	apiMux.HandleFunc("/api/jobs/events", api.HandleJobEvents)
-	apiMux.HandleFunc("/api/jobs", api.HandleJobsRouter)
+	apiMux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/jobs/events" {
+			api.HandleJobEvents(w, r)
+			return
+		}
+		api.HandleJobsRouter(w, r)
+	})
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

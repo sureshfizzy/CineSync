@@ -677,7 +677,7 @@ func updateProcessingStatusFromMediaHub() error {
 
 // checkFileInMediaHub checks if a file exists in MediaHub database and returns its status
 func checkFileInMediaHub(mediaHubDB *sql.DB, filePath string) (status string, tmdbID string, seasonNumber *int) {
-	// Check if file exists in processed_files table
+	// Try to query the processed_files table directly
 	query := `SELECT destination_path, tmdb_id, season_number, reason FROM processed_files WHERE file_path = ?`
 	row := mediaHubDB.QueryRow(query, filePath)
 
@@ -691,6 +691,9 @@ func checkFileInMediaHub(mediaHubDB *sql.DB, filePath string) (status string, tm
 		return "unprocessed", "", nil
 	}
 	if err != nil {
+		if strings.Contains(err.Error(), "no such table: processed_files") {
+			return "unprocessed", "", nil
+		}
 		logger.Error("Error checking file in MediaHub database: %v", err)
 		return "unprocessed", "", nil
 	}

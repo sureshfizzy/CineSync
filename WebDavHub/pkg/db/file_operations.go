@@ -173,6 +173,17 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 		return nil, 0, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
+	var testCount int
+	err = mediaHubDB.QueryRow("SELECT COUNT(*) FROM processed_files LIMIT 1").Scan(&testCount)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such table: processed_files") {
+			logger.Debug("processed_files table does not exist yet - MediaHub service needs to be started first")
+			return []FileOperation{}, 0, nil
+		}
+		logger.Debug("Error checking processed_files table: %v", err)
+		return []FileOperation{}, 0, nil
+	}
+
 	// Ensure deletion tracking table exists
 	err = createDeletionTrackingTable(mediaHubDB)
 	if err != nil {
@@ -279,7 +290,7 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 	for rows.Next() {
 		var op FileOperation
 		var seasonStr string
-		
+
 		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason)
 		if err != nil {
 			logger.Warn("Failed to scan row: %v", err)
@@ -288,10 +299,10 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 
 		// Generate ID from file path hash
 		op.ID = fmt.Sprintf("%x", sha256.Sum256([]byte(op.FilePath)))
-		
+
 		// Extract filename from path
 		op.FileName = filepath.Base(op.FilePath)
-		
+
 		// Determine status based on destination path and reason
 		if op.DestinationPath != "" && op.DestinationPath != "NULL" {
 			if _, err := os.Stat(op.DestinationPath); err == nil {
@@ -384,6 +395,17 @@ func getStatusCounts(operations []FileOperation, total int) (map[string]int, err
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	var testCount int
+	err = mediaHubDB.QueryRow("SELECT COUNT(*) FROM processed_files LIMIT 1").Scan(&testCount)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such table: processed_files") {
+			logger.Debug("processed_files table does not exist yet - MediaHub service needs to be started first")
+			return map[string]int{"created": 0, "failed": 0, "skipped": 0, "deleted": 0}, nil
+		}
+		logger.Debug("Error checking processed_files table: %v", err)
+		return map[string]int{"created": 0, "failed": 0, "skipped": 0, "deleted": 0}, nil
 	}
 
 	counts := map[string]int{
@@ -543,15 +565,15 @@ func createDeletionTrackingTable(db *sql.DB) error {
 // getDeletionRecords retrieves deletion records from the database
 func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 	query := `
-		SELECT 
+		SELECT
 			source_path,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason,
 			deleted_at
-		FROM file_deletions 
-		ORDER BY deleted_at DESC 
+		FROM file_deletions
+		ORDER BY deleted_at DESC
 		LIMIT 500
 	`
 
@@ -561,7 +583,7 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 		return []FileOperation{}, nil
 	}
 	defer rows.Close()
-	
+
 	// Check if table has any records
 	var count int
 	countQuery := "SELECT COUNT(*) FROM file_deletions"
@@ -574,7 +596,7 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 	for rows.Next() {
 		var op FileOperation
 		var seasonStr, deletedAt string
-		
+
 		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason, &deletedAt)
 		if err != nil {
 			logger.Warn("Failed to scan deletion row: %v", err)
@@ -861,7 +883,7 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int) ([]FileOpera
 // TrackFileDeletion records a file deletion event
 func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason string) error {
 	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	
+
 	// Check if database exists
 	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
 		return fmt.Errorf("MediaHub database not found")
