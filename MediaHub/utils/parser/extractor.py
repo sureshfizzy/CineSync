@@ -420,7 +420,7 @@ def _classify_technical_term(term: str) -> Optional[str]:
         return 'hdr'
 
     # Technical processing terms (AI upscaling, etc.)
-    if re.match(r'^AI[_-]?UPSCALE[_-]?\d*$', term_upper) or term_upper in ['AI_UPSCALE', 'UPSCALE', 'FINAL']:
+    if re.match(r'^AI[_-]?UPSCALE[_-]?\d*$', term_upper) or term_upper in ['AI_UPSCALE', 'UPSCALE']:
         return 'technical_processing'
 
     # Technical quality indicators with numbers/dashes (generic pattern for quality codes)
@@ -620,8 +620,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                   re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution
                   clean_part.lower() in ['bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'uncensored', 'extended', 'unrated', 'directors', 'theatrical', 'bd', 'dual'] or
                   re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
-                  re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
-                  clean_part.lower() in ['final']):  # Final processing indicators
+                  re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE)):  # Quality indicators like "alq-12"
                 title_end = i
                 break
 
@@ -661,7 +660,6 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                   clean_part.lower() in ['bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'dts-hdma', 'web-dl', 'lmhd', 'multi', 'vostfr', 'bd', 'dual'] or
                   re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
                   re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
-                  clean_part.lower() in ['final'] or  # Final processing indicators
                   re.match(r'^--', clean_part) or  # Double dash patterns
                   re.match(r'^-[A-Z]', clean_part)):  # Release group patterns like "-Punisher694"
                 tech_start = i
@@ -761,7 +759,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 continue
 
             # Skip technical terms that shouldn't be in title
-            if re.match(r'^(Hi10P|10bit|8bit|HDR10?\+?|1080p|720p|480p|\d{3,4}x\d{3,4}|BluRay|BD|WEBRip|HDTV|x264|x265|HEVC|FLAC|DTS|AC3|JPN|CUSTOM|MULTi|VOSTFR|Uncensored|RM|AI[_-]?UPSCALE|DUAL|FINAL)$', clean_part, re.IGNORECASE):
+            if re.match(r'^(Hi10P|10bit|8bit|HDR10?\+?|1080p|720p|480p|\d{3,4}x\d{3,4}|BluRay|BD|WEBRip|HDTV|x264|x265|HEVC|FLAC|DTS|AC3|JPN|CUSTOM|MULTi|VOSTFR|Uncensored|RM|AI[_-]?UPSCALE|DUAL)$', clean_part, re.IGNORECASE):
                 continue
 
             # Skip generic quality indicators with numbers
