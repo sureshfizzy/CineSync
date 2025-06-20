@@ -340,7 +340,7 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
     episode_patterns = [
         r'S\d{1,2}\.E\d{1,2}',  # Dot-separated season/episode format like S01.E01
         r'S\d{1,2}E\d{1,2}',
-        r'S\d{1,2}(?!E)',  # Standalone season patterns like S01, S02, etc.
+        r'S(0[1-9]|1[0-9]|30)(?!E)',  # Standalone season patterns S01-S30
         r'Season\s+\d+',
         r'\bEpisode\s+\d+',
         r'\bEP\d+',

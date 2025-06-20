@@ -58,6 +58,8 @@ def clean_title_string(title: str) -> str:
 
     title = re.sub(r'\s+', ' ', title).strip()
 
+    title = re.sub(r'^\d{1,2}\s+', '', title).strip()
+
     title = re.sub(r'^[^\w\s.]+|[^\w\s.]+$', '', title).strip()
 
     return title
