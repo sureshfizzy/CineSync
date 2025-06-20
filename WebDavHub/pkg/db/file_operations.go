@@ -37,6 +37,8 @@ func HandleFileOperations(w http.ResponseWriter, r *http.Request) {
 		handleGetFileOperations(w, r)
 	case http.MethodPost:
 		handleTrackFileOperation(w, r)
+	case http.MethodDelete:
+		handleBulkDeleteSkippedFiles(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -152,6 +154,79 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": message,
+	})
+}
+
+// handleBulkDeleteSkippedFiles handles bulk deletion of all skipped files from the database
+func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
+	// Get database connection
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection: %v", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Count skipped files before deletion
+	countQuery := `
+		SELECT COUNT(*) FROM processed_files
+		WHERE reason IS NOT NULL AND reason != '' AND
+		(LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+		 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+		 LOWER(reason) LIKE '%adult content%')
+	`
+	var skippedCount int
+	err = mediaHubDB.QueryRow(countQuery).Scan(&skippedCount)
+	if err != nil {
+		logger.Warn("Failed to count skipped files: %v", err)
+		http.Error(w, "Failed to count skipped files", http.StatusInternalServerError)
+		return
+	}
+
+	if skippedCount == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "No skipped files found to delete",
+			"deletedCount": 0,
+		})
+		return
+	}
+
+	// Delete all skipped files
+	deleteQuery := `
+		DELETE FROM processed_files
+		WHERE reason IS NOT NULL AND reason != '' AND
+		(LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+		 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+		 LOWER(reason) LIKE '%adult content%')
+	`
+	result, err := mediaHubDB.Exec(deleteQuery)
+	if err != nil {
+		logger.Warn("Failed to delete skipped files: %v", err)
+		http.Error(w, "Failed to delete skipped files", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.Warn("Failed to get rows affected: %v", err)
+		rowsAffected = int64(skippedCount) // fallback to counted value
+	}
+
+	logger.Info("Bulk deleted %d skipped files from database", rowsAffected)
+
+	// Notify dashboard about stats change
+	NotifyDashboardStatsChanged()
+
+	// Notify file operations subscribers about the change
+	NotifyFileOperationChanged()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully deleted %d skipped files from database", rowsAffected),
+		"deletedCount": rowsAffected,
 	})
 }
 

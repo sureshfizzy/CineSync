@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment } from '@mui/material';
-import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText } from '@mui/material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -111,6 +111,10 @@ function FileOperations() {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+
+  // Bulk delete state
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
@@ -491,6 +495,39 @@ function FileOperations() {
 
     } catch (error: any) {
       console.error(`Failed to process file: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleBulkDeleteSkippedFiles = async () => {
+    setBulkDeleteLoading(true);
+    try {
+      const response = await axios.delete('/api/file-operations');
+
+      if (response.data.success) {
+        console.log(response.data.message);
+
+        // Update status counts to reflect the deletion
+        setStatusCounts(prev => ({
+          ...prev,
+          skipped: 0
+        }));
+
+        // Clear operations if we're on the skipped tab
+        if (tabValue === 3) {
+          setOperations([]);
+          setTotalOperations(0);
+        }
+
+        // Refresh data
+        fetchFileOperations();
+
+        setBulkDeleteDialogOpen(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to delete skipped files:', error.response?.data?.error || error.message);
+      setError(error.response?.data?.error || error.message || 'Failed to delete skipped files');
+    } finally {
+      setBulkDeleteLoading(false);
     }
   };
 
@@ -1122,6 +1159,7 @@ function FileOperations() {
               Updated: {lastUpdated.toLocaleTimeString()}
             </Typography>
           )}
+
           {!isMobile && (
             <Tooltip title="Refresh">
               <IconButton
@@ -1285,6 +1323,9 @@ function FileOperations() {
         mb: { xs: 2, sm: 3 },
         mx: { xs: -1, sm: 0 },
         px: { xs: 1, sm: 0 },
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
         <Tabs
           value={tabValue}
@@ -1294,6 +1335,7 @@ function FileOperations() {
           scrollButtons={isMobile ? "auto" : false}
           allowScrollButtonsMobile={isMobile}
           sx={{
+            flex: 1,
             '& .MuiTab-root': {
               textTransform: 'none',
               fontWeight: 600,
@@ -1419,6 +1461,54 @@ function FileOperations() {
             {...a11yProps(4)}
           />
         </Tabs>
+
+        {/* Bulk Delete Button for Skipped Files - Tabs Line Placement */}
+        {!isMobile && tabValue === 3 && statusCounts.skipped > 0 && (
+          <Tooltip title={`Delete all ${statusCounts.skipped} skipped files from database`}>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => setBulkDeleteDialogOpen(true)}
+              disabled={bulkDeleteLoading}
+              sx={{
+                borderRadius: 2,
+                px: 2,
+                py: 0.5,
+                fontWeight: 600,
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                minWidth: 'auto',
+                border: '1px solid',
+                borderColor: 'error.main',
+                color: 'error.main',
+                bgcolor: alpha(theme.palette.error.main, 0.05),
+                ml: 2,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.error.main, 0.1),
+                  borderColor: 'error.dark',
+                  transform: 'translateY(-1px)',
+                  boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.25)}`,
+                },
+                '&:disabled': {
+                  bgcolor: alpha(theme.palette.error.main, 0.02),
+                  borderColor: alpha(theme.palette.error.main, 0.3),
+                  color: alpha(theme.palette.error.main, 0.5),
+                },
+              }}
+            >
+              {bulkDeleteLoading ? (
+                <>
+                  <CircularProgress size={14} sx={{ mr: 1 }} />
+                  Deleting...
+                </>
+              ) : (
+                `Delete All ${statusCounts.skipped}`
+              )}
+            </Button>
+          </Tooltip>
+        )}
       </Box>
 
       {/* Search Input for each tab */}
@@ -2002,40 +2092,76 @@ function FileOperations() {
         </Typography>
       </Box>
 
-          {/* Mobile Floating Action Button for Operations */}
+          {/* Mobile Floating Action Buttons for Operations */}
           {isMobile && (
-            <MotionFab
-              color="primary"
-              aria-label="refresh"
-              onClick={fetchFileOperations}
-              disabled={loading}
-              sx={{
-                position: 'fixed',
-                bottom: 24,
-                right: 24,
-                zIndex: 1000,
-                background: 'linear-gradient(45deg, #6366F1 30%, #8B5CF6 90%)',
-                boxShadow: '0 8px 16px 0 rgba(99, 102, 241, 0.3)',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #5B5FE8 30%, #7C3AED 90%)',
-                  boxShadow: '0 12px 20px 0 rgba(99, 102, 241, 0.4)',
-                },
-                '&:disabled': {
-                  background: 'rgba(99, 102, 241, 0.3)',
-                },
-              }}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <RefreshIcon sx={{
-                fontSize: 24,
-                animation: loading ? 'spin 1s linear infinite' : 'none',
-                '@keyframes spin': {
-                  '0%': { transform: 'rotate(0deg)' },
-                  '100%': { transform: 'rotate(360deg)' },
-                },
-              }} />
-            </MotionFab>
+            <>
+              {/* Bulk Delete FAB for Skipped Files on Mobile */}
+              {mainTabValue === 0 && tabValue === 3 && statusCounts.skipped > 0 && (
+                <MotionFab
+                  color="error"
+                  aria-label="delete all skipped"
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                  disabled={bulkDeleteLoading}
+                  sx={{
+                    position: 'fixed',
+                    bottom: 24,
+                    right: 88, // Position to the left of refresh button
+                    zIndex: 1000,
+                    background: 'linear-gradient(45deg, #ef4444 30%, #dc2626 90%)',
+                    boxShadow: '0 8px 16px 0 rgba(239, 68, 68, 0.3)',
+                    '&:hover': {
+                      background: 'linear-gradient(45deg, #dc2626 30%, #b91c1c 90%)',
+                      boxShadow: '0 12px 20px 0 rgba(239, 68, 68, 0.4)',
+                    },
+                    '&:disabled': {
+                      background: 'rgba(239, 68, 68, 0.3)',
+                    },
+                  }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {bulkDeleteLoading ? (
+                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                  ) : (
+                    <DeleteSweepIcon sx={{ fontSize: 24 }} />
+                  )}
+                </MotionFab>
+              )}
+
+              {/* Refresh FAB */}
+              <MotionFab
+                color="primary"
+                aria-label="refresh"
+                onClick={fetchFileOperations}
+                disabled={loading}
+                sx={{
+                  position: 'fixed',
+                  bottom: 24,
+                  right: 24,
+                  zIndex: 1000,
+                  background: 'linear-gradient(45deg, #6366F1 30%, #8B5CF6 90%)',
+                  boxShadow: '0 8px 16px 0 rgba(99, 102, 241, 0.3)',
+                  '&:hover': {
+                    background: 'linear-gradient(45deg, #5B5FE8 30%, #7C3AED 90%)',
+                    boxShadow: '0 12px 20px 0 rgba(99, 102, 241, 0.4)',
+                  },
+                  '&:disabled': {
+                    background: 'rgba(99, 102, 241, 0.3)',
+                  },
+                }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <RefreshIcon sx={{
+                  fontSize: 24,
+                  animation: loading ? 'spin 1s linear infinite' : 'none',
+                  '@keyframes spin': {
+                    '0%': { transform: 'rotate(0deg)' },
+                    '100%': { transform: 'rotate(360deg)' },
+                  },
+                }} />
+              </MotionFab>
+            </>
           )}
         </>
       )}
@@ -2055,6 +2181,128 @@ function FileOperations() {
         onNavigateBack={() => {
         }}
       />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog
+        open={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            backgroundColor: theme.palette.background.paper,
+            background: theme.palette.mode === 'dark'
+              ? `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(239, 68, 68, 0.08) 100%)`
+              : `linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)`,
+            border: theme.palette.mode === 'dark'
+              ? `2px solid ${theme.palette.error.main}40`
+              : `2px solid #fecaca`,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+              : '0 8px 32px rgba(0, 0, 0, 0.15)',
+            backdropFilter: 'blur(10px)',
+          }
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: theme.palette.mode === 'dark'
+                ? 'rgba(0, 0, 0, 0.7)'
+                : 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+            }
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: 'error.main',
+          fontWeight: 600,
+          backgroundColor: theme.palette.mode === 'dark'
+            ? 'rgba(239, 68, 68, 0.15)'
+            : '#fef2f2',
+          borderBottom: theme.palette.mode === 'dark'
+            ? `2px solid ${theme.palette.error.main}60`
+            : `2px solid #fecaca`,
+        }}>
+          <DeleteSweepIcon />
+          Delete All Skipped Files
+        </DialogTitle>
+        <DialogContent sx={{
+          background: 'transparent',
+        }}>
+          <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
+            Are you sure you want to delete all <strong>{statusCounts.skipped}</strong> skipped files from the database?
+          </DialogContentText>
+          <DialogContentText sx={{
+            color: 'text.primary',
+            fontSize: '0.875rem',
+            bgcolor: theme.palette.mode === 'dark'
+              ? alpha(theme.palette.background.default, 0.5)
+              : '#f9fafb',
+            p: 2,
+            borderRadius: 2,
+            borderLeft: theme.palette.mode === 'dark'
+              ? `4px solid ${theme.palette.error.main}`
+              : `4px solid #f87171`,
+            backdropFilter: 'blur(10px)',
+          }}>
+            This action will permanently remove all skipped file records from the database.
+            The original files will remain untouched in their source locations.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{
+          p: 3,
+          pt: 1,
+          gap: 1,
+          background: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.default, 0.3)
+            : '#f9fafb',
+          backdropFilter: 'blur(10px)',
+        }}>
+          <Button
+            onClick={() => setBulkDeleteDialogOpen(false)}
+            disabled={bulkDeleteLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkDeleteSkippedFiles}
+            color="error"
+            variant="contained"
+            disabled={bulkDeleteLoading}
+            startIcon={bulkDeleteLoading ? <CircularProgress size={16} /> : <DeleteSweepIcon />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2,
+              ...(theme.palette.mode === 'light' && {
+                bgcolor: '#ef4444',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: 'none',
+                '&:hover': {
+                  bgcolor: '#dc2626',
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+                '&:disabled': {
+                  bgcolor: alpha('#ef4444', 0.3),
+                  color: alpha('#ffffff', 0.7),
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+              })
+            }}
+          >
+            {bulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
