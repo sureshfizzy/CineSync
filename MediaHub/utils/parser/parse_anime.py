@@ -68,12 +68,16 @@ def is_anime_filename(filename: str) -> bool:
         if re.search(r'\.[A-F0-9]{8}\]\.mkv$', filename, re.IGNORECASE):
             return True
         if re.search(r'\.(1080p|720p|480p)', filename, re.IGNORECASE) and re.search(r'\.(BluRay|BDRip|WEBRip)', filename, re.IGNORECASE):
+            if re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE):
+                return False
             return True
-        # Only consider dot-separated files as anime if they don't have obvious Western TV patterns
+
         if (re.search(r'^[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.', filename) and
-            not re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE) and  # Season ranges like S01-S04
-            not re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE) and  # Standard TV episodes
-            not re.search(r'\bSeason\s+\d+\b', filename, re.IGNORECASE)):  # Season words
+            not re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE) and
+            not re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE) and
+            not re.search(r'\bS\d{1,2}\.E\d{1,2}\b', filename, re.IGNORECASE) and
+            not re.search(r'\bSeason\s+\d+\b', filename, re.IGNORECASE) and
+            not re.search(r'\bE\d{1,3}\b', filename, re.IGNORECASE)):
             return True
 
     # Pattern 2: Underscore-separated anime files with episode numbers
