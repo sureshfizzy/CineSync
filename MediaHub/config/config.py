@@ -154,6 +154,18 @@ def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""
     return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
+def get_max_processes():
+    """Get the maximum number of processes for parallel processing"""
+    try:
+        max_processes = int(os.getenv('MAX_PROCESSES', '4'))
+        from multiprocessing import cpu_count
+        max_processes = max(1, min(max_processes, cpu_count()))
+        log_message(f"MAX_PROCESSES configured to use {max_processes} workers", level="INFO")
+        return max_processes
+    except (ValueError, TypeError):
+        log_message("Invalid MAX_PROCESSES value, using default of 4", level="WARNING")
+        return 4
+
 def get_movie_resolution_folder(file, resolution):
     """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""
 
