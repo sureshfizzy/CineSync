@@ -663,7 +663,21 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
         # Extract title up to the stopping point
         if tech_start < len(parts):
-            title_parts = parts[:tech_start]
+            title_parts = []
+            for i in range(tech_start):
+                part = parts[i].strip().rstrip('.')
+
+                year_at_position = next((y for y in years if y['position'] == i and y['part'] == part), None)
+                if year_at_position and year_at_position['context'] == 'title':
+                    year_str = str(year_at_position['value'])
+                    if year_str in part and part != year_str:
+                        part = part.replace(year_str, '').strip()
+                        if part and len(part) > 1:
+                            title_parts.append(part)
+                        continue
+
+                title_parts.append(part)
+
             title = ' '.join(title_parts)
             return clean_title_string(title)
 
@@ -766,8 +780,18 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                     if 1 <= episode_num <= 999:
                         break
 
-            # Include in title
-            title_parts.append(clean_part)
+            title_part = clean_part
+
+            year_at_position = next((y for y in years if y['position'] == i and y['part'] == clean_part), None)
+            if year_at_position and year_at_position['context'] == 'title':
+                year_str = str(year_at_position['value'])
+                if year_str in title_part and title_part != year_str:
+                    title_part = title_part.replace(year_str, '').strip()
+                    if title_part and len(title_part) > 1:
+                        title_parts.append(title_part)
+                    continue
+
+            title_parts.append(title_part)
 
     if title_parts:
         title = ' '.join(title_parts)

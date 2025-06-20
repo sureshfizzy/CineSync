@@ -143,10 +143,13 @@ def find_all_years_in_filename(filename: str) -> List[Dict[str, Any]]:
 
     if is_dot_separated:
         parts = filename_no_ext.split('.')
-        # Special handling for mixed separators (like "Title with spaces.technical.terms")
-        if len(parts) > 0 and ' ' in parts[0] and len(parts[0]) > 20:
-            first_part_words = parts[0].split()
-            parts = first_part_words + parts[1:]
+        if len(parts) > 0 and ' ' in parts[0]:
+            first_part = parts[0]
+            has_year_in_first_part = re.search(r'\b(19|20)\d{2}\b', first_part)
+
+            if len(first_part) > 20 or has_year_in_first_part:
+                first_part_words = first_part.split()
+                parts = first_part_words + parts[1:]
     elif is_underscore_separated:
         parts = filename_no_ext.split('_')
         new_parts = []
@@ -208,6 +211,20 @@ def find_all_years_in_filename(filename: str) -> List[Dict[str, Any]]:
                         'part': clean_part
                     })
 
+        else:
+            year_matches = re.finditer(r'(19|20)\d{2}', clean_part)
+            for year_match in year_matches:
+                year = int(year_match.group())
+                if is_valid_year(year):
+                    if i <= 3:
+                        context = 'title'
+                        years_found.append({
+                            'value': year,
+                            'position': i,
+                            'context': context,
+                            'part': clean_part
+                        })
+
     return years_found
 
 
@@ -268,7 +285,8 @@ def _determine_year_context(year_position: int, parts: List[str]) -> str:
     next_part_is_year = False
     if year_position + 1 < len(parts):
         next_part = parts[year_position + 1].strip().rstrip('.')
-        if re.match(r'^\d{4}$', next_part):
+        if (re.match(r'^\d{4}$', next_part) or
+            re.match(r'^[\[\(]\d{4}[\]\)]$', next_part)):
             next_part_is_year = True
 
     if is_early_in_filename and next_part_is_year:
