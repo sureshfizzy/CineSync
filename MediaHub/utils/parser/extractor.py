@@ -355,6 +355,12 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
             if re.match(pattern, part, re.IGNORECASE):
                 return True
 
+    for i, part in enumerate(parsed.parts):
+        if part.lower() == 'season' and i + 1 < len(parsed.parts):
+            next_part = parsed.parts[i + 1].strip().rstrip('.')
+            if re.match(r'^\d{1,2}$', next_part):
+                return True
+
     return False
 
 
@@ -768,9 +774,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 if re.match(r'Season', next_part, re.IGNORECASE):
                     break
 
-            # Also stop if current part is "Season"
             if re.match(r'Season', clean_part, re.IGNORECASE):
                 break
+
+            if clean_part.lower() == 'season' and i + 1 < len(parts):
+                next_part = parts[i + 1].strip().rstrip('.')
+                if re.match(r'^\d{1,2}$', next_part):
+                    break
 
             # Handle anime-style episode patterns
             if clean_part == '-' and i + 1 < len(parts):

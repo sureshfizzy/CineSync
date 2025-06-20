@@ -70,6 +70,8 @@ def is_anime_filename(filename: str) -> bool:
         if re.search(r'\.(1080p|720p|480p)', filename, re.IGNORECASE) and re.search(r'\.(BluRay|BDRip|WEBRip)', filename, re.IGNORECASE):
             if re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE):
                 return False
+            if re.search(r'\bS\d{1,2}\b', filename, re.IGNORECASE):
+                return False
             return True
 
         if (re.search(r'^[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.', filename) and
@@ -270,6 +272,11 @@ def _extract_title_from_content(content: str) -> str:
     anime_extra_match = re.match(r'^(.+?)\s+-\s+(?:NCED|NCOP|NCBD|PV|CM|SP|OVA|OAD|SPECIAL|EXTRA)\s+\d+', content, re.IGNORECASE)
     if anime_extra_match:
         title = anime_extra_match.group(1).strip()
+        return clean_title_string(title)
+
+    dot_season_match = re.match(r'^(.+?)\.S\d+(?:\.|$)', content, re.IGNORECASE)
+    if dot_season_match:
+        title = dot_season_match.group(1).replace('.', ' ')
         return clean_title_string(title)
 
     # Then try standard episode/season patterns
