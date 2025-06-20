@@ -115,14 +115,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             episode_number = episode_match.group(2)
             create_season_folder = True
 
-    # If we still don't have episode info and it's not anime, mark as extra
-    if not episode_identifier and not anime_result:
-        log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
-        create_extras_folder = True
-        is_extra = True
+    # Handle season-only files (like "S01" without episode number)
+    if not episode_identifier and season_number and not anime_result:
+        log_message(f"Found season info but no episode info for: {file}. Creating season folder.", level="DEBUG")
+        create_season_folder = True
+        # Don't mark as extra since we have season info
 
-    # If still no episode info found, mark as extra
-    if not episode_identifier and not anime_result:
+    # If we don't have episode info AND no season info and it's not anime, mark as extra
+    elif not episode_identifier and not season_number and not anime_result:
         log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
         create_extras_folder = True
         is_extra = True

@@ -251,6 +251,47 @@ def _parse_filename_structure(filename: str) -> ParsedFilename:
                     'original': part
                 })
             else:
+                if ' ' in clean_part and re.search(r'\b(AAC|AC3|DTS|FLAC)\d+\s+\d+\s+x\d{3}-', clean_part, re.IGNORECASE):
+                    audio_match = re.match(r'^(AAC|AC3|DTS|FLAC)(\d+)\s+(\d+)\s+(x\d{3})-(.+)$', clean_part, re.IGNORECASE)
+                    if audio_match:
+                        codec = audio_match.group(1)
+                        channels = f"{audio_match.group(2)}.{audio_match.group(3)}"
+                        video_codec = audio_match.group(4)
+                        release_group = audio_match.group(5)
+
+                        # Add audio codec
+                        technical_terms.append({
+                            'term': codec,
+                            'position': i,
+                            'type': 'audio_codec',
+                            'original': part
+                        })
+
+                        # Add audio channels
+                        technical_terms.append({
+                            'term': channels,
+                            'position': i,
+                            'type': 'audio_channels',
+                            'original': part
+                        })
+
+                        # Add video codec
+                        technical_terms.append({
+                            'term': video_codec.upper(),
+                            'position': i,
+                            'type': 'video_codec',
+                            'original': part
+                        })
+
+                        # Add release group
+                        technical_terms.append({
+                            'term': release_group,
+                            'position': i,
+                            'type': 'release_group',
+                            'original': part
+                        })
+                        continue
+
                 # Regular term classification
                 term_type = _classify_technical_term(clean_part)
                 if term_type:
@@ -386,13 +427,27 @@ def _classify_technical_term(term: str) -> Optional[str]:
     if re.match(r'^[A-F0-9]{8}$', term_upper):
         return 'hash'
 
+    # Season range patterns (like "1-3", "1-10") - should not be classified as anything
+    if re.match(r'^\d{1,2}-\d{1,2}$', term):
+        return None
+
+    # Season patterns (like "S01", "S02", etc.) - should not be classified as anything
+    if re.match(r'^S\d{1,2}$', term, re.IGNORECASE):
+        return None
+
+    # Single numbers that could be season numbers (like "3", "10") - should not be classified as anything
+    if re.match(r'^\d{1,2}$', term) and int(term) <= 30:
+        return None
+
     # Release group (ends with hyphen + group name) - but not resolution-profile patterns or technical terms
     if re.match(r'^[a-z0-9]+-[A-Z0-9]+$', term, re.IGNORECASE):
         # Skip patterns like "1080p-Hi10P" which are resolution-profile combinations
         if not re.match(r'^\d{3,4}p-', term, re.IGNORECASE):
             # Skip technical quality indicators like "alq-12", "qp-15", etc.
             if not re.match(r'^[A-Z]{2,4}[_-]?\d+$', term, re.IGNORECASE):
-                return 'release_group'
+                # Skip season ranges like "S01-S02", "S01-S03", etc.
+                if not re.match(r'^S\d{1,2}-S\d{1,2}$', term, re.IGNORECASE):
+                    return 'release_group'
 
     return None
 
@@ -451,13 +506,22 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         while i < len(parts):
             clean_part = parts[i].strip().rstrip('.')
 
-            # Stop at season/episode patterns
+            # Stop at parentheses years
+            if clean_part.startswith('(') and re.match(r'^\(\d{4}\)$', clean_part):
+                break
+
+            # Stop at season/episode patterns including ranges
             if (re.match(r'S\d{1,2}\.E\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}E\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
+                re.match(r'S\d{1,2}-S\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'E\d{1,3}', clean_part, re.IGNORECASE) or
                 re.match(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'\d{1,2}x\d{1,3}(?:-\d{1,3})?', clean_part, re.IGNORECASE)):
+                break
+
+            # Stop at "Season" keyword
+            if clean_part.lower() == 'season':
                 break
 
             # If this is a single letter and the next parts are also single letters, combine them
@@ -921,10 +985,14 @@ def _extract_release_group_from_parsed(parsed: ParsedFilename) -> Optional[str]:
         for group_term in release_groups:
             group_name = group_term['term']
             # Skip obvious technical terms that got misclassified as release groups
-            if not re.match(r'^\d{3,4}p-', group_name, re.IGNORECASE):  # Skip "1080p-Hi10P" style
+            if (not re.match(r'^\d{3,4}p-', group_name, re.IGNORECASE) and
+                not re.match(r'^S\d{1,2}$', group_name, re.IGNORECASE) and
+                not re.match(r'^\d{1,2}-\d{1,2}$', group_name) and
+                not re.match(r'^\d{1,2}$', group_name) and
+                len(group_name) > 1):
                 return group_name
-        # If all are technical-looking, return the first one
-        return release_groups[0]['term']
+
+        return None
 
     # Standard bracket-based release groups - prioritize actual groups over language info
     potential_groups = []
@@ -947,6 +1015,14 @@ def _extract_release_group_from_parsed(parsed: ParsedFilename) -> Optional[str]:
         if re.match(r'^(Dual-Audio|Multi-Audio|English|Japanese|Dubbed|Subbed)$', content, re.IGNORECASE):
             continue
 
+        # Skip season patterns
+        if re.match(r'^S\d{1,2}$', content, re.IGNORECASE):
+            continue
+
+        # Skip numeric season ranges
+        if re.match(r'^\d{1,2}-\d{1,2}$', content):
+            continue
+
         # Valid release group pattern
         if len(content) <= 20 and re.match(r'^[A-Za-z0-9&.-]+$', content):
             potential_groups.append(content)
@@ -960,7 +1036,12 @@ def _extract_release_group_from_parsed(parsed: ParsedFilename) -> Optional[str]:
         part = parsed.parts[i].strip().rstrip('.')
         if re.match(r'^[a-z0-9]+-[A-Z0-9]+$', part, re.IGNORECASE):
             if '-' in part:
-                return part.split('-')[-1]
+                group_name = part.split('-')[-1]
+                # Skip season patterns that might have been misidentified
+                if (not re.match(r'^S\d{1,2}$', group_name, re.IGNORECASE) and
+                    not re.match(r'^\d{1,2}$', group_name) and
+                    len(group_name) > 1):
+                    return group_name
 
     return None
 
@@ -1021,6 +1102,11 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     """Extract season number from parsed filename data."""
     for part in parsed.parts:
         clean_part = part.strip().rstrip('.')
+
+        # Handle season ranges like S01-S02, S01-S03, etc. (return first season)
+        match = re.match(r'S(\d{1,2})-S\d{1,2}', clean_part, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
 
         # Handle dot-separated season/episode format like S01.E01
         match = re.match(r'S(\d{1,2})\.E\d{1,2}', clean_part, re.IGNORECASE)

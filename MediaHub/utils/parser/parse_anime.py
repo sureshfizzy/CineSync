@@ -13,6 +13,10 @@ def is_anime_filename(filename: str) -> bool:
 
     filename_lower = filename.lower()
 
+    # Early exclusion: if filename has season ranges, it's likely Western TV
+    if re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE):
+        return False
+
     # Check for anime release groups in brackets at the start
     bracket_match = ANIME_PATTERNS['release_group_bracket'].match(filename)
     if bracket_match:
@@ -65,7 +69,11 @@ def is_anime_filename(filename: str) -> bool:
             return True
         if re.search(r'\.(1080p|720p|480p)', filename, re.IGNORECASE) and re.search(r'\.(BluRay|BDRip|WEBRip)', filename, re.IGNORECASE):
             return True
-        if re.search(r'^[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.', filename):
+        # Only consider dot-separated files as anime if they don't have obvious Western TV patterns
+        if (re.search(r'^[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.', filename) and
+            not re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE) and  # Season ranges like S01-S04
+            not re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE) and  # Standard TV episodes
+            not re.search(r'\bSeason\s+\d+\b', filename, re.IGNORECASE)):  # Season words
             return True
 
     # Pattern 2: Underscore-separated anime files with episode numbers
@@ -99,10 +107,14 @@ def is_anime_filename(filename: str) -> bool:
         r'\bS\d{2}EP\d+\b',
         r'\(\d{4}-\d{4}\)',
         r'\bE\d{1,3}\b',
+        r'\bS\d{1,2}-S\d{1,2}\b',
     ]
 
     for pattern in western_tv_patterns:
         if re.search(pattern, filename, re.IGNORECASE):
+            if re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE):
+                return False
+
             western_indicator_patterns = [
                 r'\b(Complete|Collection)\b',
                 r'\bTV\s+Series\b',
