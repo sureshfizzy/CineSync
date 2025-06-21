@@ -174,12 +174,31 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         if isinstance(query, tuple):
             query = query[0] if query else ""
 
-        # Try original query first
+
         params = {'api_key': api_key, 'query': query, 'language': language_iso}
+        full_url = f"{url}?{urllib.parse.urlencode(params)}"
+        log_message(f"General search URL: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
+        response = perform_search(params, url)
+
+        if response:
+            scored_results = []
+            for result in response:
+                score = calculate_score(result, query, year)
+                if score >= 40:
+                    scored_results.append((score, result))
+
+            scored_results.sort(reverse=True, key=lambda x: x[0])
+            general_results = [r[1] for r in scored_results]
+
+
+            if general_results:
+                return general_results
+
+
         if year:
-            params['first_air_date_year'] = year
+            params = {'api_key': api_key, 'query': query, 'language': language_iso, 'first_air_date_year': year}
             full_url = f"{url}?{urllib.parse.urlencode(params)}"
-            log_message(f"Primary search URL with year: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
+            log_message(f"Fallback search URL with year: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
             response = perform_search(params, url)
 
             if response:
@@ -192,23 +211,6 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 scored_results.sort(reverse=True, key=lambda x: x[0])
                 if scored_results:
                     return [r[1] for r in scored_results]
-
-        # Try without year
-        params = {'api_key': api_key, 'query': query, 'language': language_iso}
-        full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"Secondary search URL (without year): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
-        response = perform_search(params, url)
-
-        if response:
-            scored_results = []
-            for result in response:
-                score = calculate_score(result, query, year)
-                if score >= 40:
-                    scored_results.append((score, result))
-
-            scored_results.sort(reverse=True, key=lambda x: x[0])
-            if scored_results:
-                return [r[1] for r in scored_results]
 
         # Fallback: Try removing country/region suffixes
         fallback_query = remove_country_suffix(query)
