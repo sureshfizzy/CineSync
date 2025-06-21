@@ -172,6 +172,7 @@ def _is_clean_title(query: str) -> bool:
         r'\b[A-Z]{2,}-[A-Z0-9]+\b',  # Release group patterns like "RARBG", "LOST"
         r'\bS\d{1,2}\.E\d{1,2}\b',  # Season/episode patterns like S01.E01
         r'\bS\d{1,2}E\d{1,2}\b',    # Season/episode patterns like S01E01
+        r'\b\d{1,2}x\d{1,2}\b',     # Season x Episode patterns like 1x02
         r'\bS\d{1,2}\b',            # Season patterns like S01, S02, S03
         r'\bE\d{1,3}\b',            # Episode patterns like E01, E02
         r'\bSeason\s+\d+\b',        # Season patterns like "Season 1"

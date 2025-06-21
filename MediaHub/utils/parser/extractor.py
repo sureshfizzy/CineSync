@@ -54,6 +54,10 @@ class MediaMetadata:
     episode: Optional[int] = None
     episode_title: Optional[str] = None
 
+    # Content type flags
+    is_tv_show: bool = False
+    is_movie: bool = False
+
     # Technical flags
     hdr: Optional[str] = None
     is_repack: bool = False
@@ -103,6 +107,10 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         if re.search(year_pattern, title):
             title = re.sub(year_pattern, '', title).strip()
 
+    # Determine content type
+    is_tv = _is_tv_show(parsed)
+    is_movie = not is_tv and bool(title)
+
     return MediaMetadata(
         title=title,
         year=year,
@@ -119,6 +127,8 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         edition=_extract_edition_from_parsed(parsed),
         season=_extract_season_from_parsed(parsed),
         episode=_extract_episode_from_parsed(parsed),
+        is_tv_show=is_tv,
+        is_movie=is_movie,
         episode_title=_extract_episode_title_from_parsed(parsed),
         hdr=_extract_hdr_from_parsed(parsed),
         is_repack=_extract_repack_flag_from_parsed(parsed),
@@ -589,42 +599,38 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 title = ' '.join(title_parts)
                 return clean_title_string(title)
 
-    # Pattern 3: "prefix.title.words.year.technical" (wmt-horus.prince pattern)
+    # Pattern 3: "prefix.title.words.year.technical" (dot-separated files)
     if parsed.is_dot_separated and len(parts) > 3:
-        # For dot-separated files, use smarter logic to handle title years vs release years
-        # Find the end of the title by looking for multiple indicators
+        # For dot-separated files, find where technical terms start
         title_end = len(parts)
 
         for i, part in enumerate(parts):
             clean_part = part.strip().rstrip('.')
 
-            # Check if this is a year using centralized logic
+            # Check for years first - stop at technical context years
             year_at_position = next((y for y in years if y['position'] == i), None)
             if year_at_position:
-                # Use centralized year logic to determine if this should be included in title
-                from MediaHub.utils.parser.parse_year import should_include_year_in_title
+                if year_at_position['context'] == 'technical':
+                    if i == 0 and len(years) > 1:
+                        later_years = [y for y in years if y['position'] > i]
+                        if later_years:
+                            continue
 
-                remaining_parts = parts[i+1:i+4]
-                has_tech_after = any(
-                    re.match(r'^\d{3,4}p$', p.strip().rstrip('.'), re.IGNORECASE) or
-                    p.strip().rstrip('.').lower() in ['bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn']
-                    for p in remaining_parts
-                )
-
-                if not should_include_year_in_title(year_at_position['value'], i, parts, has_tech_after):
                     title_end = i
                     break
 
-            # Check for actual technical terms and edition terms
-            elif (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or  # Resolution
-                  re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution
-                  clean_part.lower() in ['bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'uncensored', 'extended', 'unrated', 'directors', 'theatrical', 'bd', 'dual'] or
-                  re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
-                  re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE)):  # Quality indicators like "alq-12"
+            # Check for technical terms that clearly indicate end of title
+            if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
+                re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or
+                clean_part.lower() in ['proper', 'uhd', 'bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'uncensored', 'extended', 'unrated', 'directors', 'theatrical', 'bd', 'dual', 'remux', 'hybrid'] or
+                re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or
+                re.match(r'^DTS-HD$', clean_part, re.IGNORECASE) or
+                re.match(r'^MA$', clean_part, re.IGNORECASE) or
+                re.match(r'^[0-9]+\.[0-9]+$', clean_part)):
                 title_end = i
                 break
 
-        if title_end < len(parts):
+        if title_end > 0:
             title_parts = parts[:title_end]
             title = ' '.join(title_parts)
             return clean_title_string(title)
