@@ -1,19 +1,8 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Box,
-  CircularProgress,
-  Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  IconButton,
-  Divider,
-  useTheme,
-  useMediaQuery,
-  Pagination,
-} from '@mui/material';
+import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import debounce from '@mui/utils/debounce';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
@@ -22,7 +11,7 @@ import { getFileIcon, joinPaths, formatDate, sortFiles, filterFilesByLetter } fr
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
-import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
+import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
@@ -215,19 +204,60 @@ export default function FileBrowser() {
     }
   };
 
+  // Create a debounced refresh function for cases where full refresh is needed
+  const debouncedRefresh = useCallback(
+    debounce((path: string) => {
+      fetchFiles(path);
+    }, 1000),
+    []
+  );
+
   useEffect(() => {
     fetchFiles(currentPath);
   }, [currentPath]);
 
-  useSymlinkCreatedListener((data) => {
-    console.log('Symlink created, refreshing file browser:', data);
+  // Helper function to check if a symlink affects the current directory
+  const symlinkAffectsCurrentDirectory = useCallback((data: any) => {
+    if (!data.destination_file) return false;
 
-    fetchFiles(currentPath);
+    // Normalize paths for comparison
+    const normalizePathForComparison = (path: string) => {
+      return path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '');
+    };
+
+    const normalizedDestination = normalizePathForComparison(data.destination_file);
+    const normalizedCurrentPath = normalizePathForComparison(currentPath);
+
+    // Extract the directory from the destination file path
+    const destinationDir = normalizedDestination.substring(0, normalizedDestination.lastIndexOf('/'));
+    const finalDestinationDir = destinationDir === '' ? '/' : destinationDir;
+    const finalCurrentPath = normalizedCurrentPath === '' ? '/' : normalizedCurrentPath;
+
+    // Check if the destination directory matches the current path
+    return finalDestinationDir === finalCurrentPath;
   }, [currentPath]);
+
+  // Listen for symlink creation events through centralized SSE (similar to FileOperations)
+  useSSEEventListener(
+    ['symlink_created'],
+    (event: any) => {
+      const data = event.data;
+
+      // Only update if the symlink affects the current directory
+      if (symlinkAffectsCurrentDirectory(data)) {
+        debouncedRefresh(currentPath);
+      }
+    },
+    {
+      source: 'mediahub',
+      dependencies: [symlinkAffectsCurrentDirectory, debouncedRefresh, currentPath]
+    }
+  );
 
   useEffect(() => {
     const handlePageRefresh = () => {
-      fetchFiles(currentPath);
+      // Use debounced refresh for page refresh events as well
+      debouncedRefresh(currentPath);
     };
 
     window.addEventListener('symlink-page-refresh', handlePageRefresh);
@@ -235,7 +265,14 @@ export default function FileBrowser() {
     return () => {
       window.removeEventListener('symlink-page-refresh', handlePageRefresh);
     };
-  }, [currentPath]);
+  }, [currentPath, debouncedRefresh]);
+
+  // Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedRefresh.clear();
+    };
+  }, [debouncedRefresh]);
 
   const handlePathClick = (path: string) => {
     const normalizedPath = joinPaths(path);
@@ -437,8 +474,8 @@ export default function FileBrowser() {
             formatDate={formatDate}
             onItemClick={(file) => handleFileClick(file, null)}
             onViewDetails={handleViewDetails}
-            onRename={() => fetchFiles(currentPath)}
-            onDeleted={() => fetchFiles(currentPath)}
+            onRename={() => debouncedRefresh(currentPath)}
+            onDeleted={() => debouncedRefresh(currentPath)}
             onError={setError}
             onNavigateBack={handleNavigateBack}
           />
