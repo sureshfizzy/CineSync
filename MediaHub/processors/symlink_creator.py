@@ -213,6 +213,7 @@ def process_file(args, processed_files_log, force=False):
 
     if force_show:
         is_show = True
+        force_extra = True
         log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
         file_result = clean_query(file)
     elif force_movie:

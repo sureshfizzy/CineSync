@@ -33,12 +33,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     else:
         file_result = clean_query(file)
 
+    # Store original parameters before they get overwritten by file parsing
+    original_season_number = season_number
+    original_episode_number = episode_number
+
     # Use file result if it has episode info, otherwise try folder
     if file_result.get('episode_identifier'):
         show_name = file_result.get('title', '')
         episode_identifier = file_result.get('episode_identifier')
-        season_number = file_result.get('season_number')
-        episode_number = file_result.get('episode_number')
+        # Only use parsed values if no original parameters were provided
+        if original_season_number is None:
+            season_number = file_result.get('season_number')
+        if original_episode_number is None:
+            episode_number = file_result.get('episode_number')
         create_season_folder = file_result.get('create_season_folder', False)
         is_extra = file_result.get('is_extra', False)
         print(f"DEBUG: Using file-based extraction: {show_name} - {episode_identifier}")
@@ -50,8 +57,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
         show_name = folder_result.get('title', '')
         episode_identifier = folder_result.get('episode_identifier')
-        season_number = folder_result.get('season_number')
-        episode_number = folder_result.get('episode_number')
+        # Only use parsed values if no original parameters were provided
+        if original_season_number is None:
+            season_number = folder_result.get('season_number')
+        if original_episode_number is None:
+            episode_number = folder_result.get('episode_number')
         create_season_folder = folder_result.get('create_season_folder', False)
         is_extra = folder_result.get('is_extra', False)
 
@@ -63,6 +73,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             print(f"DEBUG: Using folder-based extraction: {show_name} - {episode_identifier}")
         else:
             print(f"DEBUG: No episode info found, using folder name: {show_name}")
+
+    # Restore original parameters if they were provided
+    if original_season_number is not None:
+        season_number = original_season_number
+    if original_episode_number is not None:
+        episode_number = original_episode_number
 
     # Initialize remaining variables
     new_name = file
@@ -81,6 +97,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         season_number = str(season_number).zfill(2)
     if episode_number is not None:
         episode_number = str(episode_number).zfill(2)
+
+    # If we have both season and episode numbers from command line, create episode_identifier
+    if season_number is not None and episode_number is not None and not episode_identifier:
+        episode_identifier = f"S{season_number}E{episode_number}"
+        create_season_folder = True
 
     if is_anime_show or is_anime_scan() and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
@@ -122,7 +143,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         # Don't mark as extra since we have season info
 
     # If we don't have episode info AND no season info and it's not anime, mark as extra
-    elif not episode_identifier and not season_number and not anime_result:
+    elif not episode_identifier and not season_number and not anime_result and not force_extra:
         log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
         create_extras_folder = True
         is_extra = True
