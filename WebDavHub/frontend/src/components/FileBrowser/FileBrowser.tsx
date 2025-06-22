@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
-import debounce from '@mui/utils/debounce';
+import { debounce } from '@mui/material/utils';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
