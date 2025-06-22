@@ -262,7 +262,11 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 	// Ensure deletion tracking table exists
 	err = createDeletionTrackingTable(mediaHubDB)
 	if err != nil {
-		// Table creation failed, but continue silently
+	}
+
+	// Ensure failure tracking table exists
+	err = createFailureTrackingTable(mediaHubDB)
+	if err != nil {
 	}
 
 	// Build WHERE clause for status filtering
@@ -481,6 +485,16 @@ func getStatusCounts(operations []FileOperation, total int) (map[string]int, err
 		}
 		logger.Debug("Error checking processed_files table: %v", err)
 		return map[string]int{"created": 0, "failed": 0, "skipped": 0, "deleted": 0}, nil
+	}
+
+	// Ensure deletion tracking table exists
+	err = createDeletionTrackingTable(mediaHubDB)
+	if err != nil {
+	}
+
+	// Ensure failure tracking table exists
+	err = createFailureTrackingTable(mediaHubDB)
+	if err != nil {
 	}
 
 	counts := map[string]int{
