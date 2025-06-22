@@ -24,6 +24,11 @@ const (
 	DEFAULT_IMAGE_SIZE  = "w342"            // Default size to cache
 )
 
+// HTTP client for faster poster loading
+var httpClient = &http.Client{
+	Timeout: 1 * time.Second,
+}
+
 // Environment variable overrides
 func getMaxCacheSizeMB() int {
 	if envSize := os.Getenv("IMAGE_CACHE_SIZE_MB"); envSize != "" {
@@ -42,8 +47,6 @@ func getMaxCacheFiles() int {
 	}
 	return MAX_CACHE_FILES
 }
-
-
 
 func isImageCacheEnabled() bool {
 	return os.Getenv("IMAGE_CACHE_ENABLED") != "false"
@@ -166,7 +169,7 @@ func (ics *ImageCacheService) DownloadAndCacheImage(posterPath string, size stri
 	// Download from TMDB at the requested size
 	tmdbURL := fmt.Sprintf("https://image.tmdb.org/t/p/%s%s", size, posterPath)
 
-	resp, err := http.Get(tmdbURL)
+	resp, err := httpClient.Get(tmdbURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download image: %w", err)
 	}
@@ -401,17 +404,17 @@ func (ics *ImageCacheService) PreloadImagesForTmdbData(tmdbID int, mediaType str
 // CleanupOldImages removes cached images older than specified days
 func (ics *ImageCacheService) CleanupOldImages(maxAgeDays int) error {
 	cutoff := time.Now().AddDate(0, 0, -maxAgeDays)
-	
+
 	return filepath.Walk(ics.cacheDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		if !info.IsDir() && info.ModTime().Before(cutoff) {
 			logger.Info("Removing old cached image: %s", path)
 			return os.Remove(path)
 		}
-		
+
 		return nil
 	})
 }

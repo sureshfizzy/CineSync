@@ -35,6 +35,11 @@ var statsScanProgress struct {
 
 var isPlaceholderConfig bool
 
+// HTTP client for faster API requests
+var httpClientWithTimeout = &http.Client{
+	Timeout: 1 * time.Second,
+}
+
 // MediaHub SSE variables for real-time updates
 var (
 	mediaHubClients      = make(map[chan string]bool)
@@ -1261,7 +1266,7 @@ func HandleTmdbCache(w http.ResponseWriter, r *http.Request) {
 			tmdbUrl := backendHost + "/api/tmdb/search?" + params.Encode()
 			req, _ := http.NewRequest("GET", tmdbUrl, nil)
 			req.Header = r.Header
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := httpClientWithTimeout.Do(req)
 			if err != nil || resp.StatusCode != 200 {
 				w.WriteHeader(http.StatusNotFound)
 				return

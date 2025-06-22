@@ -42,6 +42,11 @@ var tmdbRateWindow = 10 * time.Second
 var tmdbRateMap = make(map[string][]time.Time)
 var tmdbRateMu sync.Mutex
 
+// HTTP client for faster TMDB requests
+var tmdbHttpClient = &http.Client{
+	Timeout: 1 * time.Second,
+}
+
 // Global TMDB request queue to ensure sequential processing
 var tmdbQueue = make(chan struct{}, 10)
 var tmdbQueueInitialized = false
@@ -181,7 +186,7 @@ func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 		tmdbUrl = "https://api.themoviedb.org/3/search/movie?" + params.Encode()
 	}
 
-	resp, err := http.Get(tmdbUrl)
+	resp, err := tmdbHttpClient.Get(tmdbUrl)
 	if err != nil {
 		logger.Warn("Error forwarding to TMDb: %v", err)
 		http.Error(w, "Failed to contact TMDb", http.StatusBadGateway)
@@ -247,20 +252,20 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		var err error
 		if mediaType == "tv" {
 			detailsUrl = "https://api.themoviedb.org/3/tv/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
-			resp, err = http.Get(detailsUrl)
+			resp, err = tmdbHttpClient.Get(detailsUrl)
 		} else if mediaType == "movie" {
 			detailsUrl = "https://api.themoviedb.org/3/movie/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
-			resp, err = http.Get(detailsUrl)
+			resp, err = tmdbHttpClient.Get(detailsUrl)
 		} else {
 			// Try TV first, then fallback to movie if not found
 			detailsUrl = "https://api.themoviedb.org/3/tv/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
-			resp, err = http.Get(detailsUrl)
+			resp, err = tmdbHttpClient.Get(detailsUrl)
 			if err != nil || resp.StatusCode != 200 {
 				if resp != nil {
 					resp.Body.Close()
 				}
 				detailsUrl = "https://api.themoviedb.org/3/movie/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
-				resp, err = http.Get(detailsUrl)
+				resp, err = tmdbHttpClient.Get(detailsUrl)
 			}
 		}
 		if err != nil || resp.StatusCode != 200 {
@@ -292,7 +297,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 						}
 
 						seasonUrl := "https://api.themoviedb.org/3/tv/" + id + "/season/" + fmt.Sprintf("%d", int(sn)) + "?api_key=" + url.QueryEscape(tmdbApiKey)
-						seasonResp, err := http.Get(seasonUrl)
+						seasonResp, err := tmdbHttpClient.Get(seasonUrl)
 						if err == nil && seasonResp.StatusCode == 200 {
 							seasonBody, _ := io.ReadAll(seasonResp.Body)
 							seasonResp.Body.Close()
@@ -407,7 +412,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		searchType = "tv"
 	}
 	searchUrl := "https://api.themoviedb.org/3/search/" + searchType + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&query=" + url.QueryEscape(query) + "&include_adult=false"
-	resp, err := http.Get(searchUrl)
+	resp, err := tmdbHttpClient.Get(searchUrl)
 	if err != nil || resp.StatusCode != 200 {
 		logger.Warn("TMDb search failed: %v", err)
 		http.Error(w, "Failed to search TMDb", http.StatusBadGateway)
@@ -434,7 +439,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	} else {
 		detailsUrl = "https://api.themoviedb.org/3/movie/" + id + "?api_key=" + url.QueryEscape(tmdbApiKey) + "&append_to_response=credits,keywords"
 	}
-	detailsResp, err := http.Get(detailsUrl)
+	detailsResp, err := tmdbHttpClient.Get(detailsUrl)
 	if err != nil || detailsResp.StatusCode != 200 {
 		logger.Warn("TMDb details fetch failed: %v", err)
 		http.Error(w, "Failed to fetch details from TMDb", http.StatusBadGateway)
@@ -458,7 +463,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 					sn, ok := season["season_number"].(float64)
 					if !ok { continue }
 					seasonUrl := "https://api.themoviedb.org/3/tv/" + id + "/season/" + fmt.Sprintf("%d", int(sn)) + "?api_key=" + url.QueryEscape(tmdbApiKey)
-					seasonResp, err := http.Get(seasonUrl)
+					seasonResp, err := tmdbHttpClient.Get(seasonUrl)
 					if err == nil && seasonResp.StatusCode == 200 {
 						seasonBody, _ := io.ReadAll(seasonResp.Body)
 						seasonResp.Body.Close()
