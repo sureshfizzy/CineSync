@@ -253,48 +253,4 @@ def should_include_year_in_title(year: int, position: int, parts: List[str], has
 
 def _determine_year_context(year_position: int, parts: List[str]) -> str:
     """Determine if year is in title or technical context."""
-    remaining_parts = parts[year_position + 1:year_position + 6]
-
-    tv_patterns = [r'^S\d{1,2}E\d{1,2}$', r'^Season\s+\d+$']
-    has_tv_after = any(
-        any(re.match(pattern, part.strip().rstrip('.'), re.IGNORECASE) for pattern in tv_patterns)
-        for part in remaining_parts
-    )
-
-    if has_tv_after:
-        return "title"
-
-    technical_patterns = [
-        r'^\d{3,4}p$', r'^(BluRay|WEB-DL|WEBRip|HDTV|DVD|BD)$',
-        r'^(x264|x265|H264|H265|HEVC)$', r'^(AAC|AC3|DTS|FLAC)$',
-        r'^(MULTI|ITA|ENG|FRENCH)$', r'^(REPACK|PROPER)$',
-        r'^(HDR|HDR10|DOLBY|VISION)$',
-        r'^[A-Z]+\d+[A-Z]*$',
-        r'^\[.*\]$',
-        r'^\(.*\)$',
-        r'^(rus|jpn|eng)$'
-    ]
-
-    has_technical_after = any(
-        any(re.match(pattern, part.strip().rstrip('.'), re.IGNORECASE) for pattern in technical_patterns)
-        for part in remaining_parts
-    )
-
-    is_early_in_filename = year_position <= 2
-
-    next_part_is_year = False
-    if year_position + 1 < len(parts):
-        next_part = parts[year_position + 1].strip().rstrip('.')
-        if (re.match(r'^\d{4}$', next_part) or
-            re.match(r'^[\[\(]\d{4}[\]\)]$', next_part)):
-            next_part_is_year = True
-
-    if is_early_in_filename and next_part_is_year:
-        return "title"
-
-    if has_technical_after and not has_tv_after and not next_part_is_year:
-        return "technical"
-    elif is_early_in_filename:
-        return "title"
-    else:
-        return "title"
+    return "title"

@@ -59,38 +59,18 @@ def is_anime_filename(filename: str) -> bool:
                     if indicator_pattern.search(remaining):
                         return True
 
-                # If no specific episode indicators, but has a release group in parentheses,
-                # it's likely anime
                 return True
 
-    # Pattern 1: Dot-separated anime files (common pattern)
-    if '.' in filename and filename.count('.') >= 3:
-        if re.search(r'\.[A-F0-9]{8}\]\.mkv$', filename, re.IGNORECASE):
-            return True
-        if re.search(r'\.(1080p|720p|480p)', filename, re.IGNORECASE) and re.search(r'\.(BluRay|BDRip|WEBRip)', filename, re.IGNORECASE):
-            if re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE):
-                return False
-            if re.search(r'\bS\d{1,2}\b', filename, re.IGNORECASE):
-                return False
-            return True
+    # Pattern 1: Only check for specific anime hash patterns
+    if re.search(r'\.[A-F0-9]{8}\]\.mkv$', filename, re.IGNORECASE):
+        return True
 
-        if (re.search(r'^[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+\.', filename) and
-            not re.search(r'\bS\d{1,2}-S\d{1,2}\b', filename, re.IGNORECASE) and
-            not re.search(r'\bS\d{1,2}E\d{1,2}\b', filename, re.IGNORECASE) and
-            not re.search(r'\bS\d{1,2}\.E\d{1,2}\b', filename, re.IGNORECASE) and
-            not re.search(r'\bSeason\s+\d+\b', filename, re.IGNORECASE) and
-            not re.search(r'\bE\d{1,3}\b', filename, re.IGNORECASE)):
-            return True
+    # Pattern 2: Underscore-separated anime files with hash patterns only
+    if re.search(r'_\d{1,4}_.*\[A-F0-9]{8}\]', filename, re.IGNORECASE):
+        return True
 
-    # Pattern 2: Underscore-separated anime files with episode numbers
-    if '_' in filename:
-        if re.search(r'_\d{1,4}_.*\[A-F0-9]{8}\]', filename, re.IGNORECASE):
-            return True
-        if re.search(r'_\d{1,4}_(1080|720|480)\.(BD|BluRay|WEBRip)', filename, re.IGNORECASE):
-            return True
-
-    # Pattern 3: Files with parentheses containing technical info (common anime pattern)
-    if re.search(r'\(.*(?:BDRip|BluRay|WEBRip|HEVC|x264|x265).*\).*\[.*\].*\[.*\]', filename, re.IGNORECASE):
+    # Pattern 3: Files with multiple brackets (common anime pattern)
+    if re.search(r'\[.*\].*\[.*\].*\[A-F0-9]{8}\]', filename, re.IGNORECASE):
         return True
 
     non_anime_patterns = [

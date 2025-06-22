@@ -389,6 +389,14 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
             if re.match(r'^\d{1,2}$', next_part):
                 return True
 
+    # Check for anime episode patterns
+    if _extract_anime_flag_from_parsed(parsed):
+        filename = parsed.original
+        if re.search(r'\s-\s+\d{1,4}(?:\s|$|\[)', filename):
+            return True
+        if re.search(r'\s+\d{1,4}\s+\[', filename):
+            return True
+
     return False
 
 
@@ -619,23 +627,17 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
     # Pattern 3: "prefix.title.words.year.technical" (dot-separated files)
     if parsed.is_dot_separated and len(parts) > 3:
-        # For dot-separated files, find where technical terms start
+        if len(years) >= 2:
+            second_year_position = years[1]['position']
+            title_parts = parts[:second_year_position + 1]
+            title = ' '.join(title_parts)
+            return clean_title_string(title)
+
+        # For single year or no years, find where technical terms start
         title_end = len(parts)
 
         for i, part in enumerate(parts):
             clean_part = part.strip().rstrip('.')
-
-            # Check for years first - stop at technical context years
-            year_at_position = next((y for y in years if y['position'] == i), None)
-            if year_at_position:
-                if year_at_position['context'] == 'technical':
-                    if i == 0 and len(years) > 1:
-                        later_years = [y for y in years if y['position'] > i]
-                        if later_years:
-                            continue
-
-                    title_end = i
-                    break
 
             # Check for technical terms that clearly indicate end of title
             if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
@@ -751,25 +753,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                         break
             else:
                 if len(years) >= 2:
-                    last_year_position = years[-1]['position']
-                    if i != last_year_position:
+                    second_year_position = years[1]['position']
+                    if i <= second_year_position:
                         title_parts.append(str(year_value))
                     else:
-                        has_tech_after = any(t['position'] > i for t in technical_terms)
-                        if has_tech_after:
-                            break
-                        else:
-                            title_parts.append(str(year_value))
-                elif len(years) == 1:
-                    # Single year - check context and position
-                    if year_at_position['context'] == 'title':
-                        title_parts.append(str(year_value))
-                    else:
-                        has_tech_after = any(t['position'] > i for t in technical_terms)
-                        if i <= 2 and has_tech_after:
-                            title_parts.append(str(year_value))
-                        else:
-                            break
+                        break
+                else:
+                    title_parts.append(str(year_value))
         else:
             if clean_part.startswith('(') or clean_part.startswith('['):
                 break
