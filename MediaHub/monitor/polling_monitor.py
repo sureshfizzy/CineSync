@@ -236,7 +236,7 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None):
                         file_path = os.path.join(mod_dir, added_file)
                         log_message(f"Processing new file: {file_path}", level="INFO")
                         try:
-                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=True, mode='monitor')
                         except Exception as e:
                             log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
 
