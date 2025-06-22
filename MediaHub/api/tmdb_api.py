@@ -38,6 +38,22 @@ session.headers.update({
     'Accept': 'application/json'
 })
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+adapter = HTTPAdapter(
+    pool_connections=50,
+    pool_maxsize=50,
+    max_retries=Retry(
+        total=3,
+        backoff_factor=0.1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+)
+
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
 # Thread-safe request cache to avoid duplicate API calls within the same session
 _request_cache = {}
 _request_cache_lock = threading.RLock()
@@ -331,8 +347,8 @@ def perform_search(params, url):
 
         params['query'] = query
 
-        # Use session for connection pooling
-        response = session.get(url, params=params, timeout=10)
+        # Use session for connection pooling with optimized timeout
+        response = session.get(url, params=params, timeout=3)
         response.raise_for_status()
         results = response.json().get('results', [])
 

@@ -180,14 +180,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 # Second attempt: Try running an external command to check if file exists
                                 log_message(f"Path not found with os.path.lexists, trying alternative check for: {safe_path}", level="DEBUG")
 
-                                # Try executing a command to check if the file exists
                                 import subprocess
                                 try:
                                     result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
                                     if result.returncode == 0:
                                         log_message(f"File found with ls command: {safe_path}", level="INFO")
-
-                                        # Try to delete the symlink using subprocess
                                         log_message(f"Trying to delete symlink using rm command: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
                                         rm_result = subprocess.run(['rm', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
 

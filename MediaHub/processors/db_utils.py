@@ -88,9 +88,9 @@ class ConnectionPool:
             else:
                 conn.close()
 
-# Create connection pools
-main_pool = ConnectionPool(DB_FILE)
-archive_pool = ConnectionPool(ARCHIVE_DB_FILE)
+# Create connection pools with single connection for SQLite
+main_pool = ConnectionPool(DB_FILE, max_connections=1)
+archive_pool = ConnectionPool(ARCHIVE_DB_FILE, max_connections=1)
 
 def with_connection(pool):
     def decorator(func):
@@ -107,7 +107,9 @@ def with_connection(pool):
 def throttle(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        time.sleep(1 / THROTTLE_RATE)
+        # Only throttle if THROTTLE_RATE > 0
+        if THROTTLE_RATE > 0:
+            time.sleep(1 / THROTTLE_RATE)
         return func(*args, **kwargs)
     return wrapper
 
@@ -127,7 +129,8 @@ def retry_on_db_lock(func):
 
 @throttle
 @retry_on_db_lock
-def initialize_db():
+@with_connection(main_pool)
+def initialize_db(conn):
     global _db_initialized
     """Initialize the SQLite database and create the necessary tables."""
     if _db_initialized:
@@ -139,7 +142,6 @@ def initialize_db():
         log_message("Initializing database...", level="INFO")
         os.makedirs(DB_DIR, exist_ok=True)
 
-    conn = sqlite3.connect(DB_FILE)
     try:
         cursor = conn.cursor()
 
@@ -198,8 +200,6 @@ def initialize_db():
     except sqlite3.Error as e:
         log_message(f"Failed to initialize or update database: {e}", level="ERROR")
         conn.rollback()
-    finally:
-        conn.close()
 
 @throttle
 @retry_on_db_lock
@@ -452,9 +452,8 @@ def display_missing_files(conn, destination_folder):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def update_db_schema():
+def update_db_schema(conn):
     try:
-        conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
         # Check if the destination_path column exists
@@ -475,8 +474,7 @@ def update_db_schema():
         conn.commit()
     except sqlite3.Error as e:
         log_message(f"Error updating database schema: {e}", level="ERROR")
-    finally:
-        conn.close()
+        conn.rollback()
 
 @throttle
 @retry_on_db_lock

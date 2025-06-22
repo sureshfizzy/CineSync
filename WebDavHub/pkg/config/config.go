@@ -135,6 +135,7 @@ func getConfigDefinitions() []ConfigValue {
 		// System Configuration
 		{Key: "RELATIVE_SYMLINK", Category: "System Configuration", Type: "boolean", Required: false, Description: "Create relative symlinks instead of absolute symlinks"},
 		{Key: "MAX_PROCESSES", Category: "System Configuration", Type: "integer", Required: false, Description: "Set the maximum number of parallel processes for creating symlinks"},
+		{Key: "MAX_CORES", Category: "System Configuration", Type: "integer", Required: false, Description: "Set the maximum number of CPU cores to use (0 for auto-detect, specific number to limit CPU usage)"},
 
 		// File Handling Configuration
 		{Key: "SKIP_EXTRAS_FOLDER", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable the creation and processing of extras folder files"},

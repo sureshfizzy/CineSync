@@ -154,17 +154,41 @@ def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""
     return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
-def get_max_processes():
-    """Get the maximum number of processes for parallel processing"""
+def get_max_cores():
+    """Get the maximum number of CPU cores for CPU-bound operations"""
     try:
-        max_processes = int(os.getenv('MAX_PROCESSES', '4'))
+        max_cores = int(os.getenv('MAX_CORES', '0'))
         from multiprocessing import cpu_count
-        max_processes = max(1, min(max_processes, cpu_count()))
-        log_message(f"MAX_PROCESSES configured to use {max_processes} workers", level="INFO")
+
+        cpu_cores = cpu_count()
+
+        if max_cores <= 0:
+            max_cores = cpu_cores
+        else:
+            max_cores = min(max_cores, cpu_cores)
+
+        log_message(f"MAX_CORES configured to use {max_cores} cores (CPU cores available: {cpu_cores})", level="INFO")
+        return max_cores
+    except (ValueError, TypeError):
+        log_message("Invalid MAX_CORES value, using auto-detect", level="WARNING")
+        from multiprocessing import cpu_count
+        return cpu_count()
+
+def get_max_processes():
+    """Get the maximum number of processes for I/O-bound parallel processing (API calls, file operations)"""
+    try:
+        max_processes = int(os.getenv('MAX_PROCESSES', '8'))
+        from multiprocessing import cpu_count
+
+        # Respect user's MAX_PROCESSES setting, but ensure it's reasonable
+        cpu_cores = cpu_count()
+        max_processes = max(1, min(max_processes, 32))
+
+        log_message(f"MAX_PROCESSES configured to use {max_processes} workers for I/O operations", level="INFO")
         return max_processes
     except (ValueError, TypeError):
-        log_message("Invalid MAX_PROCESSES value, using default of 4", level="WARNING")
-        return 4
+        log_message("Invalid MAX_PROCESSES value, using default of 8", level="WARNING")
+        return 8
 
 def get_movie_resolution_folder(file, resolution):
     """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""

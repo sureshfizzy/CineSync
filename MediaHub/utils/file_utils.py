@@ -10,6 +10,11 @@ from MediaHub.config.config import *
 from MediaHub.utils.parser.extractor import extract_all_metadata
 from MediaHub.utils.parser.parse_anime import is_anime_filename
 
+# Cache for parsed metadata to avoid redundant parsing
+_metadata_cache = {}
+
+
+
 # ============================================================================
 # MAIN STRUCTURED PARSING FUNCTIONS
 # ============================================================================
@@ -221,13 +226,17 @@ def clean_query(query: str) -> Dict[str, Any]:
         log_message(f"Invalid query type: {type(query)}. Expected string.", "ERROR", "stderr")
         return {"title": "", "error": "Invalid input type"}
 
-    log_message(f"Original query: '{query}'", "DEBUG", "stdout")
+    # Check cache first to avoid redundant parsing
+    if query in _metadata_cache:
+        return _metadata_cache[query]
 
     # Check if the query is already a clean title (no file extensions, technical terms, or complex patterns)
     # If it looks like a clean title, return it as-is to avoid unnecessary parsing
     if _is_clean_title(query):
         log_message(f"Query appears to be already clean, returning as-is: '{query}'", level="DEBUG")
-        return {"title": query, "episodes": [], "seasons": [], "episode_identifier": None}
+        result = {"title": query, "episodes": [], "seasons": [], "episode_identifier": None}
+        _metadata_cache[query] = result
+        return result
 
     try:
         # Use the unified parser
@@ -246,8 +255,6 @@ def clean_query(query: str) -> Dict[str, Any]:
         if metadata.episode and metadata.season:
             result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:02d}"
         elif metadata.episode:
-            # For anime files without season info, don't create episode_identifier
-            # This prevents defaulting to S01 when there's no actual season information
             result['episode_identifier'] = None
         else:
             result['episode_identifier'] = None
@@ -259,26 +266,39 @@ def clean_query(query: str) -> Dict[str, Any]:
         result['subbed'] = metadata.is_subbed
         result['repack'] = metadata.is_repack
         result['proper'] = metadata.is_proper
-        result['quality'] = metadata.quality_source  # Legacy field name
-        result['codec'] = metadata.video_codec  # Legacy field name
-        result['audio'] = metadata.audio_codecs  # Legacy field name
-        result['channels'] = metadata.audio_channels  # Legacy field name
-        result['group'] = metadata.release_group  # Legacy field name
+        result['quality'] = metadata.quality_source
+        result['codec'] = metadata.video_codec
+        result['audio'] = metadata.audio_codecs
+        result['channels'] = metadata.audio_channels
+        result['group'] = metadata.release_group
 
         # Add season/episode numbers as strings for compatibility
         if metadata.season:
             result['season_number'] = f"{metadata.season:02d}"
-        # Don't default to season 1 if there's no actual season information
 
         if metadata.episode:
             result['episode_number'] = f"{metadata.episode:02d}"
 
+        # Reduce logging overhead for performance
         log_message(f"Final parsed result: title='{result.get('title')}', episode='{result.get('episode_identifier')}'", level="DEBUG")
+
+        # Cache the result to avoid redundant parsing
+        _metadata_cache[query] = result
+
+        # Limit cache size to prevent memory issues
+        if len(_metadata_cache) > 1000:
+            # Remove oldest entries (simple FIFO approach)
+            oldest_keys = list(_metadata_cache.keys())[:100]
+            for key in oldest_keys:
+                del _metadata_cache[key]
+
         return result
 
     except Exception as e:
         log_message(f"Error using parser for query cleaning: {e}", "ERROR")
-        return {"title": query, "error": str(e), "episodes": [], "seasons": []}
+        error_result = {"title": query, "error": str(e), "episodes": [], "seasons": []}
+        _metadata_cache[query] = error_result
+        return error_result
 
 
 

@@ -7,6 +7,8 @@ from MediaHub.utils.parser.parse_year import is_valid_year, extract_year, find_a
 from MediaHub.utils.parser.utils import clean_title_string
 from MediaHub.utils.parser.parse_anime import is_anime_filename, extract_anime_title
 
+# Cache for parsed filename structures to avoid redundant parsing
+_filename_cache = {}
 
 @dataclass
 class ParsedFilename:
@@ -94,6 +96,10 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
     if not filename:
         return MediaMetadata(title="")
 
+    # Check cache first to avoid redundant parsing
+    if filename in _filename_cache:
+        return _filename_cache[filename]
+
     parsed = _parse_filename_structure(filename)
 
     # Extract title and year separately
@@ -111,7 +117,7 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
     is_tv = _is_tv_show(parsed)
     is_movie = not is_tv and bool(title)
 
-    return MediaMetadata(
+    metadata = MediaMetadata(
         title=title,
         year=year,
         resolution=_extract_resolution_from_parsed(parsed),
@@ -136,6 +142,18 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         container=_extract_container_from_parsed(parsed),
         is_anime=_extract_anime_flag_from_parsed(parsed),
     )
+
+    # Cache the result to avoid redundant parsing
+    _filename_cache[filename] = metadata
+
+    # Limit cache size to prevent memory issues
+    if len(_filename_cache) > 500:
+        # Remove oldest entries (simple FIFO approach)
+        oldest_keys = list(_filename_cache.keys())[:50]
+        for key in oldest_keys:
+            del _filename_cache[key]
+
+    return metadata
 
 
 def _remove_website_patterns(filename: str) -> str:

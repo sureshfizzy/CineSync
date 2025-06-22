@@ -7,7 +7,6 @@ import time
 import psutil
 import signal
 import socket
-import psutil
 import threading
 import traceback
 
@@ -248,6 +247,46 @@ def handle_exit(signum, frame):
     remove_lock_file()
     os._exit(0)
 
+def setup_process_priority():
+    """Set process priority to prevent overwhelming the system."""
+    try:
+        current_process = psutil.Process()
+        if platform.system() == 'Windows':
+            # Set to below normal priority on Windows
+            current_process.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+            log_message("Set process priority to BELOW_NORMAL", level="DEBUG")
+        else:
+            # Set to nice value 10 on Unix (lower priority)
+            current_process.nice(10)
+            log_message("Set process nice value to 10", level="DEBUG")
+    except Exception as e:
+        log_message(f"Could not set process priority: {e}", level="WARNING")
+
+def setup_cpu_affinity():
+    """Set CPU affinity to limit MediaHub to specific CPU cores."""
+    try:
+        from MediaHub.config.config import get_max_cores
+        max_cores = get_max_cores()
+        total_cores = psutil.cpu_count()
+
+        if max_cores < total_cores:
+            allowed_cores = list(range(max_cores))
+            current_process = psutil.Process()
+            current_process.cpu_affinity(allowed_cores)
+
+            log_message(f"CPU affinity set to cores {allowed_cores} (using {max_cores} of {total_cores} cores)", level="INFO")
+
+            for child in current_process.children(recursive=True):
+                try:
+                    child.cpu_affinity(allowed_cores)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        else:
+            log_message(f"Using all {total_cores} CPU cores (MAX_CORES={max_cores})", level="INFO")
+
+    except Exception as e:
+        log_message(f"Could not set CPU affinity: {e}", level="WARNING")
+
 def setup_signal_handlers():
     """Setup signal handlers for Linux and Windows."""
     # Register handlers for both Windows and Unix signals
@@ -271,6 +310,16 @@ def start_polling_monitor():
     try:
         python_command = 'python' if platform.system() == 'Windows' else 'python3'
         process = subprocess.Popen([python_command, POLLING_MONITOR_PATH])
+
+        try:
+            current_process = psutil.Process()
+            affinity = current_process.cpu_affinity()
+            child_process = psutil.Process(process.pid)
+            child_process.cpu_affinity(affinity)
+            log_message(f"Set CPU affinity for polling monitor to cores {affinity}", level="DEBUG")
+        except Exception as e:
+            log_message(f"Could not set CPU affinity for polling monitor: {e}", level="DEBUG")
+
         background_processes.append(process)
 
         with open(MONITOR_PID_FILE, 'w') as f:
@@ -550,6 +599,12 @@ if __name__ == "__main__":
 
     # Set up signal handlers before anything else
     setup_signal_handlers()
+
+    # Set process priority to be system-friendly
+    setup_process_priority()
+
+    # Set CPU affinity to limit core usage
+    setup_cpu_affinity()
 
     # Get directories and start main process
     src_dirs, dest_dir = get_directories()

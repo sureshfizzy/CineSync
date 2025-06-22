@@ -36,6 +36,22 @@ session.headers.update({
     'Accept': 'application/json'
 })
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+adapter = HTTPAdapter(
+    pool_connections=50,
+    pool_maxsize=50,
+    max_retries=Retry(
+        total=3,
+        backoff_factor=0.1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+)
+
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
 def get_external_ids(item_id, media_type):
     url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
     params = {'api_key': api_key, 'language': language_iso}

@@ -293,7 +293,7 @@ def process_file(file_path):
         except Exception as e:
             log_message(f"Failed to process file: {file_path}. Error: {e}", level="ERROR")
     else:
-        log_message(f"File already exists in the database: {file_path}", level="WARNING")
+        log_message(f"File already exists in the database, skipping processing: {file_path}", level="DEBUG")
 
 def initial_scan(dirs_to_watch):
     """Performs an initial scan of directories to capture the current state of files."""
