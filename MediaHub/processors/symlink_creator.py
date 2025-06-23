@@ -32,7 +32,41 @@ error_event = Event()
 log_imported_db = False
 db_initialized = False
 
-def process_file(args, processed_files_log, force=False):
+# Global cache for first selection in batch processing
+first_selection_cache = {
+    'tmdb_id': None,
+    'show_name': None,
+    'year': None,
+    'is_cached': False
+}
+
+def reset_first_selection_cache():
+    """Reset the first selection cache for a new batch."""
+    global first_selection_cache
+    first_selection_cache = {
+        'tmdb_id': None,
+        'show_name': None,
+        'year': None,
+        'is_cached': False
+    }
+
+def cache_first_selection(tmdb_id, show_name=None, year=None):
+    """Cache the first manual selection for subsequent files."""
+    global first_selection_cache
+    first_selection_cache['tmdb_id'] = tmdb_id
+    first_selection_cache['show_name'] = show_name
+    first_selection_cache['year'] = year
+    first_selection_cache['is_cached'] = True
+    log_message(f"Cached first selection: TMDB ID {tmdb_id}, Show: {show_name}, Year: {year}", level="INFO")
+
+def get_cached_selection():
+    """Get the cached first selection if available."""
+    global first_selection_cache
+    if first_selection_cache['is_cached']:
+        return first_selection_cache['tmdb_id'], first_selection_cache['show_name'], first_selection_cache['year']
+    return None, None, None
+
+def process_file(args, processed_files_log, force=False, batch_apply=False):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip = args
 
     if error_event.is_set():
@@ -292,6 +326,20 @@ def process_file(args, processed_files_log, force=False):
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
+    # Handle batch apply logic
+    if not auto_select and not tmdb_id:
+        if batch_apply:
+            cached_tmdb_id, cached_show_name, cached_year = get_cached_selection()
+            if cached_tmdb_id:
+                log_message(f"Using cached selection for {file}: TMDB ID {cached_tmdb_id}", level="INFO")
+                tmdb_id = cached_tmdb_id
+                auto_select = True
+        else:
+            from MediaHub.api.tmdb_api import _api_cache, _cache_lock
+            with _cache_lock:
+                _api_cache.clear()
+            log_message(f"Cleared TMDB cache for independent selection: {file}", level="DEBUG")
+
     # Determine whether to process as show or movie
     show_metadata = None
     if is_show or is_anime_show:
@@ -305,6 +353,13 @@ def process_file(args, processed_files_log, force=False):
             metadata_to_pass['is_extra'] = True
 
         result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass)
+
+        # Cache the first selection if batch_apply is enabled and this is the first manual selection
+        if batch_apply and not first_selection_cache['is_cached'] and result and len(result) >= 2:
+            result_tmdb_id = result[1]
+            if result_tmdb_id:
+                show_name = metadata_to_pass.get('title') if metadata_to_pass else None
+                cache_first_selection(result_tmdb_id, show_name)
         if result is None or result[0] is None:
             log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
             return
@@ -559,8 +614,14 @@ def process_file(args, processed_files_log, force=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False):
     global log_imported_db
+
+    if batch_apply:
+        reset_first_selection_cache()
+        log_message("Batch apply enabled - will cache first manual selection for subsequent files", level="INFO")
+    else:
+        reset_first_selection_cache()
 
     # If skip is true, automatically set force to true for proper cleanup
     if skip:
@@ -607,7 +668,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 else build_dest_index(dest_dir))
 
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
-                    tasks.append(executor.submit(process_file, args, processed_files_log, force))
+                    tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
                 else:
                     # Handle directory
                     actual_dir = os.path.basename(normalize_file_path(src_dir))
@@ -629,7 +690,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 continue
 
                             args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
-                            tasks.append(executor.submit(process_file, args, processed_files_log, force))
+                            tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
 
             # Process completed tasks
             for task in as_completed(tasks):
@@ -664,7 +725,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 else build_dest_index(dest_dir))
 
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
-                    result = process_file(args, processed_files_log, force)
+                    result = process_file(args, processed_files_log, force, batch_apply)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
                         dest_file, is_symlink, target_path = result
@@ -691,7 +752,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 continue
 
                             args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
-                            result = process_file(args, processed_files_log, force)
+                            result = process_file(args, processed_files_log, force, batch_apply)
 
                             if result and isinstance(result, tuple) and len(result) == 3:
                                 dest_file, is_symlink, target_path = result
