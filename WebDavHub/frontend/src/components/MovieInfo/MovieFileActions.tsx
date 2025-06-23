@@ -91,29 +91,7 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
   const handleModify = () => setModifyDialogOpen(true);
   const handleModifyClose = () => setModifyDialogOpen(false);
 
-  const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
-    try {
-      const params = new URLSearchParams();
 
-      if (selectedOption && selectedOption !== 'id') {
-        params.append(selectedOption, 'true');
-      }
-
-      Object.entries(selectedIds).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-
-      const fullFilePath = filePath.endsWith(fileInfo.name) ? filePath : `${filePath}/${fileInfo.name}`;
-      const response = await axios.post(`/api/process-file?${params.toString()}`, {
-        path: fileInfo.fullPath || fileInfo.sourcePath || fullFilePath
-      });
-
-      handleError(response.data.message || 'File processing completed');
-      onRename?.(fileInfo);
-    } catch (error: any) {
-      handleError(`Failed to process file: ${error.response?.data?.error || error.message}`);
-    }
-  };
 
   const fullFilePath = filePath.endsWith(fileInfo.name) ? filePath : `${filePath}/${fileInfo.name}`;
 
@@ -149,7 +127,6 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
         <ModifyDialog
           open={modifyDialogOpen}
           onClose={handleModifyClose}
-          onSubmit={handleModifySubmit}
           onNavigateBack={onNavigateBack}
           currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
           mediaType="movie"

@@ -17,7 +17,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, is_anime_file, is_junk_file
+from MediaHub.utils.file_utils import build_dest_index, is_anime_file, is_junk_file, should_skip_processing
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.config.config import *
@@ -162,8 +162,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
-    # Skip metadata and auxiliary files (subtitles, .tmdb files, etc.) silently
-    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt', '.tmdb')):
+    # Skip metadata and auxiliary files
+    if should_skip_processing(file):
         return
 
     # Check for unsupported file type
@@ -663,6 +663,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     file = os.path.basename(src_file)
                     actual_dir = os.path.basename(root)
 
+                    # Skip metadata and auxiliary files
+                    if should_skip_processing(file):
+                        continue
+
                     # Get appropriate destination index based on mode
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
@@ -683,6 +687,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if error_event.is_set():
                                 log_message("Stopping further processing due to an earlier error.", level="WARNING")
                                 return
+
+                            # Skip metadata and auxiliary files
+                            if should_skip_processing(file):
+                                continue
 
                             src_file = os.path.join(root, file)
 
@@ -720,6 +728,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     file = os.path.basename(src_file)
                     actual_dir = os.path.basename(root)
 
+                    # Skip metadata and auxiliary files
+                    if should_skip_processing(file):
+                        continue
+
                     # Get appropriate destination index based on mode
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
@@ -745,6 +757,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if error_event.is_set():
                                 log_message("Stopping further processing due to an earlier error.", level="WARNING")
                                 return
+
+                            # Skip metadata and auxiliary files
+                            if should_skip_processing(file):
+                                continue
 
                             src_file = os.path.join(root, file)
 

@@ -466,37 +466,7 @@ function FileOperations() {
     }, 1500);
   };
 
-  const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
-    try {
-      const params = new URLSearchParams();
 
-      if (selectedOption && selectedOption !== 'id') {
-        params.append(selectedOption, 'true');
-      }
-
-      Object.entries(selectedIds).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-
-      const response = await axios.post(`/api/process-file?${params.toString()}`, {
-        path: currentFileForProcessing
-      });
-
-      console.log('File processing completed:', response.data.message || 'File processing completed');
-
-      // Trigger a refresh after processing to ensure UI is updated
-      setTimeout(() => {
-        if (tabValue === 0) {
-          fetchSourceFilesData(sourcePage, sourceIndex);
-        } else {
-          fetchFileOperations();
-        }
-      }, 2000);
-
-    } catch (error: any) {
-      console.error(`Failed to process file: ${error.response?.data?.error || error.message}`);
-    }
-  };
 
   const handleBulkDeleteSkippedFiles = async () => {
     setBulkDeleteLoading(true);
@@ -2175,7 +2145,6 @@ function FileOperations() {
       <ModifyDialog
         open={modifyDialogOpen}
         onClose={handleModifyDialogClose}
-        onSubmit={handleModifySubmit}
         currentFilePath={currentFileForProcessing}
         mediaType="movie"
         onNavigateBack={() => {

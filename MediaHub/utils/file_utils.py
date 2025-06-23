@@ -463,6 +463,17 @@ def normalize_query(query: str) -> str:
 
     return normalized_query
 
+def should_skip_processing(filename: str) -> bool:
+    """
+    Determine if a file should be skipped from MediaHub processing.
+    Returns True if the file should be skipped (metadata files like .tmdb)
+    """
+    if not isinstance(filename, str):
+        return False
+
+    # Skip only metadata files (.tmdb files) - allow .srt and .strm to be processed
+    return filename.lower().endswith(('.sub', '.idx', '.vtt', '.tmdb'))
+
 def is_junk_file(file: str, file_path: str) -> bool:
     """Determine if the file is junk based on size and type."""
     if not isinstance(file, str) or not isinstance(file_path, str):
@@ -474,7 +485,13 @@ def is_junk_file(file: str, file_path: str) -> bool:
     if os.path.islink(file_path):
         return False
 
-    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt', '.tmdb')):
+    # Use centralized function to check if file should be skipped
+    if should_skip_processing(file):
+        return False
+
+    # Never consider .srt and .strm files as junk regardless of size
+    # These files are legitimately small and should always be processed
+    if file.lower().endswith(('.srt', '.strm')):
         return False
 
     try:

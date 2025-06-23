@@ -23,7 +23,7 @@ import SkipConfirmationDialog from './SkipConfirmationDialog';
 import SkipResultDialog from './SkipResultDialog';
 import { ModifyDialogProps, ModifyOption, IDOption, MovieOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack, useBatchApply: propUseBatchApply = false }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -39,6 +39,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [isClosing, setIsClosing] = useState(false);
   const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
   const [skipResultOpen, setSkipResultOpen] = useState(false);
+  const [useBatchApply, setUseBatchApply] = useState(false);
   const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,6 +126,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationSuccess(false);
     setIsClosing(false);
     setSkipConfirmOpen(false);
+    setUseBatchApply(false);
 
     // Clear timeouts
     if (inputTimeoutRef.current) {
@@ -161,7 +163,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       return;
     }
 
-    // Reset execution states
+    // Reset execution states and start python command
     setExecOutput('');
     setMovieOptions([]);
     setIsLoadingNewOptions(false);
@@ -171,30 +173,41 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setIsClosing(false);
     setExecOpen(true);
 
+    // Determine if we should use batch apply from the prop
+    const shouldUseBatchApply = propUseBatchApply;
+
+    // Set the state for future reference
+    if (shouldUseBatchApply) {
+      setUseBatchApply(true);
+    }
+
     // Log what we're about to send for debugging
     console.log('ModifyDialog submitting with:', {
       selectedOption,
       selectedIds,
-      currentFilePath
+      currentFilePath,
+      batchApply: shouldUseBatchApply
     });
 
-    startPythonCommand();
+    startPythonCommand(shouldUseBatchApply);
   };
 
-  const startPythonCommand = async () => {
+  const startPythonCommand = async (batchApplyOverride?: boolean) => {
     if (!currentFilePath) {
       setExecOutput('Error: No file path provided\n');
       return;
     }
 
     const disableMonitor = true;
+    const shouldUseBatchApply = batchApplyOverride !== undefined ? batchApplyOverride : useBatchApply;
 
     // Prepare the request payload with selected options and IDs
     const requestPayload = {
       sourcePath: currentFilePath,
       disableMonitor,
       selectedOption: selectedOption || undefined,
-      selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined
+      selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined,
+      batchApply: shouldUseBatchApply
     };
 
     // Log the exact payload being sent

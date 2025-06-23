@@ -23,6 +23,7 @@ type PythonBridgeRequest struct {
 	DisableMonitor bool `json:"disableMonitor"`
 	SelectedOption string `json:"selectedOption,omitempty"`
 	SelectedIds map[string]string `json:"selectedIds,omitempty"`
+	BatchApply bool `json:"batchApply,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
@@ -218,23 +219,33 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	var realPath string
 	if fileInfo.IsDir() {
-		// This is a directory (likely a TV show folder)
 		logger.Info("Processing TV show folder: %s", finalAbsPath)
-		// Find a video file within season folders and resolve its symlink
-		realPath, err = findVideoFileInTVShowFolder(finalAbsPath)
-		if err != nil {
-			logger.Warn("Failed to find video file in TV show folder %s: %v, using original path", finalAbsPath, err)
-			realPath = finalAbsPath // fallback to original path
+
+		isDestinationFolder := strings.Contains(finalAbsPath, "CineSync") ||
+							  strings.Contains(finalAbsPath, "Shows") ||
+							  strings.Contains(finalAbsPath, "Movies") ||
+							  strings.Contains(finalAbsPath, "AnimeShows") ||
+							  strings.Contains(finalAbsPath, "4KShows") ||
+							  strings.Contains(finalAbsPath, "4KMovies")
+
+		if isDestinationFolder {
+			logger.Info("Detected destination show folder, using folder path directly: %s", finalAbsPath)
+			realPath = finalAbsPath
 		} else {
-			logger.Info("Resolved TV show folder to real source file: %s", realPath)
+			realPath, err = findVideoFileInTVShowFolder(finalAbsPath)
+			if err != nil {
+				logger.Warn("Failed to find video file in TV show folder %s: %v, using original path", finalAbsPath, err)
+				realPath = finalAbsPath
+			} else {
+				logger.Info("Resolved TV show folder to real source file: %s", realPath)
+			}
 		}
 	} else {
-		// This is a file, try to resolve real path using readlink logic
 		logger.Info("Processing individual file: %s", finalAbsPath)
 		realPath, err = executeReadlink(finalAbsPath)
 		if err != nil {
 			logger.Warn("Failed to resolve real path for %s: %v, using original path", finalAbsPath, err)
-			realPath = finalAbsPath // fallback to original path
+			realPath = finalAbsPath
 		} else {
 			logger.Info("Resolved file symlink to: %s", realPath)
 		}
@@ -246,6 +257,9 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--disable-monitor")
 	}
 	args = append(args, "--force")
+	if req.BatchApply {
+		args = append(args, "--batch-apply")
+	}
 
 	// Add selected action option if provided
 	if req.SelectedOption != "" {

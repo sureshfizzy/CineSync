@@ -1,10 +1,10 @@
 export interface ModifyDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit?: (selectedOption: string, selectedIds: Record<string, string>) => void;
   currentFilePath?: string;
   mediaType?: 'movie' | 'tv';
   onNavigateBack?: () => void;
+  useBatchApply?: boolean;
 }
 
 export interface ModifyOption {

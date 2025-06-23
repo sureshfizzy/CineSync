@@ -180,31 +180,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
     handleMenuClose();
   };
 
-  const handleModifySubmit = async (selectedOption: string, selectedIds: Record<string, string>) => {
-    try {
-      const params = new URLSearchParams();
 
-      // Add the main action
-      if (selectedOption && selectedOption !== 'id') {
-        params.append(selectedOption, 'true');
-      }
-
-      // Add ID parameters if any
-      Object.entries(selectedIds).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-
-      const response = await axios.post(`/api/process-file?${params.toString()}`, {
-        path: file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)
-      });
-
-      onError(response.data.message || 'File processing completed');
-      // Refresh the view if needed
-      if (onRename) onRename(file);
-    } catch (error: any) {
-      onError(`Failed to process file: ${error.response?.data?.error || error.message}`);
-    }
-  };
 
   const handleRenameSubmit = async () => {
     if (!renameValue.trim() || renameValue === file.name) return;
@@ -354,13 +330,6 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
 
   return (
     <>
-      <ModifyDialog
-        open={modifyDialogOpen}
-        onClose={() => setModifyDialogOpen(false)}
-        onSubmit={handleModifySubmit}
-        onNavigateBack={onNavigateBack}
-        currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
-      />
       <IconButton onClick={handleMenuOpen} size="small">
         <MoreVertIcon />
       </IconButton>
@@ -450,7 +419,6 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       <ModifyDialog
         open={modifyDialogOpen}
         onClose={() => setModifyDialogOpen(false)}
-        onSubmit={handleModifySubmit}
         onNavigateBack={onNavigateBack}
         currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
       />

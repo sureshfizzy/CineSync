@@ -123,7 +123,7 @@ def plex_url():
     return token
 
 def get_known_types(filename=None):
-    known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4').split(','))
+    known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4,.srt,.strm').split(','))
     if filename is not None:
         if not filename:
             return False
