@@ -452,7 +452,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
 
         except requests.exceptions.RequestException as e:
-            log_message(f"Error fetching movie data: {e}", level="ERROR")
+            log_message(f"TMDB details fetch by ID failed - Network error: {e}", level="ERROR")
             log_message(f"Falling back to search due to API error", level="INFO")
 
     cache_key = (query, year, language_iso)

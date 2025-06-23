@@ -86,8 +86,12 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 
         return resultObj;
       }
-    } catch (err) {
-      console.error('[TMDB] Error fetching details by ID:', err);
+    } catch (err: any) {
+      if (err.response) {
+        console.error(`[TMDB] Details fetch by ID failed - HTTP ${err.response.status}: ID '${query}' not found for media type '${mediaType || 'auto'}'`);
+      } else {
+        console.error('[TMDB] Details fetch by ID failed - Network error:', err);
+      }
       return null;
     }
   }

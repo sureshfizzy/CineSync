@@ -269,7 +269,11 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil || resp.StatusCode != 200 {
-			logger.Warn("TMDb details fetch by ID failed: %v", err)
+			if err != nil {
+				logger.Warn("TMDb details fetch by ID failed - Network error: %v", err)
+			} else {
+				logger.Warn("TMDb details fetch by ID failed - HTTP %d: ID '%s' not found for media type '%s'", resp.StatusCode, id, mediaType)
+			}
 			http.Error(w, "Failed to fetch details from TMDb", http.StatusBadGateway)
 			return
 		}
@@ -441,7 +445,11 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	}
 	detailsResp, err := tmdbHttpClient.Get(detailsUrl)
 	if err != nil || detailsResp.StatusCode != 200 {
-		logger.Warn("TMDb details fetch failed: %v", err)
+		if err != nil {
+			logger.Warn("TMDb details fetch failed after search - Network error: %v", err)
+		} else {
+			logger.Warn("TMDb details fetch failed after search - HTTP %d: ID '%s' not found", detailsResp.StatusCode, id)
+		}
 		http.Error(w, "Failed to fetch details from TMDb", http.StatusBadGateway)
 		return
 	}

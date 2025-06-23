@@ -61,7 +61,7 @@ def get_external_ids(item_id, media_type):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching external IDs: {e}", level="ERROR")
+        log_message(f"TMDB external IDs fetch failed for {media_type} ID {item_id} - Network error: {e}", level="ERROR")
         return {}
 
 def get_movie_genres(movie_id):
@@ -210,14 +210,14 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            log_message(f"Episode {episode_number} not found for season {season_number}. Using AniDB-style mapping.", level="INFO")
+            log_message(f"Episode S{season_number}E{episode_number} not found in TMDB, using AniDB-style mapping", level="INFO")
             return map_absolute_episode(show_id, episode_number, api_key, max_length)
         else:
-            log_message(f"HTTP error occurred: {e}", level="ERROR")
+            log_message(f"TMDB episode fetch failed - HTTP {response.status_code}: {e}", level="ERROR")
             return None, None, None
 
     except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching episode data: {e}", level="ERROR")
+        log_message(f"TMDB episode fetch failed - Network error: {e}", level="ERROR")
         return None, None, None
 
 def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
@@ -467,10 +467,10 @@ def get_movie_collection(movie_id=None, movie_title=None, year=None):
                 url = f"https://api.themoviedb.org/3/movie/{movie_id}"
                 params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
             else:
-                log_message(f"No movie found for {movie_title} ({year})", level="WARNING")
+                log_message(f"No movie found for '{movie_title}' ({year}) in TMDB database", level="WARNING")
                 return None
         except requests.exceptions.RequestException as e:
-            log_message(f"Error searching for movie: {e}", level="ERROR")
+            log_message(f"TMDB movie collection fetch failed - Network error: {e}", level="ERROR")
             return None
     else:
         log_message("Either movie_id or (movie_title and year) must be provided", level="ERROR")
