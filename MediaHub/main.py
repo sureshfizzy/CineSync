@@ -428,6 +428,7 @@ def main(dest_dir):
     parser.add_argument("--season-episode", type=str, help="Specify season and episode numbers in format SxxExx (e.g., S03E15)")
     parser.add_argument("--skip", action="store_true", help="Skip processing the file and mark it as 'Skipped by user' in the database")
     parser.add_argument("--batch-apply", action="store_true", help="Apply the first manual selection to all subsequent files in the batch")
+    parser.add_argument("--manual-search", action="store_true", help="Allow manual TMDB search when automatic search fails")
     parser.add_argument("--id-refresh", action="store_true", help="Create missing .tmdb files for existing symlinks using the database.")
 
     db_group = parser.add_argument_group('Database Management')
@@ -591,10 +592,10 @@ def main(dest_dir):
             monitor_thread.daemon = False
             monitor_thread.start()
             time.sleep(2)
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply)
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
             monitor_thread.join()
         else:
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply)
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
         terminate_flag.set()

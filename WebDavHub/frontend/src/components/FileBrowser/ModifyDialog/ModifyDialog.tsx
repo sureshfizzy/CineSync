@@ -23,7 +23,7 @@ import SkipConfirmationDialog from './SkipConfirmationDialog';
 import SkipResultDialog from './SkipResultDialog';
 import { ModifyDialogProps, ModifyOption, IDOption, MovieOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack, useBatchApply: propUseBatchApply = false }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack, useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -47,7 +47,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const theme = useTheme();
 
   // Media processing options with icons
-  const modifyOptions: ModifyOption[] = [
+  const baseModifyOptions: ModifyOption[] = [
     {
       value: 'force',
       label: 'Force Recreate Symlinks',
@@ -79,6 +79,20 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       icon: '⏭️'
     },
   ];
+
+  // Add manual search option if enabled (for failed files)
+  const modifyOptions: ModifyOption[] = propUseManualSearch
+    ? [
+        ...baseModifyOptions.slice(0, -1), // All options except skip
+        {
+          value: 'manual-search',
+          label: 'Manual Search',
+          description: 'Enable manual TMDB search when automatic search fails',
+          icon: '🔍'
+        },
+        baseModifyOptions[baseModifyOptions.length - 1] // Skip option at the end
+      ]
+    : baseModifyOptions;
 
   // ID options with icons
   const idOptions: IDOption[] = [
@@ -200,14 +214,16 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
     const disableMonitor = true;
     const shouldUseBatchApply = batchApplyOverride !== undefined ? batchApplyOverride : useBatchApply;
+    const shouldUseManualSearch = selectedOption === 'manual-search' || propUseManualSearch;
 
     // Prepare the request payload with selected options and IDs
     const requestPayload = {
       sourcePath: currentFilePath,
       disableMonitor,
-      selectedOption: selectedOption || undefined,
+      selectedOption: selectedOption === 'manual-search' ? undefined : (selectedOption || undefined),
       selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined,
-      batchApply: shouldUseBatchApply
+      batchApply: shouldUseBatchApply,
+      manualSearch: shouldUseManualSearch
     };
 
     // Log the exact payload being sent
@@ -230,6 +246,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
           break;
         case 'skip':
           commandPreview += ' --skip';
+          break;
+        case 'manual-search':
+          commandPreview += ' --manual-search';
           break;
       }
     }

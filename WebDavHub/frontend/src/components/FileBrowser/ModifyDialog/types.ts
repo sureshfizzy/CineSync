@@ -5,6 +5,7 @@ export interface ModifyDialogProps {
   mediaType?: 'movie' | 'tv';
   onNavigateBack?: () => void;
   useBatchApply?: boolean;
+  useManualSearch?: boolean;
 }
 
 export interface ModifyOption {

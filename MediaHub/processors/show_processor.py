@@ -4,7 +4,8 @@ import requests
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import extract_resolution_from_filename, clean_query, extract_year, extract_resolution_from_folder
 
-from MediaHub.api.tmdb_api import search_tv_show
+from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
+from MediaHub.processors.movie_processor import process_movie
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
@@ -16,7 +17,7 @@ from MediaHub.processors.db_utils import track_file_failure
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False, file_metadata=None):
+def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False, file_metadata=None, manual_search=False):
 
     if any(root == source_dir.strip() for source_dir in source_dirs):
         parent_folder_name = os.path.basename(root)
@@ -110,7 +111,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     if is_anime_show or is_anime_scan() and is_anime_file(file):
         anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
-                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number, file_metadata)
+                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number, file_metadata, manual_search)
 
         if anime_result is None:
             log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
@@ -150,8 +151,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # If we don't have episode info AND no season info and it's not anime, mark as extra
     elif not episode_identifier and not season_number and not anime_result and not force_extra:
         log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
-        create_extras_folder = True
-        is_extra = True
+        if not manual_search or auto_select:
+            create_extras_folder = True
+            is_extra = True
 
     # Extract year from parent folder or show name for TMDb search
     year = extract_year(parent_folder_name) or extract_year(show_name)
@@ -166,6 +168,24 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     else:
         proper_show_name = show_folder
     if not anime_result:
+        # Check if TMDB ID is provided and determine if it's actually a movie (only with manual search)
+        if tmdb_id and manual_search:
+            media_type, media_data = determine_tmdb_media_type(tmdb_id)
+
+            if media_type == 'movie':
+                log_message(f"TMDB ID {tmdb_id} is a movie. Redirecting to movie processor for: {file}", level="INFO")
+                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data)
+
+                # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
+                if movie_result and len(movie_result) == 2:
+                    dest_file, movie_tmdb_id = movie_result
+                    return dest_file, movie_tmdb_id, None, False
+                else:
+                    return movie_result
+            elif media_type is None:
+                log_message(f"TMDB ID {tmdb_id} not found in TMDB database. Skipping processing.", level="ERROR")
+                return None
+
         # Retry logic for show name extraction
         max_retries = 2
         retry_count = 0
@@ -175,7 +195,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             retry_count += 1
             log_message(f"TMDb show search attempt {retry_count}/{max_retries} for: {show_folder} ({year})", level="DEBUG")
 
-            result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra)
+            result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra, manual_search=manual_search)
+
+            # Check if manual search selected a movie and redirect to movie processing
+            if isinstance(result, dict) and result.get('redirect_to_movie'):
+                log_message(f"Manual search selected a movie. Redirecting to movie processor for: {file}", level="INFO")
+                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'))
+
+                # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
+                if movie_result and len(movie_result) == 2:
+                    dest_file, movie_tmdb_id = movie_result
+                    return dest_file, movie_tmdb_id, None, False
+                else:
+                    return movie_result
 
             if result is None and retry_count < max_retries:
                 import time
@@ -191,6 +223,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
             episode_identifier = f"S{season_number}E{episode_number}"
+
+            if season_number is not None and episode_number is not None:
+                if not is_extra:
+                    create_extras_folder = False
+                    create_season_folder = True
         else:
             log_message(f"TMDb returned invalid data for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for show: {show_folder} ({year})")

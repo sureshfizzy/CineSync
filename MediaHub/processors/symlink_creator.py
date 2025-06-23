@@ -67,7 +67,7 @@ def get_cached_selection():
     return None, None, None
 
 def process_file(args, processed_files_log, force=False, batch_apply=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip = args
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search = args
 
     if error_event.is_set():
         return
@@ -352,7 +352,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         if force_extra and metadata_to_pass:
             metadata_to_pass['is_extra'] = True
 
-        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass)
+        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass, manual_search=manual_search)
 
         # Cache the first selection if batch_apply is enabled and this is the first manual selection
         if batch_apply and not first_selection_cache['is_cached'] and result and len(result) >= 2:
@@ -614,7 +614,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
     return None
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False):
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False, manual_search=False):
     global log_imported_db
 
     if batch_apply:
@@ -671,7 +671,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
                 else:
                     # Handle directory
@@ -697,7 +697,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
 
             # Process completed tasks
@@ -736,7 +736,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     dest_index = (get_dest_index_from_db() if mode == 'monitor'
                                 else build_dest_index(dest_dir))
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                     result = process_file(args, processed_files_log, force, batch_apply)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
@@ -767,7 +767,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             if mode == 'create' and src_file in processed_files_log and not force:
                                 continue
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                             result = process_file(args, processed_files_log, force, batch_apply)
 
                             if result and isinstance(result, tuple) and len(result) == 3:

@@ -466,8 +466,6 @@ function FileOperations() {
     }, 1500);
   };
 
-
-
   const handleBulkDeleteSkippedFiles = async () => {
     setBulkDeleteLoading(true);
     try {
@@ -2147,6 +2145,7 @@ function FileOperations() {
         onClose={handleModifyDialogClose}
         currentFilePath={currentFileForProcessing}
         mediaType="movie"
+        useManualSearch={tabValue === 2}
         onNavigateBack={() => {
         }}
       />

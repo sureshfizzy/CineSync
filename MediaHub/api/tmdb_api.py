@@ -112,7 +112,7 @@ def remove_country_suffix(query):
 
 @lru_cache(maxsize=None)
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None, manual_search=False):
     global api_key
     if not check_api_key():
         log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
@@ -281,8 +281,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
-        set_cached_result(cache_key, f"{query}")
-        return f"{query}"
+
+        # Manual search option when no results found - use general search
+        if manual_search and not auto_select:
+            return search_manual_general(query, year, auto_select, actual_dir, file, root, episode_match, season_number, episode_number, is_extra, force_extra)
+        else:
+            set_cached_result(cache_key, f"{query}")
+            return f"{query}"
 
     if auto_select:
         chosen_show = results[0]
@@ -568,6 +573,183 @@ def display_results(results, start_idx=0):
         release_date = movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         log_message(f"{idx}: {movie_name} ({movie_year}) [tmdb-{movie_id}]", level="INFO")
+
+def search_manual_general(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, season_number=None, episode_number=None, is_extra=None, force_extra=None):
+    """
+    Special function for manual search that searches both movies and TV shows separately
+    and combines the results, letting the user choose the media type.
+    """
+    global api_key
+    if not check_api_key():
+        log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
+        return None
+
+    def fetch_general_results(query, search_year=None):
+        if isinstance(query, tuple):
+            query = query[0] if query else ""
+
+        combined_results = []
+
+        movie_url = "https://api.themoviedb.org/3/search/movie"
+        movie_params = {'api_key': api_key, 'query': query, 'language': language_iso}
+
+        log_message(f"Manual movie search URL: {sanitize_url_for_logging(f'{movie_url}?{urllib.parse.urlencode(movie_params)}')}", "DEBUG", "stdout")
+        movie_response = perform_search(movie_params, movie_url)
+
+        if movie_response:
+            for result in movie_response:
+                score = calculate_score(result, query, None)
+                if score >= 30:
+                    result['media_type'] = 'movie'
+                    combined_results.append((score, result))
+
+        tv_url = "https://api.themoviedb.org/3/search/tv"
+        tv_params = {'api_key': api_key, 'query': query, 'language': language_iso}
+
+        log_message(f"Manual TV search URL: {sanitize_url_for_logging(f'{tv_url}?{urllib.parse.urlencode(tv_params)}')}", "DEBUG", "stdout")
+        tv_response = perform_search(tv_params, tv_url)
+
+        if tv_response:
+            for result in tv_response:
+                score = calculate_score(result, query, None)
+                if score >= 30:
+                    result['media_type'] = 'tv'
+                    combined_results.append((score, result))
+
+        combined_results.sort(reverse=True, key=lambda x: x[0])
+        return [r[1] for r in combined_results]
+
+    def display_mixed_results(results, start_idx=0):
+        for idx, item in enumerate(results[start_idx:start_idx + 3], start=start_idx + 1):
+            media_type = item.get('media_type', 'unknown')
+            if media_type == 'tv':
+                name = item.get('name', 'Unknown')
+                first_air_date = item.get('first_air_date', '')
+                year_str = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
+                log_message(f"{idx}: {name} ({year_str}) [TV Show - tmdb-{item.get('id')}]", level="INFO")
+            elif media_type == 'movie':
+                name = item.get('title', 'Unknown')
+                release_date = item.get('release_date', '')
+                year_str = release_date.split('-')[0] if release_date else "Unknown Year"
+                log_message(f"{idx}: {name} ({year_str}) [Movie - tmdb-{item.get('id')}]", level="INFO")
+
+    while True:
+        log_message("Manual search enabled. You can enter a custom search term.", level="INFO")
+        log_message("Options:", level="INFO")
+        log_message("- Enter a custom search term to search TMDB", level="INFO")
+        log_message("- Press Enter to skip this file", level="INFO")
+
+        choice = input("Enter your search term (or press Enter to skip): ").strip()
+
+        if not choice:
+            log_message("Skipping file due to no manual search term provided.", level="INFO")
+            return f"{query}"
+
+        log_message(f"Searching TMDB for: '{choice}'", level="INFO")
+        results = fetch_general_results(choice)
+
+        if not results:
+            log_message(f"No results found for '{choice}'. Try a different search term.", level="WARNING")
+            continue
+
+        while True:
+            log_message(f"Multiple results found for query '{choice}':", level="INFO")
+            display_mixed_results(results)
+
+            log_message("Options:", level="INFO")
+            log_message("- Enter 1-3 to select an item", level="INFO")
+            log_message("- Enter a search term for a new search", level="INFO")
+            log_message("- Press Enter to use first result", level="INFO")
+
+            selection = input("Enter your choice: ").strip()
+
+            if selection.lower() in ['1', '2', '3']:
+                chosen_item = results[int(selection) - 1]
+                media_type = chosen_item.get('media_type')
+
+                if media_type == 'tv':
+                    from MediaHub.api.tmdb_api_helpers import process_chosen_show
+                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra)
+                else:
+                    log_message(f"Movie selected during manual search. Redirecting to movie processor.", level="INFO")
+                    return {'redirect_to_movie': True, 'movie_data': chosen_item}
+
+            elif selection.strip():
+                choice = selection.strip()
+                log_message(f"Searching TMDB for: '{choice}'", level="INFO")
+                results = fetch_general_results(choice)
+
+                if not results:
+                    log_message(f"No results found for '{choice}'. Try a different search term.", level="WARNING")
+                    break
+                continue
+            else:
+                chosen_item = results[0]
+                media_type = chosen_item.get('media_type')
+
+                if media_type == 'tv':
+                    from MediaHub.api.tmdb_api_helpers import process_chosen_show
+                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra)
+                else:
+                    log_message(f"Movie selected during manual search. Redirecting to movie processor.", level="INFO")
+                    return {'redirect_to_movie': True, 'movie_data': chosen_item}
+
+def determine_tmdb_media_type(tmdb_id):
+    global api_key
+    if not check_api_key():
+        log_message("API key is missing or invalid. Cannot determine media type.", level="ERROR")
+        return None, None
+
+    log_message(f"Determining media type for TMDB ID: {tmdb_id}", level="DEBUG")
+
+    try:
+        movie_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+        movie_params = {'api_key': api_key, 'language': language_iso}
+        log_message(f"Checking movie endpoint: {movie_url}", level="DEBUG")
+
+        movie_response = session.get(movie_url, params=movie_params, timeout=10)
+        log_message(f"Movie endpoint response status: {movie_response.status_code}", level="DEBUG")
+
+        if movie_response.status_code == 200:
+            movie_data = movie_response.json()
+            log_message(f"Movie endpoint response data: {movie_data.get('title', 'No title')}", level="DEBUG")
+
+            if movie_data.get('title'):
+                log_message(f"TMDB ID {tmdb_id} identified as movie: {movie_data.get('title')}", level="INFO")
+                return 'movie', movie_data
+        else:
+            log_message(f"Movie endpoint returned status {movie_response.status_code}", level="DEBUG")
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error checking movie endpoint for TMDB ID {tmdb_id}: {e}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Unexpected error checking movie endpoint for TMDB ID {tmdb_id}: {e}", level="DEBUG")
+
+    try:
+        tv_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+        tv_params = {'api_key': api_key, 'language': language_iso}
+        log_message(f"Checking TV endpoint: {tv_url}", level="DEBUG")
+
+        tv_response = session.get(tv_url, params=tv_params, timeout=10)
+        log_message(f"TV endpoint response status: {tv_response.status_code}", level="DEBUG")
+
+        if tv_response.status_code == 200:
+            tv_data = tv_response.json()
+            log_message(f"TV endpoint response data: {tv_data.get('name', 'No name')}", level="DEBUG")
+
+            if tv_data.get('name'):
+                log_message(f"TMDB ID {tmdb_id} identified as TV show: {tv_data.get('name')}", level="INFO")
+                return 'tv', tv_data
+        else:
+            log_message(f"TV endpoint returned status {tv_response.status_code}", level="DEBUG")
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"Error checking TV endpoint for TMDB ID {tmdb_id}: {e}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Unexpected error checking TV endpoint for TMDB ID {tmdb_id}: {e}", level="DEBUG")
+
+    log_message(f"TMDB ID {tmdb_id} not found in either movie or TV databases", level="WARNING")
+    return None, None
 
 def process_chosen_movie(chosen_movie):
     movie_name = chosen_movie.get('title')

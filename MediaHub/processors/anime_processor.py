@@ -4,7 +4,7 @@ import requests
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.file_utils import fetch_json, extract_resolution_from_filename, extract_resolution_from_folder, is_anime_file
 
-from MediaHub.api.tmdb_api import search_tv_show
+from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name
@@ -125,7 +125,7 @@ def _extract_anime_fallback(filename):
 
     return None
 
-def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select, season_number, episode_number, file_metadata=None):
+def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, tmdb_id, tvdb_id, imdb_id, auto_select, season_number, episode_number, file_metadata=None, manual_search=False):
     anime_info = extract_anime_episode_info(file, file_metadata)
     if not anime_info:
         track_file_failure(src_file, None, None, "Anime info extraction failed", f"Unable to extract anime episode info from: {file}")
@@ -175,11 +175,13 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     retry_count = 0
     search_result = None
 
+
+
     while retry_count < max_retries and search_result is None:
         retry_count += 1
         log_message(f"TMDb anime search attempt {retry_count}/{max_retries} for: {show_name} ({year})", level="DEBUG")
 
-        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, is_extra=is_extra, file=file)
+        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, is_extra=is_extra, file=file, manual_search=manual_search)
 
         if search_result is None and retry_count < max_retries:
             import time

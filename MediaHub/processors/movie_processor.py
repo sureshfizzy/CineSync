@@ -4,7 +4,7 @@ import json
 import requests
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import *
-from MediaHub.api.tmdb_api import search_movie
+from MediaHub.api.tmdb_api import search_movie, determine_tmdb_media_type
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
@@ -16,7 +16,7 @@ from MediaHub.processors.db_utils import track_file_failure
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None):
+def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None):
 
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
@@ -52,7 +52,26 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     proper_name = movie_name
     is_anime_genre = False
 
-    if is_movie_collection_enabled():
+    # If movie_data is provided from manual search, use it directly
+    if movie_data:
+        log_message(f"Using pre-selected movie data from manual search: {movie_data.get('title', 'Unknown')}", level="INFO")
+        proper_name = movie_data.get('title', movie_name)
+        release_date = movie_data.get('release_date', '')
+        year = release_date.split('-')[0] if release_date else year
+        tmdb_id = movie_data.get('id')
+
+        # Format the proper movie name
+        proper_movie_name = f"{proper_name} ({year})"
+        if is_tmdb_folder_id_enabled() and tmdb_id:
+            proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+
+        # Get collection info if enabled
+        if is_movie_collection_enabled() and tmdb_id:
+            collection_info = get_movie_collection(movie_id=tmdb_id)
+
+    elif is_movie_collection_enabled():
+
+
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
         if result is None:
             log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
@@ -79,6 +98,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         else:
             proper_movie_name = f"{movie_name} ({year})"
     else:
+
+
         result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
         if result is None:
             log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")

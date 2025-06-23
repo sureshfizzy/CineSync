@@ -24,6 +24,7 @@ type PythonBridgeRequest struct {
 	SelectedOption string `json:"selectedOption,omitempty"`
 	SelectedIds map[string]string `json:"selectedIds,omitempty"`
 	BatchApply bool `json:"batchApply,omitempty"`
+	ManualSearch bool `json:"manualSearch,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
@@ -259,6 +260,9 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	args = append(args, "--force")
 	if req.BatchApply {
 		args = append(args, "--batch-apply")
+	}
+	if req.ManualSearch {
+		args = append(args, "--manual-search")
 	}
 
 	// Add selected action option if provided
