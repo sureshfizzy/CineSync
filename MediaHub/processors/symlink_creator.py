@@ -26,7 +26,7 @@ from MediaHub.utils.plex_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.webdav_api import send_structured_message
-from MediaHub.utils.file_utils import clean_query
+from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
 
 error_event = Event()
 log_imported_db = False
@@ -37,6 +37,14 @@ def process_file(args, processed_files_log, force=False):
 
     if error_event.is_set():
         return
+
+    # Resolve symlink to source if applicable
+    original_src_file = src_file
+    src_file = resolve_symlink_to_source(src_file)
+    if src_file != original_src_file:
+        log_message(f"Resolved symlink in processing: {original_src_file} -> {src_file}", level="INFO")
+        file = os.path.basename(src_file)
+        root = os.path.dirname(src_file)
 
     # Normalize path
     src_file = normalize_file_path(src_file)
@@ -118,6 +126,10 @@ def process_file(args, processed_files_log, force=False):
 
         reason = "Skipped by user"
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
+        return
+
+    # Skip metadata and auxiliary files (subtitles, .tmdb files, etc.) silently
+    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt', '.tmdb')):
         return
 
     # Check for unsupported file type
@@ -403,13 +415,36 @@ def process_file(args, processed_files_log, force=False):
                         os.remove(old_symlink_info['path'])
                         log_message(f"Force mode: Removed old symlink at {old_symlink_info['path']}", level="INFO")
 
-                    # Delete .tmdb file if it exists
+                    # Check if we should delete .tmdb file
                     if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
-                        try:
-                            os.remove(old_symlink_info['tmdb_file_path'])
-                            log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
-                        except Exception as e:
-                            log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
+                        should_delete_tmdb = True
+
+                        # Check if this is a TV show by looking for season folders
+                        old_parts = old_symlink_info['path'].split(os.sep)
+                        if any(part.lower().startswith('season ') for part in old_parts):
+                            show_root = None
+                            for i, part in enumerate(old_parts):
+                                if part.lower().startswith('season '):
+                                    show_root = os.sep.join(old_parts[:i])
+                                    break
+
+                            if show_root and os.path.exists(show_root):
+                                remaining_episodes = 0
+                                for root_dir, dirs, files in os.walk(show_root):
+                                    for file_name in files:
+                                        file_path = os.path.join(root_dir, file_name)
+                                        if os.path.islink(file_path) and file_path != old_symlink_info['path']:
+                                            remaining_episodes += 1
+
+                                # Only delete .tmdb if no other episodes remain
+                                should_delete_tmdb = remaining_episodes == 0
+
+                        if should_delete_tmdb:
+                            try:
+                                os.remove(old_symlink_info['tmdb_file_path'])
+                                log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
+                            except Exception as e:
+                                log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
 
                     # Delete if parent directory is empty
                     if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
@@ -483,7 +518,6 @@ def process_file(args, processed_files_log, force=False):
                                 file_was_hidden = True
                                 FILE_ATTRIBUTE_NORMAL = 0x80
                                 ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_NORMAL)
-                                log_message(f"Temporarily removed hidden attribute for update: {tmdb_file_path}", level="DEBUG")
                         except Exception as e:
                             log_message(f"Warning: Could not handle hidden attribute before writing: {e}", level="DEBUG")
 
@@ -501,10 +535,6 @@ def process_file(args, processed_files_log, force=False):
                         import ctypes
                         FILE_ATTRIBUTE_HIDDEN = 0x02
                         result = ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_HIDDEN)
-                        if result:
-                            pass
-                        else:
-                            log_message(f"Warning: Failed to set hidden attribute on .tmdb file: {tmdb_file_path}", level="DEBUG")
                     except Exception as e:
                         log_message(f"Warning: Could not set hidden attribute on .tmdb file: {e}", level="DEBUG")
 
@@ -547,9 +577,13 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     if mode == 'monitor' and not os.path.exists(PROCESS_DB):
         initialize_file_database()
 
-    # Use single_path if provided
+    # Use single_path if provided, resolving symlinks first
     if single_path:
-        src_dirs = [single_path]
+        original_single_path = single_path
+        resolved_single_path = resolve_symlink_to_source(single_path)
+        if resolved_single_path != original_single_path:
+            log_message(f"Resolved symlink for single_path: {original_single_path} -> {resolved_single_path}", level="INFO")
+        src_dirs = [resolved_single_path]
 
     # Load the record of processed files
     processed_files_log = load_processed_files()

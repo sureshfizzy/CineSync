@@ -21,6 +21,7 @@ from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.id_refresh import refresh_tmdb_files
+from MediaHub.utils.file_utils import resolve_symlink_to_source
 
 db_initialized = False
 
@@ -451,6 +452,13 @@ def main(dest_dir):
     # Parse season and episode numbers if provided
     season_number, episode_number = parse_season_episode(args.season_episode)
 
+    # Resolve symlink if single_path is provided
+    if args.single_path:
+        original_path = args.single_path
+        resolved_path = resolve_symlink_to_source(args.single_path)
+        if resolved_path != original_path:
+            log_message(f"Resolved symlink path: {original_path} -> {resolved_path}", level="INFO")
+            args.single_path = resolved_path
 
     # Ensure --force-show and --force-movie aren't used together
     if args.force_show and args.force_movie:

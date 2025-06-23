@@ -300,10 +300,6 @@ def clean_query(query: str) -> Dict[str, Any]:
         _metadata_cache[query] = error_result
         return error_result
 
-
-
-
-
 # ============================================================================
 # UNICODE AND CHARACTER NORMALIZATION FUNCTIONS
 # ============================================================================
@@ -368,6 +364,65 @@ def normalize_unicode_characters(text: str) -> str:
         return unicodedata.normalize('NFKD', ascii_text).encode('ascii', 'ignore').decode('ascii')
 
 # ============================================================================
+# SYMLINK RESOLUTION FUNCTIONS
+# ============================================================================
+
+def resolve_symlink_to_source(file_path: str) -> str:
+    """
+    Resolve a symlinked file to its actual source path.
+
+    Args:
+        file_path: Path to the file (may be a symlink)
+
+    Returns:
+        The actual source path if it's a symlink, otherwise the original path
+    """
+    if not isinstance(file_path, str) or not file_path.strip():
+        return file_path
+
+    try:
+        # Check if the path exists and is a symlink
+        if os.path.islink(file_path):
+            # Resolve the symlink to get the actual source path
+            resolved_path = os.path.realpath(file_path)
+            log_message(f"Resolved symlink: {file_path} -> {resolved_path}", level="DEBUG")
+            return resolved_path
+        else:
+            # Not a symlink, return original path
+            return file_path
+    except (OSError, IOError) as e:
+        log_message(f"Error resolving symlink {file_path}: {e}", level="WARNING")
+        return file_path
+
+def get_source_directory_from_symlink(file_path: str) -> str:
+    """
+    Get the source directory from a symlinked file.
+
+    Args:
+        file_path: Path to the file (may be a symlink)
+
+    Returns:
+        The source directory path if it's a symlink, otherwise the directory of the original path
+    """
+    if not isinstance(file_path, str) or not file_path.strip():
+        return ""
+
+    try:
+        # Resolve the symlink to get the actual source path
+        resolved_path = resolve_symlink_to_source(file_path)
+
+        # Get the directory of the resolved path
+        source_dir = os.path.dirname(resolved_path)
+
+        if os.path.islink(file_path):
+            log_message(f"Source directory for symlink {file_path}: {source_dir}", level="DEBUG")
+
+        return source_dir
+    except Exception as e:
+        log_message(f"Error getting source directory from {file_path}: {e}", level="WARNING")
+        return os.path.dirname(file_path) if file_path else ""
+
+# ============================================================================
 # UTILITY FUNCTIONS (Keep these as they are utility functions)
 # ============================================================================
 
@@ -396,8 +451,6 @@ def sanitize_windows_filename(filename: str) -> str:
 
     return filename
 
-
-
 def normalize_query(query: str) -> str:
     """Normalize query string for comparison purposes."""
     if not isinstance(query, str):
@@ -421,7 +474,7 @@ def is_junk_file(file: str, file_path: str) -> bool:
     if os.path.islink(file_path):
         return False
 
-    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt')):
+    if file.lower().endswith(('.srt', '.strm', '.sub', '.idx', '.vtt', '.tmdb')):
         return False
 
     try:

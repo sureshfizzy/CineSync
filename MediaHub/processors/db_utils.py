@@ -301,13 +301,26 @@ def check_file_in_db(conn, file_path):
         conn.rollback()
         return False
 
-def normalize_file_path(file_path):
+def normalize_file_path(file_path, resolve_symlinks=False):
     """
     Normalizes a file path to ensure consistent formatting for comparison.
     Applies platform-specific normalization for better cross-platform compatibility.
+
+    Args:
+        file_path: The file path to normalize
+        resolve_symlinks: Whether to resolve symlinks to their source paths
     """
     if not file_path:
         return file_path
+
+    # Resolve symlinks if requested
+    if resolve_symlinks:
+        try:
+            if os.path.islink(file_path):
+                file_path = os.path.realpath(file_path)
+        except (OSError, IOError):
+            # If symlink resolution fails, continue with original path
+            pass
 
     # Basic normalization
     normalized = os.path.normpath(file_path)

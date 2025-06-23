@@ -50,16 +50,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         is_extra = file_result.get('is_extra', False)
 
         if episode_identifier:
-            print(f"DEBUG: Using file-based extraction: {show_name} - {episode_identifier}")
+            log_message(f"Using file-based extraction: {show_name} - {episode_identifier}", level="DEBUG")
         elif season_number:
-            print(f"DEBUG: Using file-based extraction for season pack: {show_name} - Season {season_number}")
+            log_message(f"Using file-based extraction for season pack: {show_name} - Season {season_number}", level="DEBUG")
         else:
-            print(f"DEBUG: Using file-based extraction: {show_name}")
+            log_message(f"Using file-based extraction: {show_name}", level="DEBUG")
     else:
         # Fallback to folder only if file doesn't have episode OR season info
         folder_result = clean_query(parent_folder_name)
-        print(f"DEBUG: Folder query result:")
-        print(f"  {folder_result}")
+        log_message(f"Folder query result: {folder_result}", level="DEBUG")
 
         show_name = folder_result.get('title', '')
         episode_identifier = folder_result.get('episode_identifier')
@@ -76,9 +75,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             is_extra = True
 
         if episode_identifier:
-            print(f"DEBUG: Using folder-based extraction: {show_name} - {episode_identifier}")
+            log_message(f"Using folder-based extraction: {show_name} - {episode_identifier}", level="DEBUG")
         else:
-            print(f"DEBUG: No episode info found, using folder name: {show_name}")
+            log_message(f"No episode info found, using folder name: {show_name}", level="DEBUG")
 
     # Restore original parameters if they were provided
     if original_season_number is not None:
