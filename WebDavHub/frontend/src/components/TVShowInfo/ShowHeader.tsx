@@ -8,14 +8,13 @@ interface ShowHeaderProps {
   getPosterUrl: (path: string | null, size?: string) => string | undefined;
   folderName: string;
   currentPath: string;
-  mediaType: 'movie' | 'tv';
   onRename?: (file: any) => void;
   onError?: (error: string) => void;
   refreshTrigger?: number;
   onNavigateBack?: () => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, mediaType, onRename, onError, refreshTrigger, onNavigateBack }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
@@ -39,7 +38,6 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           data={data}
           folderName={folderName}
           currentPath={currentPath}
-          mediaType={mediaType}
           placement="belowTitle"
           onRename={onRename}
           onError={onError}
@@ -69,7 +67,6 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           data={data}
           folderName={folderName}
           currentPath={currentPath}
-          mediaType={mediaType}
           placement="belowDescription"
           onRename={onRename}
           onError={onError}

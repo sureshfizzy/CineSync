@@ -84,7 +84,6 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               getPosterUrl={getPosterUrl}
               folderName={folderName}
               currentPath={currentPath}
-              mediaType={mediaType}
               onRename={handleRefresh}
               onError={(error) => setSnackbar({ open: true, message: error, severity: 'error' })}
               refreshTrigger={refreshTrigger}

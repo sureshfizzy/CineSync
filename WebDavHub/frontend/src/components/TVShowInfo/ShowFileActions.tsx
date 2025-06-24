@@ -9,7 +9,6 @@ interface ShowFileActionsProps {
   data: MediaDetailsData;
   folderName: string;
   currentPath: string;
-  mediaType: 'movie' | 'tv';
   placement: 'belowTitle' | 'belowDescription';
   fileInfo?: any;
   onRename?: (file: any) => void;
@@ -21,7 +20,6 @@ interface ShowFileActionsProps {
 const ShowFileActions: React.FC<ShowFileActionsProps> = ({
   folderName,
   currentPath,
-  mediaType,
   placement,
   fileInfo: fileInfoProp,
   onRename,
