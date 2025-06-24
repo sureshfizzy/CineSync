@@ -1,4 +1,6 @@
 import re
+import os
+import json
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -9,6 +11,39 @@ from MediaHub.utils.parser.parse_anime import is_anime_filename, extract_anime_t
 
 # Cache for parsed filename structures to avoid redundant parsing
 _filename_cache = {}
+
+# Cache for keywords data
+_keywords_cache = None
+
+def _load_keywords():
+    """Load keywords from keywords.json file."""
+    global _keywords_cache
+    if _keywords_cache is not None:
+        return _keywords_cache
+
+    try:
+        keywords_path = os.path.join(os.path.dirname(__file__), '..', 'keywords.json')
+        with open(keywords_path, 'r', encoding='utf-8') as f:
+            _keywords_cache = json.load(f)
+            return _keywords_cache
+    except Exception:
+        # Fallback to empty dict if file not found
+        _keywords_cache = {'keywords': [], 'release_groups': []}
+        return _keywords_cache
+
+def _get_technical_keywords():
+    """Get technical keywords that should stop title extraction."""
+    keywords_data = _load_keywords()
+    keywords = keywords_data.get('keywords', [])
+
+    # Convert to lowercase for case-insensitive matching
+    technical_keywords = [kw.lower() for kw in keywords if isinstance(kw, str)]
+
+    # Add some additional technical terms that might not be in keywords.json
+    additional_terms = ['proper', 'uhd', 'bd', 'dual', 'remux', 'hybrid', 'web2l']
+    technical_keywords.extend(additional_terms)
+
+    return set(technical_keywords)  # Use set for faster lookup
 
 @dataclass
 class ParsedFilename:
@@ -639,14 +674,23 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         for i, part in enumerate(parts):
             clean_part = part.strip().rstrip('.')
 
-            # Check for technical terms that clearly indicate end of title
+            year_at_position = next((y for y in years if y['position'] == i), None)
+            if year_at_position and not is_tv:
+                if year_at_position['context'] == 'title':
+                    title_end = i + 1
+                else:
+                    title_end = i
+                break
+
+            technical_keywords = _get_technical_keywords()
             if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
                 re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or
-                clean_part.lower() in ['proper', 'uhd', 'bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'uncensored', 'extended', 'unrated', 'directors', 'theatrical', 'bd', 'dual', 'remux', 'hybrid'] or
+                clean_part.lower() in technical_keywords or
                 re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or
                 re.match(r'^DTS-HD$', clean_part, re.IGNORECASE) or
                 re.match(r'^MA$', clean_part, re.IGNORECASE) or
-                re.match(r'^[0-9]+\.[0-9]+$', clean_part)):
+                re.match(r'^[0-9]+\.[0-9]+$', clean_part) or
+                re.match(r'^[A-Z0-9]+[_-][A-Z]+$', clean_part, re.IGNORECASE)):
                 title_end = i
                 break
 
@@ -760,12 +804,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                         break
                 else:
                     title_parts.append(str(year_value))
+                    break
         else:
             if clean_part.startswith('(') or clean_part.startswith('['):
                 break
 
             tech_at_position = next((t for t in technical_terms if t['position'] == i), None)
-            if tech_at_position and tech_at_position['type'] in ['resolution', 'quality', 'video_codec', 'video_profile', 'technical_processing']:
+            if tech_at_position and tech_at_position['type'] in ['resolution', 'quality', 'video_codec', 'video_profile', 'technical_processing', 'release_group', 'hdr']:
                 break
 
             # Skip series type indicators from title

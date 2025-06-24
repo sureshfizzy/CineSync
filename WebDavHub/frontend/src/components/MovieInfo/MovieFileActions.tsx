@@ -11,7 +11,6 @@ interface MovieFileActionsProps {
   currentPath: string;
   placement: 'belowTitle' | 'belowDescription';
   fileInfo?: any;
-  onRename?: (file: any) => void;
   onError?: (error: string) => void;
   onNavigateBack?: () => void;
 }
@@ -24,7 +23,6 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
   currentPath,
   placement,
   fileInfo: fileInfoProp,
-  onRename,
   onError,
   onNavigateBack
 }) => {
