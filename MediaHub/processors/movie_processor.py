@@ -73,9 +73,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
 
         result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
-        if result is None:
-            log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
-            track_file_failure(src_file, None, None, "TMDb API failure", f"API returned None for movie: {movie_name} ({year})")
+        if result is None or isinstance(result, str):
+            log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
@@ -96,14 +96,16 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             else:
                 collection_info = get_movie_collection(movie_title=movie_name, year=year)
         else:
-            proper_movie_name = f"{movie_name} ({year})"
+            log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
+            return None, None
     else:
 
 
         result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
-        if result is None:
-            log_message(f"API returned None for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
-            track_file_failure(src_file, None, None, "TMDb API failure", f"API returned None for movie: {movie_name} ({year})")
+        if result is None or isinstance(result, str):
+            log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
             return None, None
 
         elif isinstance(result, tuple) and len(result) == 5:
@@ -121,7 +123,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
         else:
-            proper_movie_name = f"{proper_name} ({year})"
+            log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
+            return None, None
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')

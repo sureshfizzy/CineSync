@@ -216,9 +216,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 time.sleep(wait_time)
 
         # Check final result after all retries
-        if result is None:
-            log_message(f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
-            track_file_failure(src_file, None, None, "TMDb API failure", f"TMDb API failed after {max_retries} attempts for show: {show_name} ({year})")
+        if result is None or isinstance(result, str):
+            log_message(f"TMDB search failed for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
         elif isinstance(result, tuple) and len(result) == 6:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
@@ -229,8 +229,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     create_extras_folder = False
                     create_season_folder = True
         else:
-            log_message(f"TMDb returned invalid data for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
-            track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for show: {show_folder} ({year})")
+            log_message(f"TMDB search returned unexpected result type for show: {show_folder} ({year}). Skipping show processing.", level="ERROR")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for show: {show_folder} ({year})")
             return None
 
         # Validate that we got a proper show name from TMDb

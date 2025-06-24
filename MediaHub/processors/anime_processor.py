@@ -190,15 +190,15 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             time.sleep(wait_time)
 
     # Check final result after all retries
-    if search_result is None:
-        log_message(f"TMDb API failed after {max_retries} attempts for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
-        track_file_failure(src_file, None, None, "TMDb API failure", f"TMDb API failed after {max_retries} attempts for anime show: {show_name} ({year})")
+    if search_result is None or isinstance(search_result, str):
+        log_message(f"TMDB search failed for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
+        track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for anime show: {show_name} ({year})")
         return None
     elif isinstance(search_result, tuple):
         proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
     else:
-        log_message(f"TMDb returned invalid data for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
-        track_file_failure(src_file, None, None, "TMDb invalid data", f"TMDb returned invalid data for anime show: {show_name} ({year})")
+        log_message(f"TMDB search returned unexpected result type for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
+        track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for anime show: {show_name} ({year})")
         return None
 
     if not proper_show_name or proper_show_name.strip() == "" or "TMDb API error" in str(proper_show_name):

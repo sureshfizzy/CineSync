@@ -180,6 +180,14 @@ def initialize_db(conn):
             cursor.execute("ALTER TABLE processed_files ADD COLUMN file_size INTEGER")
             log_message("Added file_size column to processed_files table.", level="INFO")
 
+        if "error_message" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN error_message TEXT")
+            log_message("Added error_message column to processed_files table.", level="INFO")
+
+        if "processed_at" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            log_message("Added processed_at column to processed_files table.", level="INFO")
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
@@ -187,6 +195,8 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_message ON processed_files(error_message)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_files(processed_at)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -247,7 +257,7 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -267,10 +277,28 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (source_path,))
         is_new_file = cursor.fetchone()[0] == 0
 
-        cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (source_path, dest_path, tmdb_id, season_number, reason, file_size))
+        # Check if processed_at and error_message columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_processed_at = "processed_at" in columns
+        has_error_message = "error_message" in columns
+
+        if has_processed_at and has_error_message:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message))
+        elif has_error_message:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message))
+        else:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size))
+
         conn.commit()
 
         # Notify WebDavHub about the file addition if it's a new file and not skipped
@@ -831,8 +859,25 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
     except requests.exceptions.RequestException as e:
         log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
 
+def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
+    """Save file processing failure directly to database"""
+    try:
+        save_processed_file(
+            source_path=source_path,
+            dest_path=None,
+            tmdb_id=tmdb_id,
+            season_number=season_number,
+            reason=reason,
+            error_message=error_message
+        )
+        log_message(f"Saved failure to database: {source_path} - {reason}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Failed to save failure to database: {e}", level="DEBUG")
+
 def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
-    """Track file processing failure in WebDavHub"""
+    """Track file processing failure in both database and WebDavHub"""
+    save_file_failure(source_path, tmdb_id, season_number, reason, error_message)
+
     try:
         from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
 
@@ -854,8 +899,6 @@ def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="",
             log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
     except Exception as e:
         log_message(f"Failed to track file failure: {e}", level="DEBUG")
-    except Exception as e:
-        log_message(f"Error tracking deletion: {e}", level="DEBUG")
 
 
 @throttle
