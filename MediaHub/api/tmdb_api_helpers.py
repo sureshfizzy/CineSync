@@ -515,14 +515,14 @@ def calculate_score(result, query, year=None):
         first_air_date = result.get('first_air_date', '')
         result_year = first_air_date.split('-')[0] if first_air_date else None
 
-    # Title matching (80 points total - increased from 60)
+    # Title matching
     exact_match_bonus = 0
     if query == title:
-        score += 50  # Increased from 40
-        exact_match_bonus = 20  # Extra bonus for exact matches
+        score += 50
+        exact_match_bonus = 20
     elif query == original_title:
-        score += 55  # Increased from 45
-        exact_match_bonus = 20  # Extra bonus for exact matches
+        score += 55
+        exact_match_bonus = 20
     elif query in title or title in query:
         score += 25
     elif query in original_title or original_title in query:
@@ -546,14 +546,18 @@ def calculate_score(result, query, year=None):
     if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
         score += 5
 
-    # Popularity bonus (30 points - increased weight for better mainstream movie selection)
+    # Popularity bonus
     popularity = result.get('popularity', 0)
     if popularity > 100:
         score += 30
     elif popularity > 50:
         score += 25
-    elif popularity > 20:
+    elif popularity > 35:
+        score += 22
+    elif popularity > 25:
         score += 20
+    elif popularity > 15:
+        score += 18
     elif popularity > 10:
         score += 15
     elif popularity > 5:
@@ -561,7 +565,7 @@ def calculate_score(result, query, year=None):
     elif popularity > 1:
         score += 5
 
-    # Apply exact match bonus (helps exact matches beat partial matches with higher popularity)
+    # Apply exact match bonus
     score += exact_match_bonus
 
     return score
