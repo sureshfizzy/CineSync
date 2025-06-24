@@ -37,18 +37,18 @@ func getTmdbApiKey() string {
 	return envKey
 }
 
-var tmdbRateLimit = 35
+var tmdbRateLimit = 100 // TMDB can handle much more than 35/10s
 var tmdbRateWindow = 10 * time.Second
 var tmdbRateMap = make(map[string][]time.Time)
 var tmdbRateMu sync.Mutex
 
 // HTTP client for faster TMDB requests
 var tmdbHttpClient = &http.Client{
-	Timeout: 1 * time.Second,
+	Timeout: 5 * time.Second,
 }
 
-// Global TMDB request queue to ensure sequential processing
-var tmdbQueue = make(chan struct{}, 10)
+// Global TMDB request queue to allow concurrent processing
+var tmdbQueue = make(chan struct{}, 20)
 var tmdbQueueInitialized = false
 var tmdbQueueMu sync.Mutex
 var tmdbRequestCounter = 0
@@ -65,7 +65,10 @@ func initTmdbQueue() {
 	tmdbQueueMu.Lock()
 	defer tmdbQueueMu.Unlock()
 	if !tmdbQueueInitialized {
-		tmdbQueue <- struct{}{}
+		// Fill the queue with tokens to allow concurrent requests
+		for i := 0; i < 20; i++ {
+			tmdbQueue <- struct{}{}
+		}
 		tmdbQueueInitialized = true
 	}
 }
@@ -146,7 +149,7 @@ func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Acquire queue lock for sequential processing
+	// Acquire queue lock for concurrent processing
 	acquireTmdbQueue()
 	defer releaseTmdbQueue()
 
@@ -154,7 +157,11 @@ func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
 	}
-	waitForRateLimit(ip)
+
+	if !checkTmdbRateLimit(ip) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
 
 	tmdbApiKey := getTmdbApiKey()
 	if tmdbApiKey == "" {
@@ -205,7 +212,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Acquire queue lock for sequential processing
+	// Acquire queue lock for concurrent processing
 	acquireTmdbQueue()
 	defer releaseTmdbQueue()
 
@@ -213,7 +220,11 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
 	}
-	waitForRateLimit(ip)
+
+	if !checkTmdbRateLimit(ip) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		return
+	}
 
 	tmdbApiKey := getTmdbApiKey()
 	if tmdbApiKey == "" {

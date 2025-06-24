@@ -14,6 +14,7 @@ const StyledPosterSkeleton = muiStyled(Paper)(({ theme }) => ({
   alignItems: 'center',
   maxWidth: '140px',
   width: '100%',
+  minHeight: '220px',
   opacity: 0.7,
   '& .skeleton-poster': {
     width: '100%',
@@ -21,6 +22,8 @@ const StyledPosterSkeleton = muiStyled(Paper)(({ theme }) => ({
     aspectRatio: '2/3',
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     background: `linear-gradient(90deg, ${theme.palette.grey[300]} 0px, ${theme.palette.grey[200]} 40px, ${theme.palette.grey[300]} 80px)`,
     backgroundSize: '200px',
     animation: `${shimmer} 1.5s infinite linear`,

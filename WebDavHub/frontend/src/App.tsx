@@ -2,23 +2,22 @@ import { useState, useMemo, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { CircularProgress, Box, Typography, Button, GlobalStyles } from '@mui/material';
+import { motion } from 'framer-motion';
+import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TmdbProvider } from './contexts/TmdbContext';
+import { ConfigProvider } from './contexts/ConfigContext';
+import { SSEProvider } from './components/SSEProvider';
 import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
 import Dashboard from './components/Dashboard/Dashboard';
 import FileBrowser from './components/FileBrowser/FileBrowser';
-import { CircularProgress, Box, Typography, Button, GlobalStyles } from '@mui/material';
-import { motion } from 'framer-motion';
-import { Dashboard as DashboardIcon } from '@mui/icons-material';
-import { getTheme } from './theme';
 import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
 import FileOperations from './pages/FileOperations';
-import { TmdbProvider } from './contexts/TmdbContext';
-import { ConfigProvider } from './contexts/ConfigContext';
-import { SSEProvider } from './components/SSEProvider';
+import { getTheme } from './theme';
 
-// Loading component
 function LoadingScreen() {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -26,8 +25,6 @@ function LoadingScreen() {
     </Box>
   );
 }
-
-// Not Found component
 function NotFound() {
   const { isAuthenticated, authEnabled } = useAuth();
   const navigate = useNavigate();
@@ -40,7 +37,6 @@ function NotFound() {
         navigate('/login', { state: { from: location }, replace: true });
       }, 5000);
 
-      // Countdown timer
       const countdownInterval = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -248,15 +244,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     return <LoadingScreen />;
   }
 
-  if (!authEnabled) {
-    // If auth is disabled, always allow access
-    return <>{children}</>;
-  }
-
-  if (!isAuthenticated) {
-    // Redirect to login with the return url
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+  if (!authEnabled) return <>{children}</>;
+  if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
 
   return <>{children}</>;
 }
@@ -266,7 +255,6 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
 
   return (
     <Routes>
-      {/* Public routes */}
       <Route
         path="/login"
         element={
@@ -279,8 +267,6 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
           )
         }
       />
-
-      {/* Protected routes */}
       <Route
         path="/"
         element={
@@ -298,24 +284,36 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="settings" element={<Settings />} />
       </Route>
 
-      {/* Catch all route - 404 */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
 
 function App() {
-  // Read theme from localStorage or default to 'dark'
   const getInitialMode = () => {
     const saved = localStorage.getItem('themeMode');
     return saved === 'light' || saved === 'dark' ? saved : 'dark';
   };
   const [mode, setMode] = useState<'light' | 'dark'>(getInitialMode);
 
-  // Save theme to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('themeMode', mode);
   }, [mode]);
+
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      try {
+        const data = JSON.stringify({});
+        const blob = new Blob([data], { type: 'application/json' });
+        navigator.sendBeacon('/api/python-bridge/terminate', blob);
+      } catch (error) {
+        console.error('Failed to terminate python bridge on page unload:', error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   const theme = useMemo(() => getTheme(mode), [mode]);
 

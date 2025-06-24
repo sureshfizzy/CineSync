@@ -51,7 +51,10 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
     try {
       const params: any = { id: query, mediaType };
       if (skipCache) params.skipCache = 'true';
-      const res = await axios.get('/api/tmdb/details', { params });
+      const res = await axios.get('/api/tmdb/details', {
+        params,
+        timeout: 6000 // 6 second timeout to match backend processing time
+      });
       const data = res.data;
       if (data && typeof data === 'object' && 'id' in data) {
         // Determine media_type: use response data if available, otherwise fall back to the parameter we sent
@@ -136,7 +139,10 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       if (year) params.year = year;
       if (mediaType) params.mediaType = mediaType;
       if (skipCache) params.skipCache = 'true';
-      const res = await axios.get('/api/tmdb/search', { params });
+      const res = await axios.get('/api/tmdb/search', {
+        params,
+        timeout: 3000 // 3 second timeout for search endpoint
+      });
       const results = res.data.results || [];
       if (results.length === 0) {
         return null;
@@ -175,6 +181,8 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       return resultObj;
     } catch (err: any) {
       lastError = err;
+      const isTimeout = err.code === 'ECONNABORTED' || err.message.includes('timeout');
+
       if (err.response && err.response.status === 429) {
         let retryAfter = 1000 * (2 ** attempt);
         const retryHeader = err.response.headers['retry-after'];
@@ -183,6 +191,11 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
           if (!isNaN(retrySec)) retryAfter = retrySec * 1000;
         }
         await sleep(retryAfter);
+        attempt++;
+        continue;
+      } else if (isTimeout && attempt < maxRetries - 1) {
+        console.warn(`[TMDB] Timeout on attempt ${attempt + 1}, retrying...`);
+        await sleep(25);
         attempt++;
         continue;
       } else {

@@ -122,13 +122,14 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
           onNavigateBack={onNavigateBack}
           variant="buttons"
         />
-        <ModifyDialog
-          open={modifyDialogOpen}
-          onClose={handleModifyClose}
-          onNavigateBack={onNavigateBack}
-          currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
-          mediaType="movie"
-        />
+        {modifyDialogOpen && (
+          <ModifyDialog
+            open={modifyDialogOpen}
+            onClose={handleModifyClose}
+            onNavigateBack={onNavigateBack}
+            currentFilePath={fileInfo.fullPath || fileInfo.sourcePath || fullFilePath}
+          />
+        )}
       </>
     </Box>
   );

@@ -1,11 +1,4 @@
-import {
-  Dialog,
-  Button,
-  Tab,
-  Paper,
-  keyframes,
-  SxProps,
-} from '@mui/material';
+import { Dialog, Button, Tab, Paper, keyframes, SxProps } from '@mui/material';
 import { styled as muiStyled } from '@mui/material/styles';
 
 export const slideIn = keyframes`
@@ -229,6 +222,39 @@ export const ActionButton = muiStyled(Button)(({ theme }) => ({
       backgroundColor: theme.palette.action.hover,
       borderColor: theme.palette.divider,
     },
+  },
+}));
+
+export const ConfirmationDialog = muiStyled(Dialog)(({ theme }) => ({
+  '& .MuiDialog-paper': {
+    borderRadius: '16px',
+    maxWidth: '500px',
+    width: '100%',
+    margin: '16px',
+    background: theme.palette.mode === 'dark'
+      ? 'linear-gradient(135deg, rgba(30, 30, 30, 0.95) 0%, rgba(20, 20, 20, 0.98) 100%)'
+      : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 250, 250, 0.98) 100%)',
+    backdropFilter: 'blur(20px)',
+    border: theme.palette.mode === 'dark'
+      ? '1px solid rgba(255, 255, 255, 0.1)'
+      : '1px solid rgba(0, 0, 0, 0.05)',
+    boxShadow: theme.palette.mode === 'dark'
+      ? '0 20px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+      : '0 20px 40px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.02)',
+  },
+}));
+
+export const ConfirmationActionButton = muiStyled(Button)(({ theme }) => ({
+  borderRadius: '12px',
+  textTransform: 'none',
+  fontWeight: 600,
+  padding: '10px 24px',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    transform: 'translateY(-1px)',
+    boxShadow: theme.palette.mode === 'dark'
+      ? '0 8px 25px rgba(0, 0, 0, 0.3)'
+      : '0 8px 25px rgba(0, 0, 0, 0.15)',
   },
 }));
 

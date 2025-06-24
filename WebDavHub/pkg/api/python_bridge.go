@@ -517,3 +517,61 @@ func HandlePythonMessage(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+// HandlePythonBridgeTerminate handles terminating the active python bridge process
+func HandlePythonBridgeTerminate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	activePythonMutex.Lock()
+	cmd := activePythonCmd
+	stdin := activePythonStdin
+	activePythonMutex.Unlock()
+
+	if cmd == nil {
+		// No active process to terminate
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "success",
+			"message": "No active python process to terminate",
+		})
+		return
+	}
+
+	logger.Info("Terminating active python bridge process")
+
+	// Close stdin first to signal the process to stop gracefully
+	if stdin != nil {
+		stdin.Close()
+	}
+
+	// Kill the process
+	if cmd.Process != nil {
+		err := cmd.Process.Kill()
+		if err != nil {
+			logger.Error("Failed to kill python process: %v", err)
+			http.Error(w, "Failed to terminate process", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Clear the active command and response writer
+	activePythonMutex.Lock()
+	activePythonCmd = nil
+	activePythonStdin = nil
+	activePythonMutex.Unlock()
+
+	activePythonResponseMutex.Lock()
+	activePythonResponseWriter = nil
+	activePythonResponseMutex.Unlock()
+
+	logger.Info("Python bridge process terminated successfully")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "success",
+		"message": "Python bridge process terminated",
+	})
+}

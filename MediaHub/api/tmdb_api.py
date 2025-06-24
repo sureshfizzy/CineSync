@@ -302,8 +302,9 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
         return result
     else:
+        current_query = query
         while True:
-            log_message(f"Multiple shows found for query '{query}':", level="INFO")
+            log_message(f"Multiple shows found for query '{current_query}':", level="INFO")
             display_results(results)
 
             log_message("Options:", level="INFO")
@@ -318,12 +319,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 set_cached_result(cache_key, result)
                 return result
             elif choice.strip():
-                new_results = fetch_results(choice, year)
+                current_query = choice.strip()
+                new_results = fetch_results(current_query, year)
                 if new_results:
                     results = new_results
                     continue
                 else:
-                    log_message(f"No results found for '{choice}'", level="WARNING")
+                    log_message(f"No results found for '{current_query}'", level="WARNING")
                     continue
             else:
                 chosen_show = results[0]
@@ -511,8 +513,9 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     if auto_select:
         chosen_movie = results[0]
     else:
+        current_query = query
         while True:
-            log_message(f"Multiple movies found for query '{query}':", level="INFO")
+            log_message(f"Multiple movies found for query '{current_query}':", level="INFO")
             display_results(results)
             log_message("Options:", level="INFO")
             log_message("- Enter 1-3 to select a movie", level="INFO")
@@ -524,17 +527,17 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 chosen_movie = results[int(choice) - 1]
                 break
             elif choice.strip():
-                new_query = choice.strip()
-                log_message(f"Searching for new query: '{new_query}'", "DEBUG", "stdout")
-                new_results = fetch_results(new_query)
+                current_query = choice.strip()
+                log_message(f"Searching for new query: '{current_query}'", "DEBUG", "stdout")
+                new_results = fetch_results(current_query)
                 if not new_results and year:
-                    new_results = fetch_results(new_query, year)
+                    new_results = fetch_results(current_query, year)
 
                 if new_results:
                     results = new_results
                     continue
                 else:
-                    log_message(f"No results found for '{new_query}'", level="WARNING")
+                    log_message(f"No results found for '{current_query}'", level="WARNING")
                     continue
             else:
                 chosen_movie = results[0]
@@ -652,8 +655,9 @@ def search_manual_general(query, year=None, auto_select=False, actual_dir=None, 
             log_message(f"No results found for '{choice}'. Try a different search term.", level="WARNING")
             continue
 
+        current_choice = choice  # Track the current search term for logging
         while True:
-            log_message(f"Multiple results found for query '{choice}':", level="INFO")
+            log_message(f"Multiple results found for query '{current_choice}':", level="INFO")
             display_mixed_results(results)
 
             log_message("Options:", level="INFO")
@@ -675,12 +679,12 @@ def search_manual_general(query, year=None, auto_select=False, actual_dir=None, 
                     return {'redirect_to_movie': True, 'movie_data': chosen_item}
 
             elif selection.strip():
-                choice = selection.strip()
-                log_message(f"Searching TMDB for: '{choice}'", level="INFO")
-                results = fetch_general_results(choice)
+                current_choice = selection.strip()  # Update the current search term for logging
+                log_message(f"Searching TMDB for: '{current_choice}'", level="INFO")
+                results = fetch_general_results(current_choice)
 
                 if not results:
-                    log_message(f"No results found for '{choice}'. Try a different search term.", level="WARNING")
+                    log_message(f"No results found for '{current_choice}'. Try a different search term.", level="WARNING")
                     break
                 continue
             else:

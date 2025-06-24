@@ -116,6 +116,7 @@ func main() {
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
+	apiMux.HandleFunc("/api/python-bridge/terminate", api.HandlePythonBridgeTerminate)
 	apiMux.HandleFunc("/api/mediahub/message", api.HandleMediaHubMessage)
 	apiMux.HandleFunc("/api/mediahub/events", api.HandleMediaHubEvents)
 	apiMux.HandleFunc("/api/recent-media", api.HandleRecentMedia)

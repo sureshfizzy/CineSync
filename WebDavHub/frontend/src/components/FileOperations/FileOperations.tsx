@@ -2140,15 +2140,16 @@ function FileOperations() {
       )}
 
       {/* ModifyDialog for file processing */}
-      <ModifyDialog
-        open={modifyDialogOpen}
-        onClose={handleModifyDialogClose}
-        currentFilePath={currentFileForProcessing}
-        mediaType="movie"
-        useManualSearch={tabValue === 2}
-        onNavigateBack={() => {
-        }}
-      />
+      {modifyDialogOpen && (
+        <ModifyDialog
+          open={modifyDialogOpen}
+          onClose={handleModifyDialogClose}
+          currentFilePath={currentFileForProcessing}
+          useManualSearch={tabValue === 2}
+          onNavigateBack={() => {
+          }}
+        />
+      )}
 
       {/* Bulk Delete Confirmation Dialog */}
       <Dialog

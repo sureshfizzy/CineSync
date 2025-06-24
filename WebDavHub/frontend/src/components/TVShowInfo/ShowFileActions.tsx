@@ -120,14 +120,15 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
           onNavigateBack={onNavigateBack}
           variant="buttons"
         />
-        <ModifyDialog
-          open={modifyDialogOpen}
-          onClose={handleModifyClose}
-          onNavigateBack={onNavigateBack}
-          currentFilePath={filePath}
-          mediaType={mediaType}
-          useBatchApply={true}
-        />
+        {modifyDialogOpen && (
+          <ModifyDialog
+            open={modifyDialogOpen}
+            onClose={handleModifyClose}
+            onNavigateBack={onNavigateBack}
+            currentFilePath={filePath}
+            useBatchApply={true}
+          />
+        )}
       </>
     </Box>
   );

@@ -1,29 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Tabs,
-  Typography,
-  useTheme,
-  IconButton
-} from '@mui/material';
+import { DialogTitle, DialogContent, DialogActions, Tabs, Typography, useTheme, IconButton } from '@mui/material';
 import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
 import { searchTmdb, getTmdbPosterUrlDirect } from '../../api/tmdbApi';
 import { processStructuredMessage } from '../../../utils/symlinkUpdates';
-
-
-// Import the modular components
 import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';
 import ActionOptions from './ActionOptions';
 import IDOptions from './IDOptions';
 import ExecutionDialog from './ExecutionDialog';
 import SkipConfirmationDialog from './SkipConfirmationDialog';
 import SkipResultDialog from './SkipResultDialog';
-import { ModifyDialogProps, ModifyOption, IDOption, MovieOption } from './types';
+import ForceConfirmationDialog from './ForceConfirmationDialog';
+import { ModifyDialogProps, ModifyOption, IDOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, mediaType = 'movie', onNavigateBack, useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, onNavigateBack, useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false }) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -34,97 +24,53 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [movieOptions, setMovieOptions] = useState<any[]>([]);
   const [isLoadingNewOptions, setIsLoadingNewOptions] = useState(false);
   const [previousOptions, setPreviousOptions] = useState<any[]>([]);
+  const [posterFetchInProgress, setPosterFetchInProgress] = useState(false);
   const [operationComplete, setOperationComplete] = useState(false);
   const [operationSuccess, setOperationSuccess] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
   const [skipResultOpen, setSkipResultOpen] = useState(false);
+  const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
   const [useBatchApply, setUseBatchApply] = useState(false);
+  const [lastSelectedOption, setLastSelectedOption] = useState<string | null>(null);
   const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const theme = useTheme();
 
-  // Media processing options with icons
   const baseModifyOptions: ModifyOption[] = [
-    {
-      value: 'force',
-      label: 'Force Recreate Symlinks',
-      description: 'Recreate symlinks even if they exist',
-      icon: '🔗'
-    },
-    {
-      value: 'force-show',
-      label: 'Force as TV Show',
-      description: 'Process file as a TV show',
-      icon: '📺'
-    },
-    {
-      value: 'force-movie',
-      label: 'Force as Movie',
-      description: 'Process file as a movie',
-      icon: '🎬'
-    },
-    {
-      value: 'force-extra',
-      label: 'Force as Extra',
-      description: 'Process file as an extra',
-      icon: '➕'
-    },
-    {
-      value: 'skip',
-      label: 'Skip Processing',
-      description: 'Remove symlinks and block future processing',
-      icon: '⏭️'
-    },
+    { value: 'force', label: 'Force Recreate Symlinks', description: 'Recreate symlinks even if they exist', icon: '🔗' },
+    { value: 'force-show', label: 'Force as TV Show', description: 'Process file as a TV show', icon: '📺' },
+    { value: 'force-movie', label: 'Force as Movie', description: 'Process file as a movie', icon: '🎬' },
+    { value: 'force-extra', label: 'Force as Extra', description: 'Process file as an extra', icon: '➕' },
+    { value: 'skip', label: 'Skip Processing', description: 'Remove symlinks and block future processing', icon: '⏭️' },
   ];
 
-  // Add manual search option if enabled (for failed files)
   const modifyOptions: ModifyOption[] = propUseManualSearch
     ? [
-        ...baseModifyOptions.slice(0, -1), // All options except skip
-        {
-          value: 'manual-search',
-          label: 'Manual Search',
-          description: 'Enable manual TMDB search when automatic search fails',
-          icon: '🔍'
-        },
-        baseModifyOptions[baseModifyOptions.length - 1] // Skip option at the end
+        ...baseModifyOptions.slice(0, -1),
+        { value: 'manual-search', label: 'Manual Search', description: 'Enable manual TMDB search when automatic search fails', icon: '🔍' },
+        baseModifyOptions[baseModifyOptions.length - 1]
       ]
     : baseModifyOptions;
 
-  // ID options with icons
   const idOptions: IDOption[] = [
-    {
-      value: 'imdb',
-      label: 'IMDb ID',
-      placeholder: 'tt1234567',
-      icon: '🎥',
-      helperText: 'Enter the IMDb ID (e.g., tt1234567)'
-    },
-    {
-      value: 'tmdb',
-      label: 'TMDb ID',
-      placeholder: '12345',
-      icon: '🎞️',
-      helperText: 'Enter the TMDb ID (e.g., 12345)'
-    },
-    {
-      value: 'tvdb',
-      label: 'TVDb ID',
-      placeholder: '123456',
-      icon: '📺',
-      helperText: 'Enter the TVDb ID (e.g., 123456)'
-    },
-    {
-      value: 'season-episode',
-      label: 'Season/Episode',
-      placeholder: 'S01E01',
-      icon: '📅',
-      helperText: 'Format: S01E01 for season 1 episode 1'
-    },
+    { value: 'imdb', label: 'IMDb ID', placeholder: 'tt1234567', icon: '🎥', helperText: 'Enter the IMDb ID (e.g., tt1234567)' },
+    { value: 'tmdb', label: 'TMDb ID', placeholder: '12345', icon: '🎞️', helperText: 'Enter the TMDb ID (e.g., 12345)' },
+    { value: 'tvdb', label: 'TVDb ID', placeholder: '123456', icon: '📺', helperText: 'Enter the TVDb ID (e.g., 123456)' },
+    { value: 'season-episode', label: 'Season/Episode', placeholder: 'S01E01', icon: '📅', helperText: 'Format: S01E01 for season 1 episode 1' },
   ];
+
+  const clearTimeouts = () => {
+    [inputTimeoutRef, autoCloseTimeoutRef, loadingTimeoutRef, parseTimeoutRef].forEach(ref => {
+      if (ref.current) {
+        clearTimeout(ref.current);
+        ref.current = null;
+      }
+    });
+  };
 
   const resetAllStates = () => {
     setSelectedOption('');
@@ -136,48 +82,54 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setMovieOptions([]);
     setIsLoadingNewOptions(false);
     setPreviousOptions([]);
+    setPosterFetchInProgress(false);
     setOperationComplete(false);
     setOperationSuccess(false);
     setIsClosing(false);
     setSkipConfirmOpen(false);
     setUseBatchApply(false);
+    setLastSelectedOption(null);
+    clearTimeouts();
+  };
 
-    // Clear timeouts
-    if (inputTimeoutRef.current) {
-      clearTimeout(inputTimeoutRef.current);
-      inputTimeoutRef.current = null;
-    }
-    if (autoCloseTimeoutRef.current) {
-      clearTimeout(autoCloseTimeoutRef.current);
-      autoCloseTimeoutRef.current = null;
-    }
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
+  const terminatePythonBridge = async () => {
+    try {
+      const response = await fetch('/api/python-bridge/terminate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+        }
+      });
+      if (response.ok) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      console.error('Failed to terminate python bridge process:', error);
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
+    await terminatePythonBridge();
     resetAllStates();
     onClose();
   };
 
   const handleDialogClose = (_: unknown, reason: 'backdropClick' | 'escapeKeyDown') => {
-    // Only close on escape key, not on backdrop click
-    if (reason === 'backdropClick') {
-      return;
-    }
+    if (reason === 'backdropClick') return;
     handleClose();
   };
 
   const handleSubmit = () => {
-    // Check if skip is selected and show confirmation dialog
     if (selectedOption === 'skip') {
       setSkipConfirmOpen(true);
       return;
     }
+    if (selectedOption === 'force') {
+      setForceConfirmOpen(true);
+      return;
+    }
 
-    // Reset execution states and start python command
     setExecOutput('');
     setMovieOptions([]);
     setIsLoadingNewOptions(false);
@@ -187,21 +139,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setIsClosing(false);
     setExecOpen(true);
 
-    // Determine if we should use batch apply from the prop
     const shouldUseBatchApply = propUseBatchApply;
-
-    // Set the state for future reference
     if (shouldUseBatchApply) {
       setUseBatchApply(true);
     }
-
-    // Log what we're about to send for debugging
-    console.log('ModifyDialog submitting with:', {
-      selectedOption,
-      selectedIds,
-      currentFilePath,
-      batchApply: shouldUseBatchApply
-    });
 
     startPythonCommand(shouldUseBatchApply);
   };
@@ -211,6 +152,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       setExecOutput('Error: No file path provided\n');
       return;
     }
+
+
 
     const disableMonitor = true;
     const shouldUseBatchApply = batchApplyOverride !== undefined ? batchApplyOverride : useBatchApply;
@@ -298,10 +241,12 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
               if (msg.output) {
                 const output = msg.output;
-                setExecOutput(prev => prev + output + '\n');
-
-                // Check if this output contains movie/show options
-                parseMovieOptions(output);
+                setExecOutput(prev => {
+                  const newOutput = prev + output + '\n';
+                  // Check if the accumulated output contains movie/show options
+                  parseMovieOptions(newOutput);
+                  return newOutput;
+                });
 
                 // Check if waiting for user input - be more flexible with detection
                 if (output.includes('Enter your choice:') ||
@@ -332,19 +277,30 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                 setExecOutput(prev => prev + 'Error: ' + msg.error + '\n');
               }
               if (msg.done) {
-                setWaitingForInput(false);
-                setOperationComplete(true);
-                setOperationSuccess(true);
+                // Only mark as complete if we're not currently showing options or waiting for input
+                // This prevents premature completion when the backend is still waiting for user selection
+                const hasActiveOptions = movieOptions.length > 0 || isLoadingNewOptions;
+                const isWaitingForUserInput = waitingForInput || (msg.output && (msg.output.includes('Enter your choice:') || msg.output.includes('Select an option:')));
 
-                // Auto-close after 2 seconds of successful completion
-                autoCloseTimeoutRef.current = setTimeout(() => {
-                  setIsClosing(true);
-                  // Give time for closing animation, then actually close
-                  setTimeout(() => {
-                    handleExecClose();
-                    handleClose();
-                  }, 300);
-                }, 2000);
+                if (!hasActiveOptions && !isWaitingForUserInput) {
+                  console.log('Operation truly complete - no active options and not waiting for input');
+                  setWaitingForInput(false);
+                  setOperationComplete(true);
+                  setOperationSuccess(true);
+
+                  // Auto-close after 2 seconds of successful completion
+                  autoCloseTimeoutRef.current = setTimeout(() => {
+                    setIsClosing(true);
+                    // Give time for closing animation, then actually close
+                    setTimeout(() => {
+                      handleExecClose();
+                      handleClose();
+                    }, 300);
+                  }, 2000);
+                } else {
+                  console.log('Backend sent done but still have active UI state - ignoring completion signal');
+                  console.log('Has active options:', hasActiveOptions, 'Waiting for input:', isWaitingForUserInput);
+                }
               }
             } catch (e) {
               setExecOutput(prev => prev + 'Parse error: ' + e + '\n');
@@ -358,96 +314,228 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     }
   };
 
-  const parseMovieOptions = (output: string) => {
-    // Look for numbered options with movie/show titles and TMDB IDs
-    let optionRegex = /(\d+):\s*([^(\n\[]+?)\s*(?:\((\d{4})\))?\s*\[tmdb-(\d+)\]/gm;
-    let matches = [...output.matchAll(optionRegex)];
-
-    // If no matches, try a simpler pattern
-    if (matches.length === 0) {
-      optionRegex = /(\d+):\s*(.+?)\s*\[tmdb-(\d+)\]/gm;
-      matches = [...output.matchAll(optionRegex)];
+  const parseMovieOptions = (fullOutput: string) => {
+    // Clear any existing parse timeout
+    if (parseTimeoutRef.current) {
+      clearTimeout(parseTimeoutRef.current);
     }
 
-    if (matches.length > 0) {
-      const options = matches.map(match => {
-        // Handle different regex patterns
-        let option: MovieOption;
-        if (match.length >= 5) {
-          option = {
-            number: match[1],
-            title: match[2]?.trim(),
-            year: match[3],
-            tmdbId: match[4]
-          };
+    // Debounce the parsing to prevent multiple rapid calls
+    parseTimeoutRef.current = setTimeout(() => {
+      parseMovieOptionsImmediate(fullOutput);
+    }, 200); // Wait 200ms for output to stabilize
+  };
+
+  const parseMovieOptionsImmediate = (fullOutput: string) => {
+    // Check if we're in a processing state after selection - look for processing indicators
+    const isProcessingAfterSelection = fullOutput.includes('Processing with selected') ||
+                                      fullOutput.includes('Creating symlinks') ||
+                                      fullOutput.includes('Metadata processing') ||
+                                      fullOutput.includes('Successfully processed') ||
+                                      fullOutput.includes('Operation completed') ||
+                                      fullOutput.includes('Processing file') ||
+                                      fullOutput.includes('Symlink created') ||
+                                      (lastSelectedOption && fullOutput.includes(`> ${lastSelectedOption}`));
+
+    if (isProcessingAfterSelection) {
+      console.log('Processing detected after selection, clearing options and skipping parsing');
+      // Clear options to show processing state
+      if (movieOptions.length > 0) {
+        setMovieOptions([]);
+        setIsLoadingNewOptions(false);
+        setPreviousOptions([]);
+      }
+      return;
+    }
+
+    // Look for numbered options with movie/show titles and TMDB IDs in the full output
+    const optionRegex = /(\d+):\s*([^(\n\[]+?)\s*\((\d{4})\)\s*\[(?:(TV Show|Movie) - )?tmdb-(\d+)\]/gm;
+    const allMatches = [...fullOutput.matchAll(optionRegex)];
+
+    console.log('All matches found in output:', allMatches);
+
+    if (allMatches.length === 0) {
+      return;
+    }
+
+    // Find the most recent complete set of options (1, 2, 3)
+    // We look for the last occurrence of "1:" and then find the complete set from there
+    let relevantMatches: RegExpMatchArray[] = [];
+
+    // Find the last match that starts with "1:"
+    let lastOneIndex = -1;
+    for (let i = allMatches.length - 1; i >= 0; i--) {
+      if (allMatches[i][1] === '1') {
+        lastOneIndex = i;
+        break;
+      }
+    }
+
+    if (lastOneIndex !== -1) {
+      // Get all consecutive matches starting from the last "1:"
+      relevantMatches = allMatches.slice(lastOneIndex);
+
+      // Filter to only include consecutive numbers starting from 1
+      const consecutiveMatches = [];
+      let expectedNumber = 1;
+      for (const match of relevantMatches) {
+        if (parseInt(match[1]) === expectedNumber) {
+          consecutiveMatches.push(match);
+          expectedNumber++;
         } else {
-          // Simpler pattern: (\d+):\s*(.+?)\s*\[tmdb-(\d+)\]
-          const titleAndYear = match[2]?.trim();
-          const yearMatch = titleAndYear?.match(/^(.+?)\s*\((\d{4})\)$/);
-          option = {
-            number: match[1],
-            title: yearMatch ? yearMatch[1]?.trim() : titleAndYear,
-            year: yearMatch ? yearMatch[2] : undefined,
-            tmdbId: match[3]
-          };
+          break; // Stop if we hit a non-consecutive number
         }
-        return option;
-      });
+      }
+      relevantMatches = consecutiveMatches;
+    }
+
+    console.log('Relevant matches (most recent set):', relevantMatches);
+    const matches = relevantMatches;
+
+    if (matches.length > 0) {
+      const options = matches.map(match => ({
+        number: match[1],
+        title: match[2]?.trim(),
+        year: match[3],
+        mediaType: match[4] ? (match[4] === 'TV Show' ? 'tv' : 'movie') : null, // Extract media type if available
+        tmdbId: match[5] // TMDB ID is now in match[5] due to the capture group
+      }));
+
+      console.log('Parsed options:', options);
+
+      // Check if these are actually new options by comparing the first option's tmdbId
+      const currentFirstTmdbId = movieOptions.length > 0 ? movieOptions[0].tmdbId : null;
+      const newFirstTmdbId = options.length > 0 ? options[0].tmdbId : null;
+
+      // If we have a last selected option and the same options are appearing again, skip
+      if (lastSelectedOption && currentFirstTmdbId === newFirstTmdbId && options.length === movieOptions.length) {
+        console.log('Same options detected after selection, likely processing feedback - skipping update');
+        return;
+      }
+
+      // Only update if we have different options or more options than before
+      if (options.length !== movieOptions.length || currentFirstTmdbId !== newFirstTmdbId) {
+        console.log(`Updating options: ${movieOptions.length} -> ${options.length}`);
+        console.log(`First TMDB ID changed: ${currentFirstTmdbId} -> ${newFirstTmdbId}`);
+
+        // Show options immediately without posters, then load posters concurrently
+        const sortedOptions = options.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+        setMovieOptions(sortedOptions);
+        setIsLoadingNewOptions(false);
+      } else {
+        console.log('Same options detected, skipping update');
+        return; // Don't fetch posters again if same options
+      }
+
+      // Prevent duplicate poster fetching
+      if (posterFetchInProgress) {
+        console.log('Poster fetch already in progress, skipping duplicate request');
+        return;
+      }
 
       // Fetch poster images for each option using the TMDb ID provided by backend
-      // Use Promise.all to avoid excessive concurrent requests and reduce caching overhead
       const fetchPostersAsync = async () => {
-        const posterPromises = options.map(async (option) => {
-          if (!option.tmdbId) return option;
+        setPosterFetchInProgress(true);
+        console.log('Starting throttled poster fetch for options:', options);
+        console.log('Full output context for media type detection:', fullOutput.substring(Math.max(0, fullOutput.length - 500))); // Last 500 chars
 
-          try {
-            // Skip caching for temporary poster fetches in ModifyDialog - these are just for user selection
-            const tmdbResult = await searchTmdb(option.tmdbId, undefined, mediaType, 3, true);
+        let totalApiCalls = 0;
 
-            if (tmdbResult && tmdbResult.poster_path) {
-              const posterUrl = getTmdbPosterUrlDirect(tmdbResult.poster_path, 'w200');
-              return {
-                ...option,
-                posterUrl: posterUrl,
-                tmdbData: tmdbResult
-              };
-            }
-          } catch (error) {
-            console.error('Failed to fetch TMDB data for option', option.number, ':', error);
-          }
+        // Throttled poster fetching - limit to 3 concurrent requests at a time for better performance
+        const CONCURRENT_LIMIT = 3;
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-          return option;
-        });
+        for (let i = 0; i < options.length; i += CONCURRENT_LIMIT) {
+          const batch = options.slice(i, i + CONCURRENT_LIMIT);
 
-        // Wait for all poster fetches to complete, then update state once
-        try {
-          const optionsWithPosters = await Promise.all(posterPromises);
-          setMovieOptions(prev => {
-            const updated = [...prev];
+          const batchPromises = batch.map(async (option) => {
+            if (!option.tmdbId) return;
 
-            optionsWithPosters.forEach(option => {
-              const existingIndex = updated.findIndex(opt => opt.number === option.number);
-              if (existingIndex >= 0) {
-                updated[existingIndex] = option;
+            try {
+              let tmdbResult = null;
+
+              // Use media type information if available from backend output
+              if (option.mediaType && (option.mediaType === 'tv' || option.mediaType === 'movie')) {
+                console.log(`Using explicit media type '${option.mediaType}' for option ${option.number}`);
+                totalApiCalls++;
+                tmdbResult = await searchTmdb(option.tmdbId, undefined, option.mediaType, 1, true);
               } else {
-                updated.push(option);
-              }
-            });
+                // For regular search results without explicit media type, use smart detection
+                // Check if this looks like a TV show search context by looking at the output
+                const isTvContext = fullOutput.includes('Multiple shows found for query') ||
+                                    fullOutput.includes('search/tv') ||
+                                    fullOutput.includes('TV Show -') ||
+                                    fullOutput.includes('Episode') ||
+                                    fullOutput.includes('Season');
 
-            return updated.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+                // Check if this looks like a movie context
+                const isMovieContext = fullOutput.includes('Multiple movies found for query') ||
+                                       fullOutput.includes('search/movie') ||
+                                       fullOutput.includes('Movie -');
+
+                if (isTvContext && !isMovieContext) {
+                  console.log(`TV context detected for option ${option.number}, using TV endpoint only`);
+                  totalApiCalls++;
+                  tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv', 1, true);
+                } else if (isMovieContext && !isTvContext) {
+                  console.log(`Movie context detected for option ${option.number}, using movie endpoint only`);
+                  totalApiCalls++;
+                  tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie', 1, true);
+                } else {
+                  // Ambiguous context - try movie first (most common), but don't fallback to TV
+                  // This prevents the double API calls that cause network errors
+                  console.log(`Ambiguous context for option ${option.number}, trying movie only (no fallback)`);
+                  totalApiCalls++;
+                  tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie', 1, true);
+
+                  // Only try TV if we have strong indicators it might be a TV show
+                  if (!tmdbResult && (option.title?.toLowerCase().includes('season') ||
+                                      option.title?.toLowerCase().includes('episode') ||
+                                      option.title?.toLowerCase().includes('s0') ||
+                                      option.title?.toLowerCase().includes('e0'))) {
+                    console.log(`Movie failed but TV indicators found for option ${option.number}, trying TV`);
+                    totalApiCalls++;
+                    tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv', 1, true);
+                  }
+                }
+              }
+
+              if (tmdbResult && tmdbResult.poster_path) {
+                const posterUrl = getTmdbPosterUrlDirect(tmdbResult.poster_path, 'w200');
+                console.log(`Fetched poster for option ${option.number}:`, posterUrl);
+
+                // Update this specific option with its poster
+                setMovieOptions(prevOptions =>
+                  prevOptions.map(prevOption =>
+                    prevOption.number === option.number
+                      ? { ...prevOption, posterUrl, tmdbData: tmdbResult }
+                      : prevOption
+                  )
+                );
+              } else {
+                console.log(`No poster found for option ${option.number} (ID: ${option.tmdbId}, type: ${option.mediaType || 'unknown'})`);
+              }
+            } catch (error) {
+              console.error('Failed to fetch TMDB data for option', option.number, ':', error);
+              // Option will remain without poster - that's fine
+            }
           });
-        } catch (error) {
-          console.error('Failed to fetch poster data:', error);
+
+          // Execute current batch and wait for completion
+          await Promise.allSettled(batchPromises);
+
+          // Minimal delay between batches for optimal performance
+          if (i + CONCURRENT_LIMIT < options.length) {
+            await delay(10);
+          }
         }
+
+        console.log(`All poster fetch attempts completed. Total API calls made: ${totalApiCalls}`);
+        setPosterFetchInProgress(false);
       };
 
       // Execute the async function
       fetchPostersAsync();
-
-      // Set initial options without posters and clear loading state
-      setMovieOptions(options);
-      setIsLoadingNewOptions(false);
-      setPreviousOptions([]);
 
       // Clear loading timeout since we received new options
       if (loadingTimeoutRef.current) {
@@ -470,6 +558,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
           setPreviousOptions([]);
         }, 5000); // 5 seconds timeout
       }
+
+      // Clear current options immediately to prevent mixing with new results
+      setMovieOptions([]);
 
       // Send input to the python process via the API
       const response = await fetch('/api/python-bridge/input', {
@@ -515,7 +606,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   };
 
   const handleOptionClick = (optionNumber: string) => {
+    setLastSelectedOption(optionNumber);
     sendInput(optionNumber);
+
+    // Clear the last selected option after 10 seconds to prevent interference with future operations
+    setTimeout(() => {
+      setLastSelectedOption(null);
+    }, 10000);
   };
 
   const handleInputSubmit = () => {
@@ -539,6 +636,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       console.error('No file path provided for skip operation');
       return;
     }
+
+
 
     const disableMonitor = true;
     const requestPayload = {
@@ -569,6 +668,29 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setSkipConfirmOpen(false);
   };
 
+  const handleForceConfirm = async () => {
+    setForceConfirmOpen(false);
+    await terminatePythonBridge();
+
+    setExecOutput('');
+    setMovieOptions([]);
+    setIsLoadingNewOptions(false);
+    setPreviousOptions([]);
+    setOperationComplete(false);
+    setOperationSuccess(false);
+    setIsClosing(false);
+    setExecOpen(true);
+
+    const shouldUseBatchApply = propUseBatchApply;
+    if (shouldUseBatchApply) {
+      setUseBatchApply(true);
+    }
+
+    startPythonCommand();
+  };
+
+  const handleForceCancel = () => setForceConfirmOpen(false);
+
   const handleSkipResultClose = () => {
     setSkipResultOpen(false);
     handleClose();
@@ -580,21 +702,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     }
   };
 
-  const handleExecClose = () => {
+  const handleExecClose = async () => {
+    await terminatePythonBridge();
     setExecOpen(false);
-    // Clear timeouts when closing
-    if (inputTimeoutRef.current) {
-      clearTimeout(inputTimeoutRef.current);
-      inputTimeoutRef.current = null;
-    }
-    if (autoCloseTimeoutRef.current) {
-      clearTimeout(autoCloseTimeoutRef.current);
-      autoCloseTimeoutRef.current = null;
-    }
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
+    clearTimeouts();
     setWaitingForInput(false);
     setIsLoadingNewOptions(false);
     setPreviousOptions([]);
@@ -603,19 +714,12 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setIsClosing(false);
   };
 
-  // Cleanup timeouts on unmount
   useEffect(() => {
-    return () => {
-      if (inputTimeoutRef.current) {
-        clearTimeout(inputTimeoutRef.current);
-      }
-      if (autoCloseTimeoutRef.current) {
-        clearTimeout(autoCloseTimeoutRef.current);
-      }
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
+    if (open) resetAllStates();
+  }, [open]);
+
+  useEffect(() => {
+    return clearTimeouts;
   }, []);
 
   return (
@@ -625,6 +729,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         onClose={handleDialogClose}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            margin: { xs: 1, sm: 2 },
+            maxHeight: { xs: '95vh', sm: '90vh' },
+            width: { xs: 'calc(100vw - 16px)', sm: 'auto' },
+          }
+        }}
       >
         <DialogTitle
           component="div"
@@ -632,8 +743,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            py: 2,
-            px: 3,
+            py: { xs: 1.5, sm: 2 },
+            px: { xs: 2, sm: 3 },
             ...(Object.values(selectedIds).some(v => v) && {
               background: theme.palette.mode === 'dark'
                 ? 'linear-gradient(45deg, rgba(25, 118, 210, 0.1), rgba(156, 39, 176, 0.1))'
@@ -670,7 +781,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
           </IconButton>
         </DialogTitle>
 
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>
           <Tabs
             value={activeTab}
             onChange={(_: React.SyntheticEvent, newValue: string) => setActiveTab(newValue)}
@@ -705,10 +816,20 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
           )}
         </DialogContent>
 
-        <DialogActions sx={{ justifyContent: 'space-between' }}>
+        <DialogActions sx={{
+          justifyContent: 'space-between',
+          px: { xs: 2, sm: 3 },
+          py: { xs: 1.5, sm: 2 },
+          gap: { xs: 1, sm: 2 },
+          flexDirection: { xs: 'column-reverse', sm: 'row' },
+        }}>
           <ActionButton
             onClick={handleClose}
             variant="outlined"
+            sx={{
+              width: { xs: '100%', sm: 'auto' },
+              order: { xs: 2, sm: 1 }
+            }}
           >
             Cancel
           </ActionButton>
@@ -717,6 +838,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
             variant="contained"
             disabled={!selectedOption && Object.values(selectedIds).every(v => !v)}
             startIcon={<BuildIcon fontSize="small" />}
+            sx={{
+              width: { xs: '100%', sm: 'auto' },
+              order: { xs: 1, sm: 2 }
+            }}
           >
             Process File
           </ActionButton>
@@ -754,6 +879,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         onClose={handleSkipResultClose}
         onRefresh={handleSkipResultRefresh}
         onNavigateBack={onNavigateBack}
+        filePath={currentFilePath}
+      />
+
+      <ForceConfirmationDialog
+        open={forceConfirmOpen}
+        onConfirm={handleForceConfirm}
+        onCancel={handleForceCancel}
         filePath={currentFilePath}
       />
     </>

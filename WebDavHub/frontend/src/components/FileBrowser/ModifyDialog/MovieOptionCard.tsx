@@ -20,8 +20,9 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        maxWidth: '140px',
+        maxWidth: { xs: '120px', sm: '140px' },
         width: '100%',
+        minHeight: { xs: '200px', sm: '220px' },
         animation: `${fadeIn} 0.4s ease-out forwards`,
         '&:hover': {
           boxShadow: 6,
@@ -37,7 +38,7 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
           alt={option.title}
           sx={{
             width: '100%',
-            maxWidth: '140px',
+            maxWidth: { xs: '120px', sm: '140px' },
             aspectRatio: '2/3',
             objectFit: 'cover',
             borderTopLeftRadius: 12,
@@ -56,14 +57,14 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
         <Box
           sx={{
             width: '100%',
-            maxWidth: '140px',
+            maxWidth: { xs: '120px', sm: '140px' },
             aspectRatio: '2/3',
             borderTopLeftRadius: 12,
             borderTopRightRadius: 12,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'grey.300',
+            backgroundColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.200',
           }}
         >
           <Typography variant="body2" color="text.secondary">
@@ -77,16 +78,42 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
         px: 0.5,
         textAlign: 'center',
       }}>
-        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5, color: theme.palette.text.primary }}>
+        <Typography
+          variant="subtitle2"
+          fontWeight={700}
+          sx={{
+            mb: 0.5,
+            color: theme.palette.text.primary,
+            fontSize: { xs: '0.8rem', sm: '0.875rem' },
+            lineHeight: 1.2,
+            textAlign: 'center',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+          }}
+        >
           {option.title}
         </Typography>
         {option.year && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+          >
             {option.year}
           </Typography>
         )}
         {option.tmdbData?.id && (
-          <Typography variant="caption" color="primary.main" sx={{ fontSize: '0.7rem', fontWeight: 500 }}>
+          <Typography
+            variant="caption"
+            color="primary.main"
+            sx={{
+              fontSize: { xs: '0.65rem', sm: '0.7rem' },
+              fontWeight: 500
+            }}
+          >
             TMDb: {option.tmdbData.id}
           </Typography>
         )}

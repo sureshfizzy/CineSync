@@ -416,12 +416,14 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           </Button>
         </DialogActions>
       </Dialog>
-      <ModifyDialog
-        open={modifyDialogOpen}
-        onClose={() => setModifyDialogOpen(false)}
-        onNavigateBack={onNavigateBack}
-        currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
-      />
+      {modifyDialogOpen && (
+        <ModifyDialog
+          open={modifyDialogOpen}
+          onClose={() => setModifyDialogOpen(false)}
+          onNavigateBack={onNavigateBack}
+          currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
+        />
+      )}
     </>
   );
 };

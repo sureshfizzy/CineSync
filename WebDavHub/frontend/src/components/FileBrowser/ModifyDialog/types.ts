@@ -2,7 +2,6 @@ export interface ModifyDialogProps {
   open: boolean;
   onClose: () => void;
   currentFilePath?: string;
-  mediaType?: 'movie' | 'tv';
   onNavigateBack?: () => void;
   useBatchApply?: boolean;
   useManualSearch?: boolean;
@@ -28,6 +27,7 @@ export interface MovieOption {
   title: string;
   year?: string;
   tmdbId: string;
+  mediaType?: 'tv' | 'movie' | null; // Media type extracted from backend output
   posterUrl?: string;
   tmdbData?: {
     id: number;
@@ -37,6 +37,13 @@ export interface MovieOption {
     media_type?: string;
     [key: string]: any;
   };
+}
+
+export interface ForceConfirmationDialogProps {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  filePath?: string;
 }
 
 export interface ActionOptionsProps {
