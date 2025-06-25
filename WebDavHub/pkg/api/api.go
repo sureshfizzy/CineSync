@@ -502,11 +502,11 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 						fileInfo.MediaType = "tv"
 						fileInfo.HasSeasonFolders = true
 						subDirMediaType = "tv"
-						logger.Info("Detected TV show structure in %s by content (no .tmdb type or .tmdb not present)", subDirPath)
+						logger.Info("Detected TV show structure in %s by content", subDirPath)
 					} else if hasMediaFiles {
 						fileInfo.MediaType = "movie"
 						subDirMediaType = "movie"
-						logger.Info("Detected movie files in %s by content (no .tmdb type or .tmdb not present)", subDirPath)
+						logger.Info("Detected movie files in %s by content", subDirPath)
 					}
 				}
 			}

@@ -316,9 +316,9 @@ export default function FileBrowser() {
 
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
-      if (tmdb?.poster_path) {
+      if (tmdb || file.tmdbId) {
         const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
-        const tmdbId = tmdb?.id;
+        const tmdbId = tmdb?.id || file.tmdbId;
         const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
         const mediaPath = joinPaths(currentPath, file.name);
         navigate(`/media${mediaPath}`, {
