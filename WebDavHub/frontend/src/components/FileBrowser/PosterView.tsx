@@ -93,21 +93,44 @@ export default function PosterView({
               overflow: 'hidden',
             }}>
               {(() => {
-                const hasTmdbData = !!tmdb;
-                const hasPosterPath = tmdb && tmdb.poster_path;
+                const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
+                const title = file.title || (tmdb && tmdb.title) || file.name;
+                const hasPosterPath = !!posterPath;
 
-                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasTmdbData;
+                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasPosterPath;
 
                 if (isPosterCandidate) {
                   return (
                     <>
-                      {!loaded && (
+                      {/* Show skeleton only if no poster path is available */}
+                      {!loaded && !hasPosterPath && (
                         <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
                       )}
 
+                      {/* Blurred background image (shows immediately if poster path available) */}
+                      {hasPosterPath && !loaded && (
+                        <img
+                          src={getTmdbPosterUrl(posterPath, 'w92') || ''}
+                          alt={`${title} (loading)`}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            display: 'block',
+                            opacity: 1,
+                            filter: 'blur(8px)',
+                            transform: 'scale(1.1)',
+                            transition: 'opacity 0.3s ease-in-out',
+                          }}
+                        />
+                      )}
+
+                      {/* Main high-quality image */}
                       <img
-                        src={hasPosterPath ? getTmdbPosterUrl(tmdb.poster_path) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
-                        alt={tmdb.title || file.name}
+                        src={hasPosterPath ? getTmdbPosterUrl(posterPath) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
+                        alt={title}
                         style={{
                           width: '100%',
                           height: '100%',
@@ -115,11 +138,11 @@ export default function PosterView({
                           position: 'absolute',
                           top: 0, left: 0, right: 0, bottom: 0,
                           display: 'block',
-                          // Progressive loading: show poster immediately when available
                           opacity: loaded && hasPosterPath ? 1 : 0,
-                          filter: loaded && hasPosterPath ? 'blur(0px)' : 'blur(5px)',
-                          transform: loaded && hasPosterPath ? 'scale(1)' : 'scale(1.05)',
-                          transition: 'opacity 0.4s ease-in-out, filter 0.4s ease-in-out, transform 0.4s ease-in-out',
+                          filter: 'blur(0px)',
+                          transform: 'scale(1)',
+                          transition: 'opacity 0.4s ease-in-out',
+                          zIndex: 1,
                         }}
                         onLoad={() => onImageLoad(file.name)}
                         onError={() => onImageLoad(file.name)}

@@ -166,6 +166,8 @@ type FileInfo struct {
 	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
 	TmdbId   string `json:"tmdbId,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
+	PosterPath string `json:"posterPath,omitempty"`
+	Title    string `json:"title,omitempty"`
 	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
 	IsSourceFile bool `json:"isSourceFile,omitempty"`
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
@@ -289,6 +291,75 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, string) {
+	if tmdbID == "" {
+		return "", "", ""
+	}
+
+	cacheKey := "id:" + tmdbID + ":" + mediaType
+
+	if result, err := db.GetTmdbCache(cacheKey); err == nil && result != "" {
+		var tmdbData map[string]interface{}
+		if err := json.Unmarshal([]byte(result), &tmdbData); err == nil {
+			posterPath := ""
+			title := ""
+			resultMediaType := ""
+
+			if pp, ok := tmdbData["poster_path"].(string); ok {
+				posterPath = pp
+			}
+			if t, ok := tmdbData["title"].(string); ok {
+				title = t
+			}
+			if mt, ok := tmdbData["media_type"].(string); ok {
+				resultMediaType = mt
+			}
+
+			return posterPath, title, resultMediaType
+		}
+	}
+
+	return "", "", ""
+}
+
+func getTmdbDataFromCache(folderName string) (string, string, string) {
+	cacheKeys := []string{
+		folderName + "||movie",
+		folderName + "||tv",
+		folderName + "||",
+		folderName,
+		strings.ToLower(folderName) + "||movie",
+		strings.ToLower(folderName) + "||tv",
+		strings.ToLower(folderName) + "||",
+		strings.ToLower(folderName),
+	}
+
+	for _, cacheKey := range cacheKeys {
+		if result, err := db.GetTmdbCache(cacheKey); err == nil && result != "" {
+			var tmdbData map[string]interface{}
+			if err := json.Unmarshal([]byte(result), &tmdbData); err == nil {
+				posterPath := ""
+				title := ""
+				mediaType := ""
+
+				if pp, ok := tmdbData["poster_path"].(string); ok {
+					posterPath = pp
+				}
+				if t, ok := tmdbData["title"].(string); ok {
+					title = t
+				}
+				if mt, ok := tmdbData["media_type"].(string); ok {
+					mediaType = mt
+				}
+
+				return posterPath, title, mediaType
+			}
+		}
+	}
+
+	return "", "", ""
 }
 
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
@@ -474,6 +545,35 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				} else {
 					subDirTmdbID = content
 					fileInfo.TmdbId = subDirTmdbID
+				}
+			}
+
+			var posterPath, title, cachedMediaType string
+
+			if subDirTmdbID != "" && subDirMediaType != "" {
+				posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, subDirMediaType)
+			}
+
+			if posterPath == "" && subDirTmdbID != "" {
+				posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "movie")
+				if posterPath == "" {
+					posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "tv")
+				}
+			}
+
+			if posterPath == "" {
+				posterPath, title, cachedMediaType = getTmdbDataFromCache(entry.Name())
+			}
+
+			if posterPath != "" {
+				fileInfo.PosterPath = posterPath
+				fileInfo.Title = title
+				if subDirMediaType == "" && cachedMediaType != "" {
+					fileInfo.MediaType = cachedMediaType
+					subDirMediaType = cachedMediaType
+					if cachedMediaType == "tv" {
+						fileInfo.HasSeasonFolders = true
+					}
 				}
 			}
 

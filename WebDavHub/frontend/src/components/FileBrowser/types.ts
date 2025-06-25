@@ -15,6 +15,8 @@ export interface FileItem {
   isSeasonFolder?: boolean;
   tmdbId?: string;
   mediaType?: 'movie' | 'tv';
+  posterPath?: string;
+  title?: string;
   isSourceRoot?: boolean;
   isSourceFile?: boolean;
   isMediaFile?: boolean;
