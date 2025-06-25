@@ -3,15 +3,51 @@ Shared utility functions for media parsers.
 """
 
 import re
+import os
+import json
 from typing import Optional
 
 from MediaHub.utils.parser.patterns import FILE_EXTENSION_PATTERNS
+
+# Cache for keywords data
+_keywords_cache = None
+
+def _load_keywords():
+    """Load keywords from keywords.json file."""
+    global _keywords_cache
+    if _keywords_cache is not None:
+        return _keywords_cache
+
+    try:
+        keywords_path = os.path.join(os.path.dirname(__file__), '..', 'keywords.json')
+        with open(keywords_path, 'r', encoding='utf-8') as f:
+            _keywords_cache = json.load(f)
+            return _keywords_cache
+    except Exception:
+        # Fallback to empty dict if file not found
+        _keywords_cache = {'keywords': [], 'release_groups': []}
+        return _keywords_cache
+
+def _get_all_keywords():
+    """Get all keywords from keywords.json that should be removed from titles."""
+    keywords_data = _load_keywords()
+    keywords = keywords_data.get('keywords', [])
+
+    # Return all keywords as a set for faster lookup
+    return set(keyword for keyword in keywords if isinstance(keyword, str))
 
 
 def clean_title_string(title: str) -> str:
     """Clean and normalize a title string."""
     if not title:
         return ""
+
+    # Remove keywords from keywords.json from title
+    all_keywords = _get_all_keywords()
+    for keyword in all_keywords:
+        # Create pattern to match the keyword as a whole word, case-insensitive
+        pattern = r'\b' + re.escape(keyword) + r'\b'
+        title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
     protected_dots = []
     abbreviation_patterns = [
@@ -47,14 +83,15 @@ def clean_title_string(title: str) -> str:
     for placeholder, abbrev in protected_dots:
         title = title.replace(placeholder, abbrev)
 
-    technical_terms = [
-        r'\b\d{3,4}p\b', r'\bx264\b', r'\bx265\b', r'\bHEVC\b', r'\bAAC\b',
-        r'\bAC3\b', r'\bDTS\b', r'\bBluRay\b', r'\bWEB-DL\b', r'\bWEBRip\b',
-        r'\bHDTV\b', r'\bREMUX\b', r'\bREPACK\b', r'\bPROPER\b'
-    ]
+    keywords_data = _load_keywords()
+    technical_keywords = keywords_data.get('keywords', [])
 
-    for term in technical_terms:
-        title = re.sub(term, '', title, flags=re.IGNORECASE)
+    title = re.sub(r'\b\d{3,4}p\b', '', title, flags=re.IGNORECASE)
+
+    for keyword in technical_keywords:
+        if isinstance(keyword, str):
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
     title = re.sub(r'\s+', ' ', title).strip()
 

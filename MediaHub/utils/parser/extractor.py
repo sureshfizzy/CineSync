@@ -39,10 +39,6 @@ def _get_technical_keywords():
     # Convert to lowercase for case-insensitive matching
     technical_keywords = [kw.lower() for kw in keywords if isinstance(kw, str)]
 
-    # Add some additional technical terms that might not be in keywords.json
-    additional_terms = ['proper', 'uhd', 'bd', 'dual', 'remux', 'hybrid', 'web2l']
-    technical_keywords.extend(additional_terms)
-
     return set(technical_keywords)  # Use set for faster lookup
 
 @dataclass
@@ -451,7 +447,9 @@ def _classify_technical_term(term: str) -> Optional[str]:
         return 'resolution'
 
     # Quality source
-    if term_upper in ['BLURAY', 'WEB-DL', 'WEBDL', 'WEBRIP', 'WEB', 'HDTV', 'DVDRIP', 'REMUX', 'BD', 'BDRIP']:
+    keywords_data = _load_keywords()
+    quality_sources = [qs.lower() for qs in keywords_data.get('quality_sources', [])]
+    if term_upper.lower() in quality_sources:
         return 'quality'
 
     # Video codec - check for codec in hyphenated terms first
@@ -676,14 +674,18 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
             year_at_position = next((y for y in years if y['position'] == i), None)
             if year_at_position and not is_tv:
-                if year_at_position['context'] == 'title':
-                    title_end = i + 1
-                else:
-                    title_end = i
+                title_end = i
                 break
 
             technical_keywords = _get_technical_keywords()
-            if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
+            is_likely_title_word = (
+                i <= 2 and
+                not re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) and
+                not clean_part.lower() in technical_keywords
+            )
+
+            if not is_likely_title_word and (
+                re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
                 re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or
                 clean_part.lower() in technical_keywords or
                 re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or
@@ -711,23 +713,22 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
             year_at_position = next((y for y in years if y['position'] == i), None)
             if year_at_position:
-                # For parentheses years, stop at them for title extraction
-                if year_at_position['part'].startswith('('):
-                    tech_start = i
-                    break
-                # For regular years with 'technical' context, stop at them
-                elif year_at_position['context'] == 'technical':
-                    tech_start = i
-                    break
-                # For regular years with 'title' context, continue looking for tech terms
+                if len(years) >= 2:
+                    last_year_position = years[-1]['position']
+                    if i >= last_year_position:
+                        tech_start = i
+                        break
+                    else:
+                        year_position = i
+                        continue
                 else:
-                    year_position = i
-                    continue
+                    tech_start = i
+                    break
 
             # Check for technical terms and release group patterns
             elif (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or  # Resolution
                   re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution like 3840x2160
-                  clean_part.lower() in ['bluray', 'webrip', 'hdtv', 'x264', 'x265', 'hevc', 'blu-ray', 'jpn', 'dts-hdma', 'web-dl', 'lmhd', 'multi', 'vostfr', 'bd', 'dual'] or
+                  clean_part.lower() in _get_technical_keywords() or  # Use keywords.json
                   re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
                   re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
                   re.match(r'^--', clean_part) or  # Double dash patterns
@@ -798,12 +799,11 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
             else:
                 if len(years) >= 2:
                     second_year_position = years[1]['position']
-                    if i <= second_year_position:
+                    if i < second_year_position:
                         title_parts.append(str(year_value))
                     else:
                         break
                 else:
-                    title_parts.append(str(year_value))
                     break
         else:
             if clean_part.startswith('(') or clean_part.startswith('['):
@@ -818,7 +818,9 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 continue
 
             # Skip technical terms that shouldn't be in title
-            if re.match(r'^(Hi10P|10bit|8bit|HDR10?\+?|1080p|720p|480p|\d{3,4}x\d{3,4}|BluRay|BD|WEBRip|HDTV|x264|x265|HEVC|FLAC|DTS|AC3|JPN|CUSTOM|MULTi|VOSTFR|Uncensored|RM|AI[_-]?UPSCALE|DUAL)$', clean_part, re.IGNORECASE):
+            technical_keywords = _get_technical_keywords()
+            if (re.match(r'^(Hi10P|10bit|8bit|HDR10?\+?|1080p|720p|480p|\d{3,4}x\d{3,4}|AI[_-]?UPSCALE)$', clean_part, re.IGNORECASE) or
+                clean_part.lower() in technical_keywords):
                 continue
 
             # Skip generic quality indicators with numbers

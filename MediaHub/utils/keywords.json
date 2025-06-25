@@ -1,13 +1,18 @@
 {
+    "quality_sources": [
+        "BluRay", "Blu-ray", "BD", "BDRip", "BRRip", "WEB-DL", "WEBDL", "WebRip", "WEBRip",
+        "HDTV", "DVDRip", "DVDRIP", "REMUX", "BDRemux", "HYBRID"
+    ],
     "keywords": [
-        "Unrated", "Remastered", "IMAX", "Extended", "BDRemux", "ITA", "ENG", "x265", "H265", "HDR10",
+        "Unrated", "Remastered", "IMAX", "Extended", "Theatrical", "Directors", "Director's", "Ultimate", "Special", "Final", "Cut", "Edition", "Limited", "Collector's", "Anniversary", "Definitive", "Uncensored", "Complete", "BDRemux", "ITA", "ENG", "x265", "H265", "HDR10",
         "WebDl", "Rip", "4K", "HDR", "DV", "2160p", "BDRip", "AC3", "5.1", "Sub", "NAHOM", "mkv",
         "www", "Torrenting", "com", "TamilMV", "Mp4", "Series", "HorribleRips", "mp4", "[Anime Time]", "[Dual Audio]", "[1080p]", "[HEVC 10bit]", "[AAC]", "[Batch]",
         "[Erai-raws]", "[720p]", "[Multiple Subtitle]", "[ENG]", "[POR-BR]", "[SPA-LA]", "[SPA]", "[ARA]", "[FRE]", "[GER]", "[ITA]", "[RUS]",
         "iobop", " DTS", "x2ua", "bluray", "cz", "Sample", "flhd", "part", "FullHD", "1080p", "QHD", "QuadHD", "1440p", "HD", "High Definition",
         "Standard Definition", "SuperHD", "Blu-ray", "H.264", "H.265","AC-3", "EAC3", "Dolby Atmos", "Surround Sound", "DTS-HD", "Lossless", "HEVC",
         "UltraHD", "UHD", "60fps", "120fps", "24fps", "48fps", "HDR10+", "Dolby Vision", "FLAC", "TrueHD", "AAC", "ProRes", "WebRip", "WEB-DL",
-        "WEBDL", "WEBRip", "BRRip", "720p", "1080p", "2160p", "UltraHD", "UHD", "Subtitles", "Multi-Subs", "ENG-SUB",
+        "WEBDL", "WEBRip", "BRRip", "720p", "1080p", "2160p", "UltraHD", "UHD", "Subtitles", "Multi-Subs", "ENG-SUB", "HDTV", "REMUX",
+        "PROPER", "BD", "DUAL", "HYBRID", "WEB2L", "JPG", "DTS-HDMA", "LMHD", "MULTI", "VOSTFR", "Blu-ray", "DVDRIP", "BDRIP",
         "Spanish-Subs", "Portuguese-Subs", "RUS-SUB", "French-Subs", "Multi-audio", "Full Season", "Complete Season",
         "EP1", "EP2", "Episodic", "4K-UHD", "Blu-Ray", "Lossless Audio", "Multi-language", "HEVC-10bit", "x264",
         "Yify", "NTSC", "PAL", "Avi", "RAR", "Torrent", "Magnet Link", "AC3 5.1", "English Dub", "Multi-Dub",
