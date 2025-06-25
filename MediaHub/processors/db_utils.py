@@ -185,7 +185,8 @@ def initialize_db(conn):
             log_message("Added error_message column to processed_files table.", level="INFO")
 
         if "processed_at" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN processed_at TIMESTAMP")
+            cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
             log_message("Added processed_at column to processed_files table.", level="INFO")
 
         # Create indexes
