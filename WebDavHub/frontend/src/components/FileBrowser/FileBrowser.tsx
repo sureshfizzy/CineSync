@@ -68,6 +68,7 @@ export default function FileBrowser() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [page, setPage] = useState(1);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
@@ -87,22 +88,15 @@ export default function FileBrowser() {
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
   const tmdbProcessingRef = useRef<{ [key: string]: boolean }>({});
 
-  // TMDB related states (folderHasAllowed removed - no longer needed)
-
   const filteredFiles = useMemo(() => {
     let result = files;
-
-    const searchTerm = search.trim().toLowerCase();
-    if (searchTerm) {
-      result = result.filter(f => f.name.toLowerCase().includes(searchTerm));
-    }
 
     if (selectedLetter) {
       result = filterFilesByLetter(result, selectedLetter);
     }
 
     return sortFiles(result, sortOption);
-  }, [files, search, selectedLetter, sortOption]);
+  }, [files, selectedLetter, sortOption]);
 
   const [totalPages, setTotalPages] = useState(1);
 
@@ -151,17 +145,19 @@ export default function FileBrowser() {
     };
   }, []);
 
-
-
-  const fetchFiles = async (path: string, pageNum: number = page) => {
-    setLoading(true);
+  const fetchFiles = async (path: string, pageNum: number = page, searchQuery?: string, isSearchOperation: boolean = false) => {
+    if (!isSearchOperation) {
+      setLoading(true);
+    }
     setError('');
     try {
-      const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE);
+      const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE, searchQuery);
 
       if (response.headers && response.headers['x-needs-configuration'] === 'true') {
         setFiles([]);
-        setLoading(false);
+        if (!isSearchOperation) {
+          setLoading(false);
+        }
         return;
       }
 
@@ -200,21 +196,40 @@ export default function FileBrowser() {
       setError('Failed to fetch files');
       setFiles([]);
     } finally {
-      setLoading(false);
+      if (!isSearchOperation) {
+        setLoading(false);
+      }
     }
   };
 
   // Create a debounced refresh function for cases where full refresh is needed
   const debouncedRefresh = useCallback(
     debounce((path: string) => {
-      fetchFiles(path);
+      fetchFiles(path, page, search);
     }, 1000),
-    []
+    [page, search]
   );
 
   useEffect(() => {
-    fetchFiles(currentPath);
+    fetchFiles(currentPath, page, search);
   }, [currentPath]);
+
+  useEffect(() => {
+    setIsSearching(true);
+
+    const timeoutId = setTimeout(() => {
+      if (page !== 1) {
+        setPage(1);
+      }
+      fetchFiles(currentPath, 1, search, true);
+      setIsSearching(false);
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      setIsSearching(false);
+    };
+  }, [search]); // Only search changes trigger this
 
   // Helper function to check if a symlink affects the current directory
   const symlinkAffectsCurrentDirectory = useCallback((data: any) => {
@@ -307,7 +322,7 @@ export default function FileBrowser() {
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
-    fetchFiles(currentPath, value);
+    fetchFiles(currentPath, value, search, search.trim().length > 0);
   };
 
   const handleLetterClick = (letter: string | null) => {
@@ -435,6 +450,7 @@ export default function FileBrowser() {
         search={search}
         view={view}
         sortOption={sortOption}
+        isSearching={isSearching}
         onPathClick={handlePathClick}
         onUpClick={handleUpClick}
         onSearchChange={setSearch}

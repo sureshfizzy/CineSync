@@ -633,11 +633,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setSkipResultOpen(true);
 
     if (!currentFilePath) {
-      console.error('No file path provided for skip operation');
       return;
     }
-
-
 
     const disableMonitor = true;
     const requestPayload = {
@@ -656,11 +653,29 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         body: JSON.stringify(requestPayload)
       });
 
-      if (!response.ok) {
-        console.error('Skip operation failed:', response.statusText);
+      if (!response.body) {
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(Boolean);
+          lines.forEach(line => {
+            try {
+              JSON.parse(line);
+            } catch (parseError) {
+            }
+          });
+        }
       }
     } catch (error) {
-      console.error('Error during skip operation:', error);
     }
   };
 

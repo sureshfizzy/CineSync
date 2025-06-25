@@ -14,7 +14,7 @@ interface FileResponse {
   headers?: Record<string, string>;
 }
 
-export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100): Promise<FileResponse> => {
+export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100, search?: string): Promise<FileResponse> => {
   const headers: Record<string, string> = {};
   if (checkTmdb) {
     headers['X-Check-Tmdb'] = 'true';
@@ -23,6 +23,9 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
   const params = new URLSearchParams();
   params.append('page', page.toString());
   params.append('limit', limit.toString());
+  if (search && search.trim()) {
+    params.append('search', search.trim());
+  }
 
   const response = await axios.get<FileItem[]>('/api/files' + path + '?' + params.toString(), { headers });
 
@@ -40,13 +43,17 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
   };
 };
 
-export const fetchSourceFiles = async (path: string, sourceIndex?: number, page: number = 1, limit: number = 100): Promise<FileResponse> => {
+export const fetchSourceFiles = async (path: string, sourceIndex?: number, page: number = 1, limit: number = 100, search?: string): Promise<FileResponse> => {
   const params = new URLSearchParams();
   params.append('page', page.toString());
   params.append('limit', limit.toString());
 
   if (sourceIndex !== undefined) {
     params.append('source', sourceIndex.toString());
+  }
+
+  if (search && search.trim()) {
+    params.append('search', search.trim());
   }
 
   const response = await axios.get<FileItem[]>('/api/source-browse' + path + '?' + params.toString());

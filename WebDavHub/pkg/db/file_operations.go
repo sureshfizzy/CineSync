@@ -49,6 +49,7 @@ func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
 	statusFilter := r.URL.Query().Get("status")
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	limit := 50
 	if limitStr != "" {
@@ -65,7 +66,7 @@ func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get file operations from MediaHub database
-	operations, total, err := getFileOperationsFromMediaHub(limit, offset, statusFilter)
+	operations, total, err := getFileOperationsFromMediaHub(limit, offset, statusFilter, searchQuery)
 	if err != nil {
 		logger.Warn("Failed to get file operations: %v", err)
 		http.Error(w, "Failed to retrieve file operations", http.StatusInternalServerError)
@@ -233,7 +234,7 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 
 
 // getFileOperationsFromMediaHub reads file operations from MediaHub database
-func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]FileOperation, int, error) {
+func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery string) ([]FileOperation, int, error) {
 	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
 
 	// Check if database exists
@@ -271,13 +272,24 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 	if statusFilter == "deleted" {
 		// Handle deletions separately
 		var totalDeletions int
-		err = mediaHubDB.QueryRow("SELECT COUNT(*) FROM file_deletions").Scan(&totalDeletions)
+		var countQuery string
+		var countArgs []interface{}
+
+		if searchQuery != "" {
+			searchPattern := "%" + searchQuery + "%"
+			countQuery = "SELECT COUNT(*) FROM file_deletions WHERE (source_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)"
+			countArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern}
+		} else {
+			countQuery = "SELECT COUNT(*) FROM file_deletions"
+		}
+
+		err = mediaHubDB.QueryRow(countQuery, countArgs...).Scan(&totalDeletions)
 		if err != nil {
 			logger.Warn("Failed to get total deletions count: %v", err)
 			totalDeletions = 0
 		}
 
-		deletions, err := getDeletionRecordsWithPagination(mediaHubDB, limit, offset)
+		deletions, err := getDeletionRecordsWithPagination(mediaHubDB, limit, offset, searchQuery)
 		if err != nil {
 			logger.Warn("Failed to get deletion records: %v", err)
 			return []FileOperation{}, 0, nil
@@ -288,21 +300,38 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 
 	if statusFilter == "failed" {
 		// Handle failures from processed_files table
-		failuresQuery := `
-			SELECT COUNT(*) FROM processed_files
-			WHERE reason IS NOT NULL AND reason != '' AND
-				  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
-					   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
-					   LOWER(reason) LIKE '%adult content%')
-		`
+		var failuresQuery string
+		var countArgs []interface{}
+
+		if searchQuery != "" {
+			searchPattern := "%" + searchQuery + "%"
+			failuresQuery = `
+				SELECT COUNT(*) FROM processed_files
+				WHERE reason IS NOT NULL AND reason != '' AND
+					  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+						   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+						   LOWER(reason) LIKE '%adult content%') AND
+					  (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)
+			`
+			countArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern}
+		} else {
+			failuresQuery = `
+				SELECT COUNT(*) FROM processed_files
+				WHERE reason IS NOT NULL AND reason != '' AND
+					  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+						   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+						   LOWER(reason) LIKE '%adult content%')
+			`
+		}
+
 		var totalFailures int
-		err = mediaHubDB.QueryRow(failuresQuery).Scan(&totalFailures)
+		err = mediaHubDB.QueryRow(failuresQuery, countArgs...).Scan(&totalFailures)
 		if err != nil {
 			logger.Warn("Failed to get failures count: %v", err)
 			totalFailures = 0
 		}
 
-		failures, err := getFailureRecordsWithPagination(mediaHubDB, limit, offset)
+		failures, err := getFailureRecordsWithPagination(mediaHubDB, limit, offset, searchQuery)
 		if err != nil {
 			logger.Warn("Failed to get failure records: %v", err)
 			return []FileOperation{}, 0, nil
@@ -319,6 +348,17 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter string) ([]Fi
 		case "skipped":
 			whereClause = "WHERE reason IS NOT NULL AND reason != '' AND (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR LOWER(reason) LIKE '%adult content%')"
 		}
+	}
+
+	// Add search filtering if search query is provided
+	if searchQuery != "" {
+		searchPattern := "%" + searchQuery + "%"
+		if whereClause == "" {
+			whereClause = "WHERE (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)"
+		} else {
+			whereClause += " AND (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)"
+		}
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 
 	// Get total count for filtered results
@@ -707,21 +747,43 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 }
 
 // getDeletionRecordsWithPagination retrieves deletion records with pagination
-func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int) ([]FileOperation, error) {
-	query := `
-		SELECT
-			source_path,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(season_number, '') as season_number,
-			COALESCE(reason, '') as reason,
-			deleted_at
-		FROM file_deletions
-		ORDER BY deleted_at DESC
-		LIMIT ? OFFSET ?
-	`
+func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery string) ([]FileOperation, error) {
+	var query string
+	var queryArgs []interface{}
 
-	rows, err := db.Query(query, limit, offset)
+	if searchQuery != "" {
+		searchPattern := "%" + searchQuery + "%"
+		query = `
+			SELECT
+				source_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(reason, '') as reason,
+				deleted_at
+			FROM file_deletions
+			WHERE (source_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)
+			ORDER BY deleted_at DESC
+			LIMIT ? OFFSET ?
+		`
+		queryArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern, limit, offset}
+	} else {
+		query = `
+			SELECT
+				source_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(reason, '') as reason,
+				deleted_at
+			FROM file_deletions
+			ORDER BY deleted_at DESC
+			LIMIT ? OFFSET ?
+		`
+		queryArgs = []interface{}{limit, offset}
+	}
+
+	rows, err := db.Query(query, queryArgs...)
 	if err != nil {
 		logger.Warn("Failed to query file_deletions table: %v", err)
 		return []FileOperation{}, nil
@@ -780,28 +842,55 @@ func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int) ([]FileOper
 	return operations, nil
 }
 
-func getFailureRecordsWithPagination(db *sql.DB, limit, offset int) ([]FileOperation, error) {
+func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery string) ([]FileOperation, error) {
 	var operations []FileOperation
 
-	failuresQuery := `
-		SELECT
-			file_path,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(season_number, '') as season_number,
-			COALESCE(reason, '') as reason,
-			COALESCE(error_message, '') as error_message,
-			COALESCE(processed_at, '') as processed_at
-		FROM processed_files
-		WHERE reason IS NOT NULL AND reason != '' AND
-			  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
-				   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
-				   LOWER(reason) LIKE '%adult content%')
-		ORDER BY processed_at DESC
-		LIMIT ? OFFSET ?
-	`
+	var failuresQuery string
+	var queryArgs []interface{}
 
-	rows, err := db.Query(failuresQuery, limit, offset)
+	if searchQuery != "" {
+		searchPattern := "%" + searchQuery + "%"
+		failuresQuery = `
+			SELECT
+				file_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(reason, '') as reason,
+				COALESCE(error_message, '') as error_message,
+				COALESCE(processed_at, '') as processed_at
+			FROM processed_files
+			WHERE reason IS NOT NULL AND reason != '' AND
+				  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+					   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+					   LOWER(reason) LIKE '%adult content%') AND
+				  (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)
+			ORDER BY processed_at DESC
+			LIMIT ? OFFSET ?
+		`
+		queryArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern, limit, offset}
+	} else {
+		failuresQuery = `
+			SELECT
+				file_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(reason, '') as reason,
+				COALESCE(error_message, '') as error_message,
+				COALESCE(processed_at, '') as processed_at
+			FROM processed_files
+			WHERE reason IS NOT NULL AND reason != '' AND
+				  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+					   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+					   LOWER(reason) LIKE '%adult content%')
+			ORDER BY processed_at DESC
+			LIMIT ? OFFSET ?
+		`
+		queryArgs = []interface{}{limit, offset}
+	}
+
+	rows, err := db.Query(failuresQuery, queryArgs...)
 	if err != nil {
 		logger.Warn("Failed to query processed_files for failures: %v", err)
 		return operations, err

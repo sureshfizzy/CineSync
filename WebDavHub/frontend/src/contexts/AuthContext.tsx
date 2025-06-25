@@ -75,7 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             '/api/database/search',
             '/api/database/export',
             '/api/stats',
-            '/api/jobs'
+            '/api/jobs',
+            '/api/python-bridge/terminate'
           ];
 
           const isAuthOptional = authDisabledEndpoints.some(endpoint =>
@@ -118,7 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             '/api/database/search',
             '/api/database/export',
             '/api/stats',
-            '/api/jobs'
+            '/api/jobs',
+            '/api/python-bridge/terminate'
           ];
 
           const isAuthOptional = authOptionalEndpoints.some(endpoint =>

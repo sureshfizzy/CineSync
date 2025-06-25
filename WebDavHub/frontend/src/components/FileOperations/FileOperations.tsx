@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText } from '@mui/material';
 import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,7 +9,6 @@ import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 import { FileItem } from '../FileBrowser/types';
 import ModifyDialog from '../FileBrowser/ModifyDialog/ModifyDialog';
 
-const MotionCard = motion(Card);
 const MotionFab = motion(Fab);
 
 interface FileOperation {
@@ -42,9 +41,10 @@ function TabPanel(props: TabPanelProps) {
       hidden={value !== index}
       id={`file-operations-tabpanel-${index}`}
       aria-labelledby={`file-operations-tab-${index}`}
+      style={{ display: value === index ? 'block' : 'none' }}
       {...other}
     >
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
+      <Box sx={{ pt: 3 }}>{children}</Box>
     </div>
   );
 }
@@ -56,17 +56,7 @@ function a11yProps(index: number) {
   };
 }
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      delay: i * 0.1,
-      duration: 0.5,
-    },
-  }),
-};
+
 
 // Remove unused interface
 
@@ -74,11 +64,12 @@ function FileOperations() {
   const [mainTabValue, setMainTabValue] = useState(0);
   const [tabValue, setTabValue] = useState(0);
   const [operations, setOperations] = useState<FileOperation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [recordsPerPage] = useState(50);
+  const [recordsPerPage] = useState(25);
   const [totalOperations, setTotalOperations] = useState(0);
   const [statusCounts, setStatusCounts] = useState({
     created: 0,
@@ -86,6 +77,8 @@ function FileOperations() {
     skipped: 0,
     deleted: 0,
   });
+
+
 
   // Source File Browser state
   const [sourceFiles, setSourceFiles] = useState<FileItem[]>([]);
@@ -111,6 +104,11 @@ function FileOperations() {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSourceSearching, setIsSourceSearching] = useState(false);
+
+  const searchQueryRef = useRef('');
+  const sourceSearchQueryRef = useRef('');
 
   // Bulk delete state
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
@@ -121,47 +119,31 @@ function FileOperations() {
 
   const ITEMS_PER_PAGE = 50;
 
-  // Filtered operations
-  const filteredOperations = useMemo(() => {
-    if (!searchQuery.trim() || tabValue === 0) return operations;
 
-    const query = searchQuery.toLowerCase();
-    return operations.filter(op =>
-      op.fileName.toLowerCase().includes(query) ||
-      op.filePath.toLowerCase().includes(query) ||
-      (op.destinationPath && op.destinationPath.toLowerCase().includes(query)) ||
-      (op.reason && op.reason.toLowerCase().includes(query)) ||
-      (op.error && op.error.toLowerCase().includes(query)) ||
-      op.type.toLowerCase().includes(query)
-    );
-  }, [operations, searchQuery, tabValue]);
 
-  // Filtered source files
-  const filteredSourceFiles = useMemo(() => {
-    if (!sourceSearchQuery.trim() || tabValue !== 0) return sourceFiles;
+  const filteredSourceFiles = sourceFiles;
 
-    const query = sourceSearchQuery.toLowerCase();
-    return sourceFiles.filter(file =>
-      file.name.toLowerCase().includes(query) ||
-      (file.path && file.path.toLowerCase().includes(query)) ||
-      (file.fullPath && file.fullPath.toLowerCase().includes(query)) ||
-      file.type.toLowerCase().includes(query)
-    );
-  }, [sourceFiles, sourceSearchQuery, tabValue]);
-
-  const fetchSourceFilesData = useCallback(async (pageNum: number = 1, sourceIndexFilter?: number) => {
+  const fetchSourceFilesData = useCallback(async (pageNum?: number, sourceIndexFilter?: number) => {
     setSourceLoading(true);
     setSourceError('');
     try {
+      const actualPageNum = pageNum || sourcePage;
+      const actualSourceIndex = sourceIndexFilter !== undefined ? sourceIndexFilter : sourceIndex;
+
       const params = new URLSearchParams({
         limit: ITEMS_PER_PAGE.toString(),
-        offset: ((pageNum - 1) * ITEMS_PER_PAGE).toString(),
+        offset: ((actualPageNum - 1) * ITEMS_PER_PAGE).toString(),
         activeOnly: 'true',
         mediaOnly: 'false'
       });
 
-      if (sourceIndexFilter !== undefined) {
-        params.append('sourceIndex', sourceIndexFilter.toString());
+      if (actualSourceIndex !== undefined) {
+        params.append('sourceIndex', actualSourceIndex.toString());
+      }
+
+      const currentSearch = sourceSearchQueryRef.current;
+      if (currentSearch && currentSearch.trim()) {
+        params.append('search', currentSearch.trim());
       }
 
       const response = await axios.get(`/api/database/source-files?${params.toString()}`);
@@ -256,44 +238,44 @@ function FileOperations() {
       setSourceFiles([]);
     } finally {
       setSourceLoading(false);
+      setInitialLoading(false);
     }
-  }, []);
+  }, [sourcePage, sourceIndex]);
 
-  const fetchFileOperations = useCallback(async () => {
+  const fetchFileOperations = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
-      const offset = (currentPage - 1) * recordsPerPage;
-
       if (tabValue === 0) {
-        setOperations([]);
-        setTotalOperations(0);
-        setStatusCounts({
-          created: 0,
-          failed: 0,
-          skipped: 0,
-          deleted: 0,
-        });
-        setError('');
-        setLastUpdated(new Date());
-        setLoading(false);
-        fetchSourceFilesData(sourcePage, sourceIndex);
         return;
       }
 
+      if (showLoading) {
+        setLoading(true);
+      }
+
+      const currentSearch = searchQueryRef.current;
+      const offset = (currentPage - 1) * recordsPerPage;
       const statusMap = ['created', 'failed', 'skipped', 'deleted'];
       const statusFilter = statusMap[tabValue - 1];
+
+      if (!statusFilter) {
+        return;
+      }
 
       const params: any = {
         limit: recordsPerPage,
         offset: offset,
         status: statusFilter,
+        lightweight: true,
       };
+
+      if (currentSearch && currentSearch.trim()) {
+        params.search = currentSearch.trim();
+      }
 
       const response = await axios.get('/api/file-operations', { params });
       const data = response.data;
 
-      const operations = data.operations || [];
-      setOperations(operations);
+      setOperations(data.operations || []);
       setTotalOperations(data.total || 0);
       setStatusCounts(data.statusCounts || {
         created: 0,
@@ -303,26 +285,77 @@ function FileOperations() {
       });
       setError('');
       setLastUpdated(new Date());
+      setInitialLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch file operations');
       setOperations([]);
       setTotalOperations(0);
+      setInitialLoading(false);
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  }, [currentPage, recordsPerPage, tabValue]);
+  }, [tabValue, currentPage, recordsPerPage]);
 
-  useEffect(() => {
-    fetchFileOperations();
-  }, [fetchFileOperations]);
 
+
+  // Initial load effect
   useEffect(() => {
     if (tabValue === 0) {
       fetchSourceFilesData(sourcePage, sourceIndex);
+    } else {
+      fetchFileOperations(false);
     }
-  }, [fetchSourceFilesData, sourceIndex, sourcePage, tabValue]);
+  }, []);
 
-  // Helper function to handle operation updates (add, update, or move between tabs)
+
+
+  useEffect(() => {
+    if (tabValue === 0) return;
+
+    searchQueryRef.current = searchQuery;
+    setIsSearching(true);
+
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    } else {
+      fetchFileOperations(false);
+      setIsSearching(false);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (tabValue === 0) return;
+    fetchFileOperations(false);
+  }, [currentPage, recordsPerPage]);
+
+  // Separate effect for tab changes to ensure proper data loading
+  useEffect(() => {
+    if (tabValue > 0) {
+      fetchFileOperations(false);
+    }
+  }, [tabValue]);
+
+  useEffect(() => {
+    if (tabValue !== 0) return;
+    fetchSourceFilesData(sourcePage, sourceIndex);
+  }, [sourcePage, sourceIndex]);
+
+  useEffect(() => {
+    if (tabValue !== 0) return;
+
+    sourceSearchQueryRef.current = sourceSearchQuery;
+    setIsSourceSearching(true);
+
+    if (sourcePage !== 1) {
+      setSourcePage(1);
+    } else {
+      fetchSourceFilesData(1, sourceIndex);
+      setIsSourceSearching(false);
+    }
+  }, [sourceSearchQuery]);
+
   const handleOperationUpdate = useCallback((newOperation: FileOperation) => {
     const statusMap = ['created', 'failed', 'skipped', 'deleted'];
     const newOperationTabIndex = statusMap.indexOf(newOperation.status) + 1;
@@ -432,6 +465,11 @@ function FileOperations() {
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
     setCurrentPage(1);
+    setInitialLoading(false);
+
+    if (newValue === 0) {
+      fetchSourceFilesData(sourcePage, sourceIndex);
+    }
   };
 
   const handleMainTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -456,14 +494,11 @@ function FileOperations() {
   const handleModifyDialogClose = () => {
     setModifyDialogOpen(false);
     setCurrentFileForProcessing('');
-    // Refresh data after a short delay to ensure SSE events are processed
-    setTimeout(() => {
-      if (tabValue === 0) {
-        fetchSourceFilesData(sourcePage, sourceIndex);
-      } else {
-        fetchFileOperations();
-      }
-    }, 1500);
+    if (tabValue === 0) {
+      fetchSourceFilesData(sourcePage, sourceIndex);
+    } else {
+      fetchFileOperations(false);
+    }
   };
 
   const handleBulkDeleteSkippedFiles = async () => {
@@ -487,7 +522,7 @@ function FileOperations() {
         }
 
         // Refresh data
-        fetchFileOperations();
+        fetchFileOperations(false);
 
         setBulkDeleteDialogOpen(false);
       }
@@ -780,16 +815,12 @@ function FileOperations() {
 
 
 
-  const renderMobileCard = (file: FileOperation, index: number) => {
+  const renderMobileCard = React.useCallback((file: FileOperation, _index: number) => {
     const isExpanded = expandedCards.has(file.id);
 
     return (
-      <MotionCard
+      <Card
         key={file.id}
-        custom={index}
-        variants={cardVariants}
-        initial="hidden"
-        animate="visible"
         sx={{
           mb: 1.5,
           borderRadius: 3,
@@ -1010,9 +1041,9 @@ function FileOperations() {
             )}
           </AnimatePresence>
         </CardContent>
-      </MotionCard>
+      </Card>
     );
-  };
+  }, [expandedCards, theme]);
 
   const renderFileTable = (files: FileOperation[], emptyMessage: string) => {
     if (files.length === 0) {
@@ -1045,14 +1076,19 @@ function FileOperations() {
     // Card layout (preferred for all screen sizes)
     return (
       <Box sx={{ px: { xs: 0, sm: 1, md: 2 } }}>
-        <AnimatePresence>
-          {files.map((file, index) => renderMobileCard(file, index))}
-        </AnimatePresence>
+        {files.length > 20 ? (
+          // Disable animations for large lists to improve performance
+          files.map((file, index) => renderMobileCard(file, index))
+        ) : (
+          <AnimatePresence>
+            {files.map((file, index) => renderMobileCard(file, index))}
+          </AnimatePresence>
+        )}
       </Box>
     );
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <Box
         sx={{
@@ -1135,7 +1171,7 @@ function FileOperations() {
                   if (tabValue === 0) {
                     fetchSourceFilesData(sourcePage, sourceIndex);
                   } else {
-                    fetchFileOperations();
+                    fetchFileOperations(true);
                   }
                 }}
                 disabled={loading}
@@ -1492,11 +1528,15 @@ function FileOperations() {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{
-                    color: sourceSearchQuery ? 'primary.main' : 'text.secondary',
-                    fontSize: { xs: 18, sm: 20 },
-                    transition: 'color 0.2s ease'
-                  }} />
+                  {isSourceSearching ? (
+                    <CircularProgress size={18} sx={{ color: 'primary.main' }} />
+                  ) : (
+                    <SearchIcon sx={{
+                      color: sourceSearchQuery ? 'primary.main' : 'text.secondary',
+                      fontSize: { xs: 18, sm: 20 },
+                      transition: 'color 0.2s ease'
+                    }} />
+                  )}
                 </InputAdornment>
               ),
               sx: {
@@ -1554,11 +1594,15 @@ function FileOperations() {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{
-                    color: searchQuery ? 'primary.main' : 'text.secondary',
-                    fontSize: { xs: 18, sm: 20 },
-                    transition: 'color 0.2s ease'
-                  }} />
+                  {isSearching ? (
+                    <CircularProgress size={18} sx={{ color: 'primary.main' }} />
+                  ) : (
+                    <SearchIcon sx={{
+                      color: searchQuery ? 'primary.main' : 'text.secondary',
+                      fontSize: { xs: 18, sm: 20 },
+                      transition: 'color 0.2s ease'
+                    }} />
+                  )}
                 </InputAdornment>
               ),
               sx: {
@@ -1612,7 +1656,7 @@ function FileOperations() {
               label={
                 tabValue === 0
                   ? `${filteredSourceFiles.length} files found`
-                  : `${filteredOperations.length} operations found`
+                  : `${operations.length} operations found`
               }
               sx={{
                 bgcolor: alpha(theme.palette.primary.main, 0.1),
@@ -1831,13 +1875,9 @@ function FileOperations() {
 
                   {/* Source files list */}
                   <AnimatePresence>
-                    {filteredSourceFiles.map((file, index) => (
-                    <MotionCard
+                    {filteredSourceFiles.map((file, _index) => (
+                    <Card
                       key={file.name}
-                      custom={index}
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
                       sx={{
                         mb: 1.5,
                         borderRadius: 3,
@@ -1986,7 +2026,7 @@ function FileOperations() {
                           )}
                         </Box>
                       </CardContent>
-                    </MotionCard>
+                    </Card>
                     ))}
                   </AnimatePresence>
                 </>
@@ -2003,10 +2043,18 @@ function FileOperations() {
                 onChange={(_, newPage) => setSourcePage(newPage)}
                 color="primary"
                 size={isMobile ? "small" : "medium"}
+                siblingCount={isMobile ? 0 : 1}
+                boundaryCount={isMobile ? 1 : 1}
                 sx={{
                   '& .MuiPaginationItem-root': {
                     borderRadius: 2,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    minWidth: { xs: 28, sm: 32 },
+                    height: { xs: 28, sm: 32 },
                   },
+                  '& .MuiPagination-ul': {
+                    gap: { xs: 0.25, sm: 0.5 }
+                  }
                 }}
               />
             </Box>
@@ -2015,7 +2063,15 @@ function FileOperations() {
           {/* Summary */}
           {filteredSourceFiles.length > 0 && (
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                  textAlign: 'center',
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                }}
+              >
                 Showing {filteredSourceFiles.length} of {sourceTotalFiles.toLocaleString()} items
                 {sourceSearchQuery && ` (filtered)`}
               </Typography>
@@ -2024,38 +2080,71 @@ function FileOperations() {
         </Box>
       </TabPanel>
 
-      <TabPanel value={tabValue} index={1}>
-        {renderFileTable(filteredOperations, searchQuery ? 'No created files match your search' : 'No files created yet')}
-      </TabPanel>
+      {tabValue === 1 && (
+        <TabPanel value={tabValue} index={1}>
+          {renderFileTable(operations, searchQuery ? 'No created files match your search' : 'No files created yet')}
+        </TabPanel>
+      )}
 
-      <TabPanel value={tabValue} index={2}>
-        {renderFileTable(filteredOperations, searchQuery ? 'No failed operations match your search' : 'No failed file operations')}
-      </TabPanel>
+      {tabValue === 2 && (
+        <TabPanel value={tabValue} index={2}>
+          {renderFileTable(operations, searchQuery ? 'No failed operations match your search' : 'No failed file operations')}
+        </TabPanel>
+      )}
 
-      <TabPanel value={tabValue} index={3}>
-        {renderFileTable(filteredOperations, searchQuery ? 'No skipped files match your search' : 'No skipped files')}
-      </TabPanel>
+      {tabValue === 3 && (
+        <TabPanel value={tabValue} index={3}>
+          {renderFileTable(operations, searchQuery ? 'No skipped files match your search' : 'No skipped files')}
+        </TabPanel>
+      )}
 
-      <TabPanel value={tabValue} index={4}>
-        {renderFileTable(filteredOperations, searchQuery ? 'No deleted files match your search' : 'No deleted files')}
-      </TabPanel>
+      {tabValue === 4 && (
+        <TabPanel value={tabValue} index={4}>
+          {renderFileTable(operations, searchQuery ? 'No deleted files match your search' : 'No deleted files')}
+        </TabPanel>
+      )}
 
       {/* Pagination and Summary for Operations */}
-      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+      <Box sx={{
+        mt: 3,
+        display: 'flex',
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: { xs: 2, sm: 3 }
+      }}>
         {Math.ceil(totalOperations / recordsPerPage) > 1 && (
           <Pagination
             count={Math.ceil(totalOperations / recordsPerPage)}
             page={currentPage}
             onChange={(_, page) => setCurrentPage(page)}
+            color="primary"
+            size={isMobile ? "small" : "medium"}
+            siblingCount={isMobile ? 0 : 1}
+            boundaryCount={isMobile ? 1 : 1}
             sx={{
               '& .MuiPaginationItem-root': {
                 borderRadius: 2,
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                minWidth: { xs: 28, sm: 32 },
+                height: { xs: 28, sm: 32 },
               },
+              '& .MuiPagination-ul': {
+                gap: { xs: 0.25, sm: 0.5 }
+              }
             }}
           />
         )}
-        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-          Showing {filteredOperations.length} of {totalOperations.toLocaleString()} operations
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            whiteSpace: { xs: 'normal', sm: 'nowrap' },
+            textAlign: 'center',
+            fontSize: { xs: '0.75rem', sm: '0.875rem' }
+          }}
+        >
+          Showing {operations.length} of {totalOperations.toLocaleString()} operations
           {searchQuery && ` (filtered)`}
         </Typography>
       </Box>
@@ -2100,7 +2189,7 @@ function FileOperations() {
               <MotionFab
                 color="primary"
                 aria-label="refresh"
-                onClick={fetchFileOperations}
+                onClick={() => fetchFileOperations(true)}
                 disabled={loading}
                 sx={{
                   position: 'fixed',

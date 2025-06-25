@@ -327,6 +327,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse search parameter
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
+
 	dir := filepath.Join(rootDir, path)
 	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 	entries, err := os.ReadDir(dir)
@@ -531,6 +534,18 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		files = append(files, fileInfo)
 	}
 
+	// Apply search filtering if search query is provided
+	if searchQuery != "" {
+		var filteredFiles []FileInfo
+		searchLower := strings.ToLower(searchQuery)
+		for _, file := range files {
+			if strings.Contains(strings.ToLower(file.Name), searchLower) {
+				filteredFiles = append(filteredFiles, file)
+			}
+		}
+		files = filteredFiles
+	}
+
 	// Sort files: directories first, then alphabetically
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].Type == "directory" && files[j].Type != "directory" {
@@ -542,7 +557,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	// Apply pagination
+	// Apply pagination after filtering
 	totalFiles := len(files)
 	startIndex := (page - 1) * limit
 	endIndex := startIndex + limit
@@ -608,6 +623,9 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 			limit = parsedLimit
 		}
 	}
+
+	// Parse search parameter
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	// Parse source directory index (for multiple source dirs)
 	sourceIndex := 0
@@ -757,6 +775,18 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 		files = append(files, fileInfo)
 	}
 
+	// Apply search filtering if search query is provided
+	if searchQuery != "" {
+		var filteredFiles []FileInfo
+		searchLower := strings.ToLower(searchQuery)
+		for _, file := range files {
+			if strings.Contains(strings.ToLower(file.Name), searchLower) {
+				filteredFiles = append(filteredFiles, file)
+			}
+		}
+		files = filteredFiles
+	}
+
 	// Sort files: directories first, then alphabetically
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].Type == "directory" && files[j].Type != "directory" {
@@ -768,7 +798,7 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	// Apply pagination
+	// Apply pagination after filtering
 	totalFiles := len(files)
 	startIndex := (page - 1) * limit
 	endIndex := startIndex + limit

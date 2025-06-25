@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Breadcrumbs, IconButton, Link, TextField, Tooltip, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Box, Breadcrumbs, IconButton, Link, TextField, Tooltip, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress, InputAdornment } from '@mui/material';
 import { NavigateBefore as UpIcon, Refresh as RefreshIcon, ViewList as ViewListIcon, GridView as GridViewIcon, Close as CloseIcon, Search as SearchIcon, Sort as SortIcon, SortByAlpha as SortByAlphaIcon, Schedule as ScheduleIcon, Storage as StorageIcon } from '@mui/icons-material';
 import MobileBreadcrumbs from './MobileBreadcrumbs';
 import { SortOption } from './types';
@@ -9,6 +9,7 @@ interface HeaderProps {
   search: string;
   view: 'list' | 'poster';
   sortOption: SortOption;
+  isSearching?: boolean;
   onPathClick: (path: string) => void;
   onUpClick: () => void;
   onSearchChange: (value: string) => void;
@@ -22,6 +23,7 @@ export default function Header({
   search,
   view,
   sortOption,
+  isSearching = false,
   onPathClick,
   onUpClick,
   onSearchChange,
@@ -83,8 +85,8 @@ export default function Header({
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         {isMobile ? (
-          <Box sx={{ 
-            display: 'flex', 
+          <Box sx={{
+            display: 'flex',
             alignItems: 'center',
             width: '100%',
             minWidth: 0,
@@ -122,7 +124,15 @@ export default function Header({
                   variant="outlined"
                   fullWidth
                   InputProps={{
-                    startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        {isSearching ? (
+                          <CircularProgress size={18} sx={{ color: 'primary.main' }} />
+                        ) : (
+                          <SearchIcon sx={{ color: 'text.secondary' }} />
+                        )}
+                      </InputAdornment>
+                    ),
                     endAdornment: search && (
                       <IconButton size="small" onClick={() => onSearchChange('')}>
                         <CloseIcon fontSize="small" />
@@ -179,7 +189,15 @@ export default function Header({
               variant="outlined"
               fullWidth
               InputProps={{
-                startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    {isSearching ? (
+                      <CircularProgress size={18} sx={{ color: 'primary.main' }} />
+                    ) : (
+                      <SearchIcon sx={{ color: 'text.secondary' }} />
+                    )}
+                  </InputAdornment>
+                ),
                 endAdornment: search && (
                   <IconButton size="small" onClick={() => onSearchChange('')}>
                     <CloseIcon fontSize="small" />

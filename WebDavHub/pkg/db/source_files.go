@@ -85,6 +85,7 @@ func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
 	statusFilter := r.URL.Query().Get("status")
 	mediaOnly := r.URL.Query().Get("mediaOnly") == "true"
 	activeOnly := r.URL.Query().Get("activeOnly") != "false" // Default to true
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	// Default to showing only unprocessed files unless status is explicitly specified
 	if statusFilter == "" {
@@ -131,6 +132,13 @@ func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
 	if mediaOnly {
 		whereClause += " AND is_media_file = ?"
 		args = append(args, true)
+	}
+
+	// Add search filtering if search query is provided
+	if searchQuery != "" {
+		searchPattern := "%" + searchQuery + "%"
+		whereClause += " AND (file_name LIKE ? OR file_path LIKE ? OR relative_path LIKE ? OR media_type LIKE ?)"
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 
 	// Count total records

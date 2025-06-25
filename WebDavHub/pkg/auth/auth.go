@@ -55,6 +55,7 @@ func isAuthEndpoint(path string) bool {
 		"/api/database/export",
 		"/api/stats",
 		"/api/jobs",
+		"/api/python-bridge/terminate",
 	}
 	for _, endpoint := range authEndpoints {
 		if path == endpoint {

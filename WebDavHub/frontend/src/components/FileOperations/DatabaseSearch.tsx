@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button } from '@mui/material';
+import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button } from '@mui/material';
 import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -26,6 +26,7 @@ interface DatabaseStats {
 
 const DatabaseSearch: React.FC = () => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [records, setRecords] = useState<DatabaseRecord[]>([]);
@@ -104,7 +105,7 @@ const DatabaseSearch: React.FC = () => {
           type: filterType,
         },
       });
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -188,7 +189,7 @@ const DatabaseSearch: React.FC = () => {
               </CardContent>
             </MotionCard>
           </Grid>
-          
+
           <Grid item xs={6} sm={4} md={2}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
@@ -455,22 +456,44 @@ const DatabaseSearch: React.FC = () => {
       ) : (
         <>
           {/* Results Summary */}
-          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{
+            mb: 2,
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: { xs: 1, sm: 0 }
+          }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{
+                textAlign: { xs: 'center', sm: 'left' },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' }
+              }}
+            >
               Showing {records.length} of {totalRecords.toLocaleString()} records
               {searchQuery && ` for "${searchQuery}"`}
             </Typography>
-            
+
             {totalPages > 1 && (
               <Pagination
                 count={totalPages}
                 page={currentPage}
                 onChange={(_, page) => setCurrentPage(page)}
-                size="small"
+                size={isMobile ? "small" : "medium"}
+                siblingCount={isMobile ? 0 : 1}
+                boundaryCount={isMobile ? 1 : 1}
                 sx={{
                   '& .MuiPaginationItem-root': {
                     borderRadius: 2,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    minWidth: { xs: 28, sm: 32 },
+                    height: { xs: 28, sm: 32 },
                   },
+                  '& .MuiPagination-ul': {
+                    gap: { xs: 0.25, sm: 0.5 }
+                  }
                 }}
               />
             )}
@@ -802,10 +825,20 @@ const DatabaseSearch: React.FC = () => {
               count={totalPages}
               page={currentPage}
               onChange={(_, page) => setCurrentPage(page)}
+              color="primary"
+              size={isMobile ? "small" : "medium"}
+              siblingCount={isMobile ? 0 : 1}
+              boundaryCount={isMobile ? 1 : 1}
               sx={{
                 '& .MuiPaginationItem-root': {
                   borderRadius: 2,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minWidth: { xs: 28, sm: 32 },
+                  height: { xs: 28, sm: 32 },
                 },
+                '& .MuiPagination-ul': {
+                  gap: { xs: 0.25, sm: 0.5 }
+                }
               }}
             />
           </Box>
