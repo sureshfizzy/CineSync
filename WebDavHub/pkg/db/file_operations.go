@@ -664,6 +664,24 @@ func createDeletionTrackingTable(db *sql.DB) error {
 	return err
 }
 
+func createDeletionTrackingTableTx(tx *sql.Tx) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS file_deletions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			source_path TEXT NOT NULL,
+			destination_path TEXT,
+			tmdb_id TEXT,
+			season_number TEXT,
+			deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			reason TEXT
+		);
+		CREATE INDEX IF NOT EXISTS idx_file_deletions_source ON file_deletions(source_path);
+		CREATE INDEX IF NOT EXISTS idx_file_deletions_deleted_at ON file_deletions(deleted_at);
+	`
+	_, err := tx.Exec(query)
+	return err
+}
+
 // getDeletionRecords retrieves deletion records from the database
 func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 	query := `
@@ -949,38 +967,30 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 	return operations, nil
 }
 
-// TrackFileDeletion records a file deletion event
 func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason string) error {
 	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
 
-	// Check if database exists
 	if _, err := os.Stat(mediaHubDBPath); os.IsNotExist(err) {
 		return fmt.Errorf("MediaHub database not found")
 	}
 
-	// Get database connection from pool
-	mediaHubDB, err := GetDatabaseConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get database connection: %w", err)
-	}
+	return WithDatabaseTransaction(func(tx *sql.Tx) error {
+		err := createDeletionTrackingTableTx(tx)
+		if err != nil {
+			return fmt.Errorf("failed to create deletion tracking table: %w", err)
+		}
 
-	// Ensure table exists
-	err = createDeletionTrackingTable(mediaHubDB)
-	if err != nil {
-		return fmt.Errorf("failed to create deletion tracking table: %w", err)
-	}
+		query := `
+			INSERT INTO file_deletions (source_path, destination_path, tmdb_id, season_number, reason)
+			VALUES (?, ?, ?, ?, ?)
+		`
+		_, err = tx.Exec(query, sourcePath, destinationPath, tmdbID, seasonNumber, reason)
+		if err != nil {
+			return fmt.Errorf("failed to insert deletion record: %w", err)
+		}
 
-	// Insert deletion record
-	query := `
-		INSERT INTO file_deletions (source_path, destination_path, tmdb_id, season_number, reason)
-		VALUES (?, ?, ?, ?, ?)
-	`
-	_, err = mediaHubDB.Exec(query, sourcePath, destinationPath, tmdbID, seasonNumber, reason)
-	if err != nil {
-		return fmt.Errorf("failed to insert deletion record: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func TrackFileFailure(sourcePath, tmdbID, seasonNumber, reason, errorMessage string) error {
@@ -990,21 +1000,18 @@ func TrackFileFailure(sourcePath, tmdbID, seasonNumber, reason, errorMessage str
 		return fmt.Errorf("MediaHub database not found")
 	}
 
-	mediaHubDB, err := GetDatabaseConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get database connection: %w", err)
-	}
+	return WithDatabaseTransaction(func(tx *sql.Tx) error {
+		query := `
+			INSERT OR REPLACE INTO processed_files (file_path, tmdb_id, season_number, reason, error_message, processed_at)
+			VALUES (?, ?, ?, ?, ?, datetime('now'))
+		`
+		_, err := tx.Exec(query, sourcePath, tmdbID, seasonNumber, reason, errorMessage)
+		if err != nil {
+			return fmt.Errorf("failed to track failure record: %w", err)
+		}
 
-	query := `
-		INSERT OR REPLACE INTO processed_files (file_path, tmdb_id, season_number, reason, error_message, processed_at)
-		VALUES (?, ?, ?, ?, ?, datetime('now'))
-	`
-	_, err = mediaHubDB.Exec(query, sourcePath, tmdbID, seasonNumber, reason, errorMessage)
-	if err != nil {
-		return fmt.Errorf("failed to track failure record: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 

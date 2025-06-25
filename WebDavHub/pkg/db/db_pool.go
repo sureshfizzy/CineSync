@@ -20,24 +20,36 @@ var (
 func GetDatabaseConnection() (*sql.DB, error) {
 	dbPoolOnce.Do(func() {
 		mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-		
-		// Open database with optimized SQLite settings for concurrent access
-		db, err := sql.Open("sqlite", mediaHubDBPath+"?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=1000&_foreign_keys=on")
+
+		db, err := sql.Open("sqlite", mediaHubDBPath+"?_busy_timeout=60000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=20000&_foreign_keys=ON&_temp_store=MEMORY")
 		if err != nil {
 			logger.Error("Failed to open MediaHub database pool: %v", err)
 			return
 		}
 
-		// Configure connection pool for optimal performance
-		db.SetMaxOpenConns(25)
-		db.SetMaxIdleConns(10)
-		db.SetConnMaxLifetime(time.Hour * 2)
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+		db.SetConnMaxLifetime(time.Hour * 24)
 
-		// Test the connection
 		if err := db.Ping(); err != nil {
 			logger.Error("Failed to ping MediaHub database: %v", err)
 			db.Close()
 			return
+		}
+
+		pragmas := []string{
+			"PRAGMA journal_mode=WAL",
+			"PRAGMA synchronous=NORMAL",
+			"PRAGMA cache_size=20000",
+			"PRAGMA temp_store=MEMORY",
+			"PRAGMA mmap_size=268435456",
+			"PRAGMA optimize",
+		}
+
+		for _, pragma := range pragmas {
+			if _, err := db.Exec(pragma); err != nil {
+				logger.Warn("Failed to set pragma %s: %v", pragma, err)
+			}
 		}
 
 		dbPool = db
@@ -46,11 +58,11 @@ func GetDatabaseConnection() (*sql.DB, error) {
 
 	dbPoolMux.RLock()
 	defer dbPoolMux.RUnlock()
-	
+
 	if dbPool == nil {
 		return nil, sql.ErrConnDone
 	}
-	
+
 	return dbPool, nil
 }
 
@@ -58,7 +70,7 @@ func GetDatabaseConnection() (*sql.DB, error) {
 func CloseDatabasePool() {
 	dbPoolMux.Lock()
 	defer dbPoolMux.Unlock()
-	
+
 	if dbPool != nil {
 		dbPool.Close()
 		dbPool = nil
@@ -66,29 +78,32 @@ func CloseDatabasePool() {
 	}
 }
 
-// WithDatabaseTransaction executes a function within a database transaction
 func WithDatabaseTransaction(fn func(*sql.Tx) error) error {
-	db, err := GetDatabaseConnection()
-	if err != nil {
-		return err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			tx.Rollback()
-		} else {
-			err = tx.Commit()
+	return executeWithRetry(func() error {
+		db, err := GetDatabaseConnection()
+		if err != nil {
+			return err
 		}
-	}()
 
-	err = fn(tx)
-	return err
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+
+		defer func() {
+			if p := recover(); p != nil {
+				tx.Rollback()
+				panic(p)
+			} else if err != nil {
+				tx.Rollback()
+			} else {
+				err = tx.Commit()
+			}
+		}()
+
+		err = fn(tx)
+		return err
+	})
 }
+
+

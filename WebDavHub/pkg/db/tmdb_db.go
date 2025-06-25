@@ -51,22 +51,35 @@ func InitDB(_ string) error {
 	}
 	dbPath := filepath.Join(dbDir, "cinesync.db")
 	var err error
-	db, err = sql.Open("sqlite", dbPath)
+	db, err = sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=20000&_foreign_keys=ON&_temp_store=MEMORY")
 	if err != nil {
 		return fmt.Errorf("failed to open db: %w", err)
 	}
-	// Set WAL mode and busy timeout
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		return fmt.Errorf("failed to set WAL mode: %w", err)
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(time.Hour * 24)
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
-		return fmt.Errorf("failed to set busy timeout: %w", err)
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=20000",
+		"PRAGMA temp_store=MEMORY",
+		"PRAGMA mmap_size=268435456",
+		"PRAGMA busy_timeout=60000",
+		"PRAGMA auto_vacuum=FULL",
+		"PRAGMA page_size=4096",
+		"PRAGMA optimize",
 	}
-	if _, err := db.Exec("PRAGMA auto_vacuum = FULL;"); err != nil {
-		return fmt.Errorf("failed to set auto_vacuum: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA page_size = 4096;"); err != nil {
-		return fmt.Errorf("failed to set page_size: %w", err)
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			logger.Warn("Failed to set pragma %s: %v", pragma, err)
+		}
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
