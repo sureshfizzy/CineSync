@@ -38,11 +38,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     original_season_number = season_number
     original_episode_number = episode_number
 
-    # Use file result if it has episode info OR season info, otherwise try folder
     if file_result.get('episode_identifier') or file_result.get('season_number'):
         show_name = file_result.get('title', '')
         episode_identifier = file_result.get('episode_identifier')
-        # Only use parsed values if no original parameters were provided
         if original_season_number is None:
             season_number = file_result.get('season_number')
         if original_episode_number is None:
@@ -56,14 +54,23 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"Using file-based extraction for season pack: {show_name} - Season {season_number}", level="DEBUG")
         else:
             log_message(f"Using file-based extraction: {show_name}", level="DEBUG")
+    elif force_extra and file_result.get('title', '').strip():
+        show_name = file_result.get('title', '')
+        episode_identifier = file_result.get('episode_identifier')
+        if original_season_number is None:
+            season_number = file_result.get('season_number')
+        if original_episode_number is None:
+            episode_number = file_result.get('episode_number')
+        create_season_folder = file_result.get('create_season_folder', False)
+        is_extra = file_result.get('is_extra', False)
+
+        log_message(f"Force Show mode - using file-based extraction: {show_name}", level="DEBUG")
     else:
-        # Fallback to folder only if file doesn't have episode OR season info
         folder_result = clean_query(parent_folder_name)
         log_message(f"Folder query result: {folder_result}", level="DEBUG")
 
         show_name = folder_result.get('title', '')
         episode_identifier = folder_result.get('episode_identifier')
-        # Only use parsed values if no original parameters were provided
         if original_season_number is None:
             season_number = folder_result.get('season_number')
         if original_episode_number is None:
@@ -71,7 +78,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         create_season_folder = folder_result.get('create_season_folder', False)
         is_extra = folder_result.get('is_extra', False)
 
-        # Check if file metadata has is_extra flag set
         if file_result and file_result.get('is_extra'):
             is_extra = True
 
@@ -142,14 +148,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             episode_number = episode_match.group(2)
             create_season_folder = True
 
-    # Handle season-only files (like "S01" without episode number)
     if not episode_identifier and season_number and not anime_result:
         log_message(f"Found season info but no episode info for: {file}. Creating season folder.", level="DEBUG")
         create_season_folder = True
-        # Don't mark as extra since we have season info
 
-    # If we don't have episode info AND no season info and it's not anime, mark as extra
-    elif not episode_identifier and not season_number and not anime_result and not force_extra:
+    elif not episode_identifier and not season_number and not anime_result:
         log_message(f"Unable to determine season and episode info for: {file}", level="DEBUG")
         if not manual_search or auto_select:
             create_extras_folder = True
