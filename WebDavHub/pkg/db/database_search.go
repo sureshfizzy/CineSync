@@ -181,6 +181,79 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// FileInfo represents file information from the database
+type FileInfo struct {
+	FileSize     int64
+	TmdbID       string
+	SeasonNumber int
+}
+
+// GetFileSizeFromDatabase retrieves file size from the processed_files table by file path
+func GetFileSizeFromDatabase(filePath string) (int64, bool) {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Debug("Failed to get database connection for file size lookup: %v", err)
+		return 0, false
+	}
+
+	var fileSize sql.NullInt64
+	query := `SELECT file_size FROM processed_files WHERE file_path = ? OR destination_path = ? LIMIT 1`
+	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			logger.Debug("Failed to query file size for %s: %v", filePath, err)
+		}
+		return 0, false
+	}
+
+	if fileSize.Valid {
+		return fileSize.Int64, true
+	}
+	return 0, false
+}
+
+// GetFileInfoFromDatabase retrieves comprehensive file information from the processed_files table
+func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Debug("Failed to get database connection for file info lookup: %v", err)
+		return FileInfo{}, false
+	}
+
+	var fileSize sql.NullInt64
+	var tmdbID sql.NullString
+	var seasonNumber sql.NullInt64
+
+	query := `SELECT
+		COALESCE(file_size, 0) as file_size,
+		COALESCE(tmdb_id, '') as tmdb_id,
+		COALESCE(season_number, 0) as season_number
+	FROM processed_files
+	WHERE file_path = ? OR destination_path = ?
+	LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			logger.Debug("Failed to query file info for %s: %v", filePath, err)
+		}
+		return FileInfo{}, false
+	}
+
+	info := FileInfo{}
+	if fileSize.Valid {
+		info.FileSize = fileSize.Int64
+	}
+	if tmdbID.Valid {
+		info.TmdbID = tmdbID.String
+	}
+	if seasonNumber.Valid {
+		info.SeasonNumber = int(seasonNumber.Int64)
+	}
+
+	return info, true
+}
+
 // HandleDatabaseStats handles database statistics requests
 func HandleDatabaseStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -231,7 +304,7 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 	var args []interface{}
 
 	sqlQuery.WriteString(`
-		SELECT 
+		SELECT
 			file_path,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(tmdb_id, '') as tmdb_id,
@@ -245,8 +318,8 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 	// Add search filter
 	if query != "" {
 		sqlQuery.WriteString(` AND (
-			file_path LIKE ? OR 
-			destination_path LIKE ? OR 
+			file_path LIKE ? OR
+			destination_path LIKE ? OR
 			tmdb_id LIKE ? OR
 			reason LIKE ?
 		)`)
@@ -329,8 +402,8 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 
 	// Processed files (have destination_path and no reason)
 	err = db.QueryRow(`
-		SELECT COUNT(*) FROM processed_files 
-		WHERE destination_path IS NOT NULL AND destination_path != '' 
+		SELECT COUNT(*) FROM processed_files
+		WHERE destination_path IS NOT NULL AND destination_path != ''
 		AND (reason IS NULL OR reason = '')
 	`).Scan(&stats.ProcessedFiles)
 	if err != nil {
@@ -339,7 +412,7 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 
 	// Skipped files (have reason)
 	err = db.QueryRow(`
-		SELECT COUNT(*) FROM processed_files 
+		SELECT COUNT(*) FROM processed_files
 		WHERE reason IS NOT NULL AND reason != ''
 	`).Scan(&stats.SkippedFiles)
 	if err != nil {
@@ -348,8 +421,8 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 
 	// Movies (have tmdb_id but no season_number)
 	err = db.QueryRow(`
-		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files 
-		WHERE tmdb_id IS NOT NULL AND tmdb_id != '' 
+		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files
+		WHERE tmdb_id IS NOT NULL AND tmdb_id != ''
 		AND (season_number IS NULL OR season_number = '')
 	`).Scan(&stats.Movies)
 	if err != nil {
@@ -358,8 +431,8 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 
 	// TV Shows (have tmdb_id and season_number)
 	err = db.QueryRow(`
-		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files 
-		WHERE tmdb_id IS NOT NULL AND tmdb_id != '' 
+		SELECT COUNT(DISTINCT tmdb_id) FROM processed_files
+		WHERE tmdb_id IS NOT NULL AND tmdb_id != ''
 		AND season_number IS NOT NULL AND season_number != ''
 	`).Scan(&stats.TvShows)
 	if err != nil {

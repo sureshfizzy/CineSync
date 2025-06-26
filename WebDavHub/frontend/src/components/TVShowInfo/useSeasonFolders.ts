@@ -117,11 +117,19 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
     try {
       const res = await axios.post('/api/readlink', { path: file.path });
       const webdavPath = details?.webdavPath || `Home${currentPath.replace(/\/+/g, '/').replace(/\/$/, '')}/${folderName}/${file.name}`;
+
+      // Use database file size if available from readlink response
+      let fileSize = file.size;
+      if (res.data.foundInDB && res.data.formattedSize) {
+        fileSize = res.data.formattedSize;
+      }
+
       setDetailsData({
         ...details,
         webdavPath,
         sourcePath: res.data.realPath || res.data.absPath || file.path,
-        fullPath: res.data.absPath || file.path
+        fullPath: res.data.absPath || file.path,
+        size: fileSize
       });
     } catch (err) {
       setDetailsData({ ...details, error: 'Failed to resolve file path' });
@@ -192,4 +200,4 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
     videoPlayerOpen,
     setVideoPlayerOpen,
   };
-} 
+}

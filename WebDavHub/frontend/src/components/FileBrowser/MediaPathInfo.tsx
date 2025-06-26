@@ -91,12 +91,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
             const episodes: EpisodeInfo[] = [];
             for (const episode of episodeFiles) {
               const relPath = `${seasonPath}/${episode.name}`;
-              const pathInfo = await axios.post('/api/readlink', { path: relPath });
+
               episodes.push({
                 name: episode.name,
                 size: episode.size || '--',
                 modified: episode.modified || '--',
-                path: pathInfo.data.realPath || pathInfo.data.absPath || relPath
+                path: relPath
               });
             }
 
@@ -130,11 +130,11 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
           }
 
           const relPath = `${folderPath}/${mediaFile.name}`;
-          const res = await axios.post('/api/readlink', { path: relPath });
+
           setPathInfo({
             webdavPath: `Home${relPath}`,
-            fullPath: res.data.absPath || '',
-            sourcePath: res.data.realPath || res.data.absPath || '',
+            fullPath: `${folderPath}/${mediaFile.name}`,
+            sourcePath: `${folderPath}/${mediaFile.name}`,
             fileName: mediaFile.name,
             fileSize: mediaFile.size,
             modified: mediaFile.modified

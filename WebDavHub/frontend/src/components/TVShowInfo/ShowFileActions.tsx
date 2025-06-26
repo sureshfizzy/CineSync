@@ -64,7 +64,11 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {
-          setFileInfo({ ...mediaFile, type: 'file' });
+          setFileInfo({
+            ...mediaFile,
+            type: 'file',
+            size: mediaFile.size || '0 B'
+          });
         } else {
           // If no video file found, use the folder itself for actions
           setFileInfo({ name: folderName, type: 'directory' });

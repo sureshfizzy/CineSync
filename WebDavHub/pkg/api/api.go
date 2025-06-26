@@ -191,9 +191,14 @@ type ReadlinkRequest struct {
 }
 
 type ReadlinkResponse struct {
-	RealPath string `json:"realPath"`
-	AbsPath  string `json:"absPath"`
-	Error    string `json:"error,omitempty"`
+	RealPath      string `json:"realPath"`
+	AbsPath       string `json:"absPath"`
+	Error         string `json:"error,omitempty"`
+	FileSize      *int64 `json:"fileSize,omitempty"`
+	FormattedSize string `json:"formattedSize,omitempty"`
+	TmdbID        string `json:"tmdbId,omitempty"`
+	SeasonNumber  *int   `json:"seasonNumber,omitempty"`
+	FoundInDB     bool   `json:"foundInDB"`
 }
 
 type DeleteRequest struct {
@@ -626,9 +631,16 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 			logger.Info("Found directory: %s", filePath)
 		} else {
-			fileInfo.Size = formatFileSize(info.Size())
+			// Try to get file size from database first, fallback to filesystem
+			fullFilePath := filepath.Join(dir, entry.Name())
+			if dbSize, found := db.GetFileSizeFromDatabase(fullFilePath); found {
+				fileInfo.Size = formatFileSize(dbSize)
+				logger.Info("Found file: %s (DB Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
+			} else {
+				fileInfo.Size = formatFileSize(info.Size())
+				logger.Info("Found file: %s (FS Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
+			}
 			fileCount++
-			logger.Info("Found file: %s (Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
 		}
 
 		files = append(files, fileInfo)
@@ -1105,6 +1117,33 @@ func HandleReadlink(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		resp.Error = err.Error()
 	}
+
+	// Try to get additional file information from database
+	if realPath != "" {
+		if dbInfo, found := db.GetFileInfoFromDatabase(realPath); found {
+			resp.FileSize = &dbInfo.FileSize
+			resp.FormattedSize = formatFileSize(dbInfo.FileSize)
+			resp.TmdbID = dbInfo.TmdbID
+			if dbInfo.SeasonNumber > 0 {
+				resp.SeasonNumber = &dbInfo.SeasonNumber
+			}
+			resp.FoundInDB = true
+			logger.Debug("Found database info for %s: size=%d, tmdb=%s", realPath, dbInfo.FileSize, dbInfo.TmdbID)
+		} else {
+			// Fallback: try with absPath if realPath lookup failed
+			if dbInfo, found := db.GetFileInfoFromDatabase(absPath); found {
+				resp.FileSize = &dbInfo.FileSize
+				resp.FormattedSize = formatFileSize(dbInfo.FileSize)
+				resp.TmdbID = dbInfo.TmdbID
+				if dbInfo.SeasonNumber > 0 {
+					resp.SeasonNumber = &dbInfo.SeasonNumber
+				}
+				resp.FoundInDB = true
+				logger.Debug("Found database info for %s: size=%d, tmdb=%s", absPath, dbInfo.FileSize, dbInfo.TmdbID)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }

@@ -84,7 +84,7 @@ const DetailsDialog: React.FC<DetailsDialogProps> = ({ open, onClose, selectedFi
                   <Divider sx={{ mb: 2 }} />
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                     <Typography variant="body2"><b>Type:</b> {selectedFile?.name ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'File') : 'File'}</Typography>
-                    <Typography variant="body2"><b>Size:</b> {selectedFile?.size || '--'}</Typography>
+                    <Typography variant="body2"><b>Size:</b> {detailsData?.size || selectedFile?.size || '--'}</Typography>
                     <Typography variant="body2"><b>Modified:</b> {formatDate(selectedFile?.modified)}</Typography>
                     <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
                       <b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>
@@ -112,4 +112,4 @@ const DetailsDialog: React.FC<DetailsDialogProps> = ({ open, onClose, selectedFi
   );
 };
 
-export default DetailsDialog; 
+export default DetailsDialog;
