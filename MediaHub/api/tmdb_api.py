@@ -190,10 +190,13 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         if isinstance(query, tuple):
             query = query[0] if query else ""
 
-
         params = {'api_key': api_key, 'query': query, 'language': language_iso}
+        if year:
+            params['first_air_date_year'] = year
+
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
-        log_message(f"General search URL: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
+        search_type = "with year" if year else "without year"
+        log_message(f"Primary search URL ({search_type}): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
         response = perform_search(params, url)
 
         if response:
@@ -204,17 +207,36 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                     scored_results.append((score, result))
 
             scored_results.sort(reverse=True, key=lambda x: x[0])
-            general_results = [r[1] for r in scored_results]
+
+            if scored_results and year:
+                best_score = scored_results[0][0]
+                if best_score < 75:
+                    log_message(f"Best score with year ({best_score:.1f}) is low, trying without year for better matches.", "DEBUG", "stdout")
+                    params_no_year = {'api_key': api_key, 'query': query, 'language': language_iso}
+                    response_no_year = perform_search(params_no_year, url)
+
+                    if response_no_year:
+                        scored_results_no_year = []
+                        for result in response_no_year:
+                            score = calculate_score(result, query, year)
+                            if score >= 40:
+                                scored_results_no_year.append((score, result))
+
+                        scored_results_no_year.sort(reverse=True, key=lambda x: x[0])
+
+                        if scored_results_no_year and scored_results_no_year[0][0] > best_score + 10:
+                            log_message(f"No-year search found better match (score: {scored_results_no_year[0][0]:.1f} vs {best_score:.1f})", "DEBUG", "stdout")
+                            return [r[1] for r in scored_results_no_year]
+
+            if scored_results:
+                return [r[1] for r in scored_results]
 
 
-            if general_results:
-                return general_results
-
-
-        if year:
-            params = {'api_key': api_key, 'query': query, 'language': language_iso, 'first_air_date_year': year}
+        if not response and year:
+            log_message("No results found with year, retrying without year.", "DEBUG", "stdout")
+            params = {'api_key': api_key, 'query': query, 'language': language_iso}
             full_url = f"{url}?{urllib.parse.urlencode(params)}"
-            log_message(f"Fallback search URL with year: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
+            log_message(f"Fallback search URL (no year): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
             response = perform_search(params, url)
 
             if response:
