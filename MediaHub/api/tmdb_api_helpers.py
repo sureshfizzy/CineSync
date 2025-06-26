@@ -518,11 +518,11 @@ def calculate_score(result, query, year=None):
     # Title matching
     exact_match_bonus = 0
     if query == title:
-        score += 50
-        exact_match_bonus = 20
+        score += 60
+        exact_match_bonus = 25
     elif query == original_title:
-        score += 55
-        exact_match_bonus = 20
+        score += 45
+        exact_match_bonus = 15
     elif query in title or title in query:
         score += 25
     elif query in original_title or original_title in query:
