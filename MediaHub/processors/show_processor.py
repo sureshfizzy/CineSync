@@ -174,7 +174,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
             if media_type == 'movie':
                 log_message(f"TMDB ID {tmdb_id} is a movie. Redirecting to movie processor for: {file}", level="INFO")
-                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data)
+                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data, manual_search=manual_search)
 
                 # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
                 if movie_result and len(movie_result) == 2:
@@ -200,7 +200,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             # Check if manual search selected a movie and redirect to movie processing
             if isinstance(result, dict) and result.get('redirect_to_movie'):
                 log_message(f"Manual search selected a movie. Redirecting to movie processor for: {file}", level="INFO")
-                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'))
+                movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'), manual_search=manual_search)
 
                 # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
                 if movie_result and len(movie_result) == 2:

@@ -16,7 +16,7 @@ from MediaHub.processors.db_utils import track_file_failure
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None):
+def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None, manual_search=False):
 
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
@@ -72,7 +72,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     elif is_movie_collection_enabled():
 
 
-        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
+        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, manual_search=manual_search)
         if result is None or isinstance(result, str):
             log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
@@ -102,7 +102,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     else:
 
 
-        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root, manual_search=manual_search)
         if result is None or isinstance(result, str):
             log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")

@@ -388,7 +388,7 @@ def perform_search(params, url):
 
 @lru_cache(maxsize=None)
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
-def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None):
+def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None, tmdb_id=None, imdb_id=None, root=None, manual_search=False):
     global api_key
     if not check_api_key():
         log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
@@ -507,8 +507,29 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")
-        set_cached_result(cache_key, f"{query}")
-        return f"{query}"
+
+        # Manual search option when no results found - use general search
+        if manual_search and not auto_select:
+            manual_result = search_manual_general(query, year, auto_select, actual_dir, file, root)
+            if isinstance(manual_result, dict) and manual_result.get('redirect_to_movie'):
+                chosen_movie = manual_result.get('movie_data')
+                if chosen_movie:
+                    movie_name = format_movie_name(chosen_movie.get('title'))
+                    release_date = chosen_movie.get('release_date')
+                    movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
+                    tmdb_id = chosen_movie.get('id')
+
+                    external_ids = get_external_ids(tmdb_id, 'movie')
+                    imdb_id = external_ids.get('imdb_id', '')
+                    genre_info = get_movie_genres(tmdb_id)
+                    is_anime_genre = genre_info['is_anime_genre']
+
+                    set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre))
+                    return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
+            return manual_result
+        else:
+            set_cached_result(cache_key, f"{query}")
+            return f"{query}"
 
     if auto_select:
         chosen_movie = results[0]

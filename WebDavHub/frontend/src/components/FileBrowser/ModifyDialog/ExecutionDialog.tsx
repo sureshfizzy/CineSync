@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Typography, useTheme, IconButton, LinearProgress, CircularProgress, Fade, Zoom, Slide } from '@mui/material';
 
-import { Close as CloseIcon, CheckCircle as CheckCircleIcon, PlayArrow as PlayArrowIcon, Search as SearchIcon, Send as SendIcon, HourglassEmpty as WaitingIcon, Refresh as RefreshIcon, Movie as MovieIcon, FindInPage as AnalyzeIcon } from '@mui/icons-material';
+import { Close as CloseIcon, CheckCircle as CheckCircleIcon, PlayArrow as PlayArrowIcon, Search as SearchIcon, Send as SendIcon, HourglassEmpty as WaitingIcon, Refresh as RefreshIcon, Movie as MovieIcon, FindInPage as AnalyzeIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { ActionButton, pulse, fadeOut } from './StyledComponents';
 import MovieOptionCard from './MovieOptionCard';
 import PosterSkeleton from './PosterSkeleton';
@@ -44,8 +44,16 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
     { icon: AnalyzeIcon, text: 'Analyzing media file...', color: theme.palette.primary.main },
     {
       icon: SearchIcon,
-      text: (hasMovieOptions && waitingForInput) ? `Found ${movieOptions.length} match${movieOptions.length !== 1 ? 'es' : ''}!` : 'Searching for matches...',
-      color: (hasMovieOptions && waitingForInput) ? theme.palette.success.main : theme.palette.info.main
+      text: (hasMovieOptions && waitingForInput)
+        ? `Found ${movieOptions.length} match${movieOptions.length !== 1 ? 'es' : ''}!`
+        : (waitingForInput && !hasMovieOptions)
+          ? 'Manual search required - automatic search failed'
+          : 'Searching for matches...',
+      color: (hasMovieOptions && waitingForInput)
+        ? theme.palette.success.main
+        : (waitingForInput && !hasMovieOptions)
+          ? theme.palette.warning.main
+          : theme.palette.info.main
     },
     { icon: MovieIcon, text: 'Processing metadata...', color: theme.palette.warning.main },
     { icon: CheckCircleIcon, text: 'Processing complete!', color: theme.palette.success.main }
@@ -76,10 +84,10 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       return;
     }
 
-    // If waiting for input without movie options, we're processing metadata
+    // If waiting for input without movie options, we're in manual search mode
     if (waitingForInput && !hasMovieOptions) {
-      setProgress(90);
-      setCurrentStep(2);
+      setProgress(50);
+      setCurrentStep(1);
       setIsComplete(false);
       return;
     }
@@ -124,10 +132,15 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
         setShowResults(true);
       }, 400);
       return () => clearTimeout(timer);
+    } else if (waitingForInput && !hasMovieOptions) {
+      const timer = setTimeout(() => {
+        setShowResults(true);
+      }, 400);
+      return () => clearTimeout(timer);
     } else {
       setShowResults(false);
     }
-  }, [hasMovieOptions]);
+  }, [hasMovieOptions, waitingForInput]);
 
   // Handle when user makes a selection - continue to processing metadata
   useEffect(() => {
@@ -209,7 +222,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 : hasMovieOptions
                   ? 'Select Media Match'
                   : waitingForInput
-                    ? 'Choose an Option or Provide Input'
+                    ? 'Manual Search Required'
                     : 'Processing Media File'
               }
             </Typography>
@@ -219,7 +232,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 : hasMovieOptions
                   ? 'Choose the best match for your media file'
                   : waitingForInput
-                    ? 'Please select an option or enter your response'
+                    ? 'Automatic search failed - please provide a custom search term'
                     : 'Please wait while we process your media file'
               }
             </Typography>
@@ -344,6 +357,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 );
               })}
             </Box>
+
+
           </Box>
           </Fade>
         )}
@@ -424,110 +439,219 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
           </Fade>
         )}
 
-        {/* Transition from processing to results */}
-        {!operationSuccess && hasMovieOptions && showResults && (
+
+
+        {/* Transition from processing to results OR manual search */}
+        {!operationSuccess && showResults && (
           <Fade in={showResults} timeout={600}>
             <Box>
-              {/* Results header */}
-              <Slide direction="up" in={showResults} timeout={400}>
-                <Box sx={{
-                  mb: 2,
-                  p: 1.5,
-                  backgroundColor: theme.palette.mode === 'dark'
-                    ? 'rgba(76, 175, 80, 0.1)'
-                    : 'rgba(76, 175, 80, 0.05)',
-                  borderRadius: 2,
-                  border: `1px solid ${theme.palette.success.main}40`,
-                  textAlign: 'center'
-                }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 1 }}>
-                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '20px' }} />
-                  <Typography variant="subtitle1" color="success.main" fontWeight={600}>
-                    ✨ Found {movieOptions.length} TMDB Match{movieOptions.length !== 1 ? 'es' : ''}
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Select the best match for your media file
-                </Typography>
-              </Box>
-              </Slide>
-
-              {/* Movie Options Grid */}
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: {
-                    xs: 'repeat(auto-fit, minmax(120px, 1fr))',
-                    sm: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    md: 'repeat(auto-fit, minmax(140px, 1fr))',
-                  },
-                  gap: { xs: 0.5, sm: 0.75 }, // Reduced gap from 1/1.5 to 0.5/0.75
-                  p: { xs: 0.25, sm: 0.25 }, // Reduced padding from 0.5 to 0.25
-                  mb: 1,
-                  border: 'none',
-                  backgroundColor: 'transparent',
-                  justifyItems: 'center',
-                  alignItems: 'start',
-                  maxHeight: '55vh',
-                  overflowY: 'auto',
-                  // Custom scrollbar styling
-                  '&::-webkit-scrollbar': {
-                    width: '8px',
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    background: 'transparent',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    background: theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.2)'
-                      : 'rgba(0, 0, 0, 0.2)',
-                    borderRadius: '4px',
-                  },
-                }}
-              >
-                {/* Show loading skeletons when transitioning - show 6 consistent skeletons */}
-                {isLoadingNewOptions && Array.from({ length: 6 }, (_, index) => (
-                  <PosterSkeleton
-                    key={`loading-skeleton-${index}`}
-                    sx={{
-                      animation: `${fadeOut} 0.3s ease-out forwards`,
-                    }}
-                  />
-                ))}
-
-                {/* Show actual movie options with staggered animation */}
-                {!isLoadingNewOptions && movieOptions.map((option, index) => (
-                  <Zoom
-                    key={option.number}
-                    in={!isLoadingNewOptions}
-                    timeout={300 + index * 100}
-                    style={{ transitionDelay: `${index * 50}ms` }}
-                  >
-                    <Box>
-                      <MovieOptionCard
-                        option={option}
-                        onClick={onOptionClick}
-                      />
+              {hasMovieOptions ? (
+                <>
+                  {/* Results header */}
+                  <Slide direction="up" in={showResults} timeout={400}>
+                    <Box sx={{
+                      mb: 2,
+                      p: 1.5,
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? 'rgba(76, 175, 80, 0.1)'
+                        : 'rgba(76, 175, 80, 0.05)',
+                      borderRadius: 2,
+                      border: `1px solid ${theme.palette.success.main}40`,
+                      textAlign: 'center'
+                    }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 1 }}>
+                      <CheckCircleIcon sx={{ color: 'success.main', fontSize: '20px' }} />
+                      <Typography variant="subtitle1" color="success.main" fontWeight={600}>
+                        ✨ Found {movieOptions.length} TMDB Match{movieOptions.length !== 1 ? 'es' : ''}
+                      </Typography>
                     </Box>
-                  </Zoom>
-                ))}
-              </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Select the best match for your media file
+                    </Typography>
+                  </Box>
+                  </Slide>
+
+                  {/* Movie Options Grid */}
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: 'repeat(auto-fit, minmax(120px, 1fr))',
+                        sm: 'repeat(auto-fit, minmax(140px, 1fr))',
+                        md: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      },
+                      gap: { xs: 0.5, sm: 0.75 }, // Reduced gap from 1/1.5 to 0.5/0.75
+                      p: { xs: 0.25, sm: 0.25 }, // Reduced padding from 0.5 to 0.25
+                      mb: 1,
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      justifyItems: 'center',
+                      alignItems: 'start',
+                      maxHeight: '55vh',
+                      overflowY: 'auto',
+                      // Custom scrollbar styling
+                      '&::-webkit-scrollbar': {
+                        width: '8px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        background: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        background: theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.2)'
+                          : 'rgba(0, 0, 0, 0.2)',
+                        borderRadius: '4px',
+                      },
+                    }}
+                  >
+                    {/* Show loading skeletons when transitioning - show 6 consistent skeletons */}
+                    {isLoadingNewOptions && Array.from({ length: 6 }, (_, index) => (
+                      <PosterSkeleton
+                        key={`loading-skeleton-${index}`}
+                        sx={{
+                          animation: `${fadeOut} 0.3s ease-out forwards`,
+                        }}
+                      />
+                    ))}
+
+                    {/* Show actual movie options with staggered animation */}
+                    {!isLoadingNewOptions && movieOptions.map((option, index) => (
+                      <Zoom
+                        key={option.number}
+                        in={!isLoadingNewOptions}
+                        timeout={300 + index * 100}
+                        style={{ transitionDelay: `${index * 50}ms` }}
+                      >
+                        <Box>
+                          <MovieOptionCard
+                            option={option}
+                            onClick={onOptionClick}
+                          />
+                        </Box>
+                      </Zoom>
+                    ))}
+                  </Box>
+                </>
+              ) : (
+                /* Manual Search Interface - Show in TMDB results area when no movie options */
+                <Slide direction="up" in={!hasMovieOptions && waitingForInput} timeout={400}>
+                  <Box sx={{
+                    textAlign: 'center',
+                    py: 4,
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, justifyContent: 'center' }}>
+                      <WarningIcon sx={{ color: 'warning.main', fontSize: 28 }} />
+                      <Typography variant="h6" fontWeight={600} color="warning.main">
+                        Manual Search Required
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+                      Automatic search failed - please provide a custom search term
+                    </Typography>
+
+                    <Box sx={{
+                      p: { xs: 3, md: 4 },
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? 'rgba(255, 152, 0, 0.1)'
+                        : 'rgba(255, 152, 0, 0.05)',
+                      borderRadius: 3,
+                      border: `2px solid ${theme.palette.warning.main}40`,
+                      maxWidth: '500px',
+                      mx: 'auto',
+                    }}>
+                      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2, color: 'warning.main' }}>
+                        🔍 Enter your search term:
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Automatic search failed - please provide a simpler title
+                      </Typography>
+
+                      <Box sx={{
+                        display: 'flex',
+                        gap: 2,
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        justifyContent: 'center',
+                      }}>
+                        <TextField
+                          fullWidth
+                          size="medium"
+                          variant="outlined"
+                          placeholder="Enter a simpler title (e.g., 'Argo' instead of 'vedett-argo-1080p')"
+                          value={execInput}
+                          onChange={(e) => onInputChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              onInputSubmit();
+                            }
+                          }}
+                          disabled={isLoadingNewOptions}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: '12px',
+                              backgroundColor: theme.palette.background.paper,
+                              transition: 'all 0.3s ease-in-out',
+                              fontSize: { xs: '0.95rem', sm: '1rem' },
+                              '&:hover fieldset': {
+                                borderColor: theme.palette.warning.main,
+                              },
+                              '&.Mui-focused fieldset': {
+                                borderColor: theme.palette.warning.main,
+                                borderWidth: '2px',
+                              },
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="contained"
+                          onClick={onInputSubmit}
+                          disabled={!execInput.trim() || isLoadingNewOptions}
+                          startIcon={isLoadingNewOptions ? <RefreshIcon sx={{ animation: 'spin 1s linear infinite' }} /> : <SendIcon />}
+                          sx={{
+                            minWidth: { xs: 'auto', sm: '120px' },
+                            width: { xs: '100%', sm: 'auto' },
+                            borderRadius: '12px',
+                            transition: 'all 0.3s ease-in-out',
+                            fontSize: { xs: '0.95rem', sm: '1rem' },
+                            py: { xs: 1.5, sm: 1.2 },
+                            background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`,
+                            '&:hover': {
+                              background: `linear-gradient(135deg, ${theme.palette.warning.dark} 0%, ${theme.palette.warning.main} 100%)`,
+                              transform: 'translateY(-1px)',
+                              boxShadow: theme.shadows[4],
+                            },
+                            '&:disabled': {
+                              background: theme.palette.action.disabledBackground,
+                              color: theme.palette.action.disabled,
+                            },
+                          }}
+                        >
+                          {isLoadingNewOptions ? 'Searching...' : 'Search'}
+                        </Button>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Slide>
+              )}
             </Box>
           </Fade>
         )}
 
-        {/* Input Section - Show when waiting for input AND posters are loaded */}
-        {!operationSuccess && !isIdBasedOperation && waitingForInput && showResults && (
+
+
+
+
+        {/* Input Section - Show when waiting for input with movie options */}
+        {!operationSuccess && !isIdBasedOperation && waitingForInput && hasMovieOptions && showResults && (
           <Fade in={waitingForInput} timeout={500}>
             <Box sx={{
-              mt: hasMovieOptions ? 2 : 2,
+              mt: 2,
               p: { xs: 2, md: 3 },
               backgroundColor: theme.palette.mode === 'dark'
                 ? 'rgba(255, 255, 255, 0.03)'
                 : 'rgba(0, 0, 0, 0.02)',
               borderRadius: 3,
               border: `2px solid ${theme.palette.primary.main}40`,
-              // Better layout for wider screens
               [theme.breakpoints.up('md')]: {
                 mx: 2,
               },
@@ -599,7 +723,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                     },
                   }}
                 >
-                  {isLoadingNewOptions ? 'Loading...' : 'Send'}
+                  {isLoadingNewOptions ? 'Loading...' : 'Submit'}
                 </Button>
               </Box>
             </Box>

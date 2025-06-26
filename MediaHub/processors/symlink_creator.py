@@ -32,6 +32,63 @@ error_event = Event()
 log_imported_db = False
 db_initialized = False
 
+def _cleanup_old_symlink(old_symlink_info, new_dest_file=None):
+    """Helper function to cleanup old symlinks and associated files."""
+    if not old_symlink_info:
+        return
+
+    old_path_normalized = normalize_file_path(old_symlink_info['path'])
+
+    if new_dest_file is None or old_path_normalized != normalize_file_path(new_dest_file):
+        try:
+            if os.path.exists(old_symlink_info['path']):
+                os.remove(old_symlink_info['path'])
+                log_message(f"Force mode: Removed old symlink at {old_symlink_info['path']}", level="INFO")
+
+            # Check if we should delete .tmdb file
+            if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
+                should_delete_tmdb = True
+
+                # Check if this is a TV show by looking for season folders
+                old_parts = old_symlink_info['path'].split(os.sep)
+                if any(part.lower().startswith('season ') for part in old_parts):
+                    show_root = None
+                    for i, part in enumerate(old_parts):
+                        if part.lower().startswith('season '):
+                            show_root = os.sep.join(old_parts[:i])
+                            break
+
+                    if show_root and os.path.exists(show_root):
+                        remaining_episodes = 0
+                        for root_dir, dirs, files in os.walk(show_root):
+                            for file_name in files:
+                                file_path = os.path.join(root_dir, file_name)
+                                if os.path.islink(file_path) and file_path != old_symlink_info['path']:
+                                    remaining_episodes += 1
+
+                        # Only delete .tmdb if no other episodes remain
+                        should_delete_tmdb = remaining_episodes == 0
+
+                if should_delete_tmdb:
+                    try:
+                        os.remove(old_symlink_info['tmdb_file_path'])
+                        log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
+                    except Exception as e:
+                        log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
+
+            # Delete if parent directory is empty
+            if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
+                log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
+                os.rmdir(old_symlink_info['parent_dir'])
+
+                if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
+                    log_message(f"Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
+                    os.rmdir(old_symlink_info['parent_parent_dir'])
+        except OSError as e:
+            log_message(f"Error during force mode cleanup: {e}", level="WARNING")
+    else:
+        log_message(f"Force mode: Skipping cleanup as symlink location unchanged: {new_dest_file}", level="DEBUG")
+
 # Global cache for first selection in batch processing
 first_selection_cache = {
     'tmdb_id': None,
@@ -362,6 +419,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 cache_first_selection(result_tmdb_id, show_name)
         if result is None or result[0] is None:
             log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            if force and 'old_symlink_info' in locals():
+                _cleanup_old_symlink(old_symlink_info)
             return
 
         if len(result) == 5:
@@ -382,11 +441,13 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             save_processed_file(src_file, None, tmdb_id, season_number, reason)
             return
     else:
-        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result)
+        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
 
         # Check if result is None or the first item (dest_file) is None
         if result is None or result[0] is None:
             log_message(f"Movie processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            if force and 'old_symlink_info' in locals():
+                _cleanup_old_symlink(old_symlink_info)
             return
         dest_file, tmdb_id = result
 
@@ -394,6 +455,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
         reason = "Missing destination path"
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
+        if force and 'old_symlink_info' in locals():
+            _cleanup_old_symlink(old_symlink_info)
         return
 
     os.makedirs(os.path.dirname(dest_file), exist_ok=True)
@@ -459,60 +522,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
         # Cleanup old symlink if it exists (force mode)
         if force and 'old_symlink_info' in locals():
-            # Normalize paths for comparison to handle different path separators
-            old_path_normalized = normalize_file_path(old_symlink_info['path'])
-            new_path_normalized = normalize_file_path(dest_file)
-
-            # Only cleanup if the old symlink path is different from the new one
-            if old_path_normalized != new_path_normalized:
-                try:
-                    if os.path.exists(old_symlink_info['path']):
-                        os.remove(old_symlink_info['path'])
-                        log_message(f"Force mode: Removed old symlink at {old_symlink_info['path']}", level="INFO")
-
-                    # Check if we should delete .tmdb file
-                    if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
-                        should_delete_tmdb = True
-
-                        # Check if this is a TV show by looking for season folders
-                        old_parts = old_symlink_info['path'].split(os.sep)
-                        if any(part.lower().startswith('season ') for part in old_parts):
-                            show_root = None
-                            for i, part in enumerate(old_parts):
-                                if part.lower().startswith('season '):
-                                    show_root = os.sep.join(old_parts[:i])
-                                    break
-
-                            if show_root and os.path.exists(show_root):
-                                remaining_episodes = 0
-                                for root_dir, dirs, files in os.walk(show_root):
-                                    for file_name in files:
-                                        file_path = os.path.join(root_dir, file_name)
-                                        if os.path.islink(file_path) and file_path != old_symlink_info['path']:
-                                            remaining_episodes += 1
-
-                                # Only delete .tmdb if no other episodes remain
-                                should_delete_tmdb = remaining_episodes == 0
-
-                        if should_delete_tmdb:
-                            try:
-                                os.remove(old_symlink_info['tmdb_file_path'])
-                                log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
-                            except Exception as e:
-                                log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
-
-                    # Delete if parent directory is empty
-                    if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
-                        log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
-                        os.rmdir(old_symlink_info['parent_dir'])
-
-                        if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
-                            log_message(f"Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
-                            os.rmdir(old_symlink_info['parent_parent_dir'])
-                except OSError as e:
-                    log_message(f"Error during force mode cleanup: {e}", level="WARNING")
-            else:
-                log_message(f"Force mode: Skipping cleanup as symlink location unchanged: {dest_file}", level="DEBUG")
+            _cleanup_old_symlink(old_symlink_info, dest_file)
 
         if tmdb_id:
             tmdb_id_str = str(tmdb_id)
@@ -604,13 +614,19 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     except FileExistsError:
         log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
         track_file_failure(src_file, tmdb_id, season_number, "File already exists", f"File already exists: {dest_file}")
+        if force and 'old_symlink_info' in locals():
+            _cleanup_old_symlink(old_symlink_info, dest_file)
     except OSError as e:
         log_message(f"Error creating symlink for {src_file}: {e}", level="ERROR")
         track_file_failure(src_file, tmdb_id, season_number, "Symlink creation error", f"Error creating symlink: {e}")
+        if force and 'old_symlink_info' in locals():
+            _cleanup_old_symlink(old_symlink_info, dest_file)
     except Exception as e:
         error_message = f"Task failed with exception: {e}\n{traceback.format_exc()}"
         log_message(error_message, level="ERROR")
         track_file_failure(src_file, tmdb_id, season_number, "Unexpected error", error_message)
+        if force and 'old_symlink_info' in locals():
+            _cleanup_old_symlink(old_symlink_info, dest_file)
 
     return None
 

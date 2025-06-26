@@ -48,13 +48,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     { value: 'skip', label: 'Skip Processing', description: 'Remove symlinks and block future processing', icon: '⏭️' },
   ];
 
-  const modifyOptions: ModifyOption[] = propUseManualSearch
-    ? [
-        ...baseModifyOptions.slice(0, -1),
-        { value: 'manual-search', label: 'Manual Search', description: 'Enable manual TMDB search when automatic search fails', icon: '🔍' },
-        baseModifyOptions[baseModifyOptions.length - 1]
-      ]
-    : baseModifyOptions;
+  const modifyOptions: ModifyOption[] = baseModifyOptions;
 
   const idOptions: IDOption[] = [
     { value: 'imdb', label: 'IMDb ID', placeholder: 'tt1234567', icon: '🎥', helperText: 'Enter the IMDb ID (e.g., tt1234567)' },
@@ -157,13 +151,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
     const disableMonitor = true;
     const shouldUseBatchApply = batchApplyOverride !== undefined ? batchApplyOverride : useBatchApply;
-    const shouldUseManualSearch = selectedOption === 'manual-search' || propUseManualSearch;
+    const shouldUseManualSearch = propUseManualSearch;
 
     // Prepare the request payload with selected options and IDs
     const requestPayload = {
       sourcePath: currentFilePath,
       disableMonitor,
-      selectedOption: selectedOption === 'manual-search' ? undefined : (selectedOption || undefined),
+      selectedOption: selectedOption || undefined,
       selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined,
       batchApply: shouldUseBatchApply,
       manualSearch: shouldUseManualSearch
@@ -190,10 +184,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         case 'skip':
           commandPreview += ' --skip';
           break;
-        case 'manual-search':
-          commandPreview += ' --manual-search';
-          break;
       }
+    }
+    if (shouldUseManualSearch) {
+      commandPreview += ' --manual-search';
     }
     if (Object.keys(selectedIds).length > 0) {
       Object.entries(selectedIds).forEach(([key, value]) => {
@@ -257,6 +251,11 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                     output.includes('Press Enter') ||
                     output.includes('Type') ||
                     output.includes('Input') ||
+                    output.includes('Enter your search term') ||
+                    output.includes('Enter 1-') ||
+                    output.includes('to select an item') ||
+                    output.includes('Try a different search term') ||
+                    output.includes('No results found for') ||
                     output.endsWith(': ') ||
                     output.endsWith('? ') ||
                     output.includes('>>')) {
@@ -280,7 +279,15 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                 // Only mark as complete if we're not currently showing options or waiting for input
                 // This prevents premature completion when the backend is still waiting for user selection
                 const hasActiveOptions = movieOptions.length > 0 || isLoadingNewOptions;
-                const isWaitingForUserInput = waitingForInput || (msg.output && (msg.output.includes('Enter your choice:') || msg.output.includes('Select an option:')));
+                const isWaitingForUserInput = waitingForInput || (msg.output && (
+                  msg.output.includes('Enter your choice:') ||
+                  msg.output.includes('Select an option:') ||
+                  msg.output.includes('Enter your search term') ||
+                  msg.output.includes('Enter 1-') ||
+                  msg.output.includes('to select an item') ||
+                  msg.output.includes('Try a different search term') ||
+                  msg.output.includes('No results found for')
+                ));
 
                 if (!hasActiveOptions && !isWaitingForUserInput) {
                   console.log('Operation truly complete - no active options and not waiting for input');
@@ -315,6 +322,11 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   };
 
   const parseMovieOptions = (fullOutput: string) => {
+    if ((window as any).selectionBlocked) {
+      console.log('Parsing blocked due to recent selection');
+      return;
+    }
+
     // Clear any existing parse timeout
     if (parseTimeoutRef.current) {
       clearTimeout(parseTimeoutRef.current);
@@ -327,19 +339,15 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   };
 
   const parseMovieOptionsImmediate = (fullOutput: string) => {
-    // Check if we're in a processing state after selection - look for processing indicators
-    const isProcessingAfterSelection = fullOutput.includes('Processing with selected') ||
-                                      fullOutput.includes('Creating symlinks') ||
-                                      fullOutput.includes('Metadata processing') ||
-                                      fullOutput.includes('Successfully processed') ||
-                                      fullOutput.includes('Operation completed') ||
-                                      fullOutput.includes('Processing file') ||
-                                      fullOutput.includes('Symlink created') ||
-                                      (lastSelectedOption && fullOutput.includes(`> ${lastSelectedOption}`));
+    if ((window as any).selectionBlocked) {
+      console.log('Parsing blocked due to recent selection - preventing flicker');
+      return;
+    }
 
-    if (isProcessingAfterSelection) {
-      console.log('Processing detected after selection, clearing options and skipping parsing');
-      // Clear options to show processing state
+    // Simple check: if we see the user's selection input in the output, stop parsing
+    if (lastSelectedOption && fullOutput.includes(`> ${lastSelectedOption}`)) {
+      console.log('User selection detected in output - blocking parsing to prevent flicker');
+      // Clear options immediately
       if (movieOptions.length > 0) {
         setMovieOptions([]);
         setIsLoadingNewOptions(false);
@@ -349,10 +357,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     }
 
     // Look for numbered options with movie/show titles and TMDB IDs in the full output
-    const optionRegex = /(\d+):\s*([^(\n\[]+?)\s*\((\d{4})\)\s*\[(?:(TV Show|Movie) - )?tmdb-(\d+)\]/gm;
+    // Support both formats: "1: Title (Year) [Movie - tmdb-12345]" and "1: Title (Year) [tmdb-12345]"
+    // Also handle log prefixes like "[INFO] 1: Title..."
+    const optionRegex = /(?:\[INFO\]\s+)?(\d+):\s*([^(\n\[]+?)\s*\((\d{4})\)\s*\[(?:(TV Show|Movie) - )?tmdb-(\d+)\]/gm;
     const allMatches = [...fullOutput.matchAll(optionRegex)];
-
-    console.log('All matches found in output:', allMatches);
 
     if (allMatches.length === 0) {
       return;
@@ -407,11 +415,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       const currentFirstTmdbId = movieOptions.length > 0 ? movieOptions[0].tmdbId : null;
       const newFirstTmdbId = options.length > 0 ? options[0].tmdbId : null;
 
-      // If we have a last selected option and the same options are appearing again, skip
-      if (lastSelectedOption && currentFirstTmdbId === newFirstTmdbId && options.length === movieOptions.length) {
-        console.log('Same options detected after selection, likely processing feedback - skipping update');
-        return;
-      }
+
 
       // Only update if we have different options or more options than before
       if (options.length !== movieOptions.length || currentFirstTmdbId !== newFirstTmdbId) {
@@ -550,17 +554,21 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       // Store current options as previous before clearing
       if (movieOptions.length > 0) {
         setPreviousOptions([...movieOptions]);
-        setIsLoadingNewOptions(true);
-
-        // Set a timeout to clear loading state if no new options are received
-        loadingTimeoutRef.current = setTimeout(() => {
-          setIsLoadingNewOptions(false);
-          setPreviousOptions([]);
-        }, 5000); // 5 seconds timeout
       }
 
-      // Clear current options immediately to prevent mixing with new results
-      setMovieOptions([]);
+      // Always set loading state when sending input
+      setIsLoadingNewOptions(true);
+
+      // Set a timeout to clear loading state if no new options are received
+      loadingTimeoutRef.current = setTimeout(() => {
+        setIsLoadingNewOptions(false);
+        setPreviousOptions([]);
+      }, 5000); // 5 seconds timeout
+
+      // Only clear for manual text input (not numeric selections)
+      if (!/^\d+$/.test(input.trim())) {
+        setMovieOptions([]);
+      }
 
       // Send input to the python process via the API
       const response = await fetch('/api/python-bridge/input', {
@@ -607,12 +615,28 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
   const handleOptionClick = (optionNumber: string) => {
     setLastSelectedOption(optionNumber);
+
+    (window as any).lastSelectionTime = Date.now();
+    (window as any).selectionBlocked = true;
+
+    setMovieOptions([]);
+    setIsLoadingNewOptions(false);
+    setPreviousOptions([]);
+    setPosterFetchInProgress(false);
+
+    // Clear any pending parse timeouts
+    if (parseTimeoutRef.current) {
+      clearTimeout(parseTimeoutRef.current);
+      parseTimeoutRef.current = null;
+    }
+
     sendInput(optionNumber);
 
-    // Clear the last selected option after 10 seconds to prevent interference with future operations
+    // Clear the selection states after processing should be complete
     setTimeout(() => {
       setLastSelectedOption(null);
-    }, 10000);
+      (window as any).selectionBlocked = false;
+    }, 5000);
   };
 
   const handleInputSubmit = () => {
