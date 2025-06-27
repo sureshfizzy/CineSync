@@ -394,6 +394,31 @@ def _parse_filename_structure(filename: str) -> ParsedFilename:
                     'original': part
                 })
 
+        # Handle split bracket content
+        elif part.startswith('[') and not part.endswith(']'):
+            content = part[1:]
+            if content:
+                term_type = _classify_technical_term(content)
+                if term_type:
+                    technical_terms.append({
+                        'term': content,
+                        'position': i,
+                        'type': term_type,
+                        'original': part
+                    })
+
+        elif part.endswith(']') and not part.startswith('['):
+            content = part[:-1]
+            if content:
+                term_type = _classify_technical_term(content)
+                if term_type:
+                    technical_terms.append({
+                        'term': content,
+                        'position': i,
+                        'type': term_type,
+                        'original': part
+                    })
+
     return ParsedFilename(
         original=filename,
         filename_no_ext=filename_no_ext,
@@ -611,6 +636,10 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
             if clean_part.startswith('(') and re.match(r'^\(\d{4}\)$', clean_part):
                 break
 
+            # Stop at square brackets (technical info)
+            if clean_part.startswith('['):
+                break
+
             # Stop at season/episode patterns including ranges
             if (re.match(r'S\d{1,2}\.E\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}E\d{1,2}', clean_part, re.IGNORECASE) or
@@ -703,6 +732,11 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 title_end = i
                 break
 
+            # Stop at square brackets (technical info)
+            if clean_part.startswith('['):
+                title_end = i
+                break
+
             technical_keywords = _get_technical_keywords()
             max_title_words = 3 if is_tv else 8
             is_likely_title_word = (
@@ -738,28 +772,24 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         for i, part in enumerate(parts):
             clean_part = part.strip().rstrip('.')
 
-            year_at_position = next((y for y in years if y['position'] == i), None)
-            if year_at_position:
-                if len(years) >= 2:
-                    last_year_position = years[-1]['position']
-                    if i >= last_year_position:
-                        tech_start = i
-                        break
-                    else:
-                        year_position = i
-                        continue
-                else:
-                    tech_start = i
-                    break
+            # Check for years in parentheses
+            if clean_part.startswith('(') and re.match(r'^\(\d{4}\)$', clean_part):
+                tech_start = i
+                break
+
+            # Check for square brackets
+            if clean_part.startswith('['):
+                tech_start = i
+                break
 
             # Check for technical terms and release group patterns
-            elif (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or  # Resolution
-                  re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution like 3840x2160
-                  clean_part.lower() in _get_technical_keywords() or  # Use keywords.json
-                  re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
-                  re.match(r'^[A-Z]{2,4}[_-]\d{2,}', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
-                  re.match(r'^--', clean_part) or  # Double dash patterns
-                  re.match(r'^-[A-Z]', clean_part)):  # Release group patterns like "-Punisher694"
+            if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or  # Resolution
+                re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution like 3840x2160
+                clean_part.lower() in _get_technical_keywords() or  # Use keywords.json
+                re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
+                re.match(r'^[A-Z]{2,4}[_-]\d{2,}', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
+                re.match(r'^--', clean_part) or  # Double dash patterns
+                re.match(r'^-[A-Z]', clean_part)):  # Release group patterns like "-Punisher694"
                 tech_start = i
                 break
 
@@ -769,7 +799,11 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
             for i in range(tech_start):
                 part = parts[i].strip().rstrip('.')
 
-                year_at_position = next((y for y in years if y['position'] == i and y['part'] == part), None)
+                year_at_position = next((y for y in years if y['position'] == i), None)
+                if year_at_position and (part.startswith('(') and part.endswith(')')):
+                    continue
+
+                # Handle years embedded in other text
                 if year_at_position and year_at_position['context'] == 'title':
                     year_str = str(year_at_position['value'])
                     if year_str in part and part != year_str:
@@ -808,6 +842,9 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
         if year_at_position:
             year_value = year_at_position['value']
+
+            if parts[i].startswith('(') and parts[i].endswith(')'):
+                break
 
             if is_tv:
                 if len(years) >= 2:
