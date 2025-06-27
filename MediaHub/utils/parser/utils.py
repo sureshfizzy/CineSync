@@ -9,8 +9,9 @@ from typing import Optional
 
 from MediaHub.utils.parser.patterns import FILE_EXTENSION_PATTERNS
 
-# Cache for keywords data
+# Cache for keywords and mediainfo data
 _keywords_cache = None
+_mediainfo_cache = None
 
 def _load_keywords():
     """Load keywords from keywords.json file."""
@@ -18,15 +19,22 @@ def _load_keywords():
     if _keywords_cache is not None:
         return _keywords_cache
 
-    try:
-        keywords_path = os.path.join(os.path.dirname(__file__), '..', 'keywords.json')
-        with open(keywords_path, 'r', encoding='utf-8') as f:
-            _keywords_cache = json.load(f)
-            return _keywords_cache
-    except Exception:
-        # Fallback to empty dict if file not found
-        _keywords_cache = {'keywords': [], 'release_groups': []}
+    keywords_path = os.path.join(os.path.dirname(__file__), '..', 'keywords.json')
+    with open(keywords_path, 'r', encoding='utf-8') as f:
+        _keywords_cache = json.load(f)
         return _keywords_cache
+
+
+def _load_mediainfo():
+    """Load mediainfo from mediainfo.json file."""
+    global _mediainfo_cache
+    if _mediainfo_cache is not None:
+        return _mediainfo_cache
+
+    mediainfo_path = os.path.join(os.path.dirname(__file__), '..', 'mediainfo.json')
+    with open(mediainfo_path, 'r', encoding='utf-8') as f:
+        _mediainfo_cache = json.load(f)
+        return _mediainfo_cache
 
 def _get_all_keywords():
     """Get all keywords from keywords.json that should be removed from titles."""
@@ -41,6 +49,69 @@ def _get_all_keywords():
 
     # Return all keywords as a set for faster lookup
     return set(all_keywords)
+
+
+def extract_alternative_title(title: str) -> str:
+    """Extract alternative title from AKA patterns in title string."""
+    if not title:
+        return ""
+
+    def _get_technical_stop_terms():
+        """Get technical terms that should stop AKA extraction."""
+        stop_terms = []
+
+        keywords_data = _load_keywords()
+        if keywords_data:
+            stop_terms.extend(keywords_data.get('quality_sources', []))
+            stop_terms.extend(keywords_data.get('keywords', []))
+
+        mediainfo_data = _load_mediainfo()
+        if mediainfo_data:
+            stop_terms.extend(mediainfo_data.get('VideoCodecs', []))
+            stop_terms.extend(mediainfo_data.get('AudioCodecs', []))
+            stop_terms.extend(mediainfo_data.get('Resolutions', []))
+            stop_terms.extend(mediainfo_data.get('Sources', []))
+
+        stop_terms.extend(['Miniseries', 'Season', 'Series', 'Complete'])
+
+        escaped_terms = [re.escape(term) for term in stop_terms if term]
+        return '|'.join(escaped_terms)
+
+    stop_pattern = _get_technical_stop_terms()
+
+    # Patterns to match AKA and alternative title indicators
+    aka_patterns = [
+        # Dot-separated patterns (common in filenames)
+        rf'\.aka\.([^.]+(?:\.[^.]+)*?)\.(?:\d{{4}}|S\d+|E\d+|{stop_pattern})',
+        rf'\.also\.known\.as\.([^.]+(?:\.[^.]+)*?)\.(?:\d{{4}}|S\d+|E\d+|{stop_pattern})',
+        rf'\.a\.?k\.?a\.([^.]+(?:\.[^.]+)*?)\.(?:\d{{4}}|S\d+|E\d+|{stop_pattern})',
+        rf'\.alias\.([^.]+(?:\.[^.]+)*?)\.(?:\d{{4}}|S\d+|E\d+|{stop_pattern})',
+
+        # Space-separated patterns (traditional)
+        r'\s+aka\.?\s+(.+?)(?:\s+\d{4}|\s+S\d+|\s+E\d+|\s+Season|\s*$)',
+        r'\s+also\s+known\s+as\s+(.+?)(?:\s+\d{4}|\s+S\d+|\s+E\d+|\s+Season|\s*$)',
+        r'\s+a\.?\s*k\.?\s*a\.?\s+(.+?)(?:\s+\d{4}|\s+S\d+|\s+E\d+|\s+Season|\s*$)',
+        r'\s+alias\s+(.+?)(?:\s+\d{4}|\s+S\d+|\s+E\d+|\s+Season|\s*$)',
+    ]
+
+    for pattern in aka_patterns:
+        try:
+            match = re.search(pattern, title, re.IGNORECASE)
+            if match:
+                alternative = match.group(1).strip()
+                alternative = re.sub(r'\.', ' ', alternative)
+                alternative = re.sub(r'\s+S\d+.*$', '', alternative, flags=re.IGNORECASE)  # Remove S01E01 patterns
+                alternative = re.sub(r'\s+Season.*$', '', alternative, flags=re.IGNORECASE)  # Remove Season patterns
+                alternative = re.sub(r'\s+E\d+.*$', '', alternative, flags=re.IGNORECASE)  # Remove E01 patterns
+                alternative = re.sub(r'\s+\d{4}.*$', '', alternative)  # Remove year and everything after
+                alternative = re.sub(r'\s+', ' ', alternative)
+                alternative = alternative.strip()
+                if alternative and not re.match(r'^\d{4}$', alternative) and len(alternative) > 2:
+                    return alternative
+        except re.error:
+            continue
+
+    return ""
 
 
 def clean_title_string(title: str) -> str:
@@ -77,6 +148,9 @@ def clean_title_string(title: str) -> str:
 
     title = re.sub(r'\[.*?\]', '', title)
     title = re.sub(r'\(.*?\)', '', title)
+
+    # Extract alternative titles before removing them
+    alternative_title = extract_alternative_title(title)
 
     alternative_indicators = [
         r'\s+aka\.?\s+.*$',

@@ -247,15 +247,20 @@ def clean_query(query: str) -> Dict[str, Any]:
         if 'title' in result and result['title']:
             result['title'] = normalize_unicode_characters(result['title'])
 
+        # Add alternative title if available
+        if metadata.alternative_title:
+            result['alternative_title'] = normalize_unicode_characters(metadata.alternative_title)
+
         # Add legacy compatibility fields
         result['episodes'] = [metadata.episode] if metadata.episode else []
         result['seasons'] = [metadata.season] if metadata.season else []
 
-        # For episode_identifier, only create if we have actual season info
+        # For episode_identifier, create if we have episode info
         if metadata.episode and metadata.season:
             result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:02d}"
         elif metadata.episode:
-            result['episode_identifier'] = None
+            # If we have episode but no season, just use episode number
+            result['episode_identifier'] = f"E{metadata.episode:02d}"
         else:
             result['episode_identifier'] = None
 

@@ -71,6 +71,7 @@ class MediaMetadata:
     """Complete media metadata structure optimized for Plex."""
     # Core metadata
     title: str
+    alternative_title: Optional[str] = None
     year: Optional[int] = None
 
     # Video specs
@@ -145,6 +146,10 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
 
     parsed = _parse_filename_structure(filename)
 
+    # Extract alternative title from original filename before any cleaning
+    from MediaHub.utils.parser.utils import extract_alternative_title
+    alternative_title = extract_alternative_title(filename)
+
     # Extract title and year separately
     title = _extract_title_from_parsed(parsed)
     year = _extract_year_from_parsed(parsed)
@@ -162,6 +167,7 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
 
     metadata = MediaMetadata(
         title=title,
+        alternative_title=alternative_title,
         year=year,
         resolution=_extract_resolution_from_parsed(parsed),
         video_codec=_extract_video_codec_from_parsed(parsed),

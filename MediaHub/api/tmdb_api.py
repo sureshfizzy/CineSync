@@ -297,6 +297,27 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         cleaned_title = cleaned_result.get('title', '')
         results = fetch_results(cleaned_title, year)
 
+    # AKA fallback: Try alternative title if available
+    if not results and (file or root):
+        log_message("Primary search failed. Attempting search with alternative title (AKA).", "DEBUG", "stdout")
+
+        alternative_title = None
+        if root:
+            root_name = os.path.basename(root)
+            root_result = clean_query(root_name)
+            alternative_title = root_result.get('alternative_title')
+
+        # If no alternative title from root, try the file
+        if not alternative_title and file:
+            file_result = clean_query(file)
+            alternative_title = file_result.get('alternative_title')
+
+        if alternative_title:
+            log_message(f"Trying alternative title: '{alternative_title}'", "DEBUG", "stdout")
+            results = fetch_results(alternative_title, year)
+        else:
+            log_message("No alternative title found for AKA fallback.", "DEBUG", "stdout")
+
     # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
@@ -522,6 +543,21 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         cleaned_result = clean_query(file)
         cleaned_title = cleaned_result.get('title', '')
         results = fetch_results(cleaned_title, year)
+
+        # AKA fallback: Try alternative title if available
+        if not results:
+            alternative_title = cleaned_result.get('alternative_title')
+
+            if not alternative_title and root:
+                root_name = os.path.basename(root)
+                root_result = clean_query(root_name)
+                alternative_title = root_result.get('alternative_title')
+
+            if alternative_title:
+                log_message(f"Trying alternative title: '{alternative_title}'", "DEBUG", "stdout")
+                results = fetch_results(alternative_title, year)
+            else:
+                log_message("No alternative title found for AKA fallback.", "DEBUG", "stdout")
 
     # Directory-based fallback
     if not results and actual_dir and root:
