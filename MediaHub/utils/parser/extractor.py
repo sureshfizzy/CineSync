@@ -484,9 +484,22 @@ def _classify_technical_term(term: str) -> Optional[str]:
     if re.match(r'^\d\.\d$', term) or term_upper in ['MONO', 'STEREO']:
         return 'audio_channels'
 
-    # Languages and audio information
-    if term_upper in ['MULTI', 'ITA', 'ENG', 'FRENCH', 'GERMAN', 'SPANISH', 'JAPANESE', 'DUAL-AUDIO', 'MULTI-AUDIO', 'DUAL']:
-        return 'language'
+    # Languages and audio information using mediainfo.json
+    current_dir = os.path.dirname(__file__)
+    mediainfo_path = os.path.join(current_dir, '..', 'mediainfo.json')
+    with open(mediainfo_path, 'r', encoding='utf-8') as f:
+        mediainfo_data = json.load(f)
+        valid_languages = mediainfo_data.get('ValidLanguages', [])
+
+        # Check single language terms
+        if term_upper in valid_languages or term_upper in ['MULTI', 'DUAL-AUDIO', 'MULTI-AUDIO', 'DUAL']:
+            return 'language'
+
+        # Check language combinations
+        if '-' in term and len(term.split('-')) == 2:
+            lang_parts = term_upper.split('-')
+            if all(lang in valid_languages for lang in lang_parts):
+                return 'language'
 
     # Release flags
     if term_upper in ['REPACK', 'PROPER', 'REAL', 'FIX']:
@@ -691,8 +704,9 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 break
 
             technical_keywords = _get_technical_keywords()
+            max_title_words = 3 if is_tv else 8
             is_likely_title_word = (
-                i <= 2 and
+                i <= max_title_words and
                 not re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) and
                 not clean_part.lower() in technical_keywords
             )
@@ -743,7 +757,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                   re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution like 3840x2160
                   clean_part.lower() in _get_technical_keywords() or  # Use keywords.json
                   re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or  # AI upscaling terms
-                  re.match(r'^[A-Z]{2,4}[_-]?\d+', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
+                  re.match(r'^[A-Z]{2,4}[_-]\d{2,}', clean_part, re.IGNORECASE) or  # Quality indicators like "alq-12"
                   re.match(r'^--', clean_part) or  # Double dash patterns
                   re.match(r'^-[A-Z]', clean_part)):  # Release group patterns like "-Punisher694"
                 tech_start = i
