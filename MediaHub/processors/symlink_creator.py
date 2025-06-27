@@ -365,7 +365,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 force_extra = True
                 log_message(f"Processing as show extra based on TV folder pattern: {file}", level="INFO")
                 if file_result:
-                    file_result['is_extra'] = True
+                    if not (file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))):
+                        file_result['is_extra'] = True
             else:
                 # Fallback to legacy regex patterns for edge cases
                 episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|S\d{1,2}\s*\d{2}|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit)\d{2,3}(?!Kbps)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+)|\b\d{2}x\d{2}\b)|\(S\d{1,2}\)', file, re.IGNORECASE)
@@ -407,7 +408,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             metadata_to_pass = parent_result
 
         if force_extra and metadata_to_pass:
-            metadata_to_pass['is_extra'] = True
+            if not (metadata_to_pass.get('episode_identifier') or (metadata_to_pass.get('season_number') and metadata_to_pass.get('episode_number'))):
+                metadata_to_pass['is_extra'] = True
 
         result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass, manual_search=manual_search)
 

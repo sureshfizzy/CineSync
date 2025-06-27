@@ -158,7 +158,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             # Process show data with the potentially updated season/episode info
             if show_data:
-                log_message("Show found by ID but missing season/episode info. Attempting to extract...", level="INFO")
+                # Check if season/episode info is available
+                if season_number is not None and episode_number is not None:
+                    log_message(f"Show found by ID with season/episode info: S{season_number}E{episode_number}", level="INFO")
+                else:
+                    log_message("Show found by ID but missing season/episode info. Attempting to extract...", level="INFO")
+
                 show_name = show_data['name']
                 first_air_date = show_data.get('first_air_date', '')
                 show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
