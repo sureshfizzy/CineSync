@@ -540,30 +540,27 @@ def calculate_score(result, query, year=None):
         elif abs(int(result_year) - int(year)) <= 1:
             score += 10
 
-    # Language and country bonus (10 points)
-    if result.get('original_language') == 'en':
-        score += 5
-    if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
-        score += 5
+    # Language and country bonus
+    popular_languages = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'hi', 'pt', 'it', 'ru']
+    if result.get('original_language') in popular_languages:
+        score += 2
 
     # Popularity bonus
     popularity = result.get('popularity', 0)
     if popularity > 100:
-        score += 30
+        score += 30 + min((popularity - 100) * 0.1, 20)
     elif popularity > 50:
-        score += 25
-    elif popularity > 35:
-        score += 22
+        score += 25 + (popularity - 50) * 0.2
     elif popularity > 25:
-        score += 20
+        score += 20 + (popularity - 25) * 0.2
     elif popularity > 15:
-        score += 18
+        score += 15 + (popularity - 15) * 0.3
     elif popularity > 10:
-        score += 15
+        score += 10 + (popularity - 10) * 0.6
     elif popularity > 5:
-        score += 10
+        score += 5 + (popularity - 5) * 0.8
     elif popularity > 1:
-        score += 5
+        score += popularity * 1.0
 
     # Apply exact match bonus
     score += exact_match_bonus
