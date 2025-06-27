@@ -3,8 +3,15 @@
         "BluRay", "Blu-ray", "BD", "BDRip", "BRRip", "WEB-DL", "WEBDL", "WebRip", "WEBRip",
         "HDTV", "DVDRip", "DVDRIP", "REMUX", "BDRemux", "HYBRID"
     ],
+    "editions": [
+        "Unrated", "Uncut", "Remastered", "Remaster", "IMAX", "IMAX Enhanced",
+        "Extended", "Extended Cut", "Theatrical", "Theatrical Cut",
+        "Directors", "Director's", "Director's Cut", "DC",
+        "Special", "Special Edition", "Edition", "Limited", "Collector's", "Anniversary", "Definitive", "Uncensored",
+        "Complete", "Criterion", "Criterion Collection", "4K Remaster", "Open Matte"
+    ],
     "keywords": [
-        "Unrated", "Remastered", "IMAX", "Extended", "Theatrical", "Directors", "Director's", "Ultimate", "Special", "Final", "Cut", "Edition", "Limited", "Collector's", "Anniversary", "Definitive", "Uncensored", "Complete", "BDRemux", "ITA", "ENG", "x265", "H265", "HDR10",
+        "BDRemux", "ITA", "ENG", "x265", "H265", "HDR10",
         "WebDl", "Rip", "4K", "HDR", "DV", "2160p", "BDRip", "AC3", "5.1", "Sub", "NAHOM", "mkv",
         "www", "Torrenting", "com", "TamilMV", "Mp4", "Series", "HorribleRips", "mp4", "[Anime Time]", "[Dual Audio]", "[1080p]", "[HEVC 10bit]", "[AAC]", "[Batch]",
         "[Erai-raws]", "[720p]", "[Multiple Subtitle]", "[ENG]", "[POR-BR]", "[SPA-LA]", "[SPA]", "[ARA]", "[FRE]", "[GER]", "[ITA]", "[RUS]",

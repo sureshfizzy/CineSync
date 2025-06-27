@@ -32,9 +32,15 @@ def _get_all_keywords():
     """Get all keywords from keywords.json that should be removed from titles."""
     keywords_data = _load_keywords()
     keywords = keywords_data.get('keywords', [])
+    editions = keywords_data.get('editions', [])
+
+    # Combine keywords and editions
+    all_keywords = []
+    all_keywords.extend(keyword for keyword in keywords if isinstance(keyword, str))
+    all_keywords.extend(edition for edition in editions if isinstance(edition, str))
 
     # Return all keywords as a set for faster lookup
-    return set(keyword for keyword in keywords if isinstance(keyword, str))
+    return set(all_keywords)
 
 
 def clean_title_string(title: str) -> str:
@@ -45,8 +51,10 @@ def clean_title_string(title: str) -> str:
     # Remove keywords from keywords.json from title
     all_keywords = _get_all_keywords()
     for keyword in all_keywords:
-        # Create pattern to match the keyword as a whole word, case-insensitive
-        pattern = r'\b' + re.escape(keyword) + r'\b'
+        if keyword.upper() == 'DC':
+            pattern = r'(?<![A-Za-z.])DC(?![\w\'.])'
+        else:
+            pattern = r'\b' + re.escape(keyword) + r'\b'
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
     protected_dots = []

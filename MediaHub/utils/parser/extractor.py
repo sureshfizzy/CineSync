@@ -35,11 +35,23 @@ def _get_technical_keywords():
     """Get technical keywords that should stop title extraction."""
     keywords_data = _load_keywords()
     keywords = keywords_data.get('keywords', [])
+    editions = keywords_data.get('editions', [])
 
-    # Convert to lowercase for case-insensitive matching
     technical_keywords = [kw.lower() for kw in keywords if isinstance(kw, str)]
+    edition_keywords = [ed.lower() for ed in editions if isinstance(ed, str)]
 
-    return set(technical_keywords)  # Use set for faster lookup
+    all_keywords = set(technical_keywords)
+    all_keywords.update(edition_keywords)
+
+    return all_keywords
+
+def _get_edition_keywords():
+    """Get edition keywords from keywords.json editions section."""
+    keywords_data = _load_keywords()
+    editions = keywords_data.get('editions', [])
+    edition_keywords = [edition.upper() for edition in editions if isinstance(edition, str)]
+
+    return set(edition_keywords)
 
 @dataclass
 class ParsedFilename:
@@ -481,7 +493,8 @@ def _classify_technical_term(term: str) -> Optional[str]:
         return 'release_flag'
 
     # Edition
-    if term_upper in ['EXTENDED', 'UNRATED', 'DIRECTORS', 'THEATRICAL', 'IMAX', 'REMASTERED', 'UNCENSORED']:
+    edition_keywords = _get_edition_keywords()
+    if term_upper in edition_keywords:
         return 'edition'
 
     # HDR

@@ -190,7 +190,7 @@ LANGUAGE_PATTERNS = _build_language_patterns()
 def _build_edition_patterns():
     """Build edition patterns data."""
     patterns = {
-        'directors_cut': re.compile(r'\b(Director\'?s?\s*Cut|DC)\b', re.IGNORECASE),
+        'directors_cut': re.compile(r'\b(Director\'?s?\s*Cut|(?<![A-Za-z.])DC(?![\w\'.]))', re.IGNORECASE),
         'extended': re.compile(r'\b(Extended|Extended\.Cut)\b', re.IGNORECASE),
         'unrated': re.compile(r'\b(Unrated|Uncut)\b', re.IGNORECASE),
         'theatrical': re.compile(r'\b(Theatrical)\b', re.IGNORECASE),
