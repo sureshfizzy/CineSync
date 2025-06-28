@@ -147,9 +147,11 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if skip:
         force = True
 
-        # Get existing destination path from database
+        # Get existing destination path from database BEFORE removing the entry
         existing_dest_path = get_destination_path(src_file)
-        existing_dest_path = normalize_file_path(existing_dest_path)
+        if existing_dest_path:
+            existing_dest_path = normalize_file_path(existing_dest_path)
+
         remove_processed_file(src_file)
 
         # Clean up existing symlink and directories if they exist

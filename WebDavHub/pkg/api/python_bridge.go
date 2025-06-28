@@ -180,9 +180,18 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	var finalAbsPath string
 
-	// Check if the path is already absolute (source files from database)
 	if filepath.IsAbs(cleanPath) {
-		finalAbsPath = cleanPath
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			http.Error(w, "Server configuration error", http.StatusInternalServerError)
+			return
+		}
+
+		if strings.HasPrefix(cleanPath, absRoot) {
+			finalAbsPath = cleanPath
+		} else {
+			finalAbsPath = filepath.Join(absRoot, strings.TrimPrefix(cleanPath, "/"))
+		}
 	} else {
 		absPath := filepath.Join(rootDir, cleanPath)
 
@@ -205,17 +214,21 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if file exists
-	if _, err := os.Stat(finalAbsPath); os.IsNotExist(err) {
+	// Check if file or symlink exists
+	fileInfo, err := os.Lstat(finalAbsPath)
+	if os.IsNotExist(err) {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-
-	// Determine if this is a directory (TV show folder) or a file
-	fileInfo, err := os.Stat(finalAbsPath)
 	if err != nil {
 		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
 		return
+	}
+
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		if _, err := os.Stat(finalAbsPath); os.IsNotExist(err) {
+			logger.Warn("Processing broken symlink: %s (target does not exist)", finalAbsPath)
+		}
 	}
 
 	var realPath string
