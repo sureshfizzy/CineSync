@@ -33,7 +33,7 @@ class WebDavHubDevelopmentServer:
         self.env_vars: Dict[str, str] = {}
         self.api_port = 8082
         self.ui_port = 5173
-        
+
     def parse_arguments(self):
         """Parse command line arguments"""
         parser = argparse.ArgumentParser(
@@ -43,17 +43,17 @@ class WebDavHubDevelopmentServer:
         )
 
         args = parser.parse_args()
-        
+
     def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
         def signal_handler(signum, frame):
             print(f"\n🛑 Received signal {signum}, shutting down servers...")
             self.cleanup()
             sys.exit(0)
-            
+
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-            
+
     def load_environment_variables(self):
         """Load environment variables from .env file"""
         env_file_paths = [
@@ -62,22 +62,23 @@ class WebDavHubDevelopmentServer:
             Path("/app/.env"),
             Path(".env")
         ]
-        
+
         env_file = None
         for path in env_file_paths:
             if path.exists():
                 env_file = path
                 break
-                
+
         if env_file:
             self._parse_env_file(env_file)
         else:
             print("Warning: No .env file found. Using default values.")
-            
+
         # Get ports from environment variables with defaults
-        self.api_port = int(self.env_vars.get('CINESYNC_API_PORT', '8082'))
-        self.ui_port = int(self.env_vars.get('CINESYNC_UI_PORT', '5173'))
-        
+        # Priority: Docker environment variables > .env file > defaults
+        self.api_port = int(os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082')))
+        self.ui_port = int(os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173')))
+
     def _parse_env_file(self, env_file: Path):
         """Parse .env file and extract environment variables"""
         try:
@@ -89,37 +90,37 @@ class WebDavHubDevelopmentServer:
                         key = key.strip()
                         value = value.strip().strip('"').strip("'")
                         self.env_vars[key] = value
-                        
+
             print(f"✅ Loaded environment variables from {env_file}")
         except Exception as e:
             print(f"⚠️  Warning: Could not parse .env file {env_file}: {e}")
-            
+
     def setup_working_directory(self):
         """Change to WebDavHub directory (2 folders back from script location)"""
         script_dir = Path(__file__).parent.absolute()
         webdavhub_dir = script_dir.parent
         os.chdir(webdavhub_dir)
         print(f"Working directory: {webdavhub_dir}")
-        
+
     def check_prerequisites(self):
         """Check if required files and dependencies exist"""
         # Check if Go binary exists
         if not Path("cinesync").exists() and not Path("cinesync.exe").exists():
             print("❌ Go binary not found. Please run 'python scripts/build-dev.py' first.")
             sys.exit(1)
-            
+
         # Check if frontend directory exists
         if not Path("frontend").exists():
             print("❌ Frontend directory not found.")
             sys.exit(1)
-            
+
         # Check if frontend dependencies are installed
         if not Path("frontend/node_modules").exists():
             print("❌ Frontend dependencies not installed. Please run 'python scripts/build-dev.py' first.")
             sys.exit(1)
-            
+
         print("✅ Prerequisites check passed")
-        
+
     def check_database_directory(self):
         """Check database directory status"""
         # Silently check database directory without verbose output
@@ -132,7 +133,7 @@ class WebDavHubDevelopmentServer:
             print("⚠️  Warning: DESTINATION_DIR not set in .env file")
             print("   Some CineSync functionality may not work properly")
             print("   Consider setting DESTINATION_DIR in your .env file")
-            
+
     def start_backend_server(self):
         """Start the Go backend server"""
         print(f"Starting Go backend server on port {self.api_port}...")
@@ -199,7 +200,7 @@ class WebDavHubDevelopmentServer:
 
             # Use 'dev' command for development server with hot reload
             self.frontend_process = subprocess.Popen(
-                f"pnpm run dev --port {self.ui_port} --host",
+                "pnpm run dev --host",
                 shell=True,
                 cwd="frontend",
                 env=env,

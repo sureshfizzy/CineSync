@@ -53,13 +53,26 @@ type UpdateConfigRequest struct {
 
 // getEnvFilePath returns the path to the .env file
 func getEnvFilePath() string {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "/app/.env"
+	}
+
+	if os.Getenv("CONTAINER") == "docker" {
+		return "/app/.env"
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		logger.Warn("Could not determine current working directory.")
 		return "../.env"
 	}
-	parentDir := filepath.Dir(cwd)
-	return filepath.Join(parentDir, ".env")
+
+	if filepath.Base(cwd) == "WebDavHub" {
+		parentDir := filepath.Dir(cwd)
+		return filepath.Join(parentDir, ".env")
+	}
+
+	return filepath.Join(cwd, ".env")
 }
 
 // getConfigDefinitions returns the configuration definitions with categories and descriptions
@@ -169,12 +182,95 @@ func getConfigDefinitions() []ConfigValue {
 	}
 }
 
+// createEnvFileFromEnvironment creates a .env file from current environment variables
+func createEnvFileFromEnvironment() error {
+	envPath := getEnvFilePath()
+	logger.Info("Creating .env file from environment variables at: %s", envPath)
+
+	// Get all configuration definitions
+	definitions := getConfigDefinitions()
+
+	// Collect environment variables that match our configuration
+	envVars := make(map[string]string)
+	for _, def := range definitions {
+		if value := os.Getenv(def.Key); value != "" {
+			envVars[def.Key] = value
+		}
+	}
+
+	// If no environment variables found, create with minimal defaults
+	if len(envVars) == 0 {
+		logger.Warn("No environment variables found, creating .env with minimal defaults")
+		envVars["SOURCE_DIR"] = "/source"
+		envVars["DESTINATION_DIR"] = "/destination"
+		envVars["CINESYNC_LAYOUT"] = "true"
+		envVars["LOG_LEVEL"] = "INFO"
+		envVars["CINESYNC_IP"] = "0.0.0.0"
+		envVars["CINESYNC_API_PORT"] = "8082"
+		envVars["CINESYNC_UI_PORT"] = "5173"
+		envVars["CINESYNC_AUTH_ENABLED"] = "true"
+		envVars["CINESYNC_USERNAME"] = "admin"
+		envVars["CINESYNC_PASSWORD"] = "admin"
+	}
+
+	file, err := os.Create(envPath)
+	if err != nil {
+		return fmt.Errorf("failed to create .env file: %v", err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString("# Configuration file created from Docker environment variables\n\n"); err != nil {
+		return fmt.Errorf("failed to write to .env file: %v", err)
+	}
+
+	for key, value := range envVars {
+		quotedValue := value
+		if strings.Contains(value, " ") || strings.Contains(value, "#") || strings.Contains(value, "\\") || value == "" {
+			quotedValue = fmt.Sprintf("\"%s\"", value)
+		}
+
+		line := fmt.Sprintf("%s=%s\n", key, quotedValue)
+		if _, err := file.WriteString(line); err != nil {
+			return fmt.Errorf("failed to write to .env file: %v", err)
+		}
+	}
+
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("failed to sync .env file: %v", err)
+	}
+
+	logger.Info("Successfully created .env file with %d configuration values", len(envVars))
+	return nil
+}
+
 // readEnvFile reads the .env file and returns a map of key-value pairs
 func readEnvFile() (map[string]string, error) {
 	envPath := getEnvFilePath()
+
+	// Check if .env file exists
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		logger.Info(".env file not found at %s, creating from environment variables", envPath)
+
+		// Create .env file from environment variables
+		if createErr := createEnvFileFromEnvironment(); createErr != nil {
+			logger.Error("Failed to create .env file: %v", createErr)
+			return readFromEnvironment(), nil
+		}
+	} else {
+		if fileInfo, err := os.Stat(envPath); err == nil && fileInfo.Size() == 0 {
+			logger.Info(".env file exists but is empty at %s, populating from environment variables", envPath)
+
+			if createErr := createEnvFileFromEnvironment(); createErr != nil {
+				logger.Error("Failed to populate .env file: %v", createErr)
+				return readFromEnvironment(), nil
+			}
+		}
+	}
+
 	file, err := os.Open(envPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open .env file: %v", err)
+		logger.Warn("Failed to open .env file: %v, falling back to environment variables", err)
+		return readFromEnvironment(), nil
 	}
 	defer file.Close()
 
@@ -208,10 +304,28 @@ func readEnvFile() (map[string]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading .env file: %v", err)
+		logger.Warn("Error reading .env file: %v, falling back to environment variables", err)
+		return readFromEnvironment(), nil
 	}
 
 	return envVars, nil
+}
+
+// readFromEnvironment reads configuration directly from environment variables
+func readFromEnvironment() map[string]string {
+	logger.Info("Reading configuration directly from environment variables")
+
+	definitions := getConfigDefinitions()
+	envVars := make(map[string]string)
+
+	for _, def := range definitions {
+		if value := os.Getenv(def.Key); value != "" {
+			envVars[def.Key] = value
+		}
+	}
+
+	logger.Info("Read %d configuration values from environment", len(envVars))
+	return envVars
 }
 
 // writeEnvFile writes the environment variables back to the .env file
@@ -366,12 +480,7 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read current environment variables
-	envVars, err := readEnvFile()
-	if err != nil {
-		logger.Error("Failed to read .env file: %v", err)
-		http.Error(w, "Failed to read configuration", http.StatusInternalServerError)
-		return
-	}
+	envVars, _ := readEnvFile()
 
 	// Get configuration definitions
 	definitions := getConfigDefinitions()
@@ -432,12 +541,7 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read current environment variables
-	envVars, err := readEnvFile()
-	if err != nil {
-		logger.Error("Failed to read .env file: %v", err)
-		http.Error(w, "Failed to read configuration", http.StatusInternalServerError)
-		return
-	}
+	envVars, _ := readEnvFile()
 
 	// Apply updates
 	for _, update := range request.Updates {

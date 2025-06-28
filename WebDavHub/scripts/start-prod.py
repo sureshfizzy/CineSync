@@ -72,8 +72,9 @@ class WebDavHubProductionServer:
             print("Warning: No .env file found. Using default values.")
 
         # Get ports from environment variables with defaults
-        self.api_port = int(self.env_vars.get('CINESYNC_API_PORT', '8082'))
-        self.ui_port = int(self.env_vars.get('CINESYNC_UI_PORT', '5173'))
+        # Priority: Docker environment variables > .env file > defaults
+        self.api_port = int(os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082')))
+        self.ui_port = int(os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173')))
 
     def _parse_env_file(self, env_file: Path):
         """Parse .env file and extract environment variables"""
@@ -216,11 +217,12 @@ class WebDavHubProductionServer:
             # Set environment variables for the frontend process
             env = os.environ.copy()
             env.update(self.env_vars)
+            # Ensure Docker environment variables take precedence
             env["CINESYNC_UI_PORT"] = str(self.ui_port)
             env["CINESYNC_API_PORT"] = str(self.api_port)
 
             self.frontend_process = subprocess.Popen(
-                f"pnpm run preview --port {self.ui_port} --host",
+                "pnpm run preview --host",
                 shell=True,
                 cwd="frontend",
                 env=env,
