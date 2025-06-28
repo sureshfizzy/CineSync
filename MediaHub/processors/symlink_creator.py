@@ -129,6 +129,9 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if error_event.is_set():
         return
 
+    # Track if force_extra was set by user
+    user_requested_force_extra = force_extra
+
     # Resolve symlink to source if applicable
     original_src_file = src_file
     src_file = resolve_symlink_to_source(src_file)
@@ -436,8 +439,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 if episode_match_result:
                     episode_number = int(episode_match_result.group(1))
 
-        # Skip symlink creation for extras unless skipped from env or force_extra is enabled
-        if is_extra and not force_extra and is_skip_extras_folder_enabled():
+        # Skip symlink creation for extras unless skipped from env or user explicitly requested force_extra
+        if is_extra and not user_requested_force_extra and is_skip_extras_folder_enabled():
             log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
             reason = "Extra/Special Content"
             save_processed_file(src_file, None, tmdb_id, season_number, reason)
