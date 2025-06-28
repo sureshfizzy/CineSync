@@ -288,6 +288,17 @@ def setup_cpu_affinity():
     except Exception as e:
         log_message(f"Could not set CPU affinity: {e}", level="WARNING")
 
+def log_system_configuration():
+    """Log system configuration at startup."""
+
+    max_processes = get_max_processes()
+    log_message(f"MAX_PROCESSES configured to use {max_processes} workers for I/O operations", level="INFO")
+    log_message(f"Using {max_processes} worker threads for parallel processing", level="INFO")
+
+    max_cores = get_max_cores()
+    cpu_cores = psutil.cpu_count()
+    log_message(f"MAX_CORES configured to use {max_cores} cores (CPU cores available: {cpu_cores})", level="INFO")
+
 def setup_signal_handlers():
     """Setup signal handlers for Linux and Windows."""
     # Register handlers for both Windows and Unix signals
@@ -615,6 +626,9 @@ if __name__ == "__main__":
 
     # Set CPU affinity to limit core usage
     setup_cpu_affinity()
+
+    # Log system configuration at startup
+    log_system_configuration()
 
     # Get directories and start main process
     src_dirs, dest_dir = get_directories()

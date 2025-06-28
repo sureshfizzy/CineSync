@@ -154,14 +154,8 @@ def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""
     return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
-# Flags to track if configuration has been logged
-_max_processes_logged = False
-_max_cores_logged = False
-
 def get_max_cores():
     """Get the maximum number of CPU cores for CPU-bound operations"""
-    global _max_cores_logged
-
     try:
         max_cores = int(os.getenv('MAX_CORES', '0'))
         from multiprocessing import cpu_count
@@ -173,23 +167,13 @@ def get_max_cores():
         else:
             max_cores = min(max_cores, cpu_cores)
 
-        # Log only once to prevent spam during real-time monitoring
-        if not _max_cores_logged:
-            log_message(f"MAX_CORES configured to use {max_cores} cores (CPU cores available: {cpu_cores})", level="INFO")
-            _max_cores_logged = True
-
         return max_cores
     except (ValueError, TypeError):
-        if not _max_cores_logged:
-            log_message("Invalid MAX_CORES value, using auto-detect", level="WARNING")
-            _max_cores_logged = True
         from multiprocessing import cpu_count
         return cpu_count()
 
 def get_max_processes():
     """Get the maximum number of processes for I/O-bound parallel processing (API calls, file operations)"""
-    global _max_processes_logged
-
     try:
         max_processes = int(os.getenv('MAX_PROCESSES', '8'))
         from multiprocessing import cpu_count
@@ -198,16 +182,8 @@ def get_max_processes():
         cpu_cores = cpu_count()
         max_processes = max(1, min(max_processes, 32))
 
-        # Log only once to prevent spam during real-time monitoring
-        if not _max_processes_logged:
-            log_message(f"MAX_PROCESSES configured to use {max_processes} workers for I/O operations", level="INFO")
-            _max_processes_logged = True
-
         return max_processes
     except (ValueError, TypeError):
-        if not _max_processes_logged:
-            log_message("Invalid MAX_PROCESSES value, using default of 8", level="WARNING")
-            _max_processes_logged = True
         return 8
 
 def get_movie_resolution_folder(file, resolution):

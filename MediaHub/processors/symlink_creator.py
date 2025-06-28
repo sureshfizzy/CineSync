@@ -673,7 +673,6 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     if auto_select:
         # Use thread pool for parallel processing when auto-select is enabled
         max_workers = get_max_processes()
-        log_message(f"Using {max_workers} worker threads for parallel processing", level="INFO")
 
         tasks = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
