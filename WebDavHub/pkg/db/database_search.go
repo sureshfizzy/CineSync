@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"cinesync/pkg/logger"
 	_ "modernc.org/sqlite"
@@ -22,6 +23,29 @@ type DatabaseRecord struct {
 	SeasonNumber    string `json:"season_number,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 	FileSize        *int64 `json:"file_size,omitempty"`
+}
+
+// Cache for column existence to avoid repeated PRAGMA queries
+var (
+	fileSizeColumnExists sync.Once
+	hasFileSizeColumn    bool
+)
+
+// checkFileSizeColumnExists checks if the file_size column exists in processed_files table
+func checkFileSizeColumnExists() bool {
+	fileSizeColumnExists.Do(func() {
+		mediaHubDB, err := GetDatabaseConnection()
+		if err != nil {
+			hasFileSizeColumn = false
+			return
+		}
+
+		// Simple query to check if column exists - if it fails, column doesn't exist
+		var dummy sql.NullInt64
+		err = mediaHubDB.QueryRow("SELECT file_size FROM processed_files LIMIT 1").Scan(&dummy)
+		hasFileSizeColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+	})
+	return hasFileSizeColumn
 }
 
 // DatabaseStats represents statistics about the database
@@ -117,6 +141,12 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build data query with pagination
+	hasFileSizeColumn := checkFileSizeColumnExists()
+	fileSizeSelect := "NULL as file_size"
+	if hasFileSizeColumn {
+		fileSizeSelect = "file_size"
+	}
+
 	dataQuery := `
 		SELECT
 			file_path,
@@ -124,7 +154,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason,
-			file_size
+			` + fileSizeSelect + `
 		FROM processed_files ` + whereClause.String() + `
 		ORDER BY rowid DESC LIMIT ? OFFSET ?`
 
@@ -190,6 +220,10 @@ type FileInfo struct {
 
 // GetFileSizeFromDatabase retrieves file size from the processed_files table by file path
 func GetFileSizeFromDatabase(filePath string) (int64, bool) {
+	if !checkFileSizeColumnExists() {
+		return 0, false
+	}
+
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		logger.Debug("Failed to get database connection for file size lookup: %v", err)
@@ -224,8 +258,14 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	var tmdbID sql.NullString
 	var seasonNumber sql.NullInt64
 
+	hasFileSizeColumn := checkFileSizeColumnExists()
+	fileSizeSelect := "NULL as file_size"
+	if hasFileSizeColumn {
+		fileSizeSelect = "COALESCE(file_size, 0) as file_size"
+	}
+
 	query := `SELECT
-		COALESCE(file_size, 0) as file_size,
+		` + fileSizeSelect + `,
 		COALESCE(tmdb_id, '') as tmdb_id,
 		COALESCE(season_number, 0) as season_number
 	FROM processed_files
@@ -241,7 +281,7 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	}
 
 	info := FileInfo{}
-	if fileSize.Valid {
+	if hasFileSizeColumn && fileSize.Valid {
 		info.FileSize = fileSize.Int64
 	}
 	if tmdbID.Valid {
@@ -302,6 +342,12 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 	// Build export query (similar to search but without limit)
 	var sqlQuery strings.Builder
 	var args []interface{}
+	hasFileSizeColumn := checkFileSizeColumnExists()
+
+	fileSizeSelect := "0 as file_size"
+	if hasFileSizeColumn {
+		fileSizeSelect = "COALESCE(file_size, 0) as file_size"
+	}
 
 	sqlQuery.WriteString(`
 		SELECT
@@ -310,7 +356,7 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason,
-			COALESCE(file_size, 0) as file_size
+			` + fileSizeSelect + `
 		FROM processed_files
 		WHERE 1=1
 	`)
@@ -379,13 +425,18 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		fileSizeStr := strconv.FormatInt(fileSize, 10)
+		if !hasFileSizeColumn || fileSize == 0 {
+			fileSizeStr = "N/A"
+		}
+
 		csvWriter.Write([]string{
 			filePath,
 			destPath,
 			tmdbID,
 			seasonNumber,
 			reason,
-			strconv.FormatInt(fileSize, 10),
+			fileSizeStr,
 		})
 	}
 }
