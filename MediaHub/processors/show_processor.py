@@ -55,7 +55,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             log_message(f"Using file-based extraction: {show_name}", level="DEBUG")
     elif force_extra and file_result.get('title', '').strip():
-        show_name = file_result.get('title', '')
+        if file_result.get('is_extra', False) or not (file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))):
+            folder_result = clean_query(parent_folder_name)
+            show_name = folder_result.get('title', '')
+            log_message(f"using folder-based extraction for extra: {show_name}", level="DEBUG")
+        else:
+            show_name = file_result.get('title', '')
+            log_message(f"using file-based extraction: {show_name}", level="DEBUG")
+
         episode_identifier = file_result.get('episode_identifier')
         if original_season_number is None:
             season_number = file_result.get('season_number')
@@ -63,8 +70,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             episode_number = file_result.get('episode_number')
         create_season_folder = file_result.get('create_season_folder', False)
         is_extra = file_result.get('is_extra', False)
-
-        log_message(f"Force Show mode - using file-based extraction: {show_name}", level="DEBUG")
     else:
         folder_result = clean_query(parent_folder_name)
         log_message(f"Folder query result: {folder_result}", level="DEBUG")
