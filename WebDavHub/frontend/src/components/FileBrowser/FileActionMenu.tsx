@@ -7,6 +7,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
+import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import axios from 'axios';
@@ -279,7 +280,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             size="small"
             variant="outlined"
             color="secondary"
-            startIcon={null}
+            startIcon={<TuneIcon />}
             onClick={handleModifyClick}
             sx={{
               flex: '1 1 120px',
@@ -358,10 +359,9 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           <MenuItem onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
         )}
         <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
+        <MenuItem onClick={handleModifyClick}><TuneIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={handleModifyClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
       </Menu>
       {videoPlayerOpen && (
         <Suspense fallback={null}>

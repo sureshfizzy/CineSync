@@ -353,6 +353,12 @@ export default function FileBrowser() {
     }
   };
 
+  const handleListViewFileClick = (file: FileItem) => {
+    if (file.type === 'directory') {
+      handlePathClick(joinPaths(currentPath, file.name));
+    }
+  };
+
   useEffect(() => {
     if (view !== 'poster') return;
 
@@ -488,7 +494,7 @@ export default function FileBrowser() {
             files={filteredFiles}
             currentPath={currentPath}
             formatDate={formatDate}
-            onItemClick={(file) => handleFileClick(file, null)}
+            onItemClick={handleListViewFileClick}
             onViewDetails={handleViewDetails}
             onRename={() => debouncedRefresh(currentPath)}
             onDeleted={() => debouncedRefresh(currentPath)}
