@@ -180,7 +180,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 # Second attempt: Try running an external command to check if file exists
                                 log_message(f"Path not found with os.path.lexists, trying alternative check for: {safe_path}", level="DEBUG")
 
-                                import subprocess
                                 try:
                                     result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
                                     if result.returncode == 0:
