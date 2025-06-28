@@ -209,8 +209,8 @@ def _remove_website_patterns(filename: str) -> str:
     if not filename:
         return filename
 
-    # Only match filenames that start with www. (actual websites)
-    website_pattern = r'^www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\s*[-–—|:]*\s*'
+    # Pattern to match website prefixes
+    website_pattern = r'^www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,6}(?:\s*[-–—|:.\s]+|(?=\s))'
 
     match = re.match(website_pattern, filename, re.IGNORECASE)
     if match:
