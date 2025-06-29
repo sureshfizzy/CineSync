@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Typography, useTheme, IconButton, LinearProgress, CircularProgress, Fade, Zoom, Slide } from '@mui/material';
-
 import { Close as CloseIcon, CheckCircle as CheckCircleIcon, PlayArrow as PlayArrowIcon, Search as SearchIcon, Send as SendIcon, HourglassEmpty as WaitingIcon, Refresh as RefreshIcon, Movie as MovieIcon, FindInPage as AnalyzeIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { ActionButton, pulse, fadeOut } from './StyledComponents';
 import MovieOptionCard from './MovieOptionCard';
@@ -13,23 +12,10 @@ const getDialogMaxWidth = (count: number) => {
   return 'lg';
 };
 
-
-
 const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
-  open,
-  onClose,
-  execInput,
-  onInputChange,
-  onInputSubmit,
-  waitingForInput,
-  movieOptions,
-  isLoadingNewOptions,
-  previousOptions,
-  operationSuccess,
-  onOptionClick,
-  selectedIds = {},
-  manualSearchEnabled = false,
-  selectionInProgress = false
+  open, onClose, execInput, onInputChange, onInputSubmit, waitingForInput, movieOptions,
+  isLoadingNewOptions, previousOptions, operationSuccess, onOptionClick,
+  selectedIds = {}, manualSearchEnabled = false, selectionInProgress = false
 }) => {
   const theme = useTheme();
   const [progress, setProgress] = useState(0);
@@ -40,20 +26,21 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
   // Check if this is an ID-based operation
   const isIdBasedOperation = Object.values(selectedIds).some(value => value && value.trim() !== '');
   const hasMovieOptions = movieOptions.length > 0 || (isLoadingNewOptions && previousOptions.length > 0);
+  const showMovieOptions = hasMovieOptions;
 
   // Define processing steps
   const steps = [
     { icon: AnalyzeIcon, text: 'Analyzing media file...', color: theme.palette.primary.main },
     {
       icon: SearchIcon,
-      text: (hasMovieOptions && waitingForInput)
+      text: (showMovieOptions && waitingForInput)
         ? `Found ${movieOptions.length} match${movieOptions.length !== 1 ? 'es' : ''}!`
-        : (manualSearchEnabled && !hasMovieOptions)
+        : (manualSearchEnabled && !showMovieOptions)
           ? 'Manual search required - automatic search failed'
           : 'Searching for matches...',
-      color: (hasMovieOptions && waitingForInput)
+      color: (showMovieOptions && waitingForInput)
         ? theme.palette.success.main
-        : (manualSearchEnabled && !hasMovieOptions)
+        : (manualSearchEnabled && !showMovieOptions)
           ? theme.palette.warning.main
           : theme.palette.info.main
     },
@@ -79,15 +66,15 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
     }
 
     // If we have movie options, complete the search step
-    if (hasMovieOptions) {
+    if (showMovieOptions) {
       setProgress(75);
       setCurrentStep(1); // Complete "Searching for matches..."
       setIsComplete(false);
       return;
     }
 
-    // If manual search is enabled and we don't have movie options, we're in manual search mode
-    if (manualSearchEnabled && !hasMovieOptions) {
+    // If manual search is enabled and we don't have any options, we're in manual search mode
+    if (manualSearchEnabled && !showMovieOptions) {
       setProgress(50);
       setCurrentStep(1);
       setIsComplete(false);
@@ -128,13 +115,13 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
 
   // Handle smooth transition to results
   useEffect(() => {
-    if (hasMovieOptions) {
-      // Show results immediately when options are available, regardless of poster loading
+    if (showMovieOptions) {
+      // Show results immediately when options are available
       const timer = setTimeout(() => {
         setShowResults(true);
       }, 400);
       return () => clearTimeout(timer);
-    } else if (manualSearchEnabled && !hasMovieOptions) {
+    } else if (manualSearchEnabled && !showMovieOptions) {
       const timer = setTimeout(() => {
         setShowResults(true);
       }, 400);
@@ -142,7 +129,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
     } else {
       setShowResults(false);
     }
-  }, [hasMovieOptions, waitingForInput, manualSearchEnabled]);
+  }, [showMovieOptions, waitingForInput, manualSearchEnabled]);
 
   // Handle when user makes a selection - continue to processing metadata
   useEffect(() => {
@@ -180,7 +167,6 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
           boxShadow: theme.palette.mode === 'dark'
             ? '0 8px 32px rgba(0, 0, 0, 0.6)'
             : '0 8px 32px rgba(0, 0, 0, 0.15)',
-          minHeight: '400px',
           maxWidth: movieOptions.length > 6 ? '85vw' : undefined,
         }
       }}
@@ -209,7 +195,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
           <Zoom in={true} timeout={300}>
             {operationSuccess ? (
               <CheckCircleIcon sx={{ color: 'success.main', fontSize: '28px' }} />
-            ) : hasMovieOptions ? (
+            ) : showMovieOptions ? (
               <SearchIcon sx={{ color: 'primary.main', fontSize: '28px' }} />
             ) : manualSearchEnabled ? (
               <WaitingIcon sx={{ color: 'warning.main', fontSize: '28px' }} />
@@ -231,7 +217,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
               {operationSuccess
                 ? 'Media processing completed successfully'
-                : hasMovieOptions
+                : showMovieOptions
                   ? 'Choose the best match for your media file'
                   : manualSearchEnabled
                     ? 'Automatic search failed - please provide a custom search term'
@@ -255,7 +241,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       </DialogTitle>
       <DialogContent
         sx={{
-          pt: 3,
+          pt: 2,
+          pb: 1,
           backgroundColor: theme.palette.mode === 'dark'
             ? 'rgba(0, 0, 0, 0.2)'
             : 'rgba(248, 249, 250, 0.9)',
@@ -360,7 +347,6 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
               })}
             </Box>
 
-
           </Box>
           </Fade>
         )}
@@ -441,13 +427,11 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
           </Fade>
         )}
 
-
-
         {/* Transition from processing to results OR manual search */}
         {!operationSuccess && showResults && (
           <Fade in={showResults} timeout={600}>
             <Box>
-              {hasMovieOptions ? (
+              {showMovieOptions ? (
                 <>
                   {/* Results header */}
                   <Slide direction="up" in={showResults} timeout={400}>
@@ -536,7 +520,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 </>
               ) : (
                 /* Manual Search Interface - Show in TMDB results area when manual search is enabled */
-                <Slide direction="up" in={!hasMovieOptions && manualSearchEnabled} timeout={400}>
+                <Slide direction="up" in={!showMovieOptions && manualSearchEnabled} timeout={400}>
                   <Box sx={{
                     textAlign: 'center',
                     py: 4,
@@ -644,8 +628,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
 
 
         {/* Input Section - Show when waiting for input with movie options */}
-        {!operationSuccess && !isIdBasedOperation && waitingForInput && hasMovieOptions && showResults && !selectionInProgress && (
-          <Fade in={waitingForInput && hasMovieOptions && !selectionInProgress} timeout={200}>
+        {!operationSuccess && !isIdBasedOperation && waitingForInput && showMovieOptions && showResults && !selectionInProgress && (
+          <Fade in={waitingForInput && showMovieOptions && !selectionInProgress} timeout={200}>
             <Box sx={{
               mt: 2,
               p: { xs: 2, md: 3 },
@@ -792,8 +776,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       </DialogContent>
       <DialogActions
         sx={{
-          p: 3,
-          pt: 2,
+          p: 2,
+          pt: 1.5,
           gap: 1,
           backgroundColor: theme.palette.mode === 'dark'
             ? 'rgba(0, 0, 0, 0.3)'

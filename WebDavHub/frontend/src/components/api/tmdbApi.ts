@@ -225,3 +225,110 @@ export function getTmdbPosterUrlDirect(posterPath: string | null, size: string =
   if (!posterPath) return null;
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
 }
+
+// Get TMDB poster URL for seasons
+export function getTmdbSeasonPosterUrl(posterPath: string | null, size: string = 'w300'): string | null {
+  if (!posterPath) return null;
+  return `https://image.tmdb.org/t/p/${size}${posterPath}`;
+}
+
+// Get TMDB still URL for episodes
+export function getTmdbEpisodeStillUrl(stillPath: string | null, size: string = 'w300'): string | null {
+  if (!stillPath) return null;
+  return `https://image.tmdb.org/t/p/${size}${stillPath}`;
+}
+
+// Format runtime in minutes to human-readable format
+export function formatRuntime(runtime?: number): string | null {
+  if (!runtime) return null;
+  const hours = Math.floor(runtime / 60);
+  const minutes = runtime % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+// Season and Episode interfaces
+interface SeasonOption {
+  id: number;
+  season_number: number;
+  name: string;
+  overview?: string;
+  poster_path?: string;
+  air_date?: string;
+  episode_count: number;
+}
+
+interface EpisodeOption {
+  id: number;
+  episode_number: number;
+  name: string;
+  overview?: string;
+  still_path?: string;
+  air_date?: string;
+  runtime?: number;
+  vote_average?: number;
+}
+
+// Fetch seasons from TMDB for a TV show
+export async function fetchSeasonsFromTmdb(tmdbId: string): Promise<SeasonOption[]> {
+  console.log('Fetching seasons from TMDB for ID:', tmdbId);
+
+  const response = await fetch(`/api/tmdb/details?id=${tmdbId}&mediaType=tv`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+    }
+  });
+
+  console.log('TMDB seasons response status:', response.status);
+
+  if (!response.ok) {
+    console.log('TMDB seasons request failed with status:', response.status);
+    throw new Error(`Failed to fetch seasons: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('TMDB seasons data:', data);
+
+  if (data.seasons) {
+    const validSeasons = data.seasons.filter((s: any) => s.season_number > 0);
+    console.log('Valid seasons found:', validSeasons.length);
+    return validSeasons;
+  } else {
+    console.log('No seasons found in TMDB data');
+    return [];
+  }
+}
+
+// Fetch episodes from TMDB for a specific season
+export async function fetchEpisodesFromTmdb(tmdbId: string, seasonNumber: number): Promise<EpisodeOption[]> {
+  console.log('Fetching episodes from TMDB for ID:', tmdbId, 'Season:', seasonNumber);
+
+  const response = await fetch(`/api/tmdb/details?id=${tmdbId}&mediaType=tv&seasonNumber=${seasonNumber}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+    }
+  });
+
+  console.log('TMDB episodes response status:', response.status);
+
+  if (!response.ok) {
+    console.log('TMDB episodes request failed with status:', response.status);
+    throw new Error(`Failed to fetch episodes: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('TMDB episodes data:', data);
+
+  if (data.seasons && data.seasons.length > 0) {
+    const season = data.seasons.find((s: any) => s.season_number === seasonNumber);
+    if (season && season.episodes) {
+      console.log('Episodes found:', season.episodes.length);
+      return season.episodes;
+    } else {
+      console.log('No episodes found for season', seasonNumber);
+      return [];
+    }
+  } else {
+    console.log('No seasons data found in TMDB response');
+    return [];
+  }
+}

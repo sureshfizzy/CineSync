@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DialogTitle, DialogContent, DialogActions, Tabs, Typography, useTheme, IconButton } from '@mui/material';
 import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
-import { searchTmdb, getTmdbPosterUrlDirect } from '../../api/tmdbApi';
+import { searchTmdb, getTmdbPosterUrlDirect, fetchSeasonsFromTmdb, fetchEpisodesFromTmdb } from '../../api/tmdbApi';
 import { processStructuredMessage } from '../../../utils/symlinkUpdates';
 import { StyledDialog, ActionButton, StyledTab } from './StyledComponents';
 import ActionOptions from './ActionOptions';
@@ -11,9 +11,14 @@ import ExecutionDialog from './ExecutionDialog';
 import SkipConfirmationDialog from './SkipConfirmationDialog';
 import SkipResultDialog from './SkipResultDialog';
 import ForceConfirmationDialog from './ForceConfirmationDialog';
+import SeasonSelectionDialog from './SeasonSelectionDialog';
+import EpisodeSelectionDialog from './EpisodeSelectionDialog';
 import { ModifyDialogProps, ModifyOption, IDOption } from './types';
 
-const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFilePath, onNavigateBack, useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false }) => {
+const ModifyDialog: React.FC<ModifyDialogProps> = ({
+  open, onClose, currentFilePath, onNavigateBack,
+  useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false
+}) => {
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('actions');
@@ -35,6 +40,17 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [lastSelectedOption, setLastSelectedOption] = useState<string | null>(null);
   const [manualSearchEnabled, setManualSearchEnabled] = useState(false);
   const [selectionInProgress, setSelectionInProgress] = useState(false);
+
+  // Season/Episode selection states
+  const [seasonOptions, setSeasonOptions] = useState<any[]>([]);
+  const [episodeOptions, setEpisodeOptions] = useState<any[]>([]);
+  const [selectedTmdbId, setSelectedTmdbId] = useState<string>('');
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number | null>(null);
+  const selectedSeasonRef = useRef<number | null>(null);
+
+  // Dialog states
+  const [seasonDialogOpen, setSeasonDialogOpen] = useState(false);
+  const [episodeDialogOpen, setEpisodeDialogOpen] = useState(false);
   const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,7 +103,38 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setLastSelectedOption(null);
     setManualSearchEnabled(false);
     setSelectionInProgress(false);
+    setSeasonOptions([]);
+    setEpisodeOptions([]);
+    setSelectedTmdbId('');
+    setSelectedSeasonNumber(null);
+    selectedSeasonRef.current = null;
+    setSeasonDialogOpen(false);
+    setEpisodeDialogOpen(false);
     clearTimeouts();
+  };
+
+  // Fetch seasons from TMDB using API function
+  const handleFetchSeasons = async (tmdbId: string) => {
+    try {
+      const validSeasons = await fetchSeasonsFromTmdb(tmdbId);
+      setSeasonOptions(validSeasons);
+      setSeasonDialogOpen(true);
+      setWaitingForInput(true);
+    } catch (error) {
+      console.error('Failed to fetch seasons from TMDB:', error);
+    }
+  };
+
+  // Fetch episodes from TMDB using API function
+  const handleFetchEpisodes = async (tmdbId: string, seasonNumber: number) => {
+    try {
+      const episodes = await fetchEpisodesFromTmdb(tmdbId, seasonNumber);
+      setEpisodeOptions(episodes);
+      setEpisodeDialogOpen(true);
+      setWaitingForInput(true);
+    } catch (error) {
+      console.error('Failed to fetch episodes from TMDB:', error);
+    }
   };
 
   const terminatePythonBridge = async () => {
@@ -168,10 +215,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       manualSearch: shouldUseManualSearch
     };
 
-    // Log the exact payload being sent
-    console.log('Sending to python-bridge API:', requestPayload);
-    console.log('Selected IDs state:', selectedIds);
-    console.log('Selected IDs entries:', Object.entries(selectedIds));
+
 
     // Show user what command will be executed
     let commandPreview = 'python main.py ' + currentFilePath + ' --force';
@@ -309,6 +353,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   };
 
   const parseMovieOptions = (fullOutput: string) => {
+    detectSeasonEpisodePrompts(fullOutput);
+
     if ((window as any).selectionBlocked) {
       console.log('Parsing blocked due to recent selection');
       return;
@@ -327,13 +373,11 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
   const parseMovieOptionsImmediate = (fullOutput: string) => {
     if ((window as any).selectionBlocked) {
-      console.log('Parsing blocked due to recent selection - preventing flicker');
       return;
     }
 
     // Simple check: if we see the user's selection input in the output, stop parsing
     if (lastSelectedOption && fullOutput.includes(`> ${lastSelectedOption}`)) {
-      console.log('User selection detected in output - blocking parsing to prevent flicker');
       // Clear options immediately
       if (movieOptions.length > 0) {
         setMovieOptions([]);
@@ -396,39 +440,28 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         tmdbId: match[5] // TMDB ID is now in match[5] due to the capture group
       }));
 
-      console.log('Parsed options:', options);
-
       // Check if these are actually new options by comparing the first option's tmdbId
       const currentFirstTmdbId = movieOptions.length > 0 ? movieOptions[0].tmdbId : null;
       const newFirstTmdbId = options.length > 0 ? options[0].tmdbId : null;
 
-
-
       // Only update if we have different options or more options than before
       if (options.length !== movieOptions.length || currentFirstTmdbId !== newFirstTmdbId) {
-        console.log(`Updating options: ${movieOptions.length} -> ${options.length}`);
-        console.log(`First TMDB ID changed: ${currentFirstTmdbId} -> ${newFirstTmdbId}`);
-
         // Show options immediately without posters, then load posters concurrently
         const sortedOptions = options.sort((a, b) => parseInt(a.number) - parseInt(b.number));
         setMovieOptions(sortedOptions);
         setIsLoadingNewOptions(false);
       } else {
-        console.log('Same options detected, skipping update');
         return; // Don't fetch posters again if same options
       }
 
       // Prevent duplicate poster fetching
       if (posterFetchInProgress) {
-        console.log('Poster fetch already in progress, skipping duplicate request');
         return;
       }
 
       // Fetch poster images for each option using the TMDb ID provided by backend
       const fetchPostersAsync = async () => {
         setPosterFetchInProgress(true);
-        console.log('Starting throttled poster fetch for options:', options);
-        console.log('Full output context for media type detection:', fullOutput.substring(Math.max(0, fullOutput.length - 500))); // Last 500 chars
 
         let totalApiCalls = 0;
 
@@ -447,7 +480,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
               // Use media type information if available from backend output
               if (option.mediaType && (option.mediaType === 'tv' || option.mediaType === 'movie')) {
-                console.log(`Using explicit media type '${option.mediaType}' for option ${option.number}`);
                 totalApiCalls++;
                 tmdbResult = await searchTmdb(option.tmdbId, undefined, option.mediaType, 1, true);
               } else {
@@ -465,17 +497,14 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                                        fullOutput.includes('Movie -');
 
                 if (isTvContext && !isMovieContext) {
-                  console.log(`TV context detected for option ${option.number}, using TV endpoint only`);
                   totalApiCalls++;
                   tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv', 1, true);
                 } else if (isMovieContext && !isTvContext) {
-                  console.log(`Movie context detected for option ${option.number}, using movie endpoint only`);
                   totalApiCalls++;
                   tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie', 1, true);
                 } else {
                   // Ambiguous context - try movie first (most common), but don't fallback to TV
                   // This prevents the double API calls that cause network errors
-                  console.log(`Ambiguous context for option ${option.number}, trying movie only (no fallback)`);
                   totalApiCalls++;
                   tmdbResult = await searchTmdb(option.tmdbId, undefined, 'movie', 1, true);
 
@@ -484,7 +513,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                                       option.title?.toLowerCase().includes('episode') ||
                                       option.title?.toLowerCase().includes('s0') ||
                                       option.title?.toLowerCase().includes('e0'))) {
-                    console.log(`Movie failed but TV indicators found for option ${option.number}, trying TV`);
                     totalApiCalls++;
                     tmdbResult = await searchTmdb(option.tmdbId, undefined, 'tv', 1, true);
                   }
@@ -493,7 +521,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
               if (tmdbResult && tmdbResult.poster_path) {
                 const posterUrl = getTmdbPosterUrlDirect(tmdbResult.poster_path, 'w200');
-                console.log(`Fetched poster for option ${option.number}:`, posterUrl);
 
                 // Update this specific option with its poster
                 setMovieOptions(prevOptions =>
@@ -503,11 +530,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                       : prevOption
                   )
                 );
-              } else {
-                console.log(`No poster found for option ${option.number} (ID: ${option.tmdbId}, type: ${option.mediaType || 'unknown'})`);
               }
             } catch (error) {
-              console.error('Failed to fetch TMDB data for option', option.number, ':', error);
               // Option will remain without poster - that's fine
             }
           });
@@ -521,7 +545,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
           }
         }
 
-        console.log(`All poster fetch attempts completed. Total API calls made: ${totalApiCalls}`);
         setPosterFetchInProgress(false);
       };
 
@@ -533,6 +556,28 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
       }
+    }
+  };
+
+  const detectSeasonEpisodePrompts = (fullOutput: string) => {
+
+    const tmdbIdMatch = fullOutput.match(/tmdb-(\d+)/);
+    if (tmdbIdMatch) {
+      setSelectedTmdbId(tmdbIdMatch[1]);
+    }
+
+    if (fullOutput.includes('No season number identified, proceeding with season selection') && !seasonDialogOpen) {
+      (window as any).selectionBlocked = false;
+      setSelectionInProgress(false);
+
+      if (selectedTmdbId || tmdbIdMatch) {
+        const tmdbId = selectedTmdbId || tmdbIdMatch![1];
+
+        setMovieOptions([]);
+
+        handleFetchSeasons(tmdbId);
+      }
+      return;
     }
   };
 
@@ -626,7 +671,27 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
       setLastSelectedOption(null);
       setSelectionInProgress(false);
       (window as any).selectionBlocked = false;
-    }, 5000);
+    }, 2000);
+  };
+
+  const handleSeasonClick = (seasonNumber: number) => {
+    setSelectedSeasonNumber(seasonNumber);
+    selectedSeasonRef.current = seasonNumber;
+
+    setSeasonDialogOpen(false);
+
+    if (selectedTmdbId) {
+      handleFetchEpisodes(selectedTmdbId, seasonNumber);
+    }
+
+    setWaitingForInput(false);
+    sendInput(seasonNumber.toString());
+  };
+
+  const handleEpisodeClick = (episodeNumber: number) => {
+    setEpisodeDialogOpen(false);
+    setWaitingForInput(false);
+    sendInput(episodeNumber.toString());
   };
 
   const handleInputSubmit = () => {
@@ -743,6 +808,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationSuccess(false);
     setIsClosing(false);
     setManualSearchEnabled(false);
+    setSeasonDialogOpen(false);
+    setEpisodeDialogOpen(false);
   };
 
   useEffect(() => {
@@ -752,6 +819,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   useEffect(() => {
     return clearTimeouts;
   }, []);
+
+  useEffect(() => {
+    if (operationSuccess) {
+      setSeasonDialogOpen(false);
+      setEpisodeDialogOpen(false);
+    }
+  }, [operationSuccess]);
 
   return (
     <>
@@ -898,6 +972,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         selectedIds={selectedIds}
         manualSearchEnabled={manualSearchEnabled}
         selectionInProgress={selectionInProgress}
+
       />
 
       <SkipConfirmationDialog
@@ -920,6 +995,21 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         onConfirm={handleForceConfirm}
         onCancel={handleForceCancel}
         filePath={currentFilePath}
+      />
+
+      <SeasonSelectionDialog
+        open={seasonDialogOpen}
+        onClose={() => setSeasonDialogOpen(false)}
+        seasons={seasonOptions}
+        onSeasonClick={handleSeasonClick}
+      />
+
+      <EpisodeSelectionDialog
+        open={episodeDialogOpen}
+        onClose={() => setEpisodeDialogOpen(false)}
+        episodes={episodeOptions}
+        onEpisodeClick={handleEpisodeClick}
+        seasonNumber={selectedSeasonNumber || 1}
       />
     </>
   );

@@ -39,6 +39,27 @@ export interface MovieOption {
   };
 }
 
+export interface SeasonOption {
+  id: number;
+  season_number: number;
+  name: string;
+  overview?: string;
+  poster_path?: string;
+  air_date?: string;
+  episode_count: number;
+}
+
+export interface EpisodeOption {
+  id: number;
+  episode_number: number;
+  name: string;
+  overview?: string;
+  still_path?: string;
+  air_date?: string;
+  runtime?: number;
+  vote_average?: number;
+}
+
 export interface ForceConfirmationDialogProps {
   open: boolean;
   onConfirm: () => void;
