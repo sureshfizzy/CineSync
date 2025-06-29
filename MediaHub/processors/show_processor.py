@@ -48,6 +48,20 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         create_season_folder = file_result.get('create_season_folder', False)
         is_extra = file_result.get('is_extra', False)
 
+        # If we have episode info but no season info, check parent folder for season
+        if episode_identifier and not season_number and original_season_number is None:
+            folder_result = clean_query(parent_folder_name)
+            folder_season = folder_result.get('season_number')
+            if folder_season:
+                season_number = folder_season
+                log_message(f"Found season {season_number} in parent folder: {parent_folder_name}", level="DEBUG")
+                episode_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
+                if episode_match:
+                    episode_number = int(episode_match.group(1))
+                    season_num = int(season_number) if isinstance(season_number, str) else season_number
+                    episode_identifier = f"S{season_num:02d}E{episode_number:02d}"
+                    log_message(f"Updated episode identifier to: {episode_identifier}", level="DEBUG")
+
         if episode_identifier:
             log_message(f"Using file-based extraction: {show_name} - {episode_identifier}", level="DEBUG")
         elif season_number:
@@ -154,7 +168,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             create_season_folder = True
 
     if not episode_identifier and season_number and not anime_result:
-        log_message(f"Found season info but no episode info for: {file}. Creating season folder.", level="DEBUG")
+        log_message(f"Found season info but no episode info for: {file}.", level="DEBUG")
         create_season_folder = True
 
     elif not episode_identifier and not season_number and not anime_result:
