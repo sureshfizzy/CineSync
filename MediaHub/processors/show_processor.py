@@ -233,7 +233,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             episode_identifier = f"S{season_number}E{episode_number}"
 
             if season_number is not None and episode_number is not None:
-                if not is_extra:
+                if force_extra:
+                    is_extra = False
+                    create_extras_folder = False
+                    create_season_folder = True
+                elif not is_extra:
                     create_extras_folder = False
                     create_season_folder = True
         else:

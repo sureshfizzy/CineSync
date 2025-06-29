@@ -367,7 +367,6 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
             if is_tv_folder:
                 is_show = True
-                force_extra = True
                 log_message(f"Processing as show extra based on TV folder pattern: {file}", level="INFO")
                 if file_result:
                     if not (file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))):
