@@ -162,8 +162,8 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug: Log the received request
 	logger.Info("Received python bridge request: %+v", req)
+	logger.Info("Source path: '%s'", req.SourcePath)
 	if req.SelectedIds != nil {
 		logger.Info("Selected IDs received:")
 		for key, value := range req.SelectedIds {
@@ -181,29 +181,22 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	var finalAbsPath string
 
 	if filepath.IsAbs(cleanPath) {
-		absRoot, err := filepath.Abs(rootDir)
-		if err != nil {
-			http.Error(w, "Server configuration error", http.StatusInternalServerError)
-			return
-		}
-
-		if strings.HasPrefix(cleanPath, absRoot) {
-			finalAbsPath = cleanPath
-		} else {
-			finalAbsPath = filepath.Join(absRoot, strings.TrimPrefix(cleanPath, "/"))
-		}
+		// For absolute paths, use them directly
+		finalAbsPath = cleanPath
 	} else {
 		absPath := filepath.Join(rootDir, cleanPath)
 
 		// Verify the path exists and is within rootDir
 		absRoot, err := filepath.Abs(rootDir)
 		if err != nil {
+			logger.Error("Failed to get absolute root dir for relative path: %v", err)
 			http.Error(w, "Server configuration error", http.StatusInternalServerError)
 			return
 		}
 
 		finalAbsPath, err = filepath.Abs(absPath)
 		if err != nil {
+			logger.Error("Failed to get absolute path for '%s': %v", absPath, err)
 			http.Error(w, "Invalid path", http.StatusBadRequest)
 			return
 		}
@@ -217,10 +210,12 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	// Check if file or symlink exists
 	fileInfo, err := os.Lstat(finalAbsPath)
 	if os.IsNotExist(err) {
+		logger.Error("File not found: '%s'", finalAbsPath)
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
+		logger.Error("Failed to access file '%s': %v", finalAbsPath, err)
 		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
 		return
 	}
@@ -233,35 +228,35 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	var realPath string
 	if fileInfo.IsDir() {
-		logger.Info("Processing TV show folder: %s", finalAbsPath)
+		logger.Debug("Processing directory: '%s'", finalAbsPath)
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			absRoot = rootDir
+		}
 
-		isDestinationFolder := strings.Contains(finalAbsPath, "CineSync") ||
-							  strings.Contains(finalAbsPath, "Shows") ||
-							  strings.Contains(finalAbsPath, "Movies") ||
-							  strings.Contains(finalAbsPath, "AnimeShows") ||
-							  strings.Contains(finalAbsPath, "4KShows") ||
-							  strings.Contains(finalAbsPath, "4KMovies")
+		isDestinationFolder := strings.HasPrefix(finalAbsPath, absRoot)
 
 		if isDestinationFolder {
-			logger.Info("Detected destination show folder, using folder path directly: %s", finalAbsPath)
 			realPath = finalAbsPath
+			logger.Debug("Using destination folder directly: '%s'", realPath)
 		} else {
+			logger.Debug("Source folder detected, searching for video file")
 			realPath, err = findVideoFileInTVShowFolder(finalAbsPath)
 			if err != nil {
-				logger.Warn("Failed to find video file in TV show folder %s: %v, using original path", finalAbsPath, err)
+				logger.Debug("No video file found in folder, using folder path: %v", err)
 				realPath = finalAbsPath
 			} else {
-				logger.Info("Resolved TV show folder to real source file: %s", realPath)
+				logger.Debug("Found video file in folder: '%s'", realPath)
 			}
 		}
 	} else {
-		logger.Info("Processing individual file: %s", finalAbsPath)
+		logger.Debug("Processing individual file: '%s'", finalAbsPath)
 		realPath, err = executeReadlink(finalAbsPath)
 		if err != nil {
-			logger.Warn("Failed to resolve real path for %s: %v, using original path", finalAbsPath, err)
+			logger.Debug("Not a symlink or readlink failed, using original path: %v", err)
 			realPath = finalAbsPath
 		} else {
-			logger.Info("Resolved file symlink to: %s", realPath)
+			logger.Debug("Resolved symlink to: '%s'", realPath)
 		}
 	}
 
@@ -313,8 +308,8 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	// Get the appropriate Python command for this platform
 	pythonCmd := getPythonCommand()
 
-	// Log the command being executed
-	logger.Info("Executing python bridge: %s %s", pythonCmd, strings.Join(args, " "))
+	// Log the start of processing
+	logger.Info("Starting Python bridge processing for: %s", filepath.Base(realPath))
 
 	// Create command context with cancel
 	ctx, cancel := context.WithCancel(context.Background())
@@ -426,12 +421,15 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err := <-doneChan:
 		if err != nil {
+			logger.Error("Python bridge processing failed for '%s': %v", filepath.Base(realPath), err)
 			sendResponse(PythonBridgeResponse{Error: err.Error(), Done: true})
 		} else {
+			logger.Info("Python bridge processing completed successfully for: %s", filepath.Base(realPath))
 			sendResponse(PythonBridgeResponse{Done: true})
 		}
 	case <-r.Context().Done():
 		// Client closed connection
+		logger.Warn("Python bridge processing interrupted (client disconnected) for: %s", filepath.Base(realPath))
 		cmd.Process.Kill()
 	}
 
