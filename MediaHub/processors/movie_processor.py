@@ -362,15 +362,23 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         else:
             tag_strings = []
+            release_group = ""
+
             for tag in tags_to_use:
                 tag = tag.strip()
                 if tag not in ['TMDB', 'IMDB'] and tag in media_info:
                     value = media_info[tag]
-                    if isinstance(value, list):
-                        formatted_value = '+'.join([str(language).upper() for language in value])
-                        tag_strings.append(f"[{formatted_value}]")
+
+                    if tag.lower() in ['releasegroup', 'release group']:
+                        release_group = str(value)
                     else:
-                        tag_strings.append(f"[{value}]")
+                        if isinstance(value, list):
+                            formatted_value = '+'.join([str(language).upper() for language in value])
+                            tag_strings.append(f"[{formatted_value}]")
+                        else:
+                            tag_strings.append(f"[{value}]")
+            if release_group:
+                tag_strings.append(f"-{release_group}")
 
             details_str = ''.join(tag_strings)
 

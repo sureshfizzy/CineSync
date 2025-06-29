@@ -452,19 +452,25 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             if is_rename_enabled() and get_rename_tags():
                 media_info = extract_media_info(file, keywords, root)
                 details = []
+                release_group = ""
 
                 for tag in get_rename_tags():
                     tag = tag.strip()
                     if tag in media_info:
                         value = media_info[tag]
 
-                        if isinstance(value, list):
-                            formatted_value = '+'.join([str(language).upper() for language in value])
-                            details.append(f"[{formatted_value}]")
+                        if tag.lower() in ['releasegroup', 'release group']:
+                            release_group = str(value)
                         else:
-                            details.append(f"[{value}]")
+                            if isinstance(value, list):
+                                formatted_value = '+'.join([str(language).upper() for language in value])
+                                details.append(f"[{formatted_value}]")
+                            else:
+                                details.append(f"[{value}]")
+                if release_group:
+                    details.append(f"-{release_group}")
 
-                new_name = f"{base_name} {''.join(details)}{os.path.splitext(file)[1]}"
+                new_name = f"{base_name}{''.join(details)}{os.path.splitext(file)[1]}"
             else:
                 new_name = f"{base_name}{os.path.splitext(file)[1]}"
 
