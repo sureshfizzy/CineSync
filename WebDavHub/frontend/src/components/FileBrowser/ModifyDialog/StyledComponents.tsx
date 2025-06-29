@@ -167,7 +167,7 @@ export const StyledDialog = muiStyled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
     borderRadius: '16px',
     background: theme.palette.mode === 'dark'
-      ? 'linear-gradient(145deg, #1E1E1E 0%, #2C2C2E 100%)'
+      ? '#000000'
       : 'linear-gradient(145deg, #FFFFFF 0%, #F8F9FA 100%)',
     boxShadow: theme.palette.mode === 'dark'
       ? '0 8px 32px 0 rgba(0, 0, 0, 0.36)'
@@ -197,7 +197,7 @@ export const StyledDialog = muiStyled(Dialog)(({ theme }) => ({
     padding: '16px 24px',
     borderTop: `1px solid ${theme.palette.divider}`,
     background: theme.palette.mode === 'dark'
-      ? 'rgba(44, 44, 46, 0.5)'
+      ? '#000000'
       : 'rgba(248, 249, 250, 0.5)',
   },
 }));
@@ -276,15 +276,23 @@ export const OptionCard = muiStyled(Paper, {
   transition: 'all 0.2s ease-in-out',
   border: '2px solid',
   borderColor: selected ? theme.palette.primary.main : 'transparent',
-  backgroundColor: selected
+  backgroundColor: theme.palette.background.paper,
+  boxShadow: selected
     ? theme.palette.mode === 'dark'
-      ? 'rgba(99, 102, 241, 0.1)'
-      : 'rgba(99, 102, 241, 0.05)'
-    : theme.palette.background.paper,
-  boxShadow: theme.shadows[1],
+      ? `${theme.shadows[1]}, 0 0 0 2px transparent, 0 0 0 4px rgba(59, 130, 246, 0.6)`
+      : `${theme.shadows[1]}, 0 0 0 2px transparent, 0 0 0 4px rgba(59, 130, 246, 0.3)`
+    : theme.palette.mode === 'dark'
+      ? `${theme.shadows[1]}, 0 0 0 1px rgba(59, 130, 246, 0.4)`
+      : `${theme.shadows[1]}, 0 0 0 1px rgba(59, 130, 246, 0.2)`,
   '&:hover': {
     transform: 'translateY(-2px)',
-    boxShadow: theme.shadows[4],
+    boxShadow: selected
+      ? theme.palette.mode === 'dark'
+        ? `${theme.shadows[4]}, 0 0 0 2px transparent, 0 0 0 4px rgba(59, 130, 246, 0.8)`
+        : `${theme.shadows[4]}, 0 0 0 2px transparent, 0 0 0 4px rgba(59, 130, 246, 0.5)`
+      : theme.palette.mode === 'dark'
+        ? `${theme.shadows[4]}, 0 0 0 1px rgba(59, 130, 246, 0.6)`
+        : `${theme.shadows[4]}, 0 0 0 1px rgba(59, 130, 246, 0.4)`,
   },
   display: 'flex',
   alignItems: 'flex-start',
