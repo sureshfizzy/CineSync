@@ -355,8 +355,8 @@ export const getTheme = (mode: PaletteMode): Theme => {
       info: colors.info,
       grey: colors.grey,
       background: {
-        default: isDark ? '#121212' : '#F5F5F7',
-        paper: isDark ? '#1E1E1E' : '#FFFFFF',
+        default: isDark ? '#000000' : '#F5F5F7',
+        paper: isDark ? '#000000' : '#FFFFFF',
       },
       text: {
         primary: isDark ? '#FFFFFF' : '#1A1A1A',

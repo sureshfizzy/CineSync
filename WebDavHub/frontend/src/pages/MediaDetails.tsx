@@ -287,7 +287,7 @@ export default function MediaDetails() {
             <Box sx={{
               width: '100%',
               height: '100%',
-              backgroundImage: `linear-gradient(to bottom, ${theme.palette.mode === 'light' ? 'rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,1) 100%' : 'rgba(20,20,20,0.85) 0%, rgba(20,20,20,0.7) 60%, rgba(20,20,20,1) 100%'}), url(${getBackdropUrl(data.backdrop_path)})`,
+              backgroundImage: `linear-gradient(to bottom, ${theme.palette.mode === 'light' ? 'rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,1) 100%' : 'rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,1) 100%'}), url(${getBackdropUrl(data.backdrop_path)})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               filter: theme.palette.mode === 'light' ? 'blur(1px) brightness(1.05)' : 'blur(1px) brightness(0.7)',
