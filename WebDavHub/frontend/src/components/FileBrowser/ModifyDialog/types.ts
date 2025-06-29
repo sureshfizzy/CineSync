@@ -75,6 +75,8 @@ export interface ExecutionDialogProps {
   isClosing: boolean;
   onOptionClick: (optionNumber: string) => void;
   selectedIds?: Record<string, string>;
+  manualSearchEnabled?: boolean;
+  selectionInProgress?: boolean;
 }
 
 export interface MovieOptionCardProps {

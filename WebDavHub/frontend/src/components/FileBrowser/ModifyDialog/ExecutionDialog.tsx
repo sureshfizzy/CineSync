@@ -27,7 +27,9 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
   previousOptions,
   operationSuccess,
   onOptionClick,
-  selectedIds = {}
+  selectedIds = {},
+  manualSearchEnabled = false,
+  selectionInProgress = false
 }) => {
   const theme = useTheme();
   const [progress, setProgress] = useState(0);
@@ -46,12 +48,12 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       icon: SearchIcon,
       text: (hasMovieOptions && waitingForInput)
         ? `Found ${movieOptions.length} match${movieOptions.length !== 1 ? 'es' : ''}!`
-        : (waitingForInput && !hasMovieOptions)
+        : (manualSearchEnabled && !hasMovieOptions)
           ? 'Manual search required - automatic search failed'
           : 'Searching for matches...',
       color: (hasMovieOptions && waitingForInput)
         ? theme.palette.success.main
-        : (waitingForInput && !hasMovieOptions)
+        : (manualSearchEnabled && !hasMovieOptions)
           ? theme.palette.warning.main
           : theme.palette.info.main
     },
@@ -84,8 +86,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       return;
     }
 
-    // If waiting for input without movie options, we're in manual search mode
-    if (waitingForInput && !hasMovieOptions) {
+    // If manual search is enabled and we don't have movie options, we're in manual search mode
+    if (manualSearchEnabled && !hasMovieOptions) {
       setProgress(50);
       setCurrentStep(1);
       setIsComplete(false);
@@ -122,7 +124,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
         clearInterval(interval);
       }
     };
-  }, [open, operationSuccess, hasMovieOptions, waitingForInput, currentStep, isLoadingNewOptions]);
+  }, [open, operationSuccess, hasMovieOptions, waitingForInput, currentStep, isLoadingNewOptions, manualSearchEnabled]);
 
   // Handle smooth transition to results
   useEffect(() => {
@@ -132,7 +134,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
         setShowResults(true);
       }, 400);
       return () => clearTimeout(timer);
-    } else if (waitingForInput && !hasMovieOptions) {
+    } else if (manualSearchEnabled && !hasMovieOptions) {
       const timer = setTimeout(() => {
         setShowResults(true);
       }, 400);
@@ -140,7 +142,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
     } else {
       setShowResults(false);
     }
-  }, [hasMovieOptions, waitingForInput]);
+  }, [hasMovieOptions, waitingForInput, manualSearchEnabled]);
 
   // Handle when user makes a selection - continue to processing metadata
   useEffect(() => {
@@ -209,7 +211,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
               <CheckCircleIcon sx={{ color: 'success.main', fontSize: '28px' }} />
             ) : hasMovieOptions ? (
               <SearchIcon sx={{ color: 'primary.main', fontSize: '28px' }} />
-            ) : waitingForInput ? (
+            ) : manualSearchEnabled ? (
               <WaitingIcon sx={{ color: 'warning.main', fontSize: '28px' }} />
             ) : (
               <PlayArrowIcon sx={{ color: 'primary.main', fontSize: '28px' }} />
@@ -221,7 +223,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 ? 'Operation Complete'
                 : hasMovieOptions
                   ? 'Select Media Match'
-                  : waitingForInput
+                  : manualSearchEnabled
                     ? 'Manual Search Required'
                     : 'Processing Media File'
               }
@@ -231,7 +233,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 ? 'Media processing completed successfully'
                 : hasMovieOptions
                   ? 'Choose the best match for your media file'
-                  : waitingForInput
+                  : manualSearchEnabled
                     ? 'Automatic search failed - please provide a custom search term'
                     : 'Please wait while we process your media file'
               }
@@ -533,8 +535,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                   </Box>
                 </>
               ) : (
-                /* Manual Search Interface - Show in TMDB results area when no movie options */
-                <Slide direction="up" in={!hasMovieOptions && waitingForInput} timeout={400}>
+                /* Manual Search Interface - Show in TMDB results area when manual search is enabled */
+                <Slide direction="up" in={!hasMovieOptions && manualSearchEnabled} timeout={400}>
                   <Box sx={{
                     textAlign: 'center',
                     py: 4,
@@ -642,8 +644,8 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
 
 
         {/* Input Section - Show when waiting for input with movie options */}
-        {!operationSuccess && !isIdBasedOperation && waitingForInput && hasMovieOptions && showResults && (
-          <Fade in={waitingForInput} timeout={500}>
+        {!operationSuccess && !isIdBasedOperation && waitingForInput && hasMovieOptions && showResults && !selectionInProgress && (
+          <Fade in={waitingForInput && hasMovieOptions && !selectionInProgress} timeout={200}>
             <Box sx={{
               mt: 2,
               p: { xs: 2, md: 3 },

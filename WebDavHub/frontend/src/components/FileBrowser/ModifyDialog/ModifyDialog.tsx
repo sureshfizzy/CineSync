@@ -33,6 +33,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
   const [useBatchApply, setUseBatchApply] = useState(false);
   const [lastSelectedOption, setLastSelectedOption] = useState<string | null>(null);
+  const [manualSearchEnabled, setManualSearchEnabled] = useState(false);
+  const [selectionInProgress, setSelectionInProgress] = useState(false);
   const inputTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,6 +85,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setSkipConfirmOpen(false);
     setUseBatchApply(false);
     setLastSelectedOption(null);
+    setManualSearchEnabled(false);
+    setSelectionInProgress(false);
     clearTimeouts();
   };
 
@@ -131,6 +135,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationComplete(false);
     setOperationSuccess(false);
     setIsClosing(false);
+    setManualSearchEnabled(false);
     setExecOpen(true);
 
     const shouldUseBatchApply = propUseBatchApply;
@@ -242,35 +247,20 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                   return newOutput;
                 });
 
-                // Check if waiting for user input - be more flexible with detection
-                if (output.includes('Enter your choice:') ||
-                    output.includes('Select an option:') ||
-                    output.includes('Choose:') ||
-                    output.includes('enter to search') ||
-                    output.includes('Enter to search') ||
-                    output.includes('Press Enter') ||
-                    output.includes('Type') ||
-                    output.includes('Input') ||
-                    output.includes('Enter your search term') ||
-                    output.includes('Enter 1-') ||
-                    output.includes('to select an item') ||
-                    output.includes('Try a different search term') ||
-                    output.includes('No results found for') ||
-                    output.endsWith(': ') ||
-                    output.endsWith('? ') ||
-                    output.includes('>>')) {
+                if (output.includes('Manual search enabled. You can enter a custom search term.')) {
+                  setManualSearchEnabled(true);
+                } else if (output.includes('Enter your choice:') ||
+                           output.includes('Select an option:') ||
+                           output.includes('Enter 1-') ||
+                           output.includes('to select an item')) {
                   setWaitingForInput(true);
                 }
 
-                // Set a timeout to enable input after 3 seconds if not already enabled
+                // Clear any existing input timeout since we're processing new output
                 if (inputTimeoutRef.current) {
                   clearTimeout(inputTimeoutRef.current);
+                  inputTimeoutRef.current = null;
                 }
-                inputTimeoutRef.current = setTimeout(() => {
-                  if (!waitingForInput) {
-                    setWaitingForInput(true);
-                  }
-                }, 3000);
               }
               if (msg.error) {
                 setExecOutput(prev => prev + 'Error: ' + msg.error + '\n');
@@ -279,14 +269,11 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
                 // Only mark as complete if we're not currently showing options or waiting for input
                 // This prevents premature completion when the backend is still waiting for user selection
                 const hasActiveOptions = movieOptions.length > 0 || isLoadingNewOptions;
-                const isWaitingForUserInput = waitingForInput || (msg.output && (
+                const isWaitingForUserInput = waitingForInput || manualSearchEnabled || (msg.output && (
                   msg.output.includes('Enter your choice:') ||
                   msg.output.includes('Select an option:') ||
-                  msg.output.includes('Enter your search term') ||
                   msg.output.includes('Enter 1-') ||
-                  msg.output.includes('to select an item') ||
-                  msg.output.includes('Try a different search term') ||
-                  msg.output.includes('No results found for')
+                  msg.output.includes('to select an item')
                 ));
 
                 if (!hasActiveOptions && !isWaitingForUserInput) {
@@ -615,6 +602,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
 
   const handleOptionClick = (optionNumber: string) => {
     setLastSelectedOption(optionNumber);
+    setSelectionInProgress(true);
 
     (window as any).lastSelectionTime = Date.now();
     (window as any).selectionBlocked = true;
@@ -623,6 +611,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setIsLoadingNewOptions(false);
     setPreviousOptions([]);
     setPosterFetchInProgress(false);
+    setWaitingForInput(false);
 
     // Clear any pending parse timeouts
     if (parseTimeoutRef.current) {
@@ -635,6 +624,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     // Clear the selection states after processing should be complete
     setTimeout(() => {
       setLastSelectedOption(null);
+      setSelectionInProgress(false);
       (window as any).selectionBlocked = false;
     }, 5000);
   };
@@ -718,6 +708,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationComplete(false);
     setOperationSuccess(false);
     setIsClosing(false);
+    setManualSearchEnabled(false);
     setExecOpen(true);
 
     const shouldUseBatchApply = propUseBatchApply;
@@ -751,6 +742,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
     setOperationComplete(false);
     setOperationSuccess(false);
     setIsClosing(false);
+    setManualSearchEnabled(false);
   };
 
   useEffect(() => {
@@ -904,6 +896,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({ open, onClose, currentFileP
         isClosing={isClosing}
         onOptionClick={handleOptionClick}
         selectedIds={selectedIds}
+        manualSearchEnabled={manualSearchEnabled}
+        selectionInProgress={selectionInProgress}
       />
 
       <SkipConfirmationDialog
