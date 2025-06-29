@@ -213,9 +213,11 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 
 // FileInfo represents file information from the database
 type FileInfo struct {
-	FileSize     int64
-	TmdbID       string
-	SeasonNumber int
+	FileSize        int64
+	TmdbID          string
+	SeasonNumber    int
+	SourcePath      string
+	DestinationPath string
 }
 
 // GetFileSizeFromDatabase retrieves file size from the processed_files table by file path
@@ -257,6 +259,8 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	var fileSize sql.NullInt64
 	var tmdbID sql.NullString
 	var seasonNumber sql.NullInt64
+	var sourcePath sql.NullString
+	var destinationPath sql.NullString
 
 	hasFileSizeColumn := checkFileSizeColumnExists()
 	fileSizeSelect := "NULL as file_size"
@@ -267,12 +271,14 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	query := `SELECT
 		` + fileSizeSelect + `,
 		COALESCE(tmdb_id, '') as tmdb_id,
-		COALESCE(season_number, 0) as season_number
+		COALESCE(season_number, 0) as season_number,
+		COALESCE(file_path, '') as source_path,
+		COALESCE(destination_path, '') as destination_path
 	FROM processed_files
 	WHERE file_path = ? OR destination_path = ?
 	LIMIT 1`
 
-	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber)
+	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber, &sourcePath, &destinationPath)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			logger.Debug("Failed to query file info for %s: %v", filePath, err)
@@ -289,6 +295,12 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	}
 	if seasonNumber.Valid {
 		info.SeasonNumber = int(seasonNumber.Int64)
+	}
+	if sourcePath.Valid {
+		info.SourcePath = sourcePath.String
+	}
+	if destinationPath.Valid {
+		info.DestinationPath = destinationPath.String
 	}
 
 	return info, true

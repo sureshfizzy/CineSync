@@ -12,6 +12,7 @@ import { MovieInfoProps } from './types';
 export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -32,6 +33,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   useEffect(() => {
     async function fetchFiles() {
       try {
+        setIsLoadingFiles(true);
         const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
         const folderPath = `${normalizedPath}/${folderName}`;
         const token = localStorage.getItem('cineSyncJWT');
@@ -58,6 +60,8 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         }
       } catch (e) {
         setFileInfo(null);
+      } finally {
+        setIsLoadingFiles(false);
       }
     }
     fetchFiles();
@@ -67,11 +71,11 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ 
+      transition={{
         duration: isMobile ? 0.2 : 0.3,
         ease: 'easeOut'
       }}
-      style={{ 
+      style={{
         position: 'relative',
         willChange: 'opacity',
         transform: 'translateZ(0)',
@@ -103,12 +107,12 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         <motion.div
           initial={{ opacity: 0, y: isMobile ? 10 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ 
+          transition={{
             duration: isMobile ? 0.25 : 0.3,
             ease: [0.4, 0, 0.2, 1],
             delay: 0.1
           }}
-          style={{ 
+          style={{
             willChange: 'opacity, transform',
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
@@ -129,10 +133,16 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
               />
             </Box>
           </Box>
-          <MediaPathInfo folderName={folderName} currentPath={currentPath} mediaType={mediaType} selectedFile={selectedFile} />
+          <MediaPathInfo
+            folderName={folderName}
+            currentPath={currentPath}
+            mediaType={mediaType}
+            selectedFile={selectedFile}
+            isParentLoading={isLoadingFiles}
+          />
           <CastList data={data} getPosterUrl={getPosterUrl} />
         </motion.div>
       </Box>
     </motion.div>
   );
-} 
+}

@@ -171,6 +171,8 @@ type FileInfo struct {
 	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
 	IsSourceFile bool `json:"isSourceFile,omitempty"`
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
+	SourcePath   string `json:"sourcePath,omitempty"`
+	DestinationPath string `json:"destinationPath,omitempty"`
 }
 
 type Stats struct {
@@ -631,14 +633,17 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 			logger.Info("Found directory: %s", filePath)
 		} else {
-			// Try to get file size from database first, fallback to filesystem
+			// Try to get comprehensive file info from database first, fallback to filesystem
 			fullFilePath := filepath.Join(dir, entry.Name())
-			if dbSize, found := db.GetFileSizeFromDatabase(fullFilePath); found {
-				fileInfo.Size = formatFileSize(dbSize)
-				logger.Info("Found file: %s (DB Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
+			if dbInfo, found := db.GetFileInfoFromDatabase(fullFilePath); found && dbInfo.FileSize > 0 {
+				fileInfo.Size = formatFileSize(dbInfo.FileSize)
+				fileInfo.SourcePath = dbInfo.SourcePath
+				fileInfo.DestinationPath = dbInfo.DestinationPath
+				if dbInfo.TmdbID != "" {
+					fileInfo.TmdbId = dbInfo.TmdbID
+				}
 			} else {
 				fileInfo.Size = formatFileSize(info.Size())
-				logger.Info("Found file: %s (FS Size: %s, Modified: %s)", filePath, fileInfo.Size, fileInfo.Modified)
 			}
 			fileCount++
 		}

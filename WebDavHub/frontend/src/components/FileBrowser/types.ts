@@ -10,6 +10,7 @@ export interface FileItem {
   path?: string;
   webdavPath?: string;
   sourcePath?: string;
+  destinationPath?: string;
   fullPath?: string;
   hasSeasonFolders?: boolean;
   isSeasonFolder?: boolean;

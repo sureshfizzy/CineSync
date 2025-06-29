@@ -8,6 +8,7 @@ interface MediaPathInfoProps {
   currentPath: string;
   mediaType: 'movie' | 'tv';
   selectedFile?: any;
+  isParentLoading?: boolean;
 }
 
 interface PathInfo {
@@ -25,6 +26,8 @@ interface FileItem {
   size?: string;
   modified?: string;
   isSeasonFolder?: boolean;
+  sourcePath?: string;
+  destinationPath?: string;
 }
 
 interface SeasonInfo {
@@ -39,7 +42,7 @@ interface EpisodeInfo {
   path: string;
 }
 
-export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile }: MediaPathInfoProps) {
+export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile, isParentLoading }: MediaPathInfoProps) {
   const [pathInfo, setPathInfo] = useState<PathInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +117,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
           // Movie logic - use selectedFile if provided, otherwise find first media file
           let mediaFile = selectedFile;
 
-          if (!mediaFile) {
+          if (!mediaFile && !isParentLoading) {
             const folderResponse = await axios.get(`/api/files${folderPath}`);
             const files: FileItem[] = folderResponse.data;
 
@@ -126,6 +129,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
           }
 
           if (!mediaFile) {
+            if (isParentLoading) {
+              return;
+            }
             throw new Error('No media file found in folder');
           }
 
@@ -133,8 +139,8 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
 
           setPathInfo({
             webdavPath: `Home${relPath}`,
-            fullPath: `${folderPath}/${mediaFile.name}`,
-            sourcePath: `${folderPath}/${mediaFile.name}`,
+            fullPath: mediaFile.destinationPath || `${folderPath}/${mediaFile.name}`,
+            sourcePath: mediaFile.sourcePath || `${folderPath}/${mediaFile.name}`,
             fileName: mediaFile.name,
             fileSize: mediaFile.size,
             modified: mediaFile.modified
@@ -150,7 +156,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
     if (folderName) {
       findMediaFile();
     }
-  }, [folderName, currentPath, mediaType, selectedFile]);
+  }, [folderName, currentPath, mediaType, selectedFile, isParentLoading]);
 
   if (loading) {
     return (
