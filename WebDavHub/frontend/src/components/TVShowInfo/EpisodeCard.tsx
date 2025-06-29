@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, Box, Typography, IconButton, Chip, alpha, useTheme } from '@mui/material';
+import { Box, Typography, alpha, useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StarIcon from '@mui/icons-material/Star';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
