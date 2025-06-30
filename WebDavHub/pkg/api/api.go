@@ -4,6 +4,7 @@ import (
 	"cinesync/pkg/logger"
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
+	"cinesync/pkg/config"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -421,16 +422,22 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	effectiveEntries := make([]os.DirEntry, 0, len(entries))
 	var tmdbID string
 	var mediaType string
-	// Only set tmdbID if .tmdb exists directly in this directory
-	tmdbPath := filepath.Join(dir, ".tmdb")
-	if data, err := os.ReadFile(tmdbPath); err == nil {
-		content := strings.TrimSpace(string(data))
-		parts := strings.Split(content, ":")
-		if len(parts) >= 2 {
-			tmdbID = parts[0]
-			mediaType = parts[1]
-		} else {
-			tmdbID = content
+
+	folderName := filepath.Base(dir)
+	isCurrentDirCategoryFolder := isCategoryFolder(folderName)
+
+	// Only set tmdbID if .tmdb exists directly in this directory AND it's not a category folder
+	if !isCurrentDirCategoryFolder {
+		tmdbPath := filepath.Join(dir, ".tmdb")
+		if data, err := os.ReadFile(tmdbPath); err == nil {
+			content := strings.TrimSpace(string(data))
+			parts := strings.Split(content, ":")
+			if len(parts) >= 2 {
+				tmdbID = parts[0]
+				mediaType = parts[1]
+			} else {
+				tmdbID = content
+			}
 		}
 	}
 	for _, entry := range entries {
@@ -477,8 +484,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
-	// Set TMDB headers if we have the information
-	if tmdbID != "" && path != "/" {
+	// Set TMDB headers if we have the information AND it's not a category folder
+	if tmdbID != "" && path != "/" && !isCurrentDirCategoryFolder {
 		w.Header().Set("X-TMDB-ID", tmdbID)
 		if mediaType != "" {
 			w.Header().Set("X-Media-Type", mediaType)
@@ -536,40 +543,46 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			subDirTmdbID := ""
 			subDirMediaType := ""
 
-			// 1. Check .tmdb file in subdirectory first
-			subTmdbPath := filepath.Join(subDirPath, ".tmdb")
-			if data, err := os.ReadFile(subTmdbPath); err == nil {
-				content := strings.TrimSpace(string(data))
-				parts := strings.Split(content, ":")
-				if len(parts) >= 2 {
-					subDirTmdbID = parts[0]
-					subDirMediaType = parts[1]
-					fileInfo.TmdbId = subDirTmdbID
-					fileInfo.MediaType = subDirMediaType
-					if subDirMediaType == "tv" {
-						fileInfo.HasSeasonFolders = true
+			// 1. Check .tmdb file in subdirectory first, but only if it's not a category folder
+			isSubdirCategoryFolder := isCategoryFolder(entry.Name())
+			if !isSubdirCategoryFolder {
+				subTmdbPath := filepath.Join(subDirPath, ".tmdb")
+				if data, err := os.ReadFile(subTmdbPath); err == nil {
+					content := strings.TrimSpace(string(data))
+					parts := strings.Split(content, ":")
+					if len(parts) >= 2 {
+						subDirTmdbID = parts[0]
+						subDirMediaType = parts[1]
+						fileInfo.TmdbId = subDirTmdbID
+						fileInfo.MediaType = subDirMediaType
+						if subDirMediaType == "tv" {
+							fileInfo.HasSeasonFolders = true
+						}
+					} else {
+						subDirTmdbID = content
+						fileInfo.TmdbId = subDirTmdbID
 					}
-				} else {
-					subDirTmdbID = content
-					fileInfo.TmdbId = subDirTmdbID
 				}
 			}
 
 			var posterPath, title, cachedMediaType string
 
-			if subDirTmdbID != "" && subDirMediaType != "" {
-				posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, subDirMediaType)
-			}
-
-			if posterPath == "" && subDirTmdbID != "" {
-				posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "movie")
-				if posterPath == "" {
-					posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "tv")
+			// Only get poster data if it's not a category folder
+			if !isSubdirCategoryFolder {
+				if subDirTmdbID != "" && subDirMediaType != "" {
+					posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, subDirMediaType)
 				}
-			}
 
-			if posterPath == "" {
-				posterPath, title, cachedMediaType = getTmdbDataFromCache(entry.Name())
+				if posterPath == "" && subDirTmdbID != "" {
+					posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "movie")
+					if posterPath == "" {
+						posterPath, title, cachedMediaType = getTmdbDataFromCacheByID(subDirTmdbID, "tv")
+					}
+				}
+
+				if posterPath == "" {
+					posterPath, title, cachedMediaType = getTmdbDataFromCache(entry.Name())
+				}
 			}
 
 			if posterPath != "" {
@@ -944,6 +957,23 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 func isSeasonFolder(name string) bool {
 	nameLower := strings.ToLower(name)
 	return strings.HasPrefix(nameLower, "season ") && len(nameLower) > 7 && isNumeric(nameLower[7:])
+}
+
+var categoryFolders = sync.OnceValue(func() map[string]bool {
+	folders := make(map[string]bool)
+	for _, def := range config.GetConfigDefinitions() {
+		if strings.Contains(def.Category, "Folder") || strings.Contains(def.Key, "_FOLDER") {
+			if value := os.Getenv(def.Key); value != "" {
+				folders[strings.ToLower(value)] = true
+			}
+		}
+	}
+	folders[strings.ToLower("CineSync")] = true
+	return folders
+})
+
+func isCategoryFolder(folderName string) bool {
+	return categoryFolders()[strings.ToLower(folderName)]
 }
 
 func isNumeric(s string) bool {

@@ -75,6 +75,11 @@ func getEnvFilePath() string {
 	return filepath.Join(cwd, ".env")
 }
 
+// GetConfigDefinitions returns the configuration definitions with categories and descriptions (exported)
+func GetConfigDefinitions() []ConfigValue {
+	return getConfigDefinitions()
+}
+
 // getConfigDefinitions returns the configuration definitions with categories and descriptions
 func getConfigDefinitions() []ConfigValue {
 	return []ConfigValue{
