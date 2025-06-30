@@ -445,6 +445,7 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
         r'S(0[1-9]|1[0-9]|30)(?!E)',  # Standalone season patterns S01-S30
         r'Season\s+\d+',
         r'\bEpisode\s+\d+',
+        r'\bepisode\.\d+',  # episode.1, episode.2, etc.
         r'\bEP\d+',
         r'S\d{1,2}\s*-\s*E\d{1,2}',
         r'E\d{1,3}',  # Standalone episode patterns like E01, E02, etc.
@@ -838,6 +839,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                       re.match(r'S\d{1,2}E\d{1,2}', clean_part, re.IGNORECASE) or
                       re.match(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
                       re.match(r'E\d{1,3}', clean_part, re.IGNORECASE) or
+                      re.match(r'episode\.\d+', clean_part, re.IGNORECASE) or
                       re.match(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                       re.match(r'\d{1,2}x\d{1,3}(?:-\d{1,3})?', clean_part, re.IGNORECASE) or
                       re.match(r'(MINI-?SERIES|LIMITED-?SERIES|TV-?SERIES)', clean_part, re.IGNORECASE)):
@@ -1341,6 +1343,11 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         if match:
             return int(match.group(1))
 
+        # Handle "episode.X" format
+        match = re.match(r'episode\.(\d{1,3})', clean_part, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
         match = re.match(r'EP(\d{1,2})', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
@@ -1388,6 +1395,17 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
             if 1 <= episode_num <= 999:  # Reasonable episode range
                 return episode_num
 
+    # Additional fallback: check for "Season X - NN" pattern in parts
+    parts = parsed.parts
+    for i, part in enumerate(parts):
+        if part.lower() == 'season' and i + 2 < len(parts):
+            if (parts[i + 2] == '-' and i + 3 < len(parts) and
+                re.match(r'^\d{1,2}$', parts[i + 1]) and
+                re.match(r'^\d{1,4}$', parts[i + 3])):
+                episode_num = int(parts[i + 3])
+                if 1 <= episode_num <= 999:
+                    return episode_num
+
     return None
 
 
@@ -1404,7 +1422,8 @@ def _extract_episode_title_from_parsed(parsed: ParsedFilename) -> Optional[str]:
         clean_part = part.strip().rstrip('.')
         if (re.match(r'S\d{1,2}\.E\d{1,2}', clean_part, re.IGNORECASE) or
             re.match(r'S\d{1,2}E\d{1,2}', clean_part, re.IGNORECASE) or
-            re.match(r'E\d{1,3}', clean_part, re.IGNORECASE)):
+            re.match(r'E\d{1,3}', clean_part, re.IGNORECASE) or
+            re.match(r'episode\.\d+', clean_part, re.IGNORECASE)):
             episode_position = i
             break
 
@@ -1446,6 +1465,11 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         r'\s-\s(\d{1,4})$',
         r'S\d{1,2}\s*-\s*(\d{1,4})',
 
+        # Season X - Episode pattern (common in anime)
+        r'Season\s+\d+\s*-\s*(\d{1,4})\s*\[',  # "Season 2 - 01 [quality]"
+        r'Season\s+\d+\s*-\s*(\d{1,4})\s*$',   # "Season 2 - 01" at end
+        r'Season\s+\d+\s*-\s*(\d{1,4})\s',     # "Season 2 - 01 " with space after
+
         # Space-separated episode numbers (common in anime)
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+[-\[]',  # "[Group] Title 16 - NCED" pattern
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+\[',     # "[Group] Title 02 [Hash]" pattern
@@ -1472,5 +1496,16 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
             episode_num = int(groups[-1])
             if 1 <= episode_num <= 9999:
                 return episode_num
+
+    # Additional fallback: check for simple numeric episode after "Season X -" in parts
+    parts = parsed.parts
+    for i, part in enumerate(parts):
+        if part.lower() == 'season' and i + 2 < len(parts):
+            if (parts[i + 2] == '-' and i + 3 < len(parts) and
+                re.match(r'^\d{1,2}$', parts[i + 1]) and
+                re.match(r'^\d{1,4}$', parts[i + 3])):
+                episode_num = int(parts[i + 3])
+                if 1 <= episode_num <= 9999:
+                    return episode_num
 
     return None
