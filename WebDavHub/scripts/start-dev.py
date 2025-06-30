@@ -33,6 +33,17 @@ class WebDavHubDevelopmentServer:
         self.env_vars: Dict[str, str] = {}
         self.api_port = 8082
         self.ui_port = 5173
+        self.network_ip = self.get_network_ip()
+
+    def get_network_ip(self) -> str:
+        """Get the actual network IP address"""
+        try:
+            # Connect to a remote address to determine the local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except Exception:
+            return "localhost"
 
     def parse_arguments(self):
         """Parse command line arguments"""
@@ -154,15 +165,15 @@ class WebDavHubDevelopmentServer:
                 stderr=None
             )
 
-            # Wait a moment for backend to start
+            # Wait for backend to start and show its startup messages
             time.sleep(3)
 
             # Check if backend is still running
             if self.backend_process.poll() is not None:
-                print("Backend server failed to start")
+                print("❌ Backend server failed to start")
                 sys.exit(1)
 
-            print("Backend server started successfully")
+            print("✅ Backend server started successfully")
 
         except Exception as e:
             print(f"Error starting backend server: {e}")
@@ -208,16 +219,16 @@ class WebDavHubDevelopmentServer:
                 stderr=None
             )
 
-            # Wait a moment for frontend to start
+            # Wait for frontend to start and show its startup messages
             time.sleep(3)
 
             # Check if frontend is still running
             if self.frontend_process.poll() is not None:
-                print("Frontend development server failed to start")
+                print("❌ Frontend development server failed to start")
                 self.cleanup()
                 sys.exit(1)
 
-            print("Frontend development server started successfully")
+            print("✅ Frontend development server started successfully")
 
         except Exception as e:
             print(f"Error starting frontend development server: {e}")
@@ -226,15 +237,21 @@ class WebDavHubDevelopmentServer:
 
     def display_server_info(self):
         """Display information about running servers"""
-        print("\n" + "="*60)
+        print("\n" + "="*70)
         print("🎉 CineSync Development Servers Started Successfully!")
-        print("="*60)
-        print(f"🔧 Backend API Server:     http://localhost:{self.api_port}")
-        print(f"🎨 Frontend Dev Server:    http://localhost:{self.ui_port}")
-        print(f"🌐 WebDAV Access:          http://localhost:{self.api_port}/webdav/")
-        print("="*60)
+        print("="*70)
+        print(f"🔧 Backend API Server:")
+        print(f"   ➜ Local:    http://localhost:{self.api_port}")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}")
+        print(f"🎨 Frontend Dev Server:")
+        print(f"   ➜ Local:    http://localhost:{self.ui_port}")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.ui_port}")
+        print(f"🌐 WebDAV Access:")
+        print(f"   ➜ Local:    http://localhost:{self.api_port}/webdav/")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}/webdav/")
+        print("="*70)
         print("🛑 Press Ctrl+C to stop both servers")
-        print("="*60 + "\n")
+        print("="*70 + "\n")
 
     def cleanup(self):
         """Clean up running processes"""

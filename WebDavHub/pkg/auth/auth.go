@@ -41,6 +41,7 @@ func isAuthEndpoint(path string) bool {
 		"/api/config-status",
 		"/api/config",
 		"/api/config/update",
+		"/api/config/update-silent",
 		"/api/config/events",
 		"/api/mediahub/message",
 		"/api/mediahub/events",

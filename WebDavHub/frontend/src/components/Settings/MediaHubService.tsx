@@ -37,6 +37,10 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
   const [showLogs, setShowLogs] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [autoStart, setAutoStart] = useState(true);
+  const [autoStartLoading, setAutoStartLoading] = useState(false);
+  const [rtmAutoStart, setRtmAutoStart] = useState(false);
+  const [rtmAutoStartLoading, setRtmAutoStartLoading] = useState(false);
 
   const fetchStatus = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) {
@@ -67,11 +71,60 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     }
   };
 
+  const fetchAutoStartConfig = async () => {
+    try {
+      const response = await axios.get('/api/config');
+      const { config } = response.data;
+
+      if (Array.isArray(config)) {
+        const autoStartItem = config.find(item => item.key === 'MEDIAHUB_AUTO_START');
+        const rtmAutoStartItem = config.find(item => item.key === 'RTM_AUTO_START');
+
+        setAutoStart(autoStartItem?.value === 'true');
+        setRtmAutoStart(rtmAutoStartItem?.value === 'true');
+      }
+    } catch (err) {
+      console.error('Failed to fetch auto-start config:', err);
+    }
+  };
+
+  const updateConfig = async (key: string, enabled: boolean, setLoading: (loading: boolean) => void, setState: (state: boolean) => void, label: string) => {
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setState(enabled);
+
+    try {
+      const response = await axios.post('/api/config/update-silent', {
+        updates: [{ key, value: enabled.toString(), type: 'boolean', required: false }]
+      });
+
+      if (response.data.status === 'success') {
+        setSuccess(`${label} ${enabled ? 'enabled' : 'disabled'} successfully`);
+      } else {
+        setError(`Failed to update ${label.toLowerCase()} setting`);
+        setState(!enabled);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to update ${label.toLowerCase()} setting`);
+      setState(!enabled);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateAutoStartConfig = (enabled: boolean) =>
+    updateConfig('MEDIAHUB_AUTO_START', enabled, setAutoStartLoading, setAutoStart, 'Auto-start');
+
+  const updateRtmAutoStartConfig = (enabled: boolean) =>
+    updateConfig('RTM_AUTO_START', enabled, setRtmAutoStartLoading, setRtmAutoStart, 'Standalone RTM Auto-start');
+
   const fetchData = async (showRefreshIndicator = false) => {
     setLoading(true);
     await Promise.all([
       fetchStatus(showRefreshIndicator),
-      fetchActivity()
+      fetchActivity(),
+      fetchAutoStartConfig()
     ]);
     setLoading(false);
   };
@@ -615,6 +668,91 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               {showLogs ? 'Hide' : 'Show'} Logs
             </Button>
           </Stack>
+
+        {/* Auto-Start Configuration */}
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={autoStart}
+                onChange={(e) => updateAutoStartConfig(e.target.checked)}
+                disabled={autoStartLoading}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#10B981',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: '#10B981',
+                  },
+                }}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" fontWeight="600">
+                  Auto-Start MediaHub Service
+                </Typography>
+                {autoStartLoading && <CircularProgress size={16} />}
+              </Box>
+            }
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+            Automatically start MediaHub service (includes built-in RTM) when CineSync starts
+          </Typography>
+        </Box>
+
+        {/* Standalone RTM Auto-Start Configuration */}
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={rtmAutoStart}
+                onChange={(e) => updateRtmAutoStartConfig(e.target.checked)}
+                disabled={rtmAutoStartLoading}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#8B5CF6',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: '#8B5CF6',
+                  },
+                }}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" fontWeight="600">
+                  Auto-Start Standalone RTM
+                </Typography>
+                {rtmAutoStartLoading && <CircularProgress size={16} />}
+              </Box>
+            }
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+            Automatically start standalone Real-Time Monitor when CineSync starts (only when MediaHub service is not running)
+          </Typography>
+
+          {/* Warning when both are enabled */}
+          {autoStart && rtmAutoStart && (
+            <Alert
+              severity="warning"
+              sx={{
+                mt: 2,
+                ml: 4,
+                borderRadius: 2,
+                border: 'none',
+                bgcolor: alpha('#F59E0B', 0.1),
+                color: '#D97706',
+                '& .MuiAlert-icon': { color: '#D97706' }
+              }}
+            >
+              <Typography variant="body2">
+                <strong>Note:</strong> MediaHub service includes RTM functionality.
+                Standalone RTM will be skipped since MediaHub auto-start is enabled.
+              </Typography>
+            </Alert>
+          )}
+        </Box>
 
         {/* Advanced Controls Toggle */}
         <Box sx={{ mb: 2 }}>

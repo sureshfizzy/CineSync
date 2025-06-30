@@ -3,6 +3,7 @@ import time
 import subprocess
 import logging
 import sys
+import io
 from dotenv import load_dotenv, find_dotenv
 
 # Append the parent directory to the system path
@@ -32,8 +33,9 @@ LOG_LEVELS = {
 # Get LOG_LEVEL from environment variable
 log_level = LOG_LEVELS.get(os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 
-# Configure logging
-logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=sys.stdout)
+# Configure logging with UTF-8 encoding support
+utf8_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=utf8_stdout)
 
 # Add state variables for mount status tracking
 mount_state = None

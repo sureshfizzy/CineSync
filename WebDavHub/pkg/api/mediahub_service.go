@@ -117,6 +117,144 @@ func getPythonCommandForMediaHub() string {
 	return "python3"
 }
 
+// GetMediaHubStatus returns the current status of MediaHub service (public wrapper)
+func GetMediaHubStatus() (*MediaHubStatus, error) {
+	return getMediaHubStatus()
+}
+
+// StartMediaHubService starts the MediaHub service programmatically (public wrapper)
+func StartMediaHubService() error {
+	// Check if already running
+	status, err := getMediaHubStatus()
+	if err != nil {
+		return fmt.Errorf("failed to check MediaHub status: %v", err)
+	}
+
+	if status.IsRunning {
+		return fmt.Errorf("MediaHub service is already running")
+	}
+
+	scriptPath, _, _, err := getMediaHubPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get MediaHub paths: %v", err)
+	}
+
+	// Start MediaHub process
+	pythonCmd := getPythonCommandForMediaHub()
+
+	mediaHubProcessMux.Lock()
+	mediaHubProcess = exec.Command(pythonCmd, scriptPath, "--auto-select")
+	mediaHubProcess.Dir = filepath.Dir(scriptPath)
+
+	// Create pipes to capture stdout and stderr for auto-start
+	stdout, err := mediaHubProcess.StdoutPipe()
+	if err != nil {
+		mediaHubProcessMux.Unlock()
+		return fmt.Errorf("failed to create stdout pipe: %v", err)
+	}
+
+	stderr, err := mediaHubProcess.StderrPipe()
+	if err != nil {
+		mediaHubProcessMux.Unlock()
+		return fmt.Errorf("failed to create stderr pipe: %v", err)
+	}
+
+	// Start the process
+	if err := mediaHubProcess.Start(); err != nil {
+		mediaHubProcessMux.Unlock()
+		return fmt.Errorf("failed to start MediaHub: %v", err)
+	}
+
+	mediaHubStartTime = time.Now()
+
+	// Start goroutines to stream output to terminal
+	go streamOutput(stdout, "MEDIAHUB-AUTO")
+	go streamOutput(stderr, "MEDIAHUB-AUTO-ERR")
+
+	// Start a goroutine to wait for the process to finish
+	go func() {
+		err := mediaHubProcess.Wait()
+		mediaHubProcessMux.Lock()
+		if err != nil {
+			logger.Error("MediaHub auto-start process exited with error: %v", err)
+			addLiveLog(fmt.Sprintf("[%s] ERROR: MediaHub auto-start process exited with error: %v",
+				time.Now().Format("2006-01-02 15:04:05"), err))
+		} else {
+			logger.Info("MediaHub auto-start process exited normally")
+			addLiveLog(fmt.Sprintf("[%s] INFO: MediaHub auto-start process exited normally",
+				time.Now().Format("2006-01-02 15:04:05")))
+		}
+		mediaHubProcess = nil
+		mediaHubStartTime = time.Time{}
+		mediaHubProcessMux.Unlock()
+	}()
+
+	mediaHubProcessMux.Unlock()
+
+	logger.Info("MediaHub service auto-started with PID: %d", mediaHubProcess.Process.Pid)
+	return nil
+}
+
+// StartMediaHubMonitorService starts the MediaHub monitor service programmatically (public wrapper)
+func StartMediaHubMonitorService() error {
+	// Check if monitor is already running
+	status, err := getMediaHubStatus()
+	if err != nil {
+		return fmt.Errorf("failed to check MediaHub status: %v", err)
+	}
+
+	if status.MonitorRunning {
+		return fmt.Errorf("MediaHub monitor is already running")
+	}
+
+	scriptPath, _, _, err := getMediaHubPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get MediaHub paths: %v", err)
+	}
+
+	// Start monitor-only process
+	pythonCmd := getPythonCommandForMediaHub()
+	monitorProcess := exec.Command(pythonCmd, scriptPath, "--monitor-only")
+	monitorProcess.Dir = filepath.Dir(scriptPath)
+
+	// Create pipes to capture monitor output for auto-start
+	stdout, err := monitorProcess.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create monitor stdout pipe: %v", err)
+	}
+
+	stderr, err := monitorProcess.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create monitor stderr pipe: %v", err)
+	}
+
+	// Start the process
+	if err := monitorProcess.Start(); err != nil {
+		return fmt.Errorf("failed to start MediaHub monitor: %v", err)
+	}
+
+	// Start goroutines to stream monitor output to terminal
+	go streamOutput(stdout, "RTM-AUTO")
+	go streamOutput(stderr, "RTM-AUTO-ERR")
+
+	// Start a goroutine to wait for the monitor process to finish
+	go func() {
+		err := monitorProcess.Wait()
+		if err != nil {
+			logger.Error("RTM auto-start process exited with error: %v", err)
+			addLiveLog(fmt.Sprintf("[%s] ERROR: RTM auto-start process exited with error: %v",
+				time.Now().Format("2006-01-02 15:04:05"), err))
+		} else {
+			logger.Info("RTM auto-start process exited normally")
+			addLiveLog(fmt.Sprintf("[%s] INFO: RTM auto-start process exited normally",
+				time.Now().Format("2006-01-02 15:04:05")))
+		}
+	}()
+
+	logger.Info("MediaHub monitor service auto-started with PID: %d", monitorProcess.Process.Pid)
+	return nil
+}
+
 // getMediaHubStatus returns the current status of MediaHub service
 func getMediaHubStatus() (*MediaHubStatus, error) {
 	_, lockFile, monitorPidFile, err := getMediaHubPaths()
@@ -160,7 +298,7 @@ func getMediaHubStatus() (*MediaHubStatus, error) {
 			uptime := time.Since(mediaHubStartTime)
 			status.Uptime = uptime.Round(time.Second).String()
 		}
-		logger.Debug("MediaHub Go-managed process exists: %v, PID: %d", status.ProcessExists, mediaHubProcess.Process.Pid)
+		// Removed debug logging to prevent spam
 	}
 	mediaHubProcessMux.Unlock()
 
@@ -221,6 +359,8 @@ func streamOutput(pipe io.ReadCloser, prefix string) {
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
 			logEntry := fmt.Sprintf("[%s] %s: %s", timestamp, prefix, line)
 			addLiveLog(logEntry)
+
+			// Output MediaHub logs directly to terminal without extra prefix
 			fmt.Println(line)
 		}
 	}

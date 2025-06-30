@@ -4,11 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"cinesync/pkg/api"
 	"cinesync/pkg/config"
@@ -22,7 +24,17 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// getNetworkIP returns the local network IP address
+func getNetworkIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "localhost"
+	}
+	defer conn.Close()
 
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
+}
 
 func main() {
 	// Load .env from one directory above
@@ -130,6 +142,7 @@ func main() {
 	apiMux.HandleFunc("/api/database/export", db.HandleDatabaseExport)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
+	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
 	apiMux.HandleFunc("/api/restart", api.HandleRestart)
 
@@ -184,6 +197,97 @@ func main() {
 
 
 
+	// Auto-start MediaHub service if enabled (delayed to appear after startup summary)
+	if env.IsBool("MEDIAHUB_AUTO_START", true) {
+		go func() {
+			// Wait longer for the server to fully initialize and startup summary to display
+			time.Sleep(10 * time.Second)
+
+			logger.Info("Auto-starting MediaHub service (includes built-in RTM)...")
+
+			// Check if MediaHub is already running
+			status, err := api.GetMediaHubStatus()
+			if err != nil {
+				logger.Warn("Failed to check MediaHub status for auto-start: %v", err)
+				return
+			}
+
+			if !status.IsRunning {
+				logger.Info("Starting MediaHub service automatically...")
+				if err := api.StartMediaHubService(); err != nil {
+					logger.Error("Failed to auto-start MediaHub service: %v", err)
+				} else {
+					logger.Info("MediaHub service auto-started successfully")
+				}
+			} else {
+				logger.Info("MediaHub service is already running")
+			}
+		}()
+	}
+
+	// Auto-start standalone RTM if enabled (only when MediaHub service is not running)
+	if env.IsBool("RTM_AUTO_START", false) {
+		// Check if MediaHub auto-start is also enabled
+		if env.IsBool("MEDIAHUB_AUTO_START", true) {
+			logger.Warn("Both MEDIAHUB_AUTO_START and RTM_AUTO_START are enabled. MediaHub service includes RTM, so standalone RTM auto-start will be skipped.")
+		}
+
+		go func() {
+			// Wait longer to ensure startup summary displays first
+			time.Sleep(12 * time.Second)
+
+			logger.Info("Auto-starting standalone Real-Time Monitor...")
+
+			// Check multiple times to ensure MediaHub has had time to start
+			for i := 0; i < 3; i++ {
+				status, err := api.GetMediaHubStatus()
+				if err != nil {
+					logger.Warn("Failed to check MediaHub status for standalone RTM auto-start (attempt %d): %v", i+1, err)
+					time.Sleep(2 * time.Second)
+					continue
+				}
+
+				// Only start standalone RTM if MediaHub service is not running
+				if status.IsRunning {
+					logger.Info("MediaHub service is running, skipping standalone RTM auto-start")
+					return
+				}
+
+				// If MediaHub auto-start is enabled, wait a bit more for it to start
+				if env.IsBool("MEDIAHUB_AUTO_START", true) && i < 2 {
+					logger.Debug("MediaHub auto-start is enabled but service not running yet, waiting...")
+					time.Sleep(3 * time.Second)
+					continue
+				}
+
+				break
+			}
+
+			// Final check and start RTM if needed
+			status, err := api.GetMediaHubStatus()
+			if err != nil {
+				logger.Error("Failed final MediaHub status check for RTM auto-start: %v", err)
+				return
+			}
+
+			if status.IsRunning {
+				logger.Info("MediaHub service is running, standalone RTM auto-start cancelled")
+				return
+			}
+
+			if !status.MonitorRunning {
+				logger.Info("Starting standalone RTM automatically...")
+				if err := api.StartMediaHubMonitorService(); err != nil {
+					logger.Error("Failed to auto-start standalone RTM: %v", err)
+				} else {
+					logger.Info("Standalone RTM auto-started successfully")
+				}
+			} else {
+				logger.Info("Standalone RTM is already running")
+			}
+		}()
+	}
+
 	// Add shutdown handler to checkpoint WAL
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
@@ -211,21 +315,16 @@ func main() {
 		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", *dir)
 	}
 
-	logger.Info("Starting CineSync server on http://%s", addr)
-	logger.Info("WebDAV access available at http://%s/webdav/ for WebDAV clients", addr)
+	logger.Info("CineSync server started on %s", addr)
 	logger.Info("Serving content from: %s", rootInfo)
-	logger.Info("API available at http://%s/api/", addr)
-	logger.Info("Server Dashboard http://%s/", addr)
 
-	// In your main function, add this information after starting the server
+	// Authentication status
 	if env.IsBool("CINESYNC_AUTH_ENABLED", true) {
 		credentials := auth.GetCredentials()
-		logger.Info("CineSync authentication enabled (username: %s)", credentials.Username)
+		logger.Info("Authentication enabled (username: %s)", credentials.Username)
 	} else {
-		logger.Warn("CineSync authentication is disabled")
+		logger.Warn("Authentication is disabled")
 	}
-
-	logger.Info("WebDAV server running at http://localhost:%d (serving %s)\n", *port, rootDir)
 
 	log.Fatal(http.ListenAndServe(addr, rootMux))
 }

@@ -33,6 +33,17 @@ class WebDavHubProductionServer:
         self.env_vars: Dict[str, str] = {}
         self.api_port = 8082
         self.ui_port = 5173
+        self.network_ip = self.get_network_ip()
+
+    def get_network_ip(self) -> str:
+        """Get the actual network IP address"""
+        try:
+            # Connect to a remote address to determine the local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except Exception:
+            return "localhost"
 
     def parse_arguments(self):
         """Parse command line arguments"""
@@ -133,6 +144,30 @@ class WebDavHubProductionServer:
         signal.signal(signal.SIGINT, self.cleanup)
         signal.signal(signal.SIGTERM, self.cleanup)
 
+    def check_prerequisites(self):
+        """Check if required files and dependencies exist"""
+        # Check if Go binary exists
+        if not Path("cinesync").exists() and not Path("cinesync.exe").exists():
+            print("❌ Go binary not found. Please run 'python scripts/build-prod.py' first.")
+            sys.exit(1)
+
+        # Check if frontend directory exists
+        if not Path("frontend").exists():
+            print("❌ Frontend directory not found.")
+            sys.exit(1)
+
+        # Check if frontend dependencies are installed
+        if not Path("frontend/node_modules").exists():
+            print("❌ Frontend dependencies not installed. Please run 'python scripts/build-prod.py' first.")
+            sys.exit(1)
+
+        # Check if frontend build exists
+        if not Path("frontend/dist").exists():
+            print("❌ Frontend build not found. Please run 'python scripts/build-prod.py' first.")
+            sys.exit(1)
+
+        print("✅ Prerequisites check passed")
+
     def check_database_directory(self):
         """Check database directory status"""
         # Silently check database directory without verbose output
@@ -176,15 +211,15 @@ class WebDavHubProductionServer:
                 stderr=None
             )
 
-            # Wait a moment for backend to start
+            # Wait for backend to start and show its startup messages
             time.sleep(3)
 
             # Check if backend is still running
             if self.backend_process.poll() is not None:
-                print("Backend server failed to start")
+                print("❌ Backend server failed to start")
                 sys.exit(1)
 
-            print("Backend server started successfully")
+            print("✅ Backend server started successfully")
 
         except Exception as e:
             print(f"Error starting backend server: {e}")
@@ -230,16 +265,16 @@ class WebDavHubProductionServer:
                 stderr=None
             )
 
-            # Wait a moment for frontend to start
+            # Wait for frontend to start and show its startup messages
             time.sleep(3)
 
             # Check if frontend is still running
             if self.frontend_process.poll() is not None:
-                print("Frontend server failed to start")
+                print("❌ Frontend server failed to start")
                 self.cleanup()
                 sys.exit(1)
 
-            print("Frontend server started successfully")
+            print("✅ Frontend server started successfully")
 
         except Exception as e:
             print(f"Error starting frontend server: {e}")
@@ -248,15 +283,21 @@ class WebDavHubProductionServer:
 
     def display_server_info(self):
         """Display information about running servers"""
-        print("\n" + "="*60)
+        print("\n" + "="*70)
         print("🏭 CineSync Production Servers Started Successfully!")
-        print("="*60)
-        print(f"🔧 Backend API Server:     http://localhost:{self.api_port}")
-        print(f"🎨 Frontend Server:        http://localhost:{self.ui_port}")
-        print(f"🌐 WebDAV Access:          http://localhost:{self.api_port}/webdav/")
-        print("="*60)
+        print("="*70)
+        print(f"🔧 Backend API Server:")
+        print(f"   ➜ Local:    http://localhost:{self.api_port}")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}")
+        print(f"🎨 Frontend Server:")
+        print(f"   ➜ Local:    http://localhost:{self.ui_port}")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.ui_port}")
+        print(f"🌐 WebDAV Access:")
+        print(f"   ➜ Local:    http://localhost:{self.api_port}/webdav/")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}/webdav/")
+        print("="*70)
         print("🛑 Press Ctrl+C to stop both servers")
-        print("="*60 + "\n")
+        print("="*70 + "\n")
 
     def wait_for_processes(self):
         """Wait for either process to finish"""
@@ -283,6 +324,9 @@ class WebDavHubProductionServer:
 
             # Setup working directory
             self.setup_working_directory()
+
+            # Check prerequisites
+            self.check_prerequisites()
 
             # Load environment variables
             self.load_environment_variables()

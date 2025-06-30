@@ -53,38 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           config.headers = config.headers || {};
           config.headers['Authorization'] = `Bearer ${token}`;
         } else {
-          const authDisabledEndpoints = [
-            '/api/auth/enabled',
-            '/api/auth/test',
-            '/api/auth/login',
-            '/api/auth/check',
-            '/api/download',
-            '/api/config-status',
-            '/api/config',
-            '/api/config/update',
-            '/api/config/events',
-            '/api/mediahub/message',
-            '/api/mediahub/events',
-            '/api/file-operations',
-            '/api/file-operations/events',
-            '/api/source-browse',
-            '/api/database/source-files',
-            '/api/database/source-scans',
-            '/api/dashboard/events',
-            '/api/database/stats',
-            '/api/database/search',
-            '/api/database/export',
-            '/api/stats',
-            '/api/jobs',
-            '/api/python-bridge/terminate'
+          const authOptionalPaths = [
+            '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
+            '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
+            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];
 
-          const isAuthOptional = authDisabledEndpoints.some(endpoint =>
-            config.url?.includes(endpoint)
-          );
+          const isAuthOptional = authOptionalPaths.some(path => config.url?.includes(path));
 
           if (!isAuthOptional) {
             config.headers = config.headers || {};
+            config.headers['Authorization'] = `Bearer ${token}`;
           }
         }
         return config;
@@ -97,34 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (error) => {
         if (error.response && error.response.status === 401) {
           // Check if this is an endpoint where auth might be optional
-          const authOptionalEndpoints = [
-            '/api/auth/enabled',
-            '/api/auth/test',
-            '/api/auth/login',
-            '/api/auth/check',
-            '/api/download',
-            '/api/config-status',
-            '/api/config',
-            '/api/config/update',
-            '/api/config/events',
-            '/api/mediahub/message',
-            '/api/mediahub/events',
-            '/api/file-operations',
-            '/api/file-operations/events',
-            '/api/source-browse',
-            '/api/database/source-files',
-            '/api/database/source-scans',
-            '/api/dashboard/events',
-            '/api/database/stats',
-            '/api/database/search',
-            '/api/database/export',
-            '/api/stats',
-            '/api/jobs',
-            '/api/python-bridge/terminate'
+          const authOptionalPaths = [
+            '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
+            '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
+            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];
 
-          const isAuthOptional = authOptionalEndpoints.some(endpoint =>
-            error.config?.url?.includes(endpoint)
+          const isAuthOptional = authOptionalPaths.some(path =>
+            error.config?.url?.includes(path)
           );
 
           if (!isAuthOptional) {

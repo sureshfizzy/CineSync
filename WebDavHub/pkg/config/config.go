@@ -128,6 +128,10 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "RCLONE_MOUNT", Category: "Rclone Mount Configuration", Type: "boolean", Required: false, Description: "Enable or disable rclone mount verification"},
 		{Key: "MOUNT_CHECK_INTERVAL", Category: "Rclone Mount Configuration", Type: "integer", Required: false, Description: "Interval (in seconds) for checking rclone mount availability"},
 
+		// MediaHub Service Configuration
+		{Key: "MEDIAHUB_AUTO_START", Category: "MediaHub Service Configuration", Type: "boolean", Required: false, Description: "Enable or disable automatic startup of MediaHub service (including built-in RTM) when CineSync starts"},
+		{Key: "RTM_AUTO_START", Category: "MediaHub Service Configuration", Type: "boolean", Required: false, Description: "Enable or disable automatic startup of standalone Real-Time Monitor when CineSync starts"},
+
 		// TMDb/IMDB Configuration
 		{Key: "TMDB_API_KEY", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Your TMDb API key for accessing TMDb services"},
 		{Key: "LANGUAGE", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Language for TMDb API requests"},
@@ -604,6 +608,61 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Configuration updated successfully"})
+}
+
+// HandleUpdateConfigSilent handles configuration updates without triggering SSE notifications
+func HandleUpdateConfigSilent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request UpdateConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		logger.Error("Failed to decode config update request: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(request.Updates) == 0 {
+		http.Error(w, "No updates provided", http.StatusBadRequest)
+		return
+	}
+
+	// Read current environment variables
+	envVars, _ := readEnvFile()
+
+	// Apply updates
+	for _, update := range request.Updates {
+		if update.Value == "" {
+			delete(envVars, update.Key)
+		} else {
+			envVars[update.Key] = update.Value
+		}
+	}
+
+	// Write back to file
+	if err := writeEnvFile(envVars); err != nil {
+		http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
+		return
+	}
+
+	// Set environment variables directly
+	for key, value := range envVars {
+		os.Setenv(key, value)
+	}
+
+	// Handle special configuration updates that require additional actions (but no SSE notifications)
+	for _, update := range request.Updates {
+		if update.Key == "DESTINATION_DIR" && update.Value != "" {
+			if updateRootDirCallback != nil {
+				updateRootDirCallback()
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
 // notifyConfigChange sends configuration change notifications to all connected SSE clients

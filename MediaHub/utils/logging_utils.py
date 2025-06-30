@@ -100,21 +100,39 @@ def log_message(message, level="INFO", output="stdout"):
     """
     if LOG_LEVELS.get(level, 20) >= LOG_LEVEL:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = f"{timestamp} [{level}] {message}\n"
+
+        # Handle Unicode characters safely
+        try:
+            safe_message = message.encode('utf-8', errors='replace').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            safe_message = message.encode('ascii', errors='replace').decode('ascii')
+
+        log_entry = f"{timestamp} [{level}] {safe_message}\n"
 
         # Only apply colors if not on Windows
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
 
-        if output == "stdout":
-            sys.stdout.write(colored_message)
-            sys.stdout.flush()
-        elif output == "stderr":
-            sys.stderr.write(colored_message)
-            sys.stderr.flush()
+        try:
+            if output == "stdout":
+                print(colored_message.rstrip())
+            elif output == "stderr":
+                print(colored_message.rstrip(), file=sys.stderr)
+        except UnicodeEncodeError:
+            safe_colored_message = colored_message.encode('utf-8', errors='replace').decode('utf-8')
+            if output == "stdout":
+                print(safe_colored_message.rstrip())
+            elif output == "stderr":
+                print(safe_colored_message.rstrip(), file=sys.stderr)
 
         # Always write to the log file without color codes
-        with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
-            log_file.write(log_entry)
+        try:
+            with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
+                log_file.write(log_entry)
+        except UnicodeEncodeError:
+            # Fallback for log file writing
+            safe_log_entry = log_entry.encode('utf-8', errors='replace').decode('utf-8')
+            with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
+                log_file.write(safe_log_entry)
 
 def log_unsupported_file_type(file_type):
     """

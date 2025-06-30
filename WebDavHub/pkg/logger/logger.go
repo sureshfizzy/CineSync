@@ -65,6 +65,11 @@ func Init() {
 	currentLevel = level
 }
 
+// GetCurrentLevel returns the current logging level
+func GetCurrentLevel() LogLevel {
+	return currentLevel
+}
+
 // formatMessage formats a log message with timestamp and level
 func formatMessage(level LogLevel, format string, args ...interface{}) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
