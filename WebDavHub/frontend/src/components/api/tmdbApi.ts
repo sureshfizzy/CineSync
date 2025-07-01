@@ -3,9 +3,12 @@ import axios from 'axios';
 export interface TmdbResult {
   id: number;
   title: string;
+  name?: string; // For TV shows
   overview: string;
   poster_path: string | null;
+  backdrop_path: string | null;
   release_date?: string;
+  first_air_date?: string; // For TV shows
   media_type?: string;
 }
 
@@ -69,12 +72,15 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
           }
         }
 
-        const resultObj = {
+        const resultObj: TmdbResult = {
           id: data.id,
           title: finalMediaType === 'movie' ? data.title : (data.name || data.title),
+          name: data.name,
           overview: data.overview,
           poster_path: data.poster_path,
-          release_date: data.release_date || data.first_air_date,
+          backdrop_path: data.backdrop_path,
+          release_date: data.release_date,
+          first_air_date: data.first_air_date,
           media_type: finalMediaType,
         };
 
@@ -165,9 +171,12 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
       const resultObj: TmdbResult = {
         id: best.id,
         title: best.title || best.name,
+        name: best.name,
         overview: best.overview,
         poster_path: best.poster_path,
-        release_date: best.release_date || best.first_air_date,
+        backdrop_path: best.backdrop_path,
+        release_date: best.release_date,
+        first_air_date: best.first_air_date,
         media_type: finalMediaType,
       };
 
@@ -213,11 +222,19 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 export function getTmdbPosterUrl(posterPath: string | null, size: string = 'w342'): string | null {
   if (!posterPath) return null;
 
-  // Include JWT token as query parameter for image requests
   const token = localStorage.getItem('cineSyncJWT');
   const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
 
   return `/api/image-cache?poster=${encodeURIComponent(posterPath)}&size=${size}${tokenParam}`;
+}
+
+export function getTmdbBackdropUrl(backdropPath: string | null, size: string = 'w1280'): string | null {
+  if (!backdropPath) return null;
+
+  const token = localStorage.getItem('cineSyncJWT');
+  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+
+  return `/api/image-cache?poster=${encodeURIComponent(backdropPath)}&size=${size}${tokenParam}`;
 }
 
 // Direct TMDB URL function (fallback)
@@ -244,6 +261,21 @@ export function formatRuntime(runtime?: number): string | null {
   const hours = Math.floor(runtime / 60);
   const minutes = runtime % 60;
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+// Fetch category content for category folders
+export async function fetchCategoryContent(category: string): Promise<TmdbResult[] | null> {
+  try {
+    const res = await axios.get('/api/tmdb/category-content', {
+      params: { category },
+      timeout: 5000
+    });
+
+    return res.data.results || [];
+  } catch (error) {
+    console.error('Error fetching category content:', error);
+    return null;
+  }
 }
 
 // Season and Episode interfaces

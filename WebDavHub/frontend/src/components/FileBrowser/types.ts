@@ -14,6 +14,7 @@ export interface FileItem {
   fullPath?: string;
   hasSeasonFolders?: boolean;
   isSeasonFolder?: boolean;
+  isCategoryFolder?: boolean;
   tmdbId?: string;
   mediaType?: 'movie' | 'tv';
   posterPath?: string;

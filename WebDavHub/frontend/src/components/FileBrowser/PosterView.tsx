@@ -5,6 +5,7 @@ import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
 import { getTmdbPosterUrl } from '../api/tmdbApi';
+import CategoryPosterDisplay from './CategoryPosterDisplay';
 
 interface PosterViewProps {
   files: FileItem[];
@@ -97,6 +98,16 @@ export default function PosterView({
                 const title = file.title || (tmdb && tmdb.title) || file.name;
                 const hasPosterPath = !!posterPath;
 
+                // Handle category folders with special display
+                if (file.isCategoryFolder && file.type === 'directory') {
+                  return (
+                    <CategoryPosterDisplay
+                      categoryName={file.name}
+                      onLoad={() => onImageLoad(file.name)}
+                    />
+                  );
+                }
+
                 const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasPosterPath;
 
                 if (isPosterCandidate) {
@@ -161,50 +172,53 @@ export default function PosterView({
                 }
               })()}
             </Box>
-            <Box sx={{
-              width: '100%',
-              p: { xs: '6px 8px', sm: '4px 12px' },
-              background: theme.palette.background.paper,
-              borderTop: `1px solid ${theme.palette.divider}`
-            }}>
-              <Typography
-                sx={{
-                  fontWeight: 500,
-                  textAlign: 'center',
-                  fontSize: { xs: '0.9rem', sm: '1rem' },
-                  wordBreak: 'break-all',
-                  mb: 0.5,
-                  lineHeight: 1.2,
-                  maxHeight: '1.4em',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  display: 'block',
-                }}
-              >
-                {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title
-                  ? (tmdb.release_date ? tmdb.title.replace(/\s*\(\d{4}\)$/, '') : tmdb.title)
-                  : file.name}
-              </Typography>
-              {tmdb && tmdb.release_date && (
+            {/* Only show bottom title section for non-category folders */}
+            {!file.isCategoryFolder && (
+              <Box sx={{
+                width: '100%',
+                p: { xs: '6px 8px', sm: '4px 12px' },
+                background: theme.palette.background.paper,
+                borderTop: `1px solid ${theme.palette.divider}`
+              }}>
                 <Typography
-                  variant="body2"
-                  color="text.secondary"
                   sx={{
                     fontWeight: 500,
                     textAlign: 'center',
+                    fontSize: { xs: '0.9rem', sm: '1rem' },
+                    wordBreak: 'break-all',
+                    mb: 0.5,
+                    lineHeight: 1.2,
+                    maxHeight: '1.4em',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     display: 'block',
                   }}
                 >
-                  {tmdb.release_date
-                    ? new Date(tmdb.release_date).getFullYear()
-                    : ''}
+                  {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title
+                    ? (tmdb.release_date ? tmdb.title.replace(/\s*\(\d{4}\)$/, '') : tmdb.title)
+                    : file.name}
                 </Typography>
-              )}
-            </Box>
+                {tmdb && tmdb.release_date && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      fontWeight: 500,
+                      textAlign: 'center',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'block',
+                    }}
+                  >
+                    {tmdb.release_date
+                      ? new Date(tmdb.release_date).getFullYear()
+                      : ''}
+                  </Typography>
+                )}
+              </Box>
+            )}
           </Paper>
         );
       })}

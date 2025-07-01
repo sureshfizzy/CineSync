@@ -165,6 +165,7 @@ type FileInfo struct {
 	Icon     string `json:"icon,omitempty"`
 	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
 	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
+	IsCategoryFolder bool `json:"isCategoryFolder,omitempty"`
 	TmdbId   string `json:"tmdbId,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
 	PosterPath string `json:"posterPath,omitempty"`
@@ -545,6 +546,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 			// 1. Check .tmdb file in subdirectory first, but only if it's not a category folder
 			isSubdirCategoryFolder := isCategoryFolder(entry.Name())
+			if isSubdirCategoryFolder {
+				fileInfo.IsCategoryFolder = true
+			}
 			if !isSubdirCategoryFolder {
 				subTmdbPath := filepath.Join(subDirPath, ".tmdb")
 				if data, err := os.ReadFile(subTmdbPath); err == nil {

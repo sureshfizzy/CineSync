@@ -15,6 +15,39 @@ import (
 	"cinesync/pkg/db"
 )
 
+// WithTmdbValidation wraps TMDB handlers with common validation and queue management
+func WithTmdbValidation(handler func(w http.ResponseWriter, r *http.Request, apiKey string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Acquire queue lock for concurrent processing
+		acquireTmdbQueue()
+		defer releaseTmdbQueue()
+
+		ip := r.RemoteAddr
+		if colon := strings.LastIndex(ip, ":"); colon != -1 {
+			ip = ip[:colon]
+		}
+
+		if !checkTmdbRateLimit(ip) {
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+
+		tmdbApiKey := getTmdbApiKey()
+		if tmdbApiKey == "" {
+			logger.Warn("TMDB_API_KEY not set in environment")
+			http.Error(w, "TMDB API key not configured", http.StatusInternalServerError)
+			return
+		}
+
+		handler(w, r, tmdbApiKey)
+	}
+}
+
 // getTmdbApiKey returns the TMDB API key with fallback mechanism
 func getTmdbApiKey() string {
 	envKey := strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
@@ -143,32 +176,7 @@ func waitForRateLimit(ip string) {
 	}
 }
 
-func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Acquire queue lock for concurrent processing
-	acquireTmdbQueue()
-	defer releaseTmdbQueue()
-
-	ip := r.RemoteAddr
-	if colon := strings.LastIndex(ip, ":"); colon != -1 {
-		ip = ip[:colon]
-	}
-
-	if !checkTmdbRateLimit(ip) {
-		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
-
-	tmdbApiKey := getTmdbApiKey()
-	if tmdbApiKey == "" {
-		logger.Warn("TMDB_API_KEY not set in environment")
-		http.Error(w, "TMDB API key not configured", http.StatusInternalServerError)
-		return
-	}
+func HandleTmdbProxy(w http.ResponseWriter, r *http.Request, tmdbApiKey string) {
 
 	query := r.URL.Query().Get("query")
 	year := r.URL.Query().Get("year")
@@ -206,32 +214,7 @@ func HandleTmdbProxy(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Acquire queue lock for concurrent processing
-	acquireTmdbQueue()
-	defer releaseTmdbQueue()
-
-	ip := r.RemoteAddr
-	if colon := strings.LastIndex(ip, ":"); colon != -1 {
-		ip = ip[:colon]
-	}
-
-	if !checkTmdbRateLimit(ip) {
-		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
-
-	tmdbApiKey := getTmdbApiKey()
-	if tmdbApiKey == "" {
-		logger.Warn("TMDB_API_KEY not set in environment")
-		http.Error(w, "TMDB API key not configured", http.StatusInternalServerError)
-		return
-	}
+func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string) {
 
 	id := r.URL.Query().Get("id")
 	mediaType := r.URL.Query().Get("mediaType") // optional: "movie" or "tv"
@@ -510,4 +493,188 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-TMDB-Details-Cache", "MISS")
 	w.Write(body)
+}
+
+// HandleTmdbCategoryContent fetches popular/trending content for category folders
+func HandleTmdbCategoryContent(w http.ResponseWriter, r *http.Request, tmdbApiKey string) {
+
+	categoryType := r.URL.Query().Get("category")
+	if categoryType == "" {
+		http.Error(w, "Missing category parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Determine content type and endpoint based on category
+	var endpoint string
+	var mediaType string
+
+	// Detect if category is for movies, shows, or anime using configured folder names
+	contentType := detectCategoryContentType(categoryType)
+
+	// Set endpoint and parameters based on detected content type
+	params := url.Values{}
+	params.Set("api_key", tmdbApiKey)
+	params.Set("page", "1")
+
+	switch contentType {
+	case "anime_tv":
+		mediaType = "tv"
+		endpoint = "https://api.themoviedb.org/3/discover/tv"
+		params.Set("with_genres", "16") // Animation genre
+		params.Set("with_original_language", "ja") // Japanese language
+		params.Set("sort_by", "vote_average.desc") // Sort by rating for quality anime
+		params.Set("vote_count.gte", "100") // Minimum votes for popular anime
+		params.Set("with_keywords", "210024") // Anime keyword
+
+	case "anime_movie":
+		mediaType = "movie"
+		endpoint = "https://api.themoviedb.org/3/discover/movie"
+		params.Set("with_genres", "16") // Animation genre
+		params.Set("with_original_language", "ja") // Japanese language
+		params.Set("sort_by", "vote_average.desc") // Sort by rating for quality anime
+		params.Set("vote_count.gte", "50") // Minimum votes for popular anime movies
+		params.Set("with_keywords", "210024") // Anime keyword
+
+	case "tv":
+		mediaType = "tv"
+		endpoint = "https://api.themoviedb.org/3/tv/top_rated"
+
+	case "movie":
+		mediaType = "movie"
+		endpoint = "https://api.themoviedb.org/3/movie/popular"
+
+	default:
+		mediaType = "movie"
+		endpoint = "https://api.themoviedb.org/3/movie/popular"
+	}
+
+	tmdbUrl := endpoint + "?" + params.Encode()
+
+	resp, err := tmdbHttpClient.Get(tmdbUrl)
+	if err != nil {
+		logger.Warn("Error fetching category content from TMDb: %v", err)
+		http.Error(w, "Failed to contact TMDb", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Warn("TMDb API returned status %d for category content", resp.StatusCode)
+		http.Error(w, "TMDb API error", http.StatusBadGateway)
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Warn("Error reading TMDb response: %v", err)
+		http.Error(w, "Failed to read TMDb response", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse response to limit results and add media type
+	var tmdbResponse map[string]interface{}
+	if err := json.Unmarshal(body, &tmdbResponse); err != nil {
+		logger.Warn("Error parsing TMDb response: %v", err)
+		http.Error(w, "Failed to parse TMDb response", http.StatusInternalServerError)
+		return
+	}
+
+	// Limit to first 20 results and add media type
+	if results, ok := tmdbResponse["results"].([]interface{}); ok {
+		if len(results) > 20 {
+			tmdbResponse["results"] = results[:20]
+		}
+
+		// Add media_type to each result for frontend processing
+		for _, result := range tmdbResponse["results"].([]interface{}) {
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				resultMap["media_type"] = mediaType
+			}
+		}
+	}
+
+	// Convert back to JSON
+	responseBody, err := json.Marshal(tmdbResponse)
+	if err != nil {
+		logger.Warn("Error marshaling response: %v", err)
+		http.Error(w, "Failed to process response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseBody)
+}
+
+// detectCategoryContentType determines the content type based on category folder name
+func detectCategoryContentType(categoryName string) string {
+	categoryLower := strings.ToLower(categoryName)
+
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		envKey := parts[0]
+		envValue := strings.ToLower(parts[1])
+
+		// Skip empty values
+		if envValue == "" {
+			continue
+		}
+
+		// Check if the category name matches this environment variable's value
+		if envValue == categoryLower {
+			// Determine content type based on environment variable name
+			envKeyUpper := strings.ToUpper(envKey)
+
+			// Check for anime patterns first (most specific)
+			if strings.Contains(envKeyUpper, "ANIME") {
+				if strings.Contains(envKeyUpper, "MOVIE") {
+					return "anime_movie"
+				}
+				if strings.Contains(envKeyUpper, "SHOW") || strings.Contains(envKeyUpper, "TV") {
+					return "anime_tv"
+				}
+				return "anime_tv" // Default anime to TV
+			}
+
+			// Check for show patterns
+			if strings.Contains(envKeyUpper, "SHOW") {
+				return "tv"
+			}
+
+			// Check for movie patterns
+			if strings.Contains(envKeyUpper, "MOVIE") {
+				return "movie"
+			}
+		}
+	}
+
+	// Fallback to keyword-based detection on the folder name itself
+	if strings.Contains(categoryLower, "anime") {
+		if strings.Contains(categoryLower, "movie") || strings.Contains(categoryLower, "film") {
+			return "anime_movie"
+		}
+		return "anime_tv"
+	}
+
+	if strings.Contains(categoryLower, "movie") || strings.Contains(categoryLower, "cinema") || strings.Contains(categoryLower, "film") {
+		return "movie"
+	}
+
+	if strings.Contains(categoryLower, "show") || strings.Contains(categoryLower, "tv") || strings.Contains(categoryLower, "series") {
+		return "tv"
+	}
+
+	// Check resolution folder patterns
+	if strings.Contains(categoryLower, "4k") || strings.Contains(categoryLower, "uhd") || strings.Contains(categoryLower, "hd") {
+		if strings.Contains(categoryLower, "show") || strings.Contains(categoryLower, "series") || strings.Contains(categoryLower, "tv") {
+			return "tv"
+		}
+		return "movie"
+	}
+
+	// Default to movie
+	return "movie"
 }
