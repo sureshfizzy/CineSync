@@ -10,6 +10,7 @@ import socket
 import threading
 import traceback
 import io
+from dotenv import load_dotenv, find_dotenv
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
 if hasattr(sys.stdout, 'buffer'):
@@ -29,6 +30,7 @@ from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.id_refresh import refresh_tmdb_files
 from MediaHub.utils.file_utils import resolve_symlink_to_source
+from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
 
 db_initialized = False
 
@@ -41,10 +43,14 @@ LOCK_TIMEOUT = 3600
 background_processes = []
 terminate_flag = threading.Event()
 
+# Ensure .env file exists before trying to load it
+if not ensure_env_file_exists():
+    print("Failed to create .env file. Continuing with environment variables only.")
+
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
+    print("Error: .env file not found in the parent directory.")
     exit(1)
 
 load_dotenv(dotenv_path)

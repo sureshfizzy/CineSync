@@ -8,6 +8,16 @@ from MediaHub.utils.logging_utils import log_message
 api_key = None
 api_warning_logged = False
 
+def get_env_int(key, default):
+    """Safely get an integer environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
 # Load .env file
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path)
@@ -39,7 +49,7 @@ def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
 
 def get_junk_max_size_mb():
-     return int(os.getenv('JUNK_MAX_SIZE_MB', '5'))
+     return get_env_int('JUNK_MAX_SIZE_MB', 5)
 
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
@@ -51,7 +61,7 @@ def is_rclone_mount_enabled():
     return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
 
 def is_mount_check_interval():
-    return int(os.getenv('MOUNT_CHECK_INTERVAL', '30'))
+    return get_env_int('MOUNT_CHECK_INTERVAL', 30)
 
 def is_anime_scan():
     return os.getenv('ANIME_SCAN', 'false').lower() == 'true'
@@ -175,7 +185,7 @@ def get_max_cores():
 def get_max_processes():
     """Get the maximum number of processes for I/O-bound parallel processing (API calls, file operations)"""
     try:
-        max_processes = int(os.getenv('MAX_PROCESSES', '8'))
+        max_processes = get_env_int('MAX_PROCESSES', 8)
         from multiprocessing import cpu_count
 
         # Respect user's MAX_PROCESSES setting, but ensure it's reasonable

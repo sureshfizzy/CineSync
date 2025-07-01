@@ -19,10 +19,9 @@ from MediaHub.processors.symlink_utils import *
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
-    exit(1)
-
-load_dotenv(dotenv_path)
+    print("Warning: .env file not found. Using environment variables only.")
+else:
+    load_dotenv(dotenv_path)
 
 def run_symlink_cleanup(dest_dir):
     symlinks_deleted = False
@@ -78,7 +77,11 @@ def run_symlink_cleanup(dest_dir):
         log_message("No broken symlinks found.", level="INFO")
 
     # Retrieve the cleanup interval
-    cleanup_interval = int(os.getenv("SYMLINK_CLEANUP_INTERVAL", 600))
+    try:
+        cleanup_interval_str = os.getenv("SYMLINK_CLEANUP_INTERVAL", "600")
+        cleanup_interval = int(cleanup_interval_str) if cleanup_interval_str and cleanup_interval_str.strip() else 600
+    except (ValueError, TypeError):
+        cleanup_interval = 600
 
     log_message(f"Sleeping Full broken symlink deletion for {cleanup_interval} seconds until next cleanup cycle.", level="INFO")
     time.sleep(cleanup_interval)

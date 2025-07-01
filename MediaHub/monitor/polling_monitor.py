@@ -18,8 +18,9 @@ from MediaHub.processors.symlink_creator import *
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
-    exit(1)
+    print("Warning: .env file not found. Using environment variables only.")
+else:
+    load_dotenv(dotenv_path)
 
 # Define the logging level dictionary
 LOG_LEVELS = {

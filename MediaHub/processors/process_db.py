@@ -15,10 +15,9 @@ from MediaHub.utils.logging_utils import log_message
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
-    exit(1)
-
-load_dotenv(dotenv_path)
+    print("Warning: .env file not found. Using environment variables only.")
+else:
+    load_dotenv(dotenv_path)
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")

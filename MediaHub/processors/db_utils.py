@@ -15,17 +15,12 @@ from MediaHub.utils.logging_utils import log_message
 import traceback
 import requests
 
-# Define color constants for terminal output
-RED_COLOR = "\033[91m"
-RESET_COLOR = "\033[0m"
-
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
-    exit(1)
-
-load_dotenv(dotenv_path)
+    print("Warning: .env file not found. Using environment variables only.")
+else:
+    load_dotenv(dotenv_path)
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")
@@ -37,12 +32,33 @@ LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
 # Ensure database directory exists
 os.makedirs(DB_DIR, exist_ok=True)
 
+# Helper functions for safe environment variable conversion
+def get_env_int(key, default):
+    """Safely get an integer environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def get_env_float(key, default):
+    """Safely get a float environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
 # Get configuration from environment variables
-THROTTLE_RATE = float(os.getenv('DB_THROTTLE_RATE', 10))
-MAX_RETRIES = int(os.getenv('DB_MAX_RETRIES', 3))
-RETRY_DELAY = float(os.getenv('DB_RETRY_DELAY', 1.0))
-BATCH_SIZE = int(os.getenv('DB_BATCH_SIZE', 1000))
-MAX_WORKERS = int(os.getenv('DB_MAX_WORKERS', 4))
+THROTTLE_RATE = get_env_float('DB_THROTTLE_RATE', 10.0)
+MAX_RETRIES = get_env_int('DB_MAX_RETRIES', 3)
+RETRY_DELAY = get_env_float('DB_RETRY_DELAY', 1.0)
+BATCH_SIZE = get_env_int('DB_BATCH_SIZE', 1000)
+MAX_WORKERS = get_env_int('DB_MAX_WORKERS', 4)
 
 # Add this near the top with other global variables
 _db_initialized = False

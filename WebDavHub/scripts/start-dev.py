@@ -87,8 +87,17 @@ class WebDavHubDevelopmentServer:
 
         # Get ports from environment variables with defaults
         # Priority: Docker environment variables > .env file > defaults
-        self.api_port = int(os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082')))
-        self.ui_port = int(os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173')))
+        try:
+            api_port_str = os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
+            self.api_port = int(api_port_str) if api_port_str and api_port_str.strip() else 8082
+        except (ValueError, TypeError):
+            self.api_port = 8082
+
+        try:
+            ui_port_str = os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173'))
+            self.ui_port = int(ui_port_str) if ui_port_str and ui_port_str.strip() else 5173
+        except (ValueError, TypeError):
+            self.ui_port = 5173
 
     def _parse_env_file(self, env_file: Path):
         """Parse .env file and extract environment variables"""

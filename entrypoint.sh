@@ -23,6 +23,11 @@ chown -R appuser:appuser /app/db 2>/dev/null || true
 chown -R appuser:appuser /app/logs 2>/dev/null || true
 chown -R appuser:appuser /app/cache 2>/dev/null || true
 
+# Ensure .env file can be created by appuser
+touch /app/.env 2>/dev/null || true
+chown appuser:appuser /app/.env 2>/dev/null || true
+chmod 644 /app/.env 2>/dev/null || true
+
 # Frontend directory
 if [ -d "/app/WebDavHub/frontend" ]; then
     find /app/WebDavHub/frontend -path "*/node_modules" -prune -o -type f -exec chown appuser:appuser {} \; 2>/dev/null || true
