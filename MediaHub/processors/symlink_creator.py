@@ -494,7 +494,12 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
         # Determine media type based on folder structure
         media_type = "movie"
-        if "TV Shows" in dest_file or "Series" in dest_file or season_number is not None:
+        dest_parts = normalize_file_path(dest_file).split(os.sep)
+        is_tv_show = ("TV Shows" in dest_file or "Series" in dest_file or
+                     season_number is not None or
+                     any(part.lower().startswith('season ') for part in dest_parts) or
+                     any(part.lower() == 'extras' for part in dest_parts))
+        if is_tv_show:
             media_type = "tvshow"
 
         # Prepare structured data for WebDavHub API

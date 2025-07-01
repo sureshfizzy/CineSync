@@ -446,7 +446,11 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		// Determine media type
 		op.Type = "other"
 		if op.TmdbID != "" && op.TmdbID != "NULL" {
-			if op.SeasonNumber > 0 {
+			// Check if this is a TV show by season number OR by path structure (for extras)
+			pathLower := strings.ToLower(op.FilePath)
+			isShowByPath := strings.Contains(pathLower, "season") || strings.Contains(pathLower, "extras") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode")
+
+			if op.SeasonNumber > 0 || isShowByPath {
 				op.Type = "tvshow"
 			} else {
 				op.Type = "movie"
@@ -456,7 +460,7 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 			ext := strings.ToLower(filepath.Ext(op.FileName))
 			if ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".mov" {
 				pathLower := strings.ToLower(op.FilePath)
-				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") {
+				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") || strings.Contains(pathLower, "extras") {
 					op.Type = "tvshow"
 				} else if strings.Contains(pathLower, "movie") {
 					op.Type = "movie"
@@ -740,7 +744,11 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 		// Determine media type
 		op.Type = "other"
 		if op.TmdbID != "" && op.TmdbID != "NULL" {
-			if op.SeasonNumber > 0 {
+			// Check if this is a TV show by season number OR by path structure (for extras)
+			pathLower := strings.ToLower(op.FilePath)
+			isShowByPath := strings.Contains(pathLower, "season") || strings.Contains(pathLower, "extras") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode")
+
+			if op.SeasonNumber > 0 || isShowByPath {
 				op.Type = "tvshow"
 			} else {
 				op.Type = "movie"
@@ -750,7 +758,7 @@ func getDeletionRecords(db *sql.DB) ([]FileOperation, error) {
 			ext := strings.ToLower(filepath.Ext(op.FileName))
 			if ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".mov" {
 				pathLower := strings.ToLower(op.FilePath)
-				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") {
+				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") || strings.Contains(pathLower, "extras") {
 					op.Type = "tvshow"
 				} else if strings.Contains(pathLower, "movie") {
 					op.Type = "movie"
@@ -836,7 +844,11 @@ func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery
 		// Determine media type
 		op.Type = "other"
 		if op.TmdbID != "" && op.TmdbID != "NULL" {
-			if op.SeasonNumber > 0 {
+			// Check if this is a TV show by season number OR by path structure (for extras)
+			pathLower := strings.ToLower(op.FilePath)
+			isShowByPath := strings.Contains(pathLower, "season") || strings.Contains(pathLower, "extras") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode")
+
+			if op.SeasonNumber > 0 || isShowByPath {
 				op.Type = "tvshow"
 			} else {
 				op.Type = "movie"
@@ -846,7 +858,7 @@ func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery
 			ext := strings.ToLower(filepath.Ext(op.FileName))
 			if ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".mov" {
 				pathLower := strings.ToLower(op.FilePath)
-				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") {
+				if strings.Contains(pathLower, "season") || strings.Contains(pathLower, "s0") || strings.Contains(pathLower, "episode") || strings.Contains(pathLower, "extras") {
 					op.Type = "tvshow"
 				} else if strings.Contains(pathLower, "movie") {
 					op.Type = "movie"

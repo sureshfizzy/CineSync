@@ -517,17 +517,32 @@ const RecentlyAddedMedia: React.FC = () => {
   }, [tmdbTitles]);
 
   const getSubtitle = useCallback((media: RecentMedia, episodeCount?: number) => {
-    if ((media.type === 'tvshow' || media.type === 'tv') && media.seasonNumber && media.episodeNumber) {
-      const seasonEpisode = `S${String(media.seasonNumber).padStart(2, '0')}E${String(media.episodeNumber).padStart(2, '0')}`;
-      if (episodeCount && episodeCount > 1) {
-        const moreCount = episodeCount - 1;
-        const displayMoreCount = moreCount > 98 ? '98+' : moreCount.toString();
-        return `Latest: ${seasonEpisode} (+${displayMoreCount} more)`;
+    if (media.type === 'tvshow' || media.type === 'tv') {
+      // Check if this is a regular episode with season and episode numbers
+      if (media.seasonNumber && media.episodeNumber) {
+        const seasonEpisode = `S${String(media.seasonNumber).padStart(2, '0')}E${String(media.episodeNumber).padStart(2, '0')}`;
+        if (episodeCount && episodeCount > 1) {
+          const moreCount = episodeCount - 1;
+          const displayMoreCount = moreCount > 98 ? '98+' : moreCount.toString();
+          return `Latest: ${seasonEpisode} (+${displayMoreCount} more)`;
+        }
+        if (media.episodeTitle && media.episodeTitle.trim() !== '') {
+          return `${seasonEpisode} • ${media.episodeTitle}`;
+        }
+        return seasonEpisode;
       }
-      if (media.episodeTitle && media.episodeTitle.trim() !== '') {
-        return `${seasonEpisode} • ${media.episodeTitle}`;
+      // Handle extras/specials (no season/episode numbers)
+      else if ((!media.seasonNumber || media.seasonNumber === 0) && (!media.episodeNumber || media.episodeNumber === 0)) {
+        if (episodeCount && episodeCount > 1) {
+          const moreCount = episodeCount - 1;
+          const displayMoreCount = moreCount > 98 ? '98+' : moreCount.toString();
+          return `Latest: Special (+${displayMoreCount} more)`;
+        }
+        if (media.episodeTitle && media.episodeTitle.trim() !== '') {
+          return `Special • ${media.episodeTitle}`;
+        }
+        return 'Special';
       }
-      return seasonEpisode;
     }
     return null;
   }, []);
@@ -871,17 +886,28 @@ const RecentlyAddedMedia: React.FC = () => {
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                           <Chip
-                            label={`S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`}
+                            label={
+                              (episode.seasonNumber && episode.episodeNumber)
+                                ? `S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`
+                                : 'Special'
+                            }
                             size="small"
                             sx={{
-                              bgcolor: alpha(theme.palette.secondary.main, 0.1),
-                              color: 'secondary.main',
+                              bgcolor: alpha(
+                                (episode.seasonNumber && episode.episodeNumber)
+                                  ? theme.palette.secondary.main
+                                  : theme.palette.warning.main,
+                                0.1
+                              ),
+                              color: (episode.seasonNumber && episode.episodeNumber)
+                                ? 'secondary.main'
+                                : 'warning.main',
                               fontWeight: 700,
                               fontSize: '0.7rem'
                             }}
                           />
                           <Typography variant="subtitle2" fontWeight="600">
-                            {episode.episodeTitle || 'Episode'}
+                            {episode.episodeTitle || (episode.seasonNumber && episode.episodeNumber ? 'Episode' : 'Special Content')}
                           </Typography>
                         </Box>
                       }
