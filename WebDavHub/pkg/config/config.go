@@ -92,15 +92,18 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "CINESYNC_LAYOUT", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable CineSync layout organization"},
 		{Key: "4K_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable automatic 4K content separation into separate folders"},
 		{Key: "ANIME_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable anime separation"},
+		{Key: "KIDS_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable kids/family content separation based on TMDB content ratings (G, PG, TV-Y, TV-G, TV-PG) and family genres"},
 		{Key: "CUSTOM_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for TV shows"},
 		{Key: "CUSTOM_4KSHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for 4K TV shows"},
 		{Key: "CUSTOM_ANIME_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for anime shows"},
 		{Key: "CUSTOM_MOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for movies"},
 		{Key: "CUSTOM_4KMOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for 4K movies"},
 		{Key: "CUSTOM_ANIME_MOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for anime movies"},
+		{Key: "CUSTOM_KIDS_MOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for kids/family movies"},
+		{Key: "CUSTOM_KIDS_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for kids/family TV shows"},
 
 		// Resolution Folder Mappings Configuration
-		// Resolution Structure Controls (moved from Media Folders)
+		// Resolution Structure Controls
 		{Key: "SHOW_RESOLUTION_STRUCTURE", Category: "Resolution Folder Mappings Configuration", Type: "boolean", Required: false, Description: "Enable resolution-based structure for shows"},
 		{Key: "MOVIE_RESOLUTION_STRUCTURE", Category: "Resolution Folder Mappings Configuration", Type: "boolean", Required: false, Description: "Enable resolution-based structure for movies"},
 

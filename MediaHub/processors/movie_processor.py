@@ -8,7 +8,7 @@ from MediaHub.api.tmdb_api import search_movie, determine_tmdb_media_type
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_movie_collection
+from MediaHub.api.tmdb_api_helpers import get_movie_data
 from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 from MediaHub.processors.db_utils import track_file_failure
@@ -67,7 +67,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         # Get collection info if enabled
         if is_movie_collection_enabled() and tmdb_id:
-            collection_info = get_movie_collection(movie_id=tmdb_id)
+            movie_data = get_movie_data(tmdb_id)
+            collection_name = movie_data.get('collection_name')
+            collection_info = (collection_name, tmdb_id) if collection_name else None
 
     elif is_movie_collection_enabled():
 
@@ -79,22 +81,28 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+                if len(result) == 6:
+                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
+                else:
+                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+                    is_kids_content = False
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
                 tmdb_id = result['id']
+                is_kids_content = False
 
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
 
-            tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_movie_name)
-            if tmdb_id_match:
-                movie_id = tmdb_id_match.group(1)
-                collection_info = get_movie_collection(movie_id=movie_id)
+            # Get collection info from optimized movie data
+            if tmdb_id:
+                movie_data = get_movie_data(tmdb_id)
+                collection_name = movie_data.get('collection_name')
+                collection_info = (collection_name, tmdb_id) if collection_name else None
             else:
-                collection_info = get_movie_collection(movie_title=movie_name, year=year)
+                collection_info = None
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -108,8 +116,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
             return None, None
 
-        elif isinstance(result, tuple) and len(result) == 5:
-            tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+        elif isinstance(result, tuple) and len(result) >= 5:
+            if len(result) == 6:
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
+            else:
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+                is_kids_content = False
             year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
@@ -122,6 +134,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
+            is_kids_content = False
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -129,6 +142,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')
+
+    # Ensure is_kids_content is defined
+    if 'is_kids_content' not in locals():
+        is_kids_content = False
 
     # Extract resolution from filename and parent folder
     file_resolution = extract_resolution_from_filename(file)
@@ -140,6 +157,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     # Check if file is 4K/2160p for custom layout selection
     is_4k = '2160' in file or '4k' in file.lower() or 'uhd' in file.lower()
+
+    # Log kids content detection if enabled
+    if is_kids_content and is_kids_separation_enabled():
+        log_message(f"Movie identified as kids/family content: {proper_movie_name}", level="INFO")
 
     # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():
@@ -160,7 +181,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                             movie_base = custom_movie_layout() if custom_movie_layout() else os.path.join('CineSync', 'Movies')
                             dest_path = os.path.join(dest_dir, movie_base, resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            kids_base = custom_kids_movie_layout() if custom_kids_movie_layout() else os.path.join('CineSync', 'KidsMovies')
+                            dest_path = os.path.join(dest_dir, kids_base, movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, movie_folder)
                         elif is_4k and is_4k_separation_enabled():
@@ -171,12 +195,16 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                             dest_path = os.path.join(dest_dir, movie_base, movie_folder)
                 else:
                     if is_movie_resolution_structure_enabled():
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', resolution_folder, movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                         elif is_4k and is_4k_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', '4KMovies', movie_folder)
@@ -207,17 +235,23 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             # Set destination path for non-collection movies
             if is_cinesync_layout_enabled():
                 if is_movie_resolution_structure_enabled():
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', resolution_folder, movie_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                     else:
                         dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
                 else:
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                     else:
                         dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
             else:
-                if is_anime_genre and is_anime_separation_enabled():
+                if is_kids_content and is_kids_separation_enabled():
+                    dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                elif is_anime_genre and is_anime_separation_enabled():
                     dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                 else:
                     dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)

@@ -582,13 +582,13 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                     movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
                     tmdb_id = chosen_movie.get('id')
 
-                    external_ids = get_external_ids(tmdb_id, 'movie')
-                    imdb_id = external_ids.get('imdb_id', '')
-                    genre_info = get_movie_genres(tmdb_id)
-                    is_anime_genre = genre_info['is_anime_genre']
+                    movie_data = get_complete_movie_data(tmdb_id)
+                    imdb_id = movie_data.get('imdb_id', '')
+                    is_anime_genre = movie_data.get('is_anime_genre', False)
+                    is_kids_content = movie_data.get('is_kids_content', False)
 
-                    set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre))
-                    return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
+                    set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content))
+                    return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content
             return manual_result
         else:
             set_cached_result(cache_key, f"{query}")
@@ -634,10 +634,10 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
 
-        external_ids = get_external_ids(tmdb_id, 'movie')
-        imdb_id = external_ids.get('imdb_id', '')
-        genre_info = get_movie_genres(tmdb_id)
-        is_anime_genre = genre_info['is_anime_genre']
+        movie_data = get_movie_data(tmdb_id)
+        imdb_id = movie_data.get('imdb_id', '')
+        is_anime_genre = movie_data.get('is_anime_genre', False)
+        is_kids_content = movie_data.get('is_kids_content', False)
 
         if is_imdb_folder_id_enabled():
             proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
@@ -646,8 +646,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         else:
             proper_name = f"{movie_name} ({movie_year})"
 
-        set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre))
-        return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre
+        set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content))
+        return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content
 
     log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
     set_cached_result(cache_key, f"{query}")

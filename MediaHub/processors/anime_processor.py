@@ -195,7 +195,11 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for anime show: {show_name} ({year})")
         return None
     elif isinstance(search_result, tuple):
-        proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
+        if len(search_result) == 7:
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = search_result
+        else:
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id = search_result
+            is_kids_content = False
     else:
         log_message(f"TMDB search returned unexpected result type for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
         track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for anime show: {show_name} ({year})")

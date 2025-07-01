@@ -242,8 +242,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"TMDB search failed for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
-        elif isinstance(result, tuple) and len(result) == 6:
-            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
+        elif isinstance(result, tuple) and len(result) >= 6:
+            if len(result) == 7:
+                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
+            else:
+                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
+                is_kids_content = False
             episode_identifier = f"S{season_number}E{episode_number}"
 
             if season_number is not None and episode_number is not None:
@@ -275,6 +279,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     show_folder = show_folder.replace('/', '')
 
+    # Ensure is_kids_content is defined
+    if 'is_kids_content' not in locals():
+        is_kids_content = False
+
     # Determine resolution-specific folder for shows
     if anime_result and anime_result.get('resolution'):
         resolution = anime_result['resolution']
@@ -290,26 +298,38 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Check if file is 4K/2160p
     is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
 
+    # Log kids content detection if enabled
+    if is_kids_content and is_kids_separation_enabled():
+        log_message(f"TV show identified as kids/family content: {proper_show_name}", level="INFO")
+
     # Modified destination path determination
     if is_extra:
         if is_cinesync_layout_enabled():
             if custom_show_layout() or custom_4kshow_layout():
                 if is_show_resolution_structure_enabled():
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        kids_base = custom_kids_show_layout() if custom_kids_show_layout() else os.path.join('CineSync', 'KidsShows')
+                        base_dest_path = os.path.join(dest_dir, kids_base, resolution_folder, show_folder, 'Extras')
+                    elif is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, resolution_folder, show_folder, 'Extras')
                     else:
                         show_base = custom_show_layout() if custom_show_layout() else os.path.join('CineSync', 'Shows')
                         base_dest_path = os.path.join(dest_dir, show_base, resolution_folder, show_folder, 'Extras')
                 else:
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        kids_base = custom_kids_show_layout() if custom_kids_show_layout() else os.path.join('CineSync', 'KidsShows')
+                        base_dest_path = os.path.join(dest_dir, kids_base, show_folder, 'Extras')
+                    elif is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, show_folder, 'Extras')
                     else:
                         show_base = custom_show_layout() if custom_show_layout() else os.path.join('CineSync', 'Shows')
                         base_dest_path = os.path.join(dest_dir, show_base, show_folder, 'Extras')
             else:
-                if is_anime_genre and is_anime_separation_enabled():
+                if is_kids_content and is_kids_separation_enabled():
+                    base_dest_path = os.path.join(dest_dir, 'CineSync', 'KidsShows', show_folder, 'Extras')
+                elif is_anime_genre and is_anime_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
                 elif is_4k and is_4k_separation_enabled():
                     base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder, 'Extras')
@@ -348,7 +368,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         base_dest_path = os.path.join(dest_dir, show_base, resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, show_base, resolution_folder, show_folder)
                 else:
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        kids_base = custom_kids_show_layout() if custom_kids_show_layout() else os.path.join('CineSync', 'KidsShows')
+                        base_dest_path = os.path.join(dest_dir, kids_base, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, kids_base, show_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         anime_base = custom_anime_show_layout() if custom_anime_show_layout() else os.path.join('CineSync', 'AnimeShows')
                         base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, anime_base, show_folder)
@@ -362,14 +386,20 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         extras_base_dest_path = os.path.join(dest_dir, show_base, show_folder)
             else:
                 if is_show_resolution_structure_enabled():
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'KidsShows', resolution_folder, show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'KidsShows', resolution_folder, show_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', resolution_folder, show_folder)
                     else:
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', resolution_folder, show_folder)
                 else:
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        base_dest_path = os.path.join(dest_dir, 'CineSync', 'KidsShows', show_folder)
+                        extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'KidsShows', show_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                         extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
                     elif is_4k and is_4k_separation_enabled():

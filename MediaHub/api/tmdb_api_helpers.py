@@ -52,113 +52,172 @@ adapter = HTTPAdapter(
 session.mount('http://', adapter)
 session.mount('https://', adapter)
 
-def get_external_ids(item_id, media_type):
-    url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
-    params = {'api_key': api_key, 'language': language_iso}
+# ============================================================================
+# TMDB DATA FETCHING FUNCTIONS
+# ============================================================================
 
-    try:
-        response = session.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        log_message(f"TMDB external IDs fetch failed for {media_type} ID {item_id} - Network error: {e}", level="ERROR")
-        return {}
-
-def get_movie_genres(movie_id):
-    """
-    Fetch genre information and other metadata for a movie from TMDb API.
-    Parameters:
-    movie_id (int): TMDb movie ID
-    Returns:
-    dict: Dictionary containing genres, language, and anime status
-    """
-    api_key = get_api_key()
+def get_movie_data(tmdb_id):
+    """Get all movie data (external IDs, genres, keywords, ratings) in one optimized API call."""
+    global api_key
     if not api_key:
-        log_message("TMDb API key not found.", level="ERROR")
-        return None
+        api_key = get_api_key()
 
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {'api_key': api_key, 'language': language_iso}
+    if not api_key:
+        log_message("API key is missing. Cannot fetch movie data.", level="ERROR")
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
+
+    params = {
+        'api_key': api_key,
+        'language': language_iso,
+        'append_to_response': 'external_ids,keywords,release_dates,belongs_to_collection'
+    }
 
     try:
+        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
         response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
-        movie_details = response.json()
+        data = response.json()
 
-        genres = [genre['name'] for genre in movie_details.get('genres', [])]
-        language = movie_details.get('original_language', '')
+        # Extract external IDs
+        external_ids = data.get('external_ids', {})
+        imdb_id = external_ids.get('imdb_id', '')
 
-        keywords_url = f"https://api.themoviedb.org/3/movie/{movie_id}/keywords"
-        keywords_response = session.get(keywords_url, params=params, timeout=10)
-        keywords_response.raise_for_status()
-        keywords = [kw['name'].lower() for kw in keywords_response.json().get('keywords', [])]
+        # Extract collection information
+        collection_data = data.get('belongs_to_collection')
+        collection_name = collection_data.get('name') if collection_data else None
 
-        is_anime = any([
-            'anime' in movie_details.get('title', '').lower(),
-            'animation' in genres and language == 'ja',
-            'anime' in keywords,
-            'japanese animation' in keywords
-        ])
+        # Extract and check genres for anime
+        genres = data.get('genres', [])
+        language = data.get('original_language', '')
+        is_anime_genre = check_anime_genre(genres, language)
+
+        # Extract keywords for family content detection
+        keywords_data = data.get('keywords', {})
+
+        # Extract release dates for content rating
+        release_dates_data = data.get('release_dates', {})
+
+        # Check for family-friendly content
+        has_family_indicators = has_family_content_indicators(data, keywords_data, 'movie')
+
+        # Get content rating from release dates
+        us_rating = None
+        other_rating = None
+
+        for result in release_dates_data.get('results', []):
+            country = result.get('iso_3166_1', '')
+            for release in result.get('release_dates', []):
+                certification = release.get('certification', '').strip()
+                if certification:
+                    if country == 'US':
+                        us_rating = certification
+                        break
+                    elif not other_rating:
+                        other_rating = certification
+
+            if us_rating:
+                break
+
+        rating = us_rating or other_rating
+        has_appropriate_rating = is_family_friendly_rating(rating)
+        is_kids_content = has_appropriate_rating and has_family_indicators
 
         return {
-            'genres': genres,
-            'language': language,
-            'is_anime_genre': is_anime
+            'imdb_id': imdb_id,
+            'collection_name': collection_name,
+            'is_anime_genre': is_anime_genre,
+            'is_kids_content': is_kids_content
         }
 
     except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching movie genres: {e}", level="ERROR")
-        return None
+        log_message(f"TMDB movie data fetch failed for movie ID {tmdb_id} - Network error: {e}", level="ERROR")
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
 
-def get_show_genres(show_id):
-    """
-    Fetch genre information and other metadata for a TV show from TMDb API.
-    Parameters:
-    show_id (int): TMDb show ID
-    Returns:
-    dict: Dictionary containing genres, language, and anime status
-    """
-    api_key = get_api_key()
+def get_show_data(tmdb_id):
+    """Get all TV show data (external IDs, genres, keywords, ratings) in one optimized API call."""
+    global api_key
     if not api_key:
-        log_message("TMDb API key not found.", level="ERROR")
-        return None
+        api_key = get_api_key()
 
-    url = f"https://api.themoviedb.org/3/tv/{show_id}"
-    params = {'api_key': api_key,'language': language_iso}
+    if not api_key:
+        log_message("API key is missing. Cannot fetch TV data.", level="ERROR")
+        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False}
+
+    params = {
+        'api_key': api_key,
+        'language': language_iso,
+        'append_to_response': 'external_ids,keywords,content_ratings'
+    }
 
     try:
-        # Get show details including genres
+        url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
         response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
-        show_details = response.json()
+        data = response.json()
 
-        genres = [genre['name'] for genre in show_details.get('genres', [])]
-        language = show_details.get('original_language', '')
+        # Extract external IDs
+        external_ids = data.get('external_ids', {})
 
-        # Get keywords for the show
-        keywords_url = f"https://api.themoviedb.org/3/tv/{show_id}/keywords"
-        keywords_response = session.get(keywords_url, params=params, timeout=10)
-        keywords_response.raise_for_status()
-        keywords = [kw['name'].lower() for kw in keywords_response.json().get('results', [])]
+        # Extract and check genres for anime
+        genres = data.get('genres', [])
+        language = data.get('original_language', '')
+        is_anime_genre = check_anime_genre(genres, language)
 
-        # Check if it's an anime based on multiple criteria
-        is_anime = any([
-            'anime' in show_details.get('name', '').lower(),
-            'animation' in genres and language == 'ja',
-            'anime' in keywords,
-            'japanese animation' in keywords,
-            any('anime' in keyword for keyword in keywords)
-        ])
+        # Extract keywords for family content detection
+        keywords_data = data.get('keywords', {})
+
+        # Extract content ratings
+        content_ratings_data = data.get('content_ratings', {})
+
+        # Check for family-friendly content
+        has_family_indicators = has_family_content_indicators(data, keywords_data, 'tv')
+
+        # Get content rating from content ratings
+        us_rating = None
+        other_rating = None
+
+        for result in content_ratings_data.get('results', []):
+            country = result.get('iso_3166_1', '')
+            certification = result.get('rating', '').strip()
+            if certification:
+                if country == 'US':
+                    us_rating = certification
+                    break
+                elif not other_rating:
+                    other_rating = certification
+
+        rating = us_rating or other_rating
+        has_appropriate_rating = is_family_friendly_rating(rating)
+        is_kids_content = has_appropriate_rating and has_family_indicators
 
         return {
-            'genres': genres,
-            'language': language,
-            'is_anime_genre': is_anime
+            'external_ids': external_ids,
+            'is_anime_genre': is_anime_genre,
+            'is_kids_content': is_kids_content
         }
 
     except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching TV show genres: {e}", level="ERROR")
-        return None
+        log_message(f"TMDB TV data fetch failed for TV ID {tmdb_id} - Network error: {e}", level="ERROR")
+        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False}
+
+def check_anime_genre(genres, language):
+    """Check if content is anime based on genres and language."""
+    # Check for Animation genre and Japanese language
+    is_animation = any(genre.get('id') == 16 for genre in genres)
+    is_japanese = language == 'ja'
+
+    # Also check for anime-specific genre names
+    anime_genre_names = ['anime', 'animation']
+    has_anime_genre = any(
+        any(anime_name in genre.get('name', '').lower() for anime_name in anime_genre_names)
+        for genre in genres
+    )
+
+    return (is_animation and is_japanese) or has_anime_genre
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False):
     """
@@ -442,50 +501,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         log_message(f"All approaches failed. Using S01E{absolute_episode} as last resort", level="WARNING")
         return f"S01E{absolute_episode:02d}", 1, int(absolute_episode)
 
-def get_movie_collection(movie_id=None, movie_title=None, year=None):
-    api_key = get_api_key()
-    if not api_key:
-        return None
 
-    if movie_id:
-        url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-        params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
-    elif movie_title and year:
-        search_url = "https://api.themoviedb.org/3/search/movie"
-        search_params = {
-            'api_key': api_key,
-            'query': movie_title,
-            'primary_release_year': year
-        }
-        try:
-            search_response = session.get(search_url, params=search_params, timeout=10)
-            search_response.raise_for_status()
-            search_results = search_response.json().get('results', [])
-
-            if search_results:
-                movie_id = search_results[0]['id']
-                url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-                params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
-            else:
-                log_message(f"No movie found for '{movie_title}' ({year}) in TMDB database", level="WARNING")
-                return None
-        except requests.exceptions.RequestException as e:
-            log_message(f"TMDB movie collection fetch failed - Network error: {e}", level="ERROR")
-            return None
-    else:
-        log_message("Either movie_id or (movie_title and year) must be provided", level="ERROR")
-        return None
-
-    try:
-        response = session.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        movie_data = response.json()
-        collection = movie_data.get('belongs_to_collection')
-        if collection:
-            return collection['name'], collection['id']
-    except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching movie collection data: {e}", level="ERROR")
-    return None
 
 def calculate_score(result, query, year=None):
     """
@@ -788,10 +804,11 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
     tmdb_id = chosen_show.get('id') if not tmdb_id else tmdb_id
 
-    # Get external IDs and genre information
-    external_ids = get_external_ids(tmdb_id, 'tv')
-    genre_info = get_show_genres(tmdb_id)
-    is_anime_genre = genre_info.get('is_anime_genre', False)
+    # Get all TV show data in one optimized API call
+    tv_data = get_show_data(tmdb_id)
+    external_ids = tv_data.get('external_ids', {})
+    is_anime_genre = tv_data.get('is_anime_genre', False)
+    is_kids_content = tv_data.get('is_kids_content', False)
 
     # Handle season and episode selection
     new_season_number = None
@@ -863,4 +880,77 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     else:
         proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
-    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id
+    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content
+
+def has_family_content_indicators(details_data, keywords_data, media_type):
+    """Check if content has family-related genres, keywords, or other indicators."""
+
+    # Family-related genre IDs from TMDB
+    family_genre_ids = [
+        10751,  # Family
+        16,     # Animation
+    ]
+
+    # Check genres
+    genres = details_data.get('genres', [])
+    for genre in genres:
+        if genre.get('id') in family_genre_ids:
+            return True
+
+    # Family-related keywords to look for
+    family_keywords = [
+        'family', 'children', 'kids', 'child', 'family film', 'family movie',
+        'family entertainment', 'children\'s film', 'children\'s movie',
+        'family friendly', 'family adventure', 'family comedy', 'family drama',
+        'disney', 'pixar', 'dreamworks', 'nickelodeon', 'cartoon network',
+        'children\'s television', 'kids show', 'preschool', 'educational',
+        'talking animals', 'fairy tale', 'bedtime story', 'nursery rhyme'
+    ]
+
+    # Check keywords
+    if media_type == 'movie':
+        keywords_list = keywords_data.get('keywords', [])
+    else:
+        keywords_list = keywords_data.get('results', [])
+
+    for keyword in keywords_list:
+        keyword_name = keyword.get('name', '').lower()
+        for family_keyword in family_keywords:
+            if family_keyword in keyword_name:
+                return True
+
+    # Check if it's an animated movie/show
+    for genre in genres:
+        if genre.get('id') == 16:
+            title = details_data.get('title' if media_type == 'movie' else 'name', '').lower()
+            overview = details_data.get('overview', '').lower()
+
+            family_title_indicators = ['kids', 'children', 'family', 'junior', 'little', 'baby']
+            for indicator in family_title_indicators:
+                if indicator in title or indicator in overview:
+                    return True
+
+    return False
+
+def is_family_friendly_rating(rating):
+    """Determine if a content rating is suitable for kids/family viewing."""
+    if not rating:
+        return False
+
+    rating = rating.upper().strip()
+
+    # US Movie ratings that could be family-friendly
+    family_movie_ratings = ['G', 'PG']
+
+    # US TV ratings that are reliable for kids content
+    family_tv_ratings = ['TV-Y', 'TV-Y7', 'TV-Y7-FV', 'TV-G', 'TV-PG']
+
+    # UK ratings that could be family-friendly
+    uk_family_ratings = ['U', 'PG']
+
+    # Other international family-friendly ratings
+    other_family_ratings = ['0+', '6+', 'ALL', 'GENERAL', 'FAMILY']
+
+    all_family_ratings = family_movie_ratings + family_tv_ratings + uk_family_ratings + other_family_ratings
+
+    return rating in all_family_ratings

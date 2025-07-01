@@ -93,6 +93,14 @@ def custom_anime_show_layout():
     token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', None)
     return token
 
+def custom_kids_movie_layout():
+    token = os.getenv('CUSTOM_KIDS_MOVIE_FOLDER', None)
+    return token
+
+def custom_kids_show_layout():
+    token = os.getenv('CUSTOM_KIDS_SHOW_FOLDER', None)
+    return token
+
 def get_mediainfo_tags():
     """Get mediainfo tags from environment variable and properly clean them"""
     tags_env = os.getenv('MEDIAINFO_TAGS', '')
@@ -156,6 +164,10 @@ def is_anime_separation_enabled():
 def is_4k_separation_enabled():
     """Check if 4K content separation should be enabled"""
     return os.getenv('4K_SEPARATION', 'true').lower() == 'true'
+
+def is_kids_separation_enabled():
+    """Check if kids content separation should be enabled"""
+    return os.getenv('KIDS_SEPARATION', 'false').lower() == 'true'
 
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()

@@ -352,7 +352,7 @@ const Settings: React.FC = () => {
 
       // For Media Folders Configuration category, prioritize CineSync Layout first
       if (category === 'Media Folders Configuration') {
-        const mediaFoldersOrder = ['CINESYNC_LAYOUT', '4K_SEPARATION', 'ANIME_SEPARATION'];
+        const mediaFoldersOrder = ['CINESYNC_LAYOUT', '4K_SEPARATION', 'ANIME_SEPARATION', 'KIDS_SEPARATION'];
         const aIndex = mediaFoldersOrder.indexOf(a.key);
         const bIndex = mediaFoldersOrder.indexOf(b.key);
 
