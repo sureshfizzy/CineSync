@@ -61,7 +61,7 @@ func NewManager() *Manager {
 
 	// Determine Python command based on OS and MediaHub directory
 	pythonCmd := getPythonCommand()
-	
+
 	// Get MediaHub directory
 	currentDir, _ := os.Getwd()
 	mediaHubDir := filepath.Join(filepath.Dir(currentDir), "MediaHub")
@@ -289,7 +289,7 @@ func (m *Manager) broadcastStatusUpdate(jobID string, status JobStatus, message 
 func (m *Manager) GetJobs() []Job {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	jobs := make([]Job, 0, len(m.jobs))
 	for _, job := range m.jobs {
 		// Update next execution time
@@ -297,7 +297,7 @@ func (m *Manager) GetJobs() []Job {
 		job.NextExecution = nextExec
 		jobs = append(jobs, *job)
 	}
-	
+
 	return jobs
 }
 
@@ -305,16 +305,16 @@ func (m *Manager) GetJobs() []Job {
 func (m *Manager) GetJob(id string) (*Job, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	job, exists := m.jobs[id]
 	if !exists {
 		return nil, fmt.Errorf("job not found: %s", id)
 	}
-	
+
 	// Update next execution time
 	nextExec := job.GetNextExecutionTime()
 	job.NextExecution = nextExec
-	
+
 	return job, nil
 }
 
@@ -323,19 +323,19 @@ func (m *Manager) RunJob(id string, force bool) error {
 	m.mutex.RLock()
 	job, exists := m.jobs[id]
 	m.mutex.RUnlock()
-	
+
 	if !exists {
 		return fmt.Errorf("job not found: %s", id)
 	}
-	
+
 	if !force && job.IsRunning() {
 		return fmt.Errorf("job is already running: %s", id)
 	}
-	
+
 	if !job.CanRun() && !force {
 		return fmt.Errorf("job cannot be run: %s (status: %s, enabled: %t)", id, job.Status, job.Enabled)
 	}
-	
+
 	go m.executeJob(id)
 	return nil
 }

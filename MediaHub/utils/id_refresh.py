@@ -1,7 +1,24 @@
+#!/usr/bin/env python3
+"""
+TMDB ID refresh job that creates .tmdb files for existing media files
+"""
+
 import os
+import sys
 import platform
 import ctypes
 import sqlite3
+
+# Update paths
+script_path = os.path.abspath(__file__)
+utils_dir = os.path.dirname(script_path)
+mediahub_dir = os.path.dirname(utils_dir)
+cinesync_dir = os.path.dirname(mediahub_dir)
+
+# Add the parent directory to the system path
+if cinesync_dir not in sys.path:
+    sys.path.insert(0, cinesync_dir)
+
 from MediaHub.config.config import get_directories
 from MediaHub.processors.db_utils import DB_FILE
 from MediaHub.utils.logging_utils import log_message
@@ -47,3 +64,6 @@ def refresh_tmdb_files():
                         log_message(f"Error creating .tmdb file for {file_path}: {e}", level="WARNING")
     conn.close()
     log_message(f".tmdb refresh complete. {count} .tmdb files created.", level="INFO")
+
+if __name__ == "__main__":
+    refresh_tmdb_files()
