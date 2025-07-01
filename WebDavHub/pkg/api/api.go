@@ -5,6 +5,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/config"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -235,6 +236,69 @@ func formatFileSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// calculateDirectorySize calculates the total size of all files in a directory recursively
+func calculateDirectorySize(dirPath string) int64 {
+	if stat, err := os.Stat(dirPath); err != nil || !stat.IsDir() {
+		return 0
+	}
+
+	// Try to get total size from database first
+	if dbSize := getDirectorySizeFromDB(dirPath); dbSize > 0 {
+		return dbSize
+	}
+
+	// Fallback to filesystem calculation
+	return calculateDirectorySizeFromFS(dirPath)
+}
+
+// getDirectorySizeFromDB attempts to get directory size from database
+func getDirectorySizeFromDB(dirPath string) int64 {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return 0
+	}
+
+	// Query for all files under this directory path
+	query := `SELECT SUM(file_size) FROM processed_files
+			  WHERE (file_path LIKE ? OR destination_path LIKE ?)
+			  AND file_size IS NOT NULL AND file_size > 0`
+
+	pathPattern := dirPath + "%"
+
+	var totalSize sql.NullInt64
+	err = mediaHubDB.QueryRow(query, pathPattern, pathPattern).Scan(&totalSize)
+	if err != nil || !totalSize.Valid {
+		return 0
+	}
+
+	return totalSize.Int64
+}
+
+// calculateDirectorySizeFromFS calculates size from filesystem (fallback)
+func calculateDirectorySizeFromFS(dirPath string) int64 {
+	var totalSize int64
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Recursively calculate subdirectory sizes
+			subDirPath := filepath.Join(dirPath, entry.Name())
+			totalSize += calculateDirectorySizeFromFS(subDirPath)
+		} else {
+			// Get file size from filesystem
+			if info, err := entry.Info(); err == nil {
+				totalSize += info.Size()
+			}
+		}
+	}
+
+	return totalSize
 }
 
 // getFileIcon returns a string representing the icon type for a file
@@ -647,6 +711,10 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 					logger.Info("Season folder %s inherited TMDB ID %s from parent directory", entry.Name(), tmdbID)
 				}
 			}
+
+			// Calculate directory size
+			dirSize := calculateDirectorySize(subDirPath)
+			fileInfo.Size = formatFileSize(dirSize)
 
 			logger.Info("Found directory: %s", filePath)
 		} else {

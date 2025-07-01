@@ -573,7 +573,7 @@ export default function FileBrowser() {
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                 <Typography variant="body2"><b>Type:</b> {detailsData.type === 'directory' ? 'Directory' : 'File'}</Typography>
-                <Typography variant="body2"><b>Size:</b> {detailsData.type === 'directory' ? '--' : detailsData.size || '--'}</Typography>
+                <Typography variant="body2"><b>Size:</b> {detailsData.size || '--'}</Typography>
                 <Typography variant="body2"><b>Modified:</b> {formatDate(detailsData.modified)}</Typography>
                 <Typography variant="body2" sx={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
                   <b>WebDAV Path:</b> <span style={{ fontFamily: 'monospace' }}>{detailsData.webdavPath || '--'}</span>

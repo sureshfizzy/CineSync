@@ -54,9 +54,9 @@ export default function ListView({
 
   if (isMobile) {
     return (
-      <Paper 
-        elevation={3} 
-        sx={{ 
+      <Paper
+        elevation={3}
+        sx={{
           borderRadius: 3,
           overflow: 'hidden',
         }}
@@ -150,7 +150,7 @@ export default function ListView({
                   </Typography>
                 </Box>
               </TableCell>
-              <TableCell>{file.type === 'directory' ? '--' : file.size}</TableCell>
+              <TableCell>{file.size || '--'}</TableCell>
               <TableCell>{formatDate(file.modified)}</TableCell>
               <TableCell align="right" onClick={e => e.stopPropagation()}>
                 <FileActionMenu
@@ -169,4 +169,4 @@ export default function ListView({
       </Table>
     </TableContainer>
   );
-} 
+}
