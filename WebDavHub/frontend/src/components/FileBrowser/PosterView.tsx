@@ -1,6 +1,16 @@
 
-import { Box, Paper, Typography, Skeleton } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
 import { useTheme } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import InfoIcon from '@mui/icons-material/InfoOutlined';
+import DownloadIcon from '@mui/icons-material/Download';
+import EditIcon from '@mui/icons-material/Edit';
+import TuneIcon from '@mui/icons-material/Tune';
+import DeleteIcon from '@mui/icons-material/Delete';
+import axios from 'axios';
+import { useFileActions } from '../../hooks/useFileActions';
+import ModifyDialog from './ModifyDialog/ModifyDialog';
 import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
@@ -13,6 +23,11 @@ interface PosterViewProps {
   imgLoadedMap: { [key: string]: boolean };
   onFileClick: (file: FileItem, tmdb: TmdbResult | null) => void;
   onImageLoad: (key: string) => void;
+  currentPath: string;
+  onViewDetails: (file: FileItem, details: any) => void;
+  onRename: () => void;
+  onDeleted: () => void;
+  onNavigateBack?: () => void;
 }
 
 export default function PosterView({
@@ -21,8 +36,64 @@ export default function PosterView({
   imgLoadedMap,
   onFileClick,
   onImageLoad,
+  currentPath,
+  onViewDetails,
+  onRename,
+  onDeleted,
+  onNavigateBack,
 }: PosterViewProps) {
   const theme = useTheme();
+  const [contextMenu, setContextMenu] = useState<{
+    mouseX: number;
+    mouseY: number;
+    file: FileItem;
+  } | null>(null);
+
+  // Use the file actions hook
+  const fileActions = useFileActions({
+    currentPath,
+    onRename,
+    onDeleted,
+  });
+
+
+
+  const handleContextMenu = (event: React.MouseEvent, file: FileItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setContextMenu({
+      mouseX: event.clientX,
+      mouseY: event.clientY,
+      file,
+    });
+  };
+
+  // Helper function to join paths (same as in FileActionMenu)
+  const joinPaths = (...parts: string[]): string => {
+    return parts.join('/').replace(/\/+/g, '/').replace(/\/\//g, '/');
+  };
+
+  // Handle view details with proper path resolution
+  const handleViewDetails = async (file: FileItem) => {
+    const normalizedPath = joinPaths(currentPath);
+    const relPath = joinPaths(normalizedPath, file.name);
+    let realPath = '';
+    let absPath = '';
+    try {
+      const res = await axios.post('/api/readlink', { path: relPath });
+      realPath = res.data.realPath || '';
+      absPath = res.data.absPath || '';
+    } catch (e) {
+      realPath = '';
+      absPath = '';
+    }
+    onViewDetails(file, {
+      webdavPath: joinPaths('Home', normalizedPath, file.name),
+      fullPath: absPath,
+      sourcePath: realPath
+    });
+  };
 
   if (files.length === 0) {
     return (
@@ -81,6 +152,7 @@ export default function PosterView({
               }
             }}
             onClick={() => onFileClick(file, tmdb)}
+            onContextMenu={(e) => handleContextMenu(e, file)}
           >
             <Box sx={{
               width: '100%',
@@ -222,6 +294,144 @@ export default function PosterView({
           </Paper>
         );
       })}
+
+      {/* Context Menu */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={() => setContextMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 3,
+              boxShadow: 6,
+              minWidth: 180,
+              mt: 1,
+              p: 0.5,
+            }
+          }
+        }}
+        MenuListProps={{ sx: { p: 0 } }}
+      >
+        {contextMenu && (
+          <>
+            {contextMenu.file.type === 'file' && (
+              <MenuItem onClick={() => {
+                setContextMenu(null);
+                console.log('Play file:', contextMenu.file.name);
+              }}>
+                <PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />
+                Play
+              </MenuItem>
+            )}
+            <MenuItem onClick={() => {
+              setContextMenu(null);
+              handleViewDetails(contextMenu.file);
+            }}>
+              <InfoIcon fontSize="small" sx={{ mr: 1 }} />
+              View Details
+            </MenuItem>
+            {contextMenu.file.type === 'file' && (
+              <MenuItem onClick={() => {
+                setContextMenu(null);
+                console.log('Download file:', contextMenu.file.name);
+              }}>
+                <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
+                Download
+              </MenuItem>
+            )}
+            <Divider />
+            <MenuItem onClick={() => {
+              setContextMenu(null);
+              fileActions.handleRenameClick(contextMenu.file);
+            }}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} />
+              Rename
+            </MenuItem>
+            {!contextMenu.file.isCategoryFolder && (
+              <MenuItem onClick={() => {
+                setContextMenu(null);
+                fileActions.handleModifyClick(contextMenu.file);
+              }}>
+                <TuneIcon fontSize="small" sx={{ mr: 1 }} />
+                Modify
+              </MenuItem>
+            )}
+            <Divider />
+            <MenuItem
+              onClick={() => {
+                setContextMenu(null);
+                fileActions.handleDeleteClick(contextMenu.file);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+              Delete
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+
+      {/* Rename Dialog */}
+      <Dialog open={fileActions.renameDialogOpen} onClose={fileActions.handleRenameDialogClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename File</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>Enter a new name for <b>{fileActions.fileBeingRenamed?.name}</b>:</Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            variant="outlined"
+            value={fileActions.renameValue}
+            onChange={(e) => fileActions.setRenameValue(e.target.value)}
+            disabled={fileActions.renameLoading}
+            inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
+            sx={{ mb: 2, background: 'background.paper', borderRadius: 2 }}
+            color="primary"
+          />
+          {fileActions.renameError && <Typography color="error" sx={{ mb: 1 }}>{fileActions.renameError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={fileActions.handleRenameDialogClose} disabled={fileActions.renameLoading} color="inherit">Cancel</Button>
+          <Button
+            onClick={fileActions.handleRenameSubmit}
+            variant="contained"
+            color="primary"
+            disabled={fileActions.renameLoading || !fileActions.renameValue.trim() || fileActions.renameValue === fileActions.fileBeingRenamed?.name}
+          >
+            {fileActions.renameLoading ? 'Renaming...' : 'Rename'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={fileActions.deleteDialogOpen} onClose={fileActions.handleDeleteDialogClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete <b>{fileActions.fileBeingDeleted?.name}</b>? This action cannot be undone.</Typography>
+          {fileActions.deleteError && <Typography color="error" sx={{ mt: 2 }}>{fileActions.deleteError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={fileActions.handleDeleteDialogClose} disabled={fileActions.deleting}>Cancel</Button>
+          <Button onClick={fileActions.handleDelete} color="error" variant="contained" disabled={fileActions.deleting}>
+            {fileActions.deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modify Dialog */}
+      {fileActions.modifyDialogOpen && fileActions.fileBeingModified && (
+        <ModifyDialog
+          open={fileActions.modifyDialogOpen}
+          onClose={fileActions.handleModifyDialogClose}
+          onNavigateBack={onNavigateBack}
+          currentFilePath={fileActions.fileBeingModified.fullPath || fileActions.fileBeingModified.sourcePath || joinPaths(currentPath, fileActions.fileBeingModified.name)}
+        />
+      )}
     </Box>
   );
 }

@@ -23,6 +23,7 @@ interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
+  isCategoryFolder?: boolean;
 }
 
 interface FileActionMenuProps {
@@ -275,23 +276,25 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleDeleteClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Delete</Button>
           </span>
         </Tooltip>
-        <Tooltip title="Modify file">
-          <Button
-            size="small"
-            variant="outlined"
-            color="secondary"
-            startIcon={<TuneIcon />}
-            onClick={handleModifyClick}
-            sx={{
-              flex: '1 1 120px',
-              maxWidth: 180,
-              fontWeight: 600,
-              ml: 1
-            }}
-          >
-            Modify
-          </Button>
-        </Tooltip>
+        {!file.isCategoryFolder && (
+          <Tooltip title="Modify file">
+            <Button
+              size="small"
+              variant="outlined"
+              color="secondary"
+              startIcon={<TuneIcon />}
+              onClick={handleModifyClick}
+              sx={{
+                flex: '1 1 120px',
+                maxWidth: 180,
+                fontWeight: 600,
+                ml: 1
+              }}
+            >
+              Modify
+            </Button>
+          </Tooltip>
+        )}
         {videoPlayerOpen && (
           <Suspense fallback={null}>
             <VideoPlayerDialog
@@ -359,7 +362,9 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           <MenuItem onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
         )}
         <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
-        <MenuItem onClick={handleModifyClick}><TuneIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
+        {!file.isCategoryFolder && (
+          <MenuItem onClick={handleModifyClick}><TuneIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
+        )}
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}><DeleteIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>

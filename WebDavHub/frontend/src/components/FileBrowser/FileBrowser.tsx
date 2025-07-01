@@ -480,6 +480,11 @@ export default function FileBrowser() {
             imgLoadedMap={imgLoadedMap}
             onFileClick={handleFileClick}
             onImageLoad={(key: string) => setImageLoaded(key, true)}
+            currentPath={currentPath}
+            onViewDetails={handleViewDetails}
+            onRename={() => debouncedRefresh(currentPath)}
+            onDeleted={() => debouncedRefresh(currentPath)}
+            onNavigateBack={handleNavigateBack}
           />
           <PaginationComponent
             totalPages={totalPages}
