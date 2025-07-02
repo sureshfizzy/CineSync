@@ -61,7 +61,7 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
               whiteSpace: 'nowrap',
             }}
           >
-            {file.type === 'directory' ? `Folder${file.size ? ` • ${file.size}` : ''} • ${formatDate(file.modified)}` : `${file.size} • ${formatDate(file.modified)}`}
+            {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
           </Typography>
         </Box>
       </Box>
@@ -70,4 +70,4 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
   );
 };
 
-export default MobileListItem;
+export default MobileListItem; 
