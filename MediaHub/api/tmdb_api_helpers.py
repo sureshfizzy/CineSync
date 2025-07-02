@@ -202,18 +202,19 @@ def get_show_data(tmdb_id):
 
 def check_anime_genre(genres, language):
     """Check if content is anime based on genres and language."""
-    # Check for Animation genre and Japanese language
+    # Primary anime detection: Animation genre + Japanese language
     is_animation = any(genre.get('id') == 16 for genre in genres)
     is_japanese = language == 'ja'
 
-    # Also check for anime-specific genre names
-    anime_genre_names = ['anime', 'animation']
-    has_anime_genre = any(
-        any(anime_name in genre.get('name', '').lower() for anime_name in anime_genre_names)
-        for genre in genres
+    if is_animation and is_japanese:
+        return True
+
+    # Secondary check: explicit "anime" keyword in genre names (not "animation")
+    has_anime_keyword = any(
+        'anime' in genre.get('name', '').lower() for genre in genres
     )
 
-    return (is_animation and is_japanese) or has_anime_genre
+    return has_anime_keyword
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -893,17 +894,25 @@ def has_family_content_indicators(details_data, keywords_data, media_type):
 
     # Check genres
     genres = details_data.get('genres', [])
-    for genre in genres:
-        if genre.get('id') in family_genre_ids:
+
+    # Check if it has explicit Family genre (10751)
+    has_family_genre = any(genre.get('id') == 10751 for genre in genres)
+    if has_family_genre:
+        return True
+
+    # For Animation genre, check if it's anime - if so, don't auto-classify as family
+    has_animation_genre = any(genre.get('id') == 16 for genre in genres)
+    if has_animation_genre:
+        language = details_data.get('original_language', '')
+        is_anime = check_anime_genre(genres, language)
+        if not is_anime:  # Only non-anime animation gets family treatment
             return True
 
-    # Family-related keywords to look for
-    family_keywords = [
-        'family', 'children', 'kids', 'child', 'family film', 'family movie',
-        'family entertainment', 'children\'s film', 'children\'s movie',
-        'family friendly', 'family adventure', 'family comedy', 'family drama',
-        'disney', 'pixar', 'dreamworks', 'nickelodeon', 'cartoon network',
+    # Kids-specific keywords
+    kids_keywords = [
+        'children', 'kids', 'child', 'children\'s film', 'children\'s movie',
         'children\'s television', 'kids show', 'preschool', 'educational',
+        'disney', 'pixar', 'dreamworks', 'nickelodeon', 'cartoon network',
         'talking animals', 'fairy tale', 'bedtime story', 'nursery rhyme'
     ]
 
@@ -915,8 +924,8 @@ def has_family_content_indicators(details_data, keywords_data, media_type):
 
     for keyword in keywords_list:
         keyword_name = keyword.get('name', '').lower()
-        for family_keyword in family_keywords:
-            if family_keyword in keyword_name:
+        for kids_keyword in kids_keywords:
+            if kids_keyword in keyword_name:
                 return True
 
     # Check if it's an animated movie/show
