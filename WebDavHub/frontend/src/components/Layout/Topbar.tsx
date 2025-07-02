@@ -24,6 +24,10 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     navigate('/login');
   };
 
+  const handleLogoClick = () => {
+    navigate('/dashboard');
+  };
+
   return (
     <AppBar
       position="sticky"
@@ -68,7 +72,21 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
             </IconButton>
           )}
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 } }}>
+          <Box
+            onClick={handleLogoClick}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: { xs: 1, sm: 1.5 },
+              cursor: 'pointer',
+              borderRadius: 2,
+              p: 0.5,
+              transition: 'all 0.2s ease-in-out',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.04),
+              }
+            }}
+          >
             <Box
               sx={{
                 display: 'flex',
