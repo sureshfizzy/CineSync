@@ -579,6 +579,11 @@ def calculate_score(result, query, year=None):
     elif popularity > 1:
         score += popularity * 1.0
 
+    # Penalize shows with 0 votes (suspicious data quality)
+    vote_count = result.get('vote_count', 0)
+    if vote_count == 0:
+        score -= 5
+
     # Apply exact match bonus
     score += exact_match_bonus
 
