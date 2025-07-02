@@ -67,6 +67,22 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor chunks
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-mui': ['@mui/material', '@mui/icons-material'],
+          'vendor-router': ['react-router-dom'],
+          'vendor-utils': ['axios', 'date-fns'],
+          'vendor-media': ['video.js', 'react-player'],
+          'vendor-animation': ['framer-motion'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   define: {
     'import.meta.env.VITE_TMDB_API_KEY': JSON.stringify(tmdbApiKey),
   },

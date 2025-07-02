@@ -325,7 +325,6 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           {error}
         </Alert>
       )}
-
       {success && (
         <Alert
           severity="success"
@@ -342,7 +341,6 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           {success}
         </Alert>
       )}
-
       {/* Main Service Card */}
       <Box
         sx={{
@@ -403,7 +401,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         {/* Process Status Grid */}
         {status && (
           <Grid container spacing={2} mb={3}>
-            <Grid item xs={12} md={6}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
               <Box
                 sx={{
                   p: 2,
@@ -447,7 +449,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               </Box>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
               <Box
                 sx={{
                   p: 2,
@@ -859,7 +865,6 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           </Box>
         </Collapse>
       </Box>
-
       {/* Activity Summary */}
       {activity && (
         <Box
@@ -878,7 +883,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           </Typography>
 
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 4
+              }}>
               <Box
                 sx={{
                   p: 2,
@@ -898,7 +907,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               </Box>
             </Grid>
 
-            <Grid item xs={12} sm={4}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 4
+              }}>
               <Box
                 sx={{
                   p: 2,
@@ -918,7 +931,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               </Box>
             </Grid>
 
-            <Grid item xs={12} sm={4}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 4
+              }}>
               <Box
                 sx={{
                   p: 2,
@@ -939,7 +956,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
             </Grid>
 
             {activity.lastActivity && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box
                   sx={{
                     p: 2,
@@ -962,7 +979,6 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           </Grid>
         </Box>
       )}
-
       {/* Logs Section */}
       <Collapse in={showLogs}>
         <Box

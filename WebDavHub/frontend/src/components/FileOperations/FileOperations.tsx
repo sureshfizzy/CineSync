@@ -1078,7 +1078,7 @@ function FileOperations() {
       <Box sx={{ px: { xs: 0, sm: 1, md: 2 } }}>
         {files.length > 20 ? (
           // Disable animations for large lists to improve performance
-          files.map((file, index) => renderMobileCard(file, index))
+          (files.map((file, index) => renderMobileCard(file, index)))
         ) : (
           <AnimatePresence>
             {files.map((file, index) => renderMobileCard(file, index))}
@@ -1193,13 +1193,11 @@ function FileOperations() {
           )}
         </Box>
       </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
-
       {/* Main Tab Navigation */}
       <Box sx={{ mb: 4 }}>
         <Box
@@ -1316,7 +1314,6 @@ function FileOperations() {
           })}
         </Box>
       </Box>
-
       {/* Operations Tab Content */}
       {mainTabValue === 0 && (
         <>
@@ -1519,7 +1516,7 @@ function FileOperations() {
       <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
         {tabValue === 0 ? (
           // Source Files Search
-          <TextField
+          (<TextField
             fullWidth
             size={isMobile ? "medium" : "small"}
             placeholder={isMobile ? "🔍 Search files..." : "🔍 Search source files by name, path, or type..."}
@@ -1579,10 +1576,10 @@ function FileOperations() {
                 },
               },
             }}
-          />
+          />)
         ) : (
           // File Operations Search
-          <TextField
+          (<TextField
             fullWidth
             size={isMobile ? "medium" : "small"}
             placeholder={isMobile
@@ -1645,7 +1642,7 @@ function FileOperations() {
                 },
               },
             }}
-          />
+          />)
         )}
 
         {/* Search results count for mobile */}
@@ -2222,12 +2219,10 @@ function FileOperations() {
           )}
         </>
       )}
-
       {/* Database Tab Content */}
       {mainTabValue === 1 && (
         <DatabaseSearch />
       )}
-
       {/* ModifyDialog for file processing */}
       {modifyDialogOpen && (
         <ModifyDialog
@@ -2239,7 +2234,6 @@ function FileOperations() {
           }}
         />
       )}
-
       {/* Bulk Delete Confirmation Dialog */}
       <Dialog
         open={bulkDeleteDialogOpen}

@@ -1135,7 +1135,12 @@ const Settings: React.FC = () => {
                     </Typography>
                     <Grid container spacing={3}>
                       {structureSettings.map((item) => (
-                        <Grid item xs={12} md={6} key={item.key}>
+                        <Grid
+                          key={item.key}
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <Box
                             sx={{
                               p: 3,
@@ -1211,11 +1216,14 @@ const Settings: React.FC = () => {
                     </Grid>
                   </Box>
                 )}
-
                 {/* Movie and Show Columns */}
                 <Grid container spacing={4}>
                   {/* Movie Settings Column */}
-                  <Grid item xs={12} md={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 6
+                    }}>
                     <Box
                       sx={{
                         p: 3,
@@ -1325,7 +1333,11 @@ const Settings: React.FC = () => {
                   </Grid>
 
                   {/* Show Settings Column */}
-                  <Grid item xs={12} md={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 6
+                    }}>
                     <Box
                       sx={{
                         p: 3,
@@ -1442,7 +1454,12 @@ const Settings: React.FC = () => {
           return (
             <Grid container spacing={3}>
               {items.map((item) => (
-                <Grid item xs={12} md={6} key={item.key}>
+                <Grid
+                  key={item.key}
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Box
                     sx={{
                       p: 3,
@@ -1533,9 +1550,6 @@ const Settings: React.FC = () => {
           </Box>
         )}
       </Container>
-
-
-
       {/* Confirm Dialog */}
       <ConfirmDialog
         open={showConfirmDialog}
@@ -1547,7 +1561,6 @@ const Settings: React.FC = () => {
         type="info"
         loading={saving}
       />
-
       {/* Snackbars */}
       <Snackbar
         open={!!error}
@@ -1559,7 +1572,6 @@ const Settings: React.FC = () => {
           {error}
         </Alert>
       </Snackbar>
-
       <Snackbar
         open={!!success}
         autoHideDuration={4000}
@@ -1570,7 +1582,6 @@ const Settings: React.FC = () => {
           {success}
         </Alert>
       </Snackbar>
-
       {/* Save Loading Overlay */}
       <Backdrop
         sx={{

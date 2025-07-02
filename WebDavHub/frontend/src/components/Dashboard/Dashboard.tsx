@@ -237,7 +237,13 @@ export default function Dashboard() {
       </Box>
       <Grid container spacing={{ xs: 0.8, sm: 2, md: 3 }} mb={{ xs: 2, sm: 3 }}>
         {cards.map((card, index) => (
-          <Grid item xs={6} sm={4} md={2} key={card.title}>
+          <Grid
+            key={card.title}
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               variants={cardVariants}
               initial="hidden"
@@ -325,7 +331,7 @@ export default function Dashboard() {
 
       {/* Recently Added Media Section */}
       <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: { xs: 1, sm: 2 } }}>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <RecentlyAddedMedia />
         </Grid>
       </Grid>

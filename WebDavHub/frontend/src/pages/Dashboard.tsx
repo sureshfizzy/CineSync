@@ -55,10 +55,13 @@ export default function Dashboard() {
       <Typography variant="h4" gutterBottom>
         Dashboard
       </Typography>
-
       <Grid container spacing={3}>
         {/* Stats Cards */}
-        <Grid item xs={12} md={4}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 4
+          }}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center">
@@ -76,7 +79,11 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 4
+          }}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center">
@@ -94,7 +101,11 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 4
+          }}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center">
@@ -113,13 +124,13 @@ export default function Dashboard() {
         </Grid>
 
         {/* Quick Actions */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Quick Actions
             </Typography>
             <Grid container spacing={2}>
-              <Grid item>
+              <Grid>
                 <IconButton
                   color="primary"
                   sx={{ p: 2, border: 1, borderColor: 'divider' }}
@@ -127,7 +138,7 @@ export default function Dashboard() {
                   <UploadIcon />
                 </IconButton>
               </Grid>
-              <Grid item>
+              <Grid>
                 <IconButton
                   color="primary"
                   sx={{ p: 2, border: 1, borderColor: 'divider' }}

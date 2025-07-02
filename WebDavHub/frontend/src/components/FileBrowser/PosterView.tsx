@@ -296,7 +296,6 @@ export default function PosterView({
           </Paper>
         );
       })}
-
       {/* Context Menu */}
       <Menu
         open={contextMenu !== null}
@@ -378,7 +377,6 @@ export default function PosterView({
           </>
         )}
       </Menu>
-
       {/* Rename Dialog */}
       <Dialog open={fileActions.renameDialogOpen} onClose={fileActions.handleRenameDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Rename File</DialogTitle>
@@ -409,7 +407,6 @@ export default function PosterView({
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Delete Dialog */}
       <Dialog open={fileActions.deleteDialogOpen} onClose={fileActions.handleDeleteDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Delete</DialogTitle>
@@ -424,7 +421,6 @@ export default function PosterView({
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Modify Dialog */}
       {fileActions.modifyDialogOpen && fileActions.fileBeingModified && (
         <ModifyDialog

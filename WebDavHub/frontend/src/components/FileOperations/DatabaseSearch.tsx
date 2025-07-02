@@ -164,7 +164,12 @@ const DatabaseSearch: React.FC = () => {
       {/* Stats Cards */}
       {stats && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -190,7 +195,12 @@ const DatabaseSearch: React.FC = () => {
             </MotionCard>
           </Grid>
 
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -216,7 +226,12 @@ const DatabaseSearch: React.FC = () => {
             </MotionCard>
           </Grid>
 
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -242,7 +257,12 @@ const DatabaseSearch: React.FC = () => {
             </MotionCard>
           </Grid>
 
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -268,7 +288,12 @@ const DatabaseSearch: React.FC = () => {
             </MotionCard>
           </Grid>
 
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -294,7 +319,12 @@ const DatabaseSearch: React.FC = () => {
             </MotionCard>
           </Grid>
 
-          <Grid item xs={6} sm={4} md={2}>
+          <Grid
+            size={{
+              xs: 6,
+              sm: 4,
+              md: 2
+            }}>
             <MotionCard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -321,7 +351,6 @@ const DatabaseSearch: React.FC = () => {
           </Grid>
         </Grid>
       )}
-
       {/* Search and Filter Controls */}
       <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: { xs: 2, sm: 2 } }}>
@@ -447,7 +476,6 @@ const DatabaseSearch: React.FC = () => {
           </Stack>
         </CardContent>
       </Card>
-
       {/* Results */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -778,7 +806,11 @@ const DatabaseSearch: React.FC = () => {
                           {/* Additional Metadata */}
                           <Grid container spacing={2}>
                             {record.tmdb_id && (
-                              <Grid item xs={6} sm={4}>
+                              <Grid
+                                size={{
+                                  xs: 6,
+                                  sm: 4
+                                }}>
                                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
                                   TMDB ID:
                                 </Typography>
@@ -789,7 +821,11 @@ const DatabaseSearch: React.FC = () => {
                             )}
 
                             {record.season_number && (
-                              <Grid item xs={6} sm={4}>
+                              <Grid
+                                size={{
+                                  xs: 6,
+                                  sm: 4
+                                }}>
                                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
                                   Season:
                                 </Typography>
@@ -800,7 +836,11 @@ const DatabaseSearch: React.FC = () => {
                             )}
 
                             {record.file_size && (
-                              <Grid item xs={6} sm={4}>
+                              <Grid
+                                size={{
+                                  xs: 6,
+                                  sm: 4
+                                }}>
                                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
                                   File Size:
                                 </Typography>

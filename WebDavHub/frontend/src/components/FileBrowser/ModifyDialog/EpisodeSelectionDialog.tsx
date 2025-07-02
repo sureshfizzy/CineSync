@@ -54,7 +54,6 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
           </IconButton>
         </Box>
       </DialogTitle>
-
       <DialogContent>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
           Choose the episode for your content
@@ -62,7 +61,13 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
 
         <Grid container spacing={2}>
           {uniqueEpisodes.map((episode) => (
-            <Grid item xs={12} sm={6} md={4} key={episode.id}>
+            <Grid
+              key={episode.id}
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
+              }}>
               <Card
                 sx={{
                   cursor: 'pointer',

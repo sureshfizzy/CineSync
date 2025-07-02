@@ -53,7 +53,6 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
           </IconButton>
         </Box>
       </DialogTitle>
-
       <DialogContent>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
           Choose the season for your content
@@ -61,7 +60,13 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
 
         <Grid container spacing={2}>
           {uniqueSeasons.map((season) => (
-            <Grid item xs={12} sm={6} md={4} key={season.id}>
+            <Grid
+              key={season.id}
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
+              }}>
               <Card
                 sx={{
                   cursor: 'pointer',

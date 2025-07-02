@@ -4,7 +4,7 @@ import {
   Paper,
   Typography,
   List,
-  ListItem,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
   ListItemSecondaryAction,
@@ -133,9 +133,8 @@ export default function FileBrowser() {
       <Paper>
         <List>
           {files.map((file) => (
-            <ListItem
+            <ListItemButton
               key={file.name}
-              button
               onClick={() => handleFileClick(file)}
               sx={{
                 '&:hover': {
@@ -158,7 +157,7 @@ export default function FileBrowser() {
                   <MoreVertIcon />
                 </IconButton>
               </ListItemSecondaryAction>
-            </ListItem>
+            </ListItemButton>
           ))}
         </List>
       </Paper>

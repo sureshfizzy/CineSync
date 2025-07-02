@@ -520,7 +520,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 </>
               ) : (
                 /* Manual Search Interface - Show in TMDB results area when manual search is enabled */
-                <Slide direction="up" in={!showMovieOptions && manualSearchEnabled} timeout={400}>
+                (<Slide direction="up" in={!showMovieOptions && manualSearchEnabled} timeout={400}>
                   <Box sx={{
                     textAlign: 'center',
                     py: 4,
@@ -617,7 +617,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                       </Box>
                     </Box>
                   </Box>
-                </Slide>
+                </Slide>)
               )}
             </Box>
           </Fade>

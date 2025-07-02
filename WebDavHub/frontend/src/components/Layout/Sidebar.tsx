@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, List, ListItem, ListItemIcon, ListItemText, Typography, useTheme, useMediaQuery, alpha } from '@mui/material';
+import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, useTheme, useMediaQuery, alpha } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
@@ -68,8 +68,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             onClick={onNavigate}
           >
             {({ isActive }) => (
-              <ListItem
-                button
+              <ListItemButton
                 sx={{
                   borderRadius: 2,
                   '&:hover': {
@@ -103,7 +102,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                     }
                   }}
                 />
-              </ListItem>
+              </ListItemButton>
             )}
           </NavLink>
         ))}
@@ -126,8 +125,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             View Options
           </Typography>
           <List sx={{ p: 0 }}>
-            <ListItem
-              button
+            <ListItemButton
               onClick={() => onViewChange?.('poster')}
               selected={currentView === 'poster'}
               sx={{
@@ -166,9 +164,8 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                   }
                 }}
               />
-            </ListItem>
-            <ListItem
-              button
+            </ListItemButton>
+            <ListItemButton
               onClick={() => onViewChange?.('list')}
               selected={currentView === 'list'}
               sx={{
@@ -202,9 +199,8 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                   }
                 }}
               />
-            </ListItem>
-            <ListItem
-              button
+            </ListItemButton>
+            <ListItemButton
               onClick={onRefresh}
               sx={{
                 borderRadius: 3,
@@ -240,7 +236,7 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                   }
                 }}
               />
-            </ListItem>
+            </ListItemButton>
           </List>
         </Box>
       )}
