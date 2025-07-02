@@ -1285,33 +1285,73 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleanPath := filepath.Clean(req.Path)
-	if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
-		logger.Warn("Error: invalid path: %s", cleanPath)
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+	var path string
+	var absPath string
 
-	path := filepath.Join(rootDir, cleanPath)
+	// Check if the path is absolute
+	if filepath.IsAbs(req.Path) {
+		destDir := env.GetString("DESTINATION_DIR", "")
+		if destDir == "" {
+			logger.Warn("Error: DESTINATION_DIR not configured for absolute path")
+			http.Error(w, "DESTINATION_DIR not configured", http.StatusBadRequest)
+			return
+		}
 
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		logger.Warn("Error: failed to get absolute path: %v", err)
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+		absDestDir, err := filepath.Abs(destDir)
+		if err != nil {
+			logger.Warn("Error: failed to get absolute DESTINATION_DIR path: %v", err)
+			http.Error(w, "Server configuration error", http.StatusInternalServerError)
+			return
+		}
 
-	absRoot, err := filepath.Abs(rootDir)
-	if err != nil {
-		logger.Warn("Error: failed to get absolute root path: %v", err)
-		http.Error(w, "Server configuration error", http.StatusInternalServerError)
-		return
-	}
+		reqAbsPath, err := filepath.Abs(req.Path)
+		if err != nil {
+			logger.Warn("Error: failed to get absolute path for request: %v", err)
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
 
-	if !strings.HasPrefix(absPath, absRoot) {
-		logger.Warn("Error: path outside root directory: %s", absPath)
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
+		// Check if the absolute path is within DESTINATION_DIR
+		if !strings.HasPrefix(reqAbsPath, absDestDir) {
+			logger.Warn("Error: absolute path outside DESTINATION_DIR: %s", reqAbsPath)
+			http.Error(w, "Path outside DESTINATION_DIR", http.StatusBadRequest)
+			return
+		}
+
+		path = req.Path
+		absPath = reqAbsPath
+		logger.Info("Using absolute path from DESTINATION_DIR: %s", path)
+	} else {
+		// For relative paths, use the existing logic with rootDir
+		cleanPath := filepath.Clean(req.Path)
+		if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
+			logger.Warn("Error: invalid relative path: %s", cleanPath)
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
+
+		path = filepath.Join(rootDir, cleanPath)
+
+		var err error
+		absPath, err = filepath.Abs(path)
+		if err != nil {
+			logger.Warn("Error: failed to get absolute path: %v", err)
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
+
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			logger.Warn("Error: failed to get absolute root path: %v", err)
+			http.Error(w, "Server configuration error", http.StatusInternalServerError)
+			return
+		}
+
+		if !strings.HasPrefix(absPath, absRoot) {
+			logger.Warn("Error: relative path outside root directory: %s", absPath)
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {

@@ -586,3 +586,72 @@ func HandlePythonBridgeTerminate(w http.ResponseWriter, r *http.Request) {
 		"message": "Python bridge process terminated",
 	})
 }
+
+// SkipProcessingRequest represents the request payload for skipping file processing
+type SkipProcessingRequest struct {
+	Path string `json:"path"`
+}
+
+// ProcessingResponse represents the response for processing operations
+type ProcessingResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
+}
+
+// HandleSkipProcessing handles POST /api/processing/skip - Skip processing for a file/folder
+func HandleSkipProcessing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req SkipProcessingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Path == "" {
+		http.Error(w, "path is required", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Skip processing request for: %s", req.Path)
+
+	// Prepare command args for skip processing
+	args := []string{"../MediaHub/main.py", req.Path, "--skip", "--disable-monitor"}
+
+	// Get the appropriate Python command
+	pythonCmd := getPythonCommand()
+
+	logger.Info("Executing skip processing command: %s %v", pythonCmd, args)
+
+	// Execute the command
+	cmd := exec.Command(pythonCmd, args...)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		logger.Error("Skip processing failed: %v, output: %s", err, string(output))
+		response := ProcessingResponse{
+			Success: false,
+			Message: "Failed to skip processing",
+			Details: fmt.Sprintf("Error: %v, Output: %s", err, string(output)),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	logger.Info("Skip processing completed successfully for: %s", req.Path)
+
+	response := ProcessingResponse{
+		Success: true,
+		Message: "File processing skipped successfully",
+		Details: string(output),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

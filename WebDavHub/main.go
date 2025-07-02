@@ -147,6 +147,9 @@ func main() {
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
 	apiMux.HandleFunc("/api/restart", api.HandleRestart)
 
+	// Processing endpoints
+	apiMux.HandleFunc("/api/processing/skip", api.HandleSkipProcessing)
+
 	// MediaHub service endpoints
 	apiMux.HandleFunc("/api/mediahub/status", api.HandleMediaHubStatus)
 	apiMux.HandleFunc("/api/mediahub/start", api.HandleMediaHubStart)
