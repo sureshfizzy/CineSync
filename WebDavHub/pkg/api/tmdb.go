@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -609,6 +610,7 @@ func HandleTmdbCategoryContent(w http.ResponseWriter, r *http.Request, tmdbApiKe
 func detectCategoryContentType(categoryName string) string {
 	categoryLower := strings.ToLower(categoryName)
 
+	// First, check environment variable values
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) != 2 {
@@ -651,6 +653,25 @@ func detectCategoryContentType(categoryName string) string {
 		}
 	}
 
+	// Check if this is a source directory name when USE_SOURCE_STRUCTURE is enabled
+	if os.Getenv("USE_SOURCE_STRUCTURE") == "true" {
+		sourceDirStr := os.Getenv("SOURCE_DIR")
+		if sourceDirStr != "" {
+			// Split by comma and check each source directory
+			dirs := strings.Split(sourceDirStr, ",")
+			for _, dir := range dirs {
+				dir = strings.TrimSpace(dir)
+				if dir != "" {
+					baseName := strings.ToLower(filepath.Base(dir))
+					if baseName == categoryLower {
+						// Determine content type based on source directory name patterns
+						return detectContentTypeFromDirectoryName(baseName)
+					}
+				}
+			}
+		}
+	}
+
 	// Fallback to keyword-based detection on the folder name itself
 	if strings.Contains(categoryLower, "anime") {
 		if strings.Contains(categoryLower, "movie") || strings.Contains(categoryLower, "film") {
@@ -676,5 +697,45 @@ func detectCategoryContentType(categoryName string) string {
 	}
 
 	// Default to movie
+	return "movie"
+}
+
+// detectContentTypeFromDirectoryName determines content type based on directory name patterns
+func detectContentTypeFromDirectoryName(dirName string) string {
+	dirLower := strings.ToLower(dirName)
+
+	// Check for anime patterns first (most specific)
+	if strings.Contains(dirLower, "anime") {
+		if strings.Contains(dirLower, "movie") || strings.Contains(dirLower, "film") {
+			return "anime_movie"
+		}
+		return "anime_tv"
+	}
+
+	// Check for show/TV patterns
+	if strings.Contains(dirLower, "show") || strings.Contains(dirLower, "tv") ||
+	   strings.Contains(dirLower, "series") || strings.Contains(dirLower, "episode") {
+		return "tv"
+	}
+
+	// Check for movie patterns
+	if strings.Contains(dirLower, "movie") || strings.Contains(dirLower, "cinema") ||
+	   strings.Contains(dirLower, "film") {
+		return "movie"
+	}
+
+	// Check resolution patterns and try to infer from context
+	if strings.Contains(dirLower, "4k") || strings.Contains(dirLower, "uhd") ||
+	   strings.Contains(dirLower, "hd") || strings.Contains(dirLower, "quality") {
+		// If it contains show/series indicators, it's TV
+		if strings.Contains(dirLower, "show") || strings.Contains(dirLower, "series") ||
+		   strings.Contains(dirLower, "tv") {
+			return "tv"
+		}
+		// Otherwise assume movie for quality-based directories
+		return "movie"
+	}
+
+	// Default to movie for unknown patterns
 	return "movie"
 }

@@ -100,12 +100,17 @@ export default function CategoryPosterDisplay({ categoryName, onLoad }: Category
 
   return (
     <Box sx={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       width: '100%',
       height: '100%',
-      position: 'relative',
       overflow: 'hidden',
-      borderRadius: 1,
+      borderRadius: 3,
       background: theme.palette.background.default,
+      zIndex: 10,
     }}>
       {!imageLoaded && backdropPath && (
         <Skeleton

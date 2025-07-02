@@ -1031,8 +1031,10 @@ func isSeasonFolder(name string) bool {
 	return strings.HasPrefix(nameLower, "season ") && len(nameLower) > 7 && isNumeric(nameLower[7:])
 }
 
-var categoryFolders = sync.OnceValue(func() map[string]bool {
+func getCategoryFolders() map[string]bool {
 	folders := make(map[string]bool)
+
+	// Add configured folder names from environment variables
 	for _, def := range config.GetConfigDefinitions() {
 		if strings.Contains(def.Category, "Folder") || strings.Contains(def.Key, "_FOLDER") {
 			if value := os.Getenv(def.Key); value != "" {
@@ -1041,11 +1043,23 @@ var categoryFolders = sync.OnceValue(func() map[string]bool {
 		}
 	}
 	folders[strings.ToLower("CineSync")] = true
+
+	// Add source directory names when USE_SOURCE_STRUCTURE is enabled
+	if env.GetString("USE_SOURCE_STRUCTURE", "false") == "true" {
+		sourceDirs := getSourceDirectories()
+		for _, sourceDir := range sourceDirs {
+			baseName := filepath.Base(sourceDir)
+			if baseName != "" && baseName != "." && baseName != "/" {
+				folders[strings.ToLower(baseName)] = true
+			}
+		}
+	}
+
 	return folders
-})
+}
 
 func isCategoryFolder(folderName string) bool {
-	return categoryFolders()[strings.ToLower(folderName)]
+	return getCategoryFolders()[strings.ToLower(folderName)]
 }
 
 func isNumeric(s string) bool {

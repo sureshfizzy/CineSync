@@ -154,6 +154,13 @@ export default function PosterView({
             onClick={() => onFileClick(file, tmdb)}
             onContextMenu={(e) => handleContextMenu(e, file)}
           >
+            {/* Category poster overlay that covers entire card */}
+            {file.isCategoryFolder && file.type === 'directory' && (
+              <CategoryPosterDisplay
+                categoryName={file.name}
+                onLoad={() => onImageLoad(file.name)}
+              />
+            )}
             <Box sx={{
               width: '100%',
               aspectRatio: '3/4',
@@ -170,14 +177,9 @@ export default function PosterView({
                 const title = file.title || (tmdb && tmdb.title) || file.name;
                 const hasPosterPath = !!posterPath;
 
-                // Handle category folders with special display
+                // Handle category folders with special display - now handled at Paper level
                 if (file.isCategoryFolder && file.type === 'directory') {
-                  return (
-                    <CategoryPosterDisplay
-                      categoryName={file.name}
-                      onLoad={() => onImageLoad(file.name)}
-                    />
-                  );
+                  return null;
                 }
 
                 const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasPosterPath;
@@ -244,8 +246,8 @@ export default function PosterView({
                 }
               })()}
             </Box>
-            {/* Only show bottom title section for non-category folders */}
-            {!file.isCategoryFolder && (
+            {/* Show bottom title section for all folders */}
+            {(
               <Box sx={{
                 width: '100%',
                 p: { xs: '6px 8px', sm: '4px 12px' },
