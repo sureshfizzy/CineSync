@@ -5,6 +5,8 @@ import logging
 import sys
 import io
 from dotenv import load_dotenv, find_dotenv
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Event
 
 # Append the parent directory to the system path
 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -14,6 +16,7 @@ sys.path.append(base_dir)
 from MediaHub.processors.db_utils import *
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
+from MediaHub.processors.symlink_utils import delete_broken_symlinks, delete_broken_symlinks_batch
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -40,6 +43,9 @@ logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(messa
 
 # Add state variables for mount status tracking
 mount_state = None
+
+# Global error event for parallel processing
+error_event = Event()
 
 def log_message(message, level="INFO"):
     """Logs a message at the specified level with additional context."""
@@ -214,70 +220,132 @@ def scan_directories(dirs_to_watch, current_files, last_mod_times=None):
 
     return new_files, modified_dirs, last_mod_times
 
-def process_changes(current_files, new_files, dest_dir, modified_dirs=None):
+def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_processes=None, db_max_workers=None, db_batch_size=None):
     """
-    Updated process_changes to create symlinks for added files.
+    Updated process_changes to create symlinks for added files using parallel processing.
+    Uses database configurations for optimal performance.
     """
     src_dirs, _ = get_directories()
+    # Use passed configuration values or fall back to function calls
+    max_processes = max_processes or get_max_processes()
+    db_max_workers = db_max_workers or get_db_max_workers()
+    max_workers = min(max_processes, db_max_workers)
 
+    # Process modified directories with parallel processing
     if modified_dirs:
-        for mod_dir, mod_details in modified_dirs.items():
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            mod_dir_tasks = []
+
+            for mod_dir, mod_details in modified_dirs.items():
+                task = executor.submit(_process_modified_directory, mod_dir, mod_details, src_dirs, dest_dir, db_batch_size)
+                mod_dir_tasks.append(task)
+
+            for task in as_completed(mod_dir_tasks):
+                if error_event.is_set():
+                    log_message("Error detected during modified directory processing. Stopping tasks.", level="WARNING")
+                    break
+                try:
+                    task.result()
+                except Exception as e:
+                    log_message(f"Error in modified directory task: {str(e)}", level="ERROR")
+                    error_event.set()
+
+    # Process new/removed files with parallel processing
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        file_tasks = []
+        removal_tasks = []
+
+        for directory, files in new_files.items():
+            old_files = current_files.get(directory, set())
+            added_files = files - old_files
+            removed_files = old_files - files
+
+            if added_files:
+                log_message(f"New files detected in {directory}: {added_files}", level="INFO")
+                for file in added_files:
+                    if file != 'version.txt':
+                        full_path = os.path.join(directory, file)
+                        task = executor.submit(_process_single_file, full_path)
+                        file_tasks.append(task)
+                    else:
+                        log_message("Skipping version.txt file processing", level="DEBUG")
+
+            if removed_files:
+                log_message(f"Detected {len(removed_files)} removed files from {directory}: {removed_files}", level="INFO")
+                removed_file_paths = [os.path.join(directory, removed_file) for removed_file in removed_files]
+                task = executor.submit(_process_removed_files_batch, dest_dir, removed_file_paths, db_batch_size)
+                removal_tasks.append(task)
+
+        # Process all file addition tasks
+        for task in as_completed(file_tasks):
+            if error_event.is_set():
+                log_message("Error detected during file processing. Stopping tasks.", level="WARNING")
+                break
             try:
-                current_dir_files = set(os.listdir(mod_dir))
-
-                db_results = search_database_silent(mod_dir)
-
-                db_file_names = set(os.path.basename(result[0]) for result in db_results)
-
-                # Find added and removed files
-                added_files = current_dir_files - db_file_names
-                removed_files = db_file_names - current_dir_files
-
-                # Process added files
-                if added_files:
-                    for added_file in added_files:
-                        file_path = os.path.join(mod_dir, added_file)
-                        log_message(f"Processing new file: {file_path}", level="INFO")
-                        try:
-                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=True, mode='monitor')
-                        except Exception as e:
-                            log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
-
-                if removed_files:
-                    for removed_file in removed_files:
-                        removed_file_path = os.path.join(mod_dir, removed_file)
-                        log_message(f"Checking for broken symlink for removed file: {removed_file_path}", level="INFO")
-                        delete_broken_symlinks(dest_dir, removed_file_path)
-
+                task.result()
             except Exception as e:
-                log_message(f"Error processing modified directory {mod_dir}: {str(e)}", level="ERROR")
+                log_message(f"Error in file processing task: {str(e)}", level="ERROR")
+                error_event.set()
 
-    for directory, files in new_files.items():
-        old_files = current_files.get(directory, set())
-        added_files = files - old_files
-        removed_files = old_files - files
+        # Process all file removal tasks
+        for task in as_completed(removal_tasks):
+            if error_event.is_set():
+                log_message("Error detected during removal processing. Stopping tasks.", level="WARNING")
+                break
+            try:
+                task.result()
+            except Exception as e:
+                log_message(f"Error in removal processing task: {str(e)}", level="ERROR")
+                error_event.set()
 
+def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_batch_size=None):
+    """Helper function to process a single modified directory."""
+    try:
+        current_dir_files = set(os.listdir(mod_dir))
+        db_results = search_database_silent(mod_dir)
+        db_file_names = set(os.path.basename(result[0]) for result in db_results)
+
+        # Find added and removed files
+        added_files = current_dir_files - db_file_names
+        removed_files = db_file_names - current_dir_files
+
+        # Process added files
         if added_files:
-            log_message(f"New files detected in {directory}: {added_files}", level="INFO")
-            for file in added_files:
-                if file != 'version.txt':
-                    full_path = os.path.join(directory, file)
-                    log_message(f"Processing new file: {full_path}", level="INFO")
-                    process_file(full_path)
-                else:
-                    log_message("Skipping version.txt file processing", level="DEBUG")
+            for added_file in added_files:
+                file_path = os.path.join(mod_dir, added_file)
+                log_message(f"Processing new file from modified directory: {file_path}", level="INFO")
+                try:
+                    force_mode = is_monitor_force_enabled()
+                    log_message(f"Processing modified directory file with force={force_mode} in monitor mode: {file_path}", level="DEBUG")
+                    create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=force_mode, mode='monitor')
+                except Exception as e:
+                    log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
 
         if removed_files:
-            log_message(f"Detected {len(removed_files)} removed files from {directory}: {removed_files}", level="INFO")
-            for removed_file in removed_files:
-                removed_file_path = os.path.join(directory, removed_file)
-                log_message(f"Checking for broken symlink for removed file: {removed_file_path}", level="DEBUG")
-                delete_broken_symlinks(dest_dir, removed_file_path)
+            removed_file_paths = [os.path.join(mod_dir, removed_file) for removed_file in removed_files]
+            log_message(f"Processing {len(removed_file_paths)} removed files from modified directory using batch processing", level="INFO")
+            delete_broken_symlinks_batch(dest_dir, removed_file_paths)
+
+    except Exception as e:
+        log_message(f"Error processing modified directory {mod_dir}: {str(e)}", level="ERROR")
+        raise
+
+def _process_single_file(full_path):
+    """Helper function to process a single file."""
+    log_message(f"Processing new file: {full_path}", level="INFO")
+    process_file(full_path)
+
+def _process_removed_files_batch(dest_dir, removed_file_paths, db_batch_size=None):
+    """Helper function to process a batch of removed files efficiently using database configurations and parallel processing."""
+    log_message(f"Processing batch of {len(removed_file_paths)} removed files using optimized batch processing", level="INFO")
+
+    delete_broken_symlinks_batch(dest_dir, removed_file_paths)
 
 def process_file(file_path):
     """
     Processes individual files by checking the database and creating symlinks.
     Only handles the symlink creation without triggering the full main function.
+    Uses force=True in monitor mode to ensure proper processing of all files.
     """
     if not check_file_in_db(file_path):
         log_message(f"File not found in database. Initiating processing for: {file_path}", level="INFO")
@@ -290,11 +358,14 @@ def process_file(file_path):
                 return
 
             # Call create_symlinks with the specific file path
-            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+            force_mode = is_monitor_force_enabled()
+            log_message(f"Processing file with force={force_mode} in monitor mode: {file_path}", level="DEBUG")
+            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=force_mode, mode='monitor')
             log_message(f"Symlink monitoring completed for {file_path}", level="INFO")
 
         except Exception as e:
             log_message(f"Failed to process file: {file_path}. Error: {e}", level="ERROR")
+            error_event.set()
     else:
         log_message(f"File already exists in the database, skipping processing: {file_path}", level="DEBUG")
 
@@ -321,28 +392,36 @@ def initial_scan(dirs_to_watch):
 
 def main():
     """Main function to monitor directories and process file changes in real-time."""
-    global mount_state
+    global mount_state, error_event
     log_message("Starting MediaHub directory monitor service", level="INFO")
 
-    # Initialize the database
+    # Load configuration values
+    max_processes = get_max_processes()
+    db_batch_size = get_db_batch_size()
+    db_max_workers = get_db_max_workers()
+
+    # Initialize the database using existing utilities
     initialize_db()
 
     # Load previously processed files from the database
     load_processed_files()
 
-    # Get source and destination directories from environment variables
+    # Get source and destination directories
     src_dirs, dest_dir = get_directories()
     if not src_dirs or not dest_dir:
         log_message("Source or destination directory not set in environment variables", level="ERROR")
         exit(1)
 
     # Get configuration from environment
-    sleep_time = int(os.getenv('SLEEP_TIME', 60))
+    sleep_time = get_env_int('SLEEP_TIME', 60)
 
     current_files = {}
     last_mod_times = {}
     while True:
         try:
+            # Reset error event at the start of each cycle
+            error_event.clear()
+
             # Check if rclone mount is available (if enabled)
             if not check_rclone_mount():
                 if mount_state is not False:
@@ -356,11 +435,17 @@ def main():
                 current_files = initial_scan(src_dirs)
                 log_message("Initial scan after mount verification completed, Monitor Service is Running", level="INFO")
 
-            # Normal directory monitoring
+            # Normal directory monitoring with error handling
             log_message("Performing regular directory scan", level="DEBUG")
             new_files, modified_dirs, last_mod_times = scan_directories(src_dirs, current_files, last_mod_times)
-            process_changes(current_files, new_files, dest_dir, modified_dirs)
-            current_files = new_files
+
+            # Process changes with parallel processing using loaded configuration
+            if not error_event.is_set():
+                process_changes(current_files, new_files, dest_dir, modified_dirs,
+                              max_processes, db_max_workers, db_batch_size)
+                current_files = new_files
+            else:
+                log_message("Skipping file processing due to previous errors", level="WARNING")
 
             log_message(f"Sleeping for {sleep_time} seconds", level="DEBUG")
             time.sleep(sleep_time)
@@ -370,6 +455,7 @@ def main():
             break
         except Exception as e:
             log_message(f"Unexpected error in main loop: {str(e)}", level="ERROR")
+            error_event.set()
             time.sleep(sleep_time)
 
 if __name__ == "__main__":

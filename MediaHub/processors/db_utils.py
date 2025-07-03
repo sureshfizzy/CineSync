@@ -7,13 +7,20 @@ import concurrent.futures
 import csv
 import sqlite3
 import platform
+import traceback
+import requests
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
-import traceback
-import requests
+from MediaHub.config.config import (
+    get_db_throttle_rate, get_db_max_retries, get_db_retry_delay,
+    get_db_batch_size, get_db_max_workers, get_db_max_records,
+    get_db_connection_timeout, get_db_cache_size,
+    get_cinesync_ip, get_cinesync_api_port
+)
+from MediaHub.utils.dashboard_utils import send_dashboard_notification
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
@@ -26,7 +33,6 @@ BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__fil
 DB_DIR = os.path.join(BASE_DIR, "db")
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
-MAX_RECORDS = 100000
 LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
 
 # Ensure database directory exists
@@ -53,12 +59,15 @@ def get_env_float(key, default):
     except (ValueError, TypeError):
         return default
 
-# Get configuration from environment variables
-THROTTLE_RATE = get_env_float('DB_THROTTLE_RATE', 10.0)
-MAX_RETRIES = get_env_int('DB_MAX_RETRIES', 3)
-RETRY_DELAY = get_env_float('DB_RETRY_DELAY', 1.0)
-BATCH_SIZE = get_env_int('DB_BATCH_SIZE', 1000)
-MAX_WORKERS = get_env_int('DB_MAX_WORKERS', 4)
+# Get configuration from config.py functions
+THROTTLE_RATE = get_db_throttle_rate()
+MAX_RETRIES = get_db_max_retries()
+RETRY_DELAY = get_db_retry_delay()
+BATCH_SIZE = get_db_batch_size()
+MAX_WORKERS = get_db_max_workers()
+MAX_RECORDS = get_db_max_records()
+CONNECTION_TIMEOUT = get_db_connection_timeout()
+CACHE_SIZE = get_db_cache_size()
 
 # Add this near the top with other global variables
 _db_initialized = False
@@ -86,10 +95,10 @@ class ConnectionPool:
                 return self.connections.pop()
             else:
                 try:
-                    conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=20.0)
+                    conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=CONNECTION_TIMEOUT)
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
-                    conn.execute("PRAGMA cache_size=10000")
+                    conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
                     return conn
                 except sqlite3.OperationalError as e:
                     print(f"[ERROR] Failed to open database file: {self.db_file}")
@@ -104,8 +113,8 @@ class ConnectionPool:
             else:
                 conn.close()
 
-# Create connection pools with single connection for SQLite
-main_pool = ConnectionPool(DB_FILE, max_connections=1)
+# Create connection pools using database configuration
+main_pool = ConnectionPool(DB_FILE, max_connections=max(1, MAX_WORKERS // 2))
 archive_pool = ConnectionPool(ARCHIVE_DB_FILE, max_connections=1)
 
 def with_connection(pool):
@@ -826,10 +835,8 @@ def get_total_storage_size(conn):
 
 
 def track_file_addition(source_path, dest_path, tmdb_id=None, season_number=None):
-    """Track file addition in WebDavHub"""
+    """Track file addition in WebDavHub with availability checking"""
     try:
-        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
-
         payload = {
             'operation': 'add',
             'sourcePath': source_path,
@@ -842,20 +849,14 @@ def track_file_addition(source_path, dest_path, tmdb_id=None, season_number=None
         cinesync_port = get_cinesync_api_port()
         url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
 
-        response = requests.post(url, json=payload, timeout=2)
-        if response.status_code != 200:
-            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
+        send_dashboard_notification(url, payload, "file addition")
 
-    except requests.exceptions.RequestException as e:
-        log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
     except Exception as e:
-        log_message(f"Error tracking addition: {e}", level="DEBUG")
+        log_message(f"Error tracking file addition: {e}", level="DEBUG")
 
 def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
-    """Track file deletion in WebDavHub"""
+    """Track file deletion in WebDavHub with availability checking"""
     try:
-        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
-
         payload = {
             'operation': 'delete',
             'sourcePath': source_path,
@@ -869,12 +870,10 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
         cinesync_port = get_cinesync_api_port()
         url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
 
-        response = requests.post(url, json=payload, timeout=2)
-        if response.status_code != 200:
-            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
+        send_dashboard_notification(url, payload, "file deletion")
 
-    except requests.exceptions.RequestException as e:
-        log_message(f"Dashboard notification unavailable (WebDavHub not running?): {e}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Error tracking file deletion: {e}", level="DEBUG")
 
 def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
     """Save file processing failure directly to database"""
@@ -896,8 +895,6 @@ def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="",
     save_file_failure(source_path, tmdb_id, season_number, reason, error_message)
 
     try:
-        from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
-
         payload = {
             'operation': 'failed',
             'sourcePath': source_path,
@@ -911,11 +908,10 @@ def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="",
         cinesync_port = get_cinesync_api_port()
         url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
 
-        response = requests.post(url, json=payload, timeout=2)
-        if response.status_code != 200:
-            log_message(f"Dashboard notification failed with status {response.status_code}", level="DEBUG")
+        send_dashboard_notification(url, payload, "file failure")
+
     except Exception as e:
-        log_message(f"Failed to track file failure: {e}", level="DEBUG")
+        log_message(f"Error tracking file failure: {e}", level="DEBUG")
 
 
 @throttle

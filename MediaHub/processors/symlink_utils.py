@@ -5,23 +5,76 @@ import subprocess
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.utils.webdav_api import send_structured_message
 
+def delete_broken_symlinks_batch(dest_dir, removed_paths):
+    """Delete broken symlinks for multiple removed paths using parallel processing and database configurations.
+
+    Args:
+        dest_dir: The destination directory containing symlinks
+        removed_paths: List of removed file/folder paths to check
+    """
+    if not removed_paths:
+        return False
+
+    batch_size = get_db_batch_size()
+    max_workers = min(get_db_max_workers(), get_max_processes())
+
+    log_message(f"Processing {len(removed_paths)} removed paths with batch_size={batch_size}, max_workers={max_workers}", level="INFO")
+
+    symlinks_deleted = False
+
+    for i in range(0, len(removed_paths), batch_size):
+        batch = removed_paths[i:i + batch_size]
+        log_message(f"Processing batch {i//batch_size + 1}/{(len(removed_paths) + batch_size - 1)//batch_size} with {len(batch)} paths", level="DEBUG")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for removed_path in batch:
+                future = executor.submit(delete_broken_symlinks, dest_dir, removed_path)
+                futures.append(future)
+
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    if result:
+                        symlinks_deleted = True
+                except Exception as e:
+                    log_message(f"Error in batch symlink deletion: {e}", level="ERROR")
+
+    return symlinks_deleted
+
 def delete_broken_symlinks(dest_dir, removed_path=None):
     """Delete broken symlinks in the destination directory and update databases.
+    Optimized with database configurations for better performance.
 
     Args:
         dest_dir: The destination directory containing symlinks
         removed_path: Optional path of the removed file/folder to check
     """
-    # Ensure database tables exist
+    # Log database configuration for debugging
+    if not hasattr(delete_broken_symlinks, '_config_logged'):
+        batch_size = get_db_batch_size()
+        max_workers = get_db_max_workers()
+        throttle_rate = get_db_throttle_rate()
+        connection_timeout = get_db_connection_timeout()
+        log_message(f"delete_broken_symlinks using DB config: batch_size={batch_size}, max_workers={max_workers}, throttle_rate={throttle_rate}, timeout={connection_timeout}", level="DEBUG")
+        delete_broken_symlinks._config_logged = True
     try:
-        with sqlite3.connect(PROCESS_DB) as conn:
+        connection_timeout = get_db_connection_timeout()
+        cache_size = get_db_cache_size()
+
+        with sqlite3.connect(PROCESS_DB, timeout=connection_timeout) as conn:
             cursor = conn.cursor()
+            cursor.execute(f"PRAGMA cache_size={cache_size}")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+
             # Create file_index table if it doesn't exist
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS file_index (
@@ -33,6 +86,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
             ''')
             conn.commit()
     except sqlite3.Error as e:
+        log_message(f"Database error in delete_broken_symlinks: {e}", level="ERROR")
         return False
 
     symlinks_deleted = False
@@ -43,8 +97,10 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
         log_message(f"Processing removed path: {removed_path}", level="DEBUG")
 
         try:
-            # Handle both databases in a single transaction
-            with sqlite3.connect(DB_FILE) as conn1, sqlite3.connect(PROCESS_DB) as conn2:
+            # Handle both databases in a single transaction with optimized settings
+            connection_timeout = get_db_connection_timeout()
+            with sqlite3.connect(DB_FILE, timeout=connection_timeout) as conn1, \
+                 sqlite3.connect(PROCESS_DB, timeout=connection_timeout) as conn2:
                 cursor1 = conn1.cursor()
                 cursor2 = conn2.cursor()
 

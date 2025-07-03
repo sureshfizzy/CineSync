@@ -5,6 +5,7 @@ import socket
 import requests
 from .logging_utils import log_message
 from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
+from MediaHub.utils.dashboard_utils import is_dashboard_available, send_dashboard_notification
 
 def is_server_available(host, port, timeout=0.1):
     """Quick check if server is available on the given host and port."""
@@ -52,5 +53,25 @@ def send_structured_message_http(message_type, data):
         return False
 
 def send_structured_message(message_type, data):
-    """Send structured message to WebDavHub API via HTTP."""
-    return send_structured_message_http(message_type, data)
+    """Send structured message to WebDavHub API via HTTP with availability checking."""
+    try:
+        # Check if dashboard is available before attempting to send
+        if not is_dashboard_available():
+            return False
+
+        host = get_cinesync_ip()
+        port = get_cinesync_api_port()
+
+        structured_msg = {
+            "type": message_type,
+            "timestamp": time.time(),
+            "data": data
+        }
+
+        # Send to the MediaHub-specific API endpoint
+        api_url = f"http://{host}:{port}/api/mediahub/message"
+        return send_dashboard_notification(api_url, structured_msg, f"structured message ({message_type})")
+
+    except Exception as e:
+        log_message(f"Error sending structured message: {e}", level="DEBUG")
+        return False

@@ -31,6 +31,7 @@ from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.id_refresh import refresh_tmdb_files
 from MediaHub.utils.file_utils import resolve_symlink_to_source
 from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
+from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
 
 db_initialized = False
 
@@ -312,6 +313,13 @@ def log_system_configuration():
     cpu_cores = psutil.cpu_count()
     log_message(f"MAX_CORES configured to use {max_cores} cores (CPU cores available: {cpu_cores})", level="INFO")
 
+    # Log dashboard configuration
+    dashboard_enabled = is_dashboard_notifications_enabled()
+
+    if dashboard_enabled:
+        dashboard_timeout = get_dashboard_timeout()
+        dashboard_check_interval = get_dashboard_check_interval()
+
 def setup_signal_handlers():
     """Setup signal handlers for Linux and Windows."""
     # Register handlers for both Windows and Unix signals
@@ -402,6 +410,28 @@ def is_port_in_use(port):
 
     return False
 
+def check_dashboard_availability():
+    """Check dashboard availability and log status."""
+    try:
+
+        if not is_dashboard_notifications_enabled():
+            log_message("Dashboard notifications are disabled", level="INFO")
+            return False
+
+        # Force a fresh check at startup
+        force_dashboard_recheck()
+
+        if is_dashboard_available():
+            log_message("Dashboard is available for notifications", level="INFO")
+            return True
+        else:
+            log_message("Dashboard is not available - notifications will be cached to avoid delays", level="WARNING")
+            return False
+
+    except Exception as e:
+        log_message(f"Error checking dashboard availability: {e}", level="ERROR")
+        return False
+
 def start_webdav_server():
     """Start WebDavHub server if enabled."""
     global background_processes
@@ -417,6 +447,8 @@ def start_webdav_server():
     # Check if the CineSync server is already running on the specified port
     if is_port_in_use(webdav_port):
         log_message(f"CineSync server is already running on port {webdav_port}", level="INFO")
+        # Check dashboard availability after confirming server is running
+        check_dashboard_availability()
         return
 
     if os.path.exists(webdav_script):
@@ -431,10 +463,17 @@ def start_webdav_server():
             os.chdir(current_dir)
 
             log_message(f"CineSync server started with PID: {webdav_process.pid}", level="INFO")
+
+            # Wait a moment for server to start, then check availability
+            time.sleep(2)
+            check_dashboard_availability()
+
         except Exception as e:
             log_message(f"Failed to start CineSync server: {e}", level="ERROR")
     else:
         log_message(f"CineSync executable not found at: {webdav_script}", level="ERROR")
+        # Check if dashboard is available anyway (might be running externally)
+        check_dashboard_availability()
 
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
@@ -537,6 +576,8 @@ def main(dest_dir):
     # Handle monitor-only mode
     if args.monitor_only:
         log_message("Starting in monitor-only mode", level="INFO")
+        # Check dashboard availability even in monitor-only mode
+        check_dashboard_availability()
         # Initialize database
         if not initialize_db_with_mount_check():
             log_message("Failed to initialize database. Exiting.", level="ERROR")
@@ -598,6 +639,8 @@ def main(dest_dir):
             cleanup_thread.start()
         else:
             log_message("RealTime-Monitoring is disabled", level="INFO")
+            # Check dashboard availability even when monitoring is disabled
+            check_dashboard_availability()
 
     src_dirs, dest_dir = get_directories()
     if not src_dirs or not dest_dir:

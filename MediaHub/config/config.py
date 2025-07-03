@@ -18,6 +18,16 @@ def get_env_int(key, default):
     except (ValueError, TypeError):
         return default
 
+def get_env_float(key, default):
+    """Safely get a float environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
 # Load .env file
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path)
@@ -338,3 +348,57 @@ def get_tmdb_api_key():
         return 'a4f28c50ae81b7529a05b61910d64398'
 
     return env_key
+
+# Database Configuration Functions
+def get_db_throttle_rate():
+    """Get database throttle rate for operations per second"""
+    return get_env_float('DB_THROTTLE_RATE', 10.0)
+
+def get_db_max_retries():
+    """Get maximum number of database operation retries"""
+    return get_env_int('DB_MAX_RETRIES', 3)
+
+def get_db_retry_delay():
+    """Get delay between database operation retries in seconds"""
+    return get_env_float('DB_RETRY_DELAY', 1.0)
+
+def get_db_batch_size():
+    """Get database batch size for bulk operations"""
+    return get_env_int('DB_BATCH_SIZE', 1000)
+
+def get_db_max_workers():
+    """Get maximum number of database workers for parallel operations"""
+    return get_env_int('DB_MAX_WORKERS', 4)
+
+def get_db_max_records():
+    """Get maximum number of records before archiving"""
+    return get_env_int('DB_MAX_RECORDS', 100000)
+
+def get_db_connection_timeout():
+    """Get database connection timeout in seconds"""
+    return get_env_float('DB_CONNECTION_TIMEOUT', 20.0)
+
+def get_db_cache_size():
+    """Get database cache size"""
+    return get_env_int('DB_CACHE_SIZE', 10000)
+
+def is_monitor_force_enabled():
+    """Check if force mode should be used in monitor mode"""
+    return os.getenv('MONITOR_FORCE_MODE', 'true').lower() in ['true', '1', 'yes']
+
+# Dashboard Configuration Functions
+def is_dashboard_notifications_enabled():
+    """Check if dashboard notifications should be sent"""
+    return os.getenv('ENABLE_DASHBOARD_NOTIFICATIONS', 'true').lower() in ['true', '1', 'yes']
+
+def get_dashboard_check_interval():
+    """Get interval in seconds for checking dashboard availability"""
+    return get_env_int('DASHBOARD_CHECK_INTERVAL', 300)  # 5 minutes default
+
+def get_dashboard_timeout():
+    """Get timeout in seconds for dashboard requests"""
+    return get_env_float('DASHBOARD_TIMEOUT', 2.0)
+
+def get_dashboard_retry_count():
+    """Get number of retries for dashboard requests"""
+    return get_env_int('DASHBOARD_RETRY_COUNT', 1)
