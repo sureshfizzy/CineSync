@@ -367,6 +367,12 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                     log_message(f"Found {len(db_results)} possible matches in processed_files", level="INFO")
                                     for dest_path, tmdb_id, season_number in db_results:
                                         log_message(f"Checking possible destination: {dest_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
+
+                                        # Skip if dest_path is None
+                                        if dest_path is None:
+                                            log_message(f"Skipping null destination path for tmdb_id={tmdb_id}, season_number={season_number}", level="DEBUG")
+                                            continue
+
                                         if os.path.lexists(dest_path):
                                             if os.path.islink(dest_path):
                                                 target = os.readlink(dest_path)

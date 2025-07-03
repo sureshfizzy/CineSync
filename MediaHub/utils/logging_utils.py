@@ -7,6 +7,36 @@ import warnings
 import logging
 from dotenv import load_dotenv
 
+# Import unicodedata for Unicode normalization
+import unicodedata
+
+def _normalize_for_logging(text: str) -> str:
+    """
+    Simple Unicode normalization for logging to prevent encoding errors.
+    Handles the most common problematic characters without circular imports.
+    """
+    if not isinstance(text, str) or not text:
+        return str(text) if text is not None else ""
+
+    # Handle the most common problematic characters that cause encoding issues
+    replacements = {
+        '\ua789': ':',  # MODIFIER LETTER COLON -> COLON (the main culprit)
+        '\u2013': '-',  # EN DASH -> HYPHEN
+        '\u2014': '-',  # EM DASH -> HYPHEN
+        '\u2018': "'",  # LEFT SINGLE QUOTATION MARK -> APOSTROPHE
+        '\u2019': "'",  # RIGHT SINGLE QUOTATION MARK -> APOSTROPHE
+        '\u201c': '"',  # LEFT DOUBLE QUOTATION MARK -> QUOTATION MARK
+        '\u201d': '"',  # RIGHT DOUBLE QUOTATION MARK -> QUOTATION MARK
+        '\u00a0': ' ',  # NON-BREAKING SPACE -> REGULAR SPACE
+        '\u2026': '...',  # HORIZONTAL ELLIPSIS -> THREE DOTS
+    }
+
+    for unicode_char, replacement in replacements.items():
+        text = text.replace(unicode_char, replacement)
+
+    # Encode to ASCII with replacement for any remaining problematic characters
+    return text.encode('ascii', errors='replace').decode('ascii')
+
 # Suppress urllib3 connection pool warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings("ignore", message="Connection pool is full, discarding connection")
@@ -101,38 +131,23 @@ def log_message(message, level="INFO", output="stdout"):
     if LOG_LEVELS.get(level, 20) >= LOG_LEVEL:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Handle Unicode characters safely
-        try:
-            safe_message = message.encode('utf-8', errors='replace').decode('utf-8')
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            safe_message = message.encode('ascii', errors='replace').decode('ascii')
+        # Normalize Unicode characters upfront to prevent encoding issues
+        safe_message = _normalize_for_logging(str(message))
 
         log_entry = f"{timestamp} [{level}] {safe_message}\n"
 
         # Only apply colors if not on Windows
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
 
-        try:
-            if output == "stdout":
-                print(colored_message.rstrip())
-            elif output == "stderr":
-                print(colored_message.rstrip(), file=sys.stderr)
-        except UnicodeEncodeError:
-            safe_colored_message = colored_message.encode('utf-8', errors='replace').decode('utf-8')
-            if output == "stdout":
-                print(safe_colored_message.rstrip())
-            elif output == "stderr":
-                print(safe_colored_message.rstrip(), file=sys.stderr)
+        # Print to console
+        if output == "stdout":
+            print(colored_message.rstrip())
+        elif output == "stderr":
+            print(colored_message.rstrip(), file=sys.stderr)
 
-        # Always write to the log file without color codes
-        try:
-            with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
-                log_file.write(log_entry)
-        except UnicodeEncodeError:
-            # Fallback for log file writing
-            safe_log_entry = log_entry.encode('utf-8', errors='replace').decode('utf-8')
-            with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
-                log_file.write(safe_log_entry)
+        # Write to log file
+        with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
+            log_file.write(log_entry)
 
 def log_unsupported_file_type(file_type):
     """

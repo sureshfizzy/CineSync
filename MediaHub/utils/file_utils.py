@@ -311,36 +311,75 @@ def clean_query(query: str) -> Dict[str, Any]:
 
 def normalize_unicode_characters(text: str) -> str:
     """
-    Normalize Unicode characters to their ASCII equivalents for better TMDB matching.
+    Normalize Unicode characters to their ASCII equivalents for better TMDB matching and logging.
 
     This function handles special Unicode characters that might appear in filenames
-    but cause issues with API searches, such as:
+    but cause issues with API searches or console output, such as:
     - Modifier Letter Colon (꞉) -> Regular Colon (:)
     - Various Unicode punctuation -> ASCII equivalents
+    - Accented characters -> Base characters (é -> e, ñ -> n)
 
     Args:
         text: Text containing potentially problematic Unicode characters
 
     Returns:
-        Text with normalized characters
+        Text with normalized characters, safe for ASCII output
     """
     if not isinstance(text, str):
         return ""
 
+    # Handle None or empty strings gracefully
+    if not text:
+        return ""
+
     # First, handle specific problematic characters
     character_replacements = {
+        # Colon variants
         '\ua789': ':',  # MODIFIER LETTER COLON -> COLON
         '\u02d0': ':',  # MODIFIER LETTER TRIANGULAR COLON -> COLON
         '\uff1a': ':',  # FULLWIDTH COLON -> COLON
         '\u2236': ':',  # RATIO -> COLON
         '\u2237': ':',  # PROPORTION -> COLON
         '\u205a': ':',  # TWO DOT PUNCTUATION -> COLON
+        '\u02f8': ':',  # MODIFIER LETTER RAISED COLON -> COLON
+
+        # Space variants
         '\u2009': ' ',  # THIN SPACE -> REGULAR SPACE
         '\u00a0': ' ',  # NON-BREAKING SPACE -> REGULAR SPACE
+        '\u2000': ' ',  # EN QUAD -> REGULAR SPACE
+        '\u2001': ' ',  # EM QUAD -> REGULAR SPACE
+        '\u2002': ' ',  # EN SPACE -> REGULAR SPACE
+        '\u2003': ' ',  # EM SPACE -> REGULAR SPACE
+        '\u2004': ' ',  # THREE-PER-EM SPACE -> REGULAR SPACE
+        '\u2005': ' ',  # FOUR-PER-EM SPACE -> REGULAR SPACE
+        '\u2006': ' ',  # SIX-PER-EM SPACE -> REGULAR SPACE
+        '\u2007': ' ',  # FIGURE SPACE -> REGULAR SPACE
+        '\u2008': ' ',  # PUNCTUATION SPACE -> REGULAR SPACE
+        '\u200a': ' ',  # HAIR SPACE -> REGULAR SPACE
+        '\u202f': ' ',  # NARROW NO-BREAK SPACE -> REGULAR SPACE
+        '\u205f': ' ',  # MEDIUM MATHEMATICAL SPACE -> REGULAR SPACE
+
+        # Dash/hyphen variants
         '\u2013': '-',  # EN DASH -> HYPHEN
         '\u2014': '-',  # EM DASH -> HYPHEN
         '\u2015': '-',  # HORIZONTAL BAR -> HYPHEN
         '\u2212': '-',  # MINUS SIGN -> HYPHEN
+        '\u2010': '-',  # HYPHEN -> HYPHEN-MINUS
+        '\u2011': '-',  # NON-BREAKING HYPHEN -> HYPHEN
+
+        # Quote variants
+        '\u2018': "'",  # LEFT SINGLE QUOTATION MARK -> APOSTROPHE
+        '\u2019': "'",  # RIGHT SINGLE QUOTATION MARK -> APOSTROPHE
+        '\u201c': '"',  # LEFT DOUBLE QUOTATION MARK -> QUOTATION MARK
+        '\u201d': '"',  # RIGHT DOUBLE QUOTATION MARK -> QUOTATION MARK
+        '\u2032': "'",  # PRIME -> APOSTROPHE
+        '\u2033': '"',  # DOUBLE PRIME -> QUOTATION MARK
+
+        # Other common problematic characters
+        '\u2026': '...',  # HORIZONTAL ELLIPSIS -> THREE DOTS
+        '\u00b7': '.',    # MIDDLE DOT -> PERIOD
+        '\u2022': '*',    # BULLET -> ASTERISK
+        '\u00d7': 'x',    # MULTIPLICATION SIGN -> x
     }
 
     # Apply specific character replacements
