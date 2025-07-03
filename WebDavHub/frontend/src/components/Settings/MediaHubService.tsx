@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Switch, FormControlLabel } from '@mui/material';
 import axios from 'axios';
-import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, Timeline, FolderOpen, Link, Visibility, Circle } from '@mui/icons-material';
+import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
 
 interface MediaHubStatus {
@@ -865,120 +865,6 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           </Box>
         </Collapse>
       </Box>
-      {/* Activity Summary */}
-      {activity && (
-        <Box
-          sx={{
-            mt: 3,
-            p: 3,
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Timeline sx={{ fontSize: 18 }} />
-            Activity Summary
-          </Typography>
-
-          <Grid container spacing={2}>
-            <Grid
-              size={{
-                xs: 12,
-                sm: 4
-              }}>
-              <Box
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: alpha('#3B82F6', 0.1),
-                  border: '1px solid',
-                  borderColor: alpha('#3B82F6', 0.2),
-                  textAlign: 'center',
-                }}
-              >
-                <Typography variant="h5" fontWeight="700" color="#3B82F6" sx={{ mb: 0.5 }}>
-                  {activity.totalFiles.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Files Processed
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid
-              size={{
-                xs: 12,
-                sm: 4
-              }}>
-              <Box
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: alpha('#10B981', 0.1),
-                  border: '1px solid',
-                  borderColor: alpha('#10B981', 0.2),
-                  textAlign: 'center',
-                }}
-              >
-                <Typography variant="h5" fontWeight="700" color="#10B981" sx={{ mb: 0.5 }}>
-                  {activity.symlinkCount.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Symlinks Created
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid
-              size={{
-                xs: 12,
-                sm: 4
-              }}>
-              <Box
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: alpha('#8B5CF6', 0.1),
-                  border: '1px solid',
-                  borderColor: alpha('#8B5CF6', 0.2),
-                  textAlign: 'center',
-                }}
-              >
-                <Typography variant="h5" fontWeight="700" color="#8B5CF6" sx={{ mb: 0.5 }}>
-                  {Math.round((activity.symlinkCount / Math.max(activity.totalFiles, 1)) * 100)}%
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Success Rate
-                </Typography>
-              </Box>
-            </Grid>
-
-            {activity.lastActivity && (
-              <Grid size={12}>
-                <Box
-                  sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    bgcolor: alpha('#F59E0B', 0.1),
-                    border: '1px solid',
-                    borderColor: alpha('#F59E0B', 0.2),
-                    textAlign: 'center',
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                    Last Activity
-                  </Typography>
-                  <Typography variant="body1" fontWeight="600" color="#F59E0B">
-                    {new Date(activity.lastActivity).toLocaleString()}
-                  </Typography>
-                </Box>
-              </Grid>
-            )}
-          </Grid>
-        </Box>
-      )}
       {/* Logs Section */}
       <Collapse in={showLogs}>
         <Box

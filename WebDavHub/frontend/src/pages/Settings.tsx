@@ -7,7 +7,7 @@ import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
 import MediaHubService from '../components/Settings/MediaHubService';
 import JobsTable from '../components/Jobs/JobsTable';
-import ConfigStatusIndicator from '../components/Settings/ConfigStatusIndicator';
+
 
 interface ConfigValue {
   key: string;
@@ -453,7 +453,6 @@ const Settings: React.FC = () => {
                 pt: { xs: 0, sm: 0 }
               }}
             >
-              <ConfigStatusIndicator />
               <IconButton
                 onClick={fetchConfig}
                 disabled={loading || saving}
