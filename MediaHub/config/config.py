@@ -382,10 +382,6 @@ def get_db_cache_size():
     """Get database cache size"""
     return get_env_int('DB_CACHE_SIZE', 10000)
 
-def is_monitor_force_enabled():
-    """Check if force mode should be used in monitor mode"""
-    return os.getenv('MONITOR_FORCE_MODE', 'true').lower() in ['true', '1', 'yes']
-
 # Dashboard Configuration Functions
 def is_dashboard_notifications_enabled():
     """Check if dashboard notifications should be sent"""

@@ -315,9 +315,7 @@ def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_bat
                 file_path = os.path.join(mod_dir, added_file)
                 log_message(f"Processing new file from modified directory: {file_path}", level="INFO")
                 try:
-                    force_mode = is_monitor_force_enabled()
-                    log_message(f"Processing modified directory file with force={force_mode} in monitor mode: {file_path}", level="DEBUG")
-                    create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=force_mode, mode='monitor')
+                    create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
                 except Exception as e:
                     log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
 
@@ -345,7 +343,6 @@ def process_file(file_path):
     """
     Processes individual files by checking the database and creating symlinks.
     Only handles the symlink creation without triggering the full main function.
-    Uses force=True in monitor mode to ensure proper processing of all files.
     """
     if not check_file_in_db(file_path):
         log_message(f"File not found in database. Initiating processing for: {file_path}", level="INFO")
@@ -358,9 +355,7 @@ def process_file(file_path):
                 return
 
             # Call create_symlinks with the specific file path
-            force_mode = is_monitor_force_enabled()
-            log_message(f"Processing file with force={force_mode} in monitor mode: {file_path}", level="DEBUG")
-            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=force_mode, mode='monitor')
+            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
             log_message(f"Symlink monitoring completed for {file_path}", level="INFO")
 
         except Exception as e:
