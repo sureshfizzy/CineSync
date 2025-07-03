@@ -19,13 +19,115 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
       gap: 2,
       mt: 1
     }}>
+      {/* Auto-Select - Full Width Block at Top */}
+      {options.find(opt => opt.value === 'auto-select') && (
+        <Box sx={{ mb: 1 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: theme.palette.mode === 'dark'
+                ? theme.palette.success.main
+                : '#2e7d32',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              mb: 1,
+              display: 'block'
+            }}
+          >
+            AUTO-SELECT PROCESSING
+          </Typography>
+          {(() => {
+            const autoSelectOption = options.find(opt => opt.value === 'auto-select')!;
+            const isSelected = selectedOption === 'auto-select';
+
+            return (
+              <OptionCard
+                selected={isSelected}
+                onClick={() => onOptionSelect('auto-select')}
+                elevation={isSelected ? 4 : 1}
+                sx={{
+                  border: theme.palette.mode === 'dark'
+                    ? `2px solid ${theme.palette.success.main}40`
+                    : `2px solid #81c784`,
+                  background: theme.palette.mode === 'dark'
+                    ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.05) 0%, rgba(139, 195, 74, 0.05) 100%)'
+                    : 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+                  '&:hover': {
+                    border: theme.palette.mode === 'dark'
+                      ? `2px solid ${theme.palette.success.main}60`
+                      : `2px solid #4caf50`,
+                    background: theme.palette.mode === 'dark'
+                      ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.08) 0%, rgba(139, 195, 74, 0.08) 100%)'
+                      : 'linear-gradient(135deg, #dcedc8 0%, #aed581 100%)',
+                  },
+                  ...(isSelected && {
+                    border: `2px solid ${theme.palette.success.main}`,
+                    background: theme.palette.mode === 'dark'
+                      ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.1) 0%, rgba(139, 195, 74, 0.1) 100%)'
+                      : 'linear-gradient(135deg, rgba(76, 175, 80, 0.05) 0%, rgba(139, 195, 74, 0.05) 100%)',
+                  })
+                }}
+              >
+                <Box sx={{
+                  fontSize: '24px',
+                  lineHeight: 1,
+                  mt: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5
+                }}>
+                  {autoSelectOption.icon}
+                </Box>
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    fontWeight={600}
+                    sx={{
+                      color: theme.palette.mode === 'dark'
+                        ? theme.palette.success.main
+                        : '#2e7d32'
+                    }}
+                  >
+                    {autoSelectOption.label}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    mt={0.5}
+                    sx={{
+                      fontWeight: 500,
+                      color: theme.palette.mode === 'dark'
+                        ? theme.palette.success.main
+                        : '#2e7d32'
+                    }}
+                  >
+                    {autoSelectOption.description}
+                  </Typography>
+                </Box>
+                {isSelected && (
+                  <CheckCircleOutlineIcon
+                    sx={{
+                      ml: 'auto',
+                      alignSelf: 'flex-start',
+                      fontSize: '20px',
+                      color: theme.palette.mode === 'dark'
+                        ? theme.palette.success.main
+                        : '#2e7d32'
+                    }}
+                  />
+                )}
+              </OptionCard>
+            );
+          })()}
+        </Box>
+      )}
+
       {/* Other Options - Grid Layout */}
       <Box sx={{
         display: 'grid',
         gap: 2,
         gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
       }}>
-        {options.filter(opt => opt.value !== 'skip').map((option) => {
+        {options.filter(opt => opt.value !== 'skip' && opt.value !== 'auto-select').map((option) => {
           const isSelected = selectedOption === option.value;
 
           return (

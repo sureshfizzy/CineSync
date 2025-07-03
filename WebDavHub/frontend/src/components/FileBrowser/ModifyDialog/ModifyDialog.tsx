@@ -59,6 +59,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
   const theme = useTheme();
 
   const baseModifyOptions: ModifyOption[] = [
+    { value: 'auto-select', label: 'Auto-Select First Result', description: 'Automatically process the first TMDB search result', icon: '🎯' },
     { value: 'force', label: 'Force Recreate Symlinks', description: 'Recreate symlinks even if they exist', icon: '🔗' },
     { value: 'force-show', label: 'Force as TV Show', description: 'Process file as a TV show', icon: '📺' },
     { value: 'force-movie', label: 'Force as Movie', description: 'Process file as a movie', icon: '🎬' },
@@ -212,7 +213,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
       selectedOption: selectedOption || undefined,
       selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined,
       batchApply: shouldUseBatchApply,
-      manualSearch: shouldUseManualSearch
+      manualSearch: shouldUseManualSearch,
+      autoSelect: selectedOption === 'auto-select'
     };
 
 
@@ -221,6 +223,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     let commandPreview = 'python main.py ' + currentFilePath + ' --force';
     if (selectedOption) {
       switch (selectedOption) {
+        case 'auto-select':
+          commandPreview += ' --auto-select';
+          break;
         case 'force-show':
           commandPreview += ' --force-show';
           break;

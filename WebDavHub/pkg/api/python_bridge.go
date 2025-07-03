@@ -25,6 +25,7 @@ type PythonBridgeRequest struct {
 	SelectedIds map[string]string `json:"selectedIds,omitempty"`
 	BatchApply bool `json:"batchApply,omitempty"`
 	ManualSearch bool `json:"manualSearch,omitempty"`
+	AutoSelect bool `json:"autoSelect,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
@@ -272,12 +273,17 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	if req.ManualSearch {
 		args = append(args, "--manual-search")
 	}
+	if req.AutoSelect {
+		args = append(args, "--auto-select")
+	}
 
 	// Add selected action option if provided
 	if req.SelectedOption != "" {
 		switch req.SelectedOption {
 		case "force":
 			// --force is already added above
+		case "auto-select":
+			// --auto-select is handled above
 		case "force-show":
 			args = append(args, "--force-show")
 		case "force-movie":
