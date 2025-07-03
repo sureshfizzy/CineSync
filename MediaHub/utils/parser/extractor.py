@@ -789,6 +789,15 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 tech_start = i
                 break
 
+            # Check for standalone years
+            year_at_position = next((y for y in years if y['position'] == i), None)
+            if year_at_position and re.match(r'^\d{4}$', clean_part):
+                from MediaHub.utils.parser.parse_year import extract_year
+                extracted_year = extract_year(parsed.original)
+                if extracted_year == year_at_position['value']:
+                    tech_start = i
+                    break
+
             # Check for technical terms and release group patterns
             if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or  # Resolution
                 re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or  # Custom resolution like 3840x2160
