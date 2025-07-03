@@ -5,6 +5,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/config"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -206,12 +207,15 @@ type ReadlinkResponse struct {
 }
 
 type DeleteRequest struct {
-	Path string `json:"path"`
+	Path  string   `json:"path"`
+	Paths []string `json:"paths"`
 }
 
 type DeleteResponse struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Success      bool     `json:"success"`
+	Error        string   `json:"error,omitempty"`
+	DeletedCount int      `json:"deletedCount,omitempty"`
+	Errors       []string `json:"errors,omitempty"`
 }
 
 type RenameRequest struct {
@@ -235,6 +239,69 @@ func formatFileSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// calculateDirectorySize calculates the total size of all files in a directory recursively
+func calculateDirectorySize(dirPath string) int64 {
+	if stat, err := os.Stat(dirPath); err != nil || !stat.IsDir() {
+		return 0
+	}
+
+	// Try to get total size from database first
+	if dbSize := getDirectorySizeFromDB(dirPath); dbSize > 0 {
+		return dbSize
+	}
+
+	// Fallback to filesystem calculation
+	return calculateDirectorySizeFromFS(dirPath)
+}
+
+// getDirectorySizeFromDB attempts to get directory size from database
+func getDirectorySizeFromDB(dirPath string) int64 {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return 0
+	}
+
+	// Query for all files under this directory path
+	query := `SELECT SUM(file_size) FROM processed_files
+			  WHERE (file_path LIKE ? OR destination_path LIKE ?)
+			  AND file_size IS NOT NULL AND file_size > 0`
+
+	pathPattern := dirPath + "%"
+
+	var totalSize sql.NullInt64
+	err = mediaHubDB.QueryRow(query, pathPattern, pathPattern).Scan(&totalSize)
+	if err != nil || !totalSize.Valid {
+		return 0
+	}
+
+	return totalSize.Int64
+}
+
+// calculateDirectorySizeFromFS calculates size from filesystem (fallback)
+func calculateDirectorySizeFromFS(dirPath string) int64 {
+	var totalSize int64
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Recursively calculate subdirectory sizes
+			subDirPath := filepath.Join(dirPath, entry.Name())
+			totalSize += calculateDirectorySizeFromFS(subDirPath)
+		} else {
+			// Get file size from filesystem
+			if info, err := entry.Info(); err == nil {
+				totalSize += info.Size()
+			}
+		}
+	}
+
+	return totalSize
 }
 
 // getFileIcon returns a string representing the icon type for a file
@@ -647,6 +714,10 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 					logger.Info("Season folder %s inherited TMDB ID %s from parent directory", entry.Name(), tmdbID)
 				}
 			}
+
+			// Calculate directory size
+			dirSize := calculateDirectorySize(subDirPath)
+			fileInfo.Size = formatFileSize(dirSize)
 
 			logger.Info("Found directory: %s", filePath)
 		} else {
@@ -1225,7 +1296,19 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Path == "" {
+	// Handle bulk deletion if paths array is provided
+	if len(req.Paths) > 0 {
+		handleBulkDelete(w, req.Paths)
+		return
+	}
+
+	// Handle single file deletion
+	handleSingleDelete(w, req.Path)
+}
+
+// handleSingleDelete handles deletion of a single file
+func handleSingleDelete(w http.ResponseWriter, relativePath string) {
+	if relativePath == "" {
 		logger.Warn("Error: empty path provided")
 		http.Error(w, "Path is required", http.StatusBadRequest)
 		return
@@ -1235,7 +1318,7 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 	var absPath string
 
 	// Check if the path is absolute
-	if filepath.IsAbs(req.Path) {
+	if filepath.IsAbs(relativePath) {
 		destDir := env.GetString("DESTINATION_DIR", "")
 		if destDir == "" {
 			logger.Warn("Error: DESTINATION_DIR not configured for absolute path")
@@ -1250,7 +1333,7 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		reqAbsPath, err := filepath.Abs(req.Path)
+		reqAbsPath, err := filepath.Abs(relativePath)
 		if err != nil {
 			logger.Warn("Error: failed to get absolute path for request: %v", err)
 			http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -1264,12 +1347,12 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		path = req.Path
+		path = relativePath
 		absPath = reqAbsPath
 		logger.Info("Using absolute path from DESTINATION_DIR: %s", path)
 	} else {
 		// For relative paths, use the existing logic with rootDir
-		cleanPath := filepath.Clean(req.Path)
+		cleanPath := filepath.Clean(relativePath)
 		if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
 			logger.Warn("Error: invalid relative path: %s", cleanPath)
 			http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -1306,16 +1389,266 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = os.RemoveAll(path)
+	err := os.RemoveAll(path)
 	if err != nil {
 		logger.Warn("Error: failed to delete %s: %v", path, err)
 		http.Error(w, "Failed to delete file or directory", http.StatusInternalServerError)
 		return
 	}
 
+	// Also delete from database if the record exists
+	deleteFromDatabase(relativePath)
+
+	// Clean up empty parent directories and .tmdb files
+	cleanupEmptyDirectories(path)
+
 	logger.Info("Success: deleted %s", path)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+}
+
+// handleBulkDelete handles deletion of multiple files
+func handleBulkDelete(w http.ResponseWriter, paths []string) {
+	if len(paths) == 0 {
+		logger.Warn("Error: no paths provided for bulk deletion")
+		http.Error(w, "No paths provided", http.StatusBadRequest)
+		return
+	}
+
+	var deletedCount int
+	var errors []string
+
+	for _, relativePath := range paths {
+		if relativePath == "" {
+			errors = append(errors, "Empty path provided")
+			continue
+		}
+
+		var path string
+		var absPath string
+
+		// Check if the path is absolute
+		if filepath.IsAbs(relativePath) {
+			destDir := env.GetString("DESTINATION_DIR", "")
+			if destDir == "" {
+				errors = append(errors, fmt.Sprintf("DESTINATION_DIR not configured for absolute path: %s", relativePath))
+				continue
+			}
+
+			absDestDir, err := filepath.Abs(destDir)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to get absolute DESTINATION_DIR path for %s: %v", relativePath, err))
+				continue
+			}
+
+			reqAbsPath, err := filepath.Abs(relativePath)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to get absolute path for %s: %v", relativePath, err))
+				continue
+			}
+
+			// Check if the absolute path is within DESTINATION_DIR
+			if !strings.HasPrefix(reqAbsPath, absDestDir) {
+				errors = append(errors, fmt.Sprintf("Absolute path outside DESTINATION_DIR: %s", reqAbsPath))
+				continue
+			}
+
+			path = relativePath
+			absPath = reqAbsPath
+		} else {
+			// For relative paths, use the existing logic with rootDir
+			cleanPath := filepath.Clean(relativePath)
+			if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
+				errors = append(errors, fmt.Sprintf("Invalid relative path: %s", cleanPath))
+				continue
+			}
+
+			path = filepath.Join(rootDir, cleanPath)
+
+			var err error
+			absPath, err = filepath.Abs(path)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to get absolute path for %s: %v", relativePath, err))
+				continue
+			}
+
+			absRoot, err := filepath.Abs(rootDir)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Failed to get absolute root path for %s: %v", relativePath, err))
+				continue
+			}
+
+			if !strings.HasPrefix(absPath, absRoot) {
+				errors = append(errors, fmt.Sprintf("Relative path outside root directory: %s", absPath))
+				continue
+			}
+		}
+
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			errors = append(errors, fmt.Sprintf("File or directory not found: %s", path))
+			continue
+		}
+
+		err := os.RemoveAll(path)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to delete %s: %v", path, err))
+			continue
+		}
+
+		// Also delete from database if the record exists
+		deleteFromDatabase(relativePath)
+
+		// Clean up empty parent directories and .tmdb files
+		cleanupEmptyDirectories(path)
+
+		logger.Info("Success: deleted %s", path)
+		deletedCount++
+	}
+
+	// Determine overall success
+	success := deletedCount > 0
+	if len(errors) > 0 && deletedCount == 0 {
+		success = false
+	}
+
+	response := DeleteResponse{
+		Success:      success,
+		DeletedCount: deletedCount,
+	}
+
+	if len(errors) > 0 {
+		response.Errors = errors
+		if deletedCount == 0 {
+			response.Error = fmt.Sprintf("Failed to delete any files. %d errors occurred.", len(errors))
+		} else {
+			response.Error = fmt.Sprintf("Deleted %d files with %d errors.", deletedCount, len(errors))
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// deleteFromDatabase removes a file record from the MediaHub database if it exists
+func deleteFromDatabase(filePath string) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for cleanup: %v", err)
+		return
+	}
+
+	// Try to delete the record from processed_files table
+	deleteQuery := `DELETE FROM processed_files WHERE file_path = ? OR destination_path = ?`
+	result, err := mediaHubDB.Exec(deleteQuery, filePath, filePath)
+	if err != nil {
+		logger.Warn("Failed to delete database record for %s: %v", filePath, err)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.Warn("Failed to get rows affected for database cleanup: %v", err)
+		return
+	}
+
+	if rowsAffected > 0 {
+		logger.Info("Deleted %d database record(s) for %s", rowsAffected, filePath)
+
+		// Notify about the database change
+		db.NotifyDashboardStatsChanged()
+		db.NotifyFileOperationChanged()
+	}
+}
+
+// cleanupEmptyDirectories removes empty parent directories and .tmdb files
+func cleanupEmptyDirectories(deletedPath string) {
+	parentDir := filepath.Dir(deletedPath)
+
+	for {
+		// Check if this directory is empty
+		isEmpty, hasOnlyTmdb, err := isDirectoryEmpty(parentDir)
+		if err != nil {
+			logger.Warn("Failed to check if directory is empty: %s, error: %v", parentDir, err)
+			break
+		}
+
+		// If directory has files other than .tmdb, stop cleanup
+		if !isEmpty && !hasOnlyTmdb {
+			break
+		}
+
+		// If directory only has .tmdb files, delete them
+		if hasOnlyTmdb {
+			tmdbFiles, err := filepath.Glob(filepath.Join(parentDir, "*.tmdb"))
+			if err != nil {
+				logger.Warn("Failed to find .tmdb files in %s: %v", parentDir, err)
+			} else {
+				for _, tmdbFile := range tmdbFiles {
+					if err := os.Remove(tmdbFile); err != nil {
+						logger.Warn("Failed to delete .tmdb file %s: %v", tmdbFile, err)
+					} else {
+						logger.Info("Deleted .tmdb file: %s", tmdbFile)
+					}
+				}
+			}
+
+			// Check again if directory is now empty
+			isEmpty, _, err = isDirectoryEmpty(parentDir)
+			if err != nil || !isEmpty {
+				break
+			}
+		}
+
+		// If directory is empty, delete it
+		if isEmpty {
+			if err := os.Remove(parentDir); err != nil {
+				logger.Warn("Failed to remove empty directory %s: %v", parentDir, err)
+				break
+			}
+			logger.Info("Removed empty directory: %s", parentDir)
+		}
+
+		// Move up to the parent directory
+		nextParent := filepath.Dir(parentDir)
+
+		// Stop if we've reached the root or if we're not making progress
+		if nextParent == parentDir || nextParent == "." || nextParent == "/" {
+			break
+		}
+
+		parentDir = nextParent
+	}
+}
+
+// isDirectoryEmpty checks if a directory is empty or contains only .tmdb files
+func isDirectoryEmpty(dirPath string) (isEmpty bool, hasOnlyTmdb bool, err error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false, false, err
+	}
+
+	if len(entries) == 0 {
+		return true, false, nil
+	}
+
+	// Check if all files are .tmdb files
+	tmdbCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return false, false, nil
+		}
+		if strings.HasSuffix(strings.ToLower(entry.Name()), ".tmdb") {
+			tmdbCount++
+		}
+	}
+
+	// If all files are .tmdb files
+	if tmdbCount == len(entries) && tmdbCount > 0 {
+		return false, true, nil
+	}
+
+	// If there are non-.tmdb files
+	return false, false, nil
 }
 
 // HandleRename renames a file or directory at the given relative path

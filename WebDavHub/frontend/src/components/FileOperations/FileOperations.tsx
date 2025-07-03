@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText } from '@mui/material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse } from '@mui/material';
 import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -56,10 +56,6 @@ function a11yProps(index: number) {
   };
 }
 
-
-
-// Remove unused interface
-
 function FileOperations() {
   const [mainTabValue, setMainTabValue] = useState(0);
   const [tabValue, setTabValue] = useState(0);
@@ -77,8 +73,6 @@ function FileOperations() {
     skipped: 0,
     deleted: 0,
   });
-
-
 
   // Source File Browser state
   const [sourceFiles, setSourceFiles] = useState<FileItem[]>([]);
@@ -114,12 +108,15 @@ function FileOperations() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
+  // Bulk selection state
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
+
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
   const ITEMS_PER_PAGE = 50;
-
-
 
   const filteredSourceFiles = sourceFiles;
 
@@ -466,6 +463,7 @@ function FileOperations() {
     setTabValue(newValue);
     setCurrentPage(1);
     setInitialLoading(false);
+    setSelectedFiles(new Set());
 
     if (newValue === 0) {
       fetchSourceFilesData(sourcePage, sourceIndex);
@@ -531,6 +529,126 @@ function FileOperations() {
       setError(error.response?.data?.error || error.message || 'Failed to delete skipped files');
     } finally {
       setBulkDeleteLoading(false);
+    }
+  };
+
+  // Bulk selection handlers
+  const handleFileSelect = (fileId: string, checked: boolean) => {
+    setSelectedFiles(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(fileId);
+      } else {
+        newSet.delete(fileId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allFileIds = operations.map(op => op.id);
+      setSelectedFiles(new Set(allFileIds));
+    } else {
+      setSelectedFiles(new Set());
+    }
+  };
+
+  const handleBulkAction = () => {
+    setBulkActionDialogOpen(true);
+  };
+
+  const handleBulkActionConfirm = async () => {
+    if (selectedFiles.size === 0) return;
+
+    setBulkActionLoading(true);
+    try {
+      // Get selected operations
+      const selectedOperations = operations.filter(op => selectedFiles.has(op.id));
+
+      // Separate files with destination paths from those without
+      const filesWithDestination = selectedOperations.filter(op => op.destinationPath && op.destinationPath.trim() !== '');
+      const filesWithoutDestination = selectedOperations.filter(op => !op.destinationPath || op.destinationPath.trim() === '');
+
+      let totalDeleted = 0;
+      let errors: string[] = [];
+
+      // Delete actual files for operations with destination paths
+      if (filesWithDestination.length > 0) {
+        try {
+          const destinationPaths = filesWithDestination.map(op => op.destinationPath);
+          const response = await axios.post('/api/delete', {
+            paths: destinationPaths
+          });
+
+          if (response.data.success) {
+            totalDeleted += response.data.deletedCount || filesWithDestination.length;
+
+            if (response.data.errors && response.data.errors.length > 0) {
+              errors = [...errors, ...response.data.errors];
+            }
+          }
+        } catch (error: any) {
+          console.error('Failed to delete files with destination paths:', error);
+          errors.push(`Failed to delete ${filesWithDestination.length} files: ${error.response?.data?.error || error.message}`);
+        }
+      }
+
+      // Delete database records for files without destination paths (failed files)
+      if (filesWithoutDestination.length > 0) {
+        try {
+          const filePaths = filesWithoutDestination.map(op => op.filePath);
+          const response = await axios.delete('/api/file-operations/bulk', {
+            data: { filePaths }
+          });
+
+          if (response.data.success) {
+            totalDeleted += response.data.deletedCount || filesWithoutDestination.length;
+          }
+        } catch (error: any) {
+          console.error('Failed to delete database records:', error);
+          errors.push(`Failed to delete ${filesWithoutDestination.length} database records: ${error.response?.data?.error || error.message}`);
+        }
+      }
+
+      if (totalDeleted > 0) {
+        console.log(`Bulk deleted ${totalDeleted} files/records`);
+
+        if (errors.length > 0) {
+          console.warn('Some files could not be deleted:', errors);
+          setError(`Deleted ${totalDeleted} items, but ${errors.length} errors occurred. Check console for details.`);
+        }
+
+        // Remove deleted files from operations
+        setOperations(prev => prev.filter(op => !selectedFiles.has(op.id)));
+        setTotalOperations(prev => prev - totalDeleted);
+
+        // Update status counts
+        const deletedByStatus = selectedOperations.reduce((acc, op) => {
+          acc[op.status] = (acc[op.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+        setStatusCounts(prev => {
+          const updated = { ...prev };
+          Object.entries(deletedByStatus).forEach(([status, count]) => {
+            if (status in updated) {
+              (updated as any)[status] = Math.max(0, (updated as any)[status] - count);
+            }
+          });
+          return updated;
+        });
+      } else if (errors.length > 0) {
+        setError(`Failed to delete any files. ${errors.length} errors occurred.`);
+      }
+
+      setSelectedFiles(new Set());
+      setBulkActionDialogOpen(false);
+    } catch (error: any) {
+      console.error('Failed to delete selected files:', error.response?.data?.error || error.message);
+      setError(error.response?.data?.error || error.message || 'Failed to delete selected files');
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -817,6 +935,7 @@ function FileOperations() {
 
   const renderMobileCard = React.useCallback((file: FileOperation, _index: number) => {
     const isExpanded = expandedCards.has(file.id);
+    const isSelected = selectedFiles.has(file.id);
 
     return (
       <Card
@@ -825,16 +944,15 @@ function FileOperations() {
           mb: 1.5,
           borderRadius: 3,
           border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
+          borderColor: isSelected ? 'primary.main' : 'divider',
+          bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
           overflow: 'hidden',
+          transition: 'all 0.2s ease',
         }}
       >
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Box
-            onClick={() => toggleCardExpansion(file.id)}
             sx={{
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -842,6 +960,21 @@ function FileOperations() {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
+              <Checkbox
+                checked={isSelected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleFileSelect(file.id, e.target.checked);
+                }}
+                size="small"
+                sx={{
+                  p: 0.5,
+                  color: 'text.secondary',
+                  '&.Mui-checked': {
+                    color: 'primary.main',
+                  },
+                }}
+              />
               <Box sx={{
                 p: 1,
                 borderRadius: 2,
@@ -930,7 +1063,11 @@ function FileOperations() {
                   </IconButton>
                 </Tooltip>
               )}
-              <IconButton size="small" sx={{ color: 'text.secondary' }}>
+              <IconButton
+                size="small"
+                onClick={() => toggleCardExpansion(file.id)}
+                sx={{ color: 'text.secondary' }}
+              >
                 {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               </IconButton>
             </Box>
@@ -1043,7 +1180,7 @@ function FileOperations() {
         </CardContent>
       </Card>
     );
-  }, [expandedCards, theme]);
+  }, [expandedCards, theme, selectedFiles]);
 
   const renderFileTable = (files: FileOperation[], emptyMessage: string) => {
     if (files.length === 0) {
@@ -1511,6 +1648,133 @@ function FileOperations() {
           </Tooltip>
         )}
       </Box>
+
+      {/* Bulk Selection Toolbar */}
+      {tabValue > 0 && (
+        <Collapse in={selectedFiles.size > 0} timeout={300}>
+          <Box sx={{ mb: 3 }}>
+            <Box
+              sx={{
+                background: theme.palette.mode === 'dark'
+                  ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, ${alpha(theme.palette.primary.main, 0.08)} 100%)`
+                  : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.primary.main, 0.04)} 100%)`,
+                backdropFilter: 'blur(20px)',
+                borderRadius: 4,
+                border: theme.palette.mode === 'dark'
+                  ? `1px solid ${alpha(theme.palette.primary.main, 0.3)}`
+                  : `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+                boxShadow: theme.palette.mode === 'dark'
+                  ? `0 8px 32px ${alpha(theme.palette.primary.main, 0.15)}, 0 2px 8px ${alpha('#000', 0.3)}`
+                  : `0 8px 32px ${alpha(theme.palette.primary.main, 0.12)}, 0 2px 8px ${alpha('#000', 0.08)}`,
+                px: 3,
+                py: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                position: 'relative',
+                overflow: 'hidden',
+                opacity: selectedFiles.size > 0 ? 1 : 0,
+                transform: selectedFiles.size > 0 ? 'scale(1)' : 'scale(0.95)',
+                transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '2px',
+                  background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  borderRadius: '4px 4px 0 0',
+                },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 2,
+                    py: 1,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                  }}
+                >
+                  <Checkbox
+                    checked={selectedFiles.size === operations.length && operations.length > 0}
+                    indeterminate={selectedFiles.size > 0 && selectedFiles.size < operations.length}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    size="small"
+                    sx={{
+                      p: 0,
+                      color: theme.palette.primary.main,
+                      '&.Mui-checked': {
+                        color: theme.palette.primary.main,
+                      },
+                      '&.MuiCheckbox-indeterminate': {
+                        color: theme.palette.primary.main,
+                      },
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    fontWeight="600"
+                    sx={{
+                      color: theme.palette.primary.main,
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    {selectedFiles.size === operations.length && operations.length > 0
+                      ? `All ${operations.length} selected`
+                      : selectedFiles.size > 0
+                      ? `${selectedFiles.size} selected`
+                      : 'Select all'
+                    }
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Button
+                  variant="contained"
+                  size="medium"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleBulkAction()}
+                  disabled={selectedFiles.size === 0 || bulkActionLoading}
+                  sx={{
+                    bgcolor: theme.palette.error.main,
+                    color: '#fff',
+                    fontWeight: 600,
+                    borderRadius: 3,
+                    px: 3,
+                    py: 1,
+                    textTransform: 'none',
+                    boxShadow: `0 4px 16px ${alpha(theme.palette.error.main, 0.3)}`,
+                    border: 'none',
+                    '&:hover': {
+                      bgcolor: theme.palette.error.dark,
+                      boxShadow: `0 6px 20px ${alpha(theme.palette.error.main, 0.4)}`,
+                      transform: 'translateY(-1px)',
+                    },
+                    '&:active': {
+                      transform: 'translateY(0)',
+                    },
+                    '&:disabled': {
+                      bgcolor: alpha(theme.palette.error.main, 0.3),
+                      color: alpha('#fff', 0.5),
+                      boxShadow: 'none',
+                    },
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  Delete
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        </Collapse>
+      )}
 
       {/* Search Input for each tab */}
       <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
@@ -2352,6 +2616,127 @@ function FileOperations() {
             }}
           >
             {bulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog
+        open={bulkActionDialogOpen}
+        onClose={() => setBulkActionDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            backgroundColor: theme.palette.background.paper,
+            background: theme.palette.mode === 'dark'
+              ? `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${alpha(theme.palette.error.main, 0.08)} 100%)`
+              : `linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)`,
+            border: theme.palette.mode === 'dark'
+              ? `2px solid ${theme.palette.error.main}40`
+              : `2px solid #fecaca`,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+              : '0 8px 32px rgba(0, 0, 0, 0.15)',
+            backdropFilter: 'blur(10px)',
+          }
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: theme.palette.mode === 'dark'
+                ? 'rgba(0, 0, 0, 0.7)'
+                : 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+            }
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: 'error.main',
+          fontWeight: 600,
+          backgroundColor: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.error.main, 0.15)
+            : '#fef2f2',
+          borderBottom: theme.palette.mode === 'dark'
+            ? `2px solid ${theme.palette.error.main}60`
+            : `2px solid #fecaca`,
+        }}>
+          <DeleteIcon />
+          Delete Selected Files
+        </DialogTitle>
+        <DialogContent sx={{
+          background: 'transparent',
+        }}>
+          <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
+            Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected files?
+          </DialogContentText>
+          <DialogContentText sx={{
+            color: 'text.primary',
+            fontSize: '0.875rem',
+            bgcolor: theme.palette.mode === 'dark'
+              ? alpha(theme.palette.background.default, 0.5)
+              : '#f9fafb',
+            p: 2,
+            borderRadius: 2,
+            borderLeft: theme.palette.mode === 'dark'
+              ? `4px solid ${theme.palette.error.main}`
+              : `4px solid #f87171`,
+            backdropFilter: 'blur(10px)',
+          }}>
+            This action will permanently remove the selected file records from the database. The original files will remain untouched in their source locations.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{
+          p: 3,
+          pt: 1,
+          gap: 1,
+          background: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.default, 0.3)
+            : '#f9fafb',
+          backdropFilter: 'blur(10px)',
+        }}>
+          <Button
+            onClick={() => setBulkActionDialogOpen(false)}
+            disabled={bulkActionLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkActionConfirm}
+            color="error"
+            variant="contained"
+            disabled={bulkActionLoading}
+            startIcon={bulkActionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2,
+              ...(theme.palette.mode === 'light' && {
+                bgcolor: '#ef4444',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: 'none',
+                '&:hover': {
+                  bgcolor: '#dc2626',
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+                '&:disabled': {
+                  bgcolor: alpha('#ef4444', 0.3),
+                  color: alpha('#ffffff', 0.7),
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+              })
+            }}
+          >
+            {bulkActionLoading ? 'Deleting...' : 'Delete Selected'}
           </Button>
         </DialogActions>
       </Dialog>

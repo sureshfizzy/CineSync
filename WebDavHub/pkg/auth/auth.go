@@ -46,6 +46,7 @@ func isAuthEndpoint(path string) bool {
 		"/api/mediahub/message",
 		"/api/mediahub/events",
 		"/api/file-operations",
+		"/api/file-operations/bulk",
 		"/api/file-operations/events",
 		"/api/source-browse",
 		"/api/database/source-files",

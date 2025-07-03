@@ -38,7 +38,11 @@ func HandleFileOperations(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handleTrackFileOperation(w, r)
 	case http.MethodDelete:
-		handleBulkDeleteSkippedFiles(w, r)
+		if strings.HasSuffix(r.URL.Path, "/bulk") {
+			handleBulkDeleteSelectedFiles(w, r)
+		} else {
+			handleBulkDeleteSkippedFiles(w, r)
+		}
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -231,7 +235,74 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// BulkActionRequest represents a bulk action request
+type BulkActionRequest struct {
+	FilePaths []string `json:"filePaths"`
+}
 
+// handleBulkDeleteSelectedFiles handles bulk deletion of selected files from the database only
+func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
+	var req BulkActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.FilePaths) == 0 {
+		http.Error(w, "No file paths provided", http.StatusBadRequest)
+		return
+	}
+
+	// Get database connection
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection: %v", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Create placeholders for the IN clause
+	placeholders := make([]string, len(req.FilePaths))
+	args := make([]interface{}, len(req.FilePaths))
+	for i, path := range req.FilePaths {
+		placeholders[i] = "?"
+		args[i] = path
+	}
+
+	// Delete selected files by file path
+	deleteQuery := fmt.Sprintf(`
+		DELETE FROM processed_files
+		WHERE file_path IN (%s)
+	`, strings.Join(placeholders, ","))
+
+	result, err := mediaHubDB.Exec(deleteQuery, args...)
+	if err != nil {
+		logger.Warn("Failed to delete selected files from database: %v", err)
+		http.Error(w, "Failed to delete selected files from database", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.Warn("Failed to get rows affected: %v", err)
+		rowsAffected = int64(len(req.FilePaths))
+	}
+
+	logger.Info("Bulk deleted %d selected files from database", rowsAffected)
+
+	// Notify dashboard about stats change
+	NotifyDashboardStatsChanged()
+
+	// Notify file operations subscribers about the change
+	NotifyFileOperationChanged()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Successfully deleted %d selected files from database", rowsAffected),
+		"deletedCount": rowsAffected,
+	})
+}
 
 // getFileOperationsFromMediaHub reads file operations from MediaHub database
 func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery string) ([]FileOperation, int, error) {
