@@ -98,7 +98,23 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                         # Try to find by searching file contents in the directory
                         log_message("Searching for files inside the directory that might have symlinks", level="INFO")
 
-                        # Try to list contents if directory still exists
+                        # Query processed_files table for files that were in the deleted directory
+                        log_message("Querying processed_files table for files in deleted directory", level="DEBUG")
+                        directory_pattern = f"{removed_path}{os.sep}%"
+                        cursor1.execute("""
+                            SELECT file_path, destination_path, tmdb_id, season_number
+                            FROM processed_files
+                            WHERE file_path LIKE ? OR file_path = ?
+                        """, (directory_pattern, removed_path))
+                        processed_files_results = cursor1.fetchall()
+                        log_message(f"Found {len(processed_files_results)} entries in processed_files for deleted directory", level="DEBUG")
+
+                        for file_path, dest_path, tmdb_id, season_number in processed_files_results:
+                            if dest_path:
+                                all_paths.add((file_path, dest_path, tmdb_id, season_number))
+                                log_message(f"Added from processed_files: source={file_path}, symlink={dest_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="DEBUG")
+
+                        # Try to list contents if directory still exists (fallback)
                         try:
                             if os.path.exists(removed_path) and os.path.isdir(removed_path):
                                 for root, _, files in os.walk(removed_path):
@@ -136,6 +152,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                         except Exception as e:
                             log_message(f"Error exploring directory contents: {e}", level="WARNING")
 
+                    if all_paths:
+                        log_message(f"Found {len(all_paths)} symlinks to process for directory: {removed_path}", level="INFO")
+                    else:
+                        log_message(f"No symlinks found for directory after all searches: {removed_path}", level="WARNING")
+
                     for item in all_paths:
                         source_path, symlink_path = item[0], item[1]
                         tmdb_id = item[2] if len(item) > 2 else None
@@ -154,7 +175,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 if os.path.islink(safe_path):
                                     try:
                                         target = os.readlink(safe_path)
-                                        log_message(f"Found symlink {safe_path} pointing to: {target}", level="DEBUG")
+                                        # Normalize the target path to remove Windows \\?\ prefix
+                                        normalized_target = normalize_file_path(target)
+                                        log_message(f"Found symlink {safe_path} pointing to: {normalized_target}", level="DEBUG")
 
                                         log_message(f"Deleting symlink: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
                                         os.remove(safe_path)
@@ -301,7 +324,8 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                     if os.path.islink(possible_dest_path):
                                         # It's a symlink - check if it's broken
                                         target = os.readlink(possible_dest_path)
-                                        if not os.path.exists(target) or target == removed_path:
+                                        normalized_target = normalize_file_path(target)
+                                        if not os.path.exists(target) or normalized_target == removed_path:
                                             os.remove(possible_dest_path)
                                             symlinks_deleted = True
                                             log_message(f"Deleted broken symlink: {possible_dest_path}", level="INFO")
@@ -340,7 +364,8 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         if os.path.islink(file_path):
                                             try:
                                                 target = os.readlink(file_path)
-                                                if target == removed_path or (not os.path.exists(target) and removed_path in target):
+                                                normalized_target = normalize_file_path(target)
+                                                if normalized_target == removed_path or (not os.path.exists(target) and removed_path in normalized_target):
                                                     log_message(f"Found broken symlink pointing to removed file: {file_path}", level="INFO")
                                                     os.remove(file_path)
                                                     symlinks_deleted = True
@@ -376,6 +401,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         if os.path.lexists(dest_path):
                                             if os.path.islink(dest_path):
                                                 target = os.readlink(dest_path)
+                                                normalized_target = normalize_file_path(target)
                                                 if not os.path.exists(target):
                                                     log_message(f"Found broken symlink: {dest_path}", level="INFO")
                                                     os.remove(dest_path)
@@ -404,7 +430,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 if os.path.islink(safe_path):
                                     try:
                                         target = os.readlink(safe_path)
-                                        log_message(f"Deleting symlink: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
+                                        # Normalize the target path to remove Windows \\?\ prefix
+                                        normalized_target = normalize_file_path(target)
+                                        log_message(f"Deleting symlink: {safe_path} -> {normalized_target}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
                                         os.remove(safe_path)
                                         symlinks_deleted = True
 
@@ -540,7 +568,8 @@ def _check_all_symlinks(dest_dir):
         file_path = os.path.join(dest_dir, file)
         if os.path.islink(file_path):
             target = os.readlink(file_path)
-            log_message(f"Checking symlink: {file_path} -> {target}", level="DEBUG")
+            normalized_target = normalize_file_path(target)
+            log_message(f"Checking symlink: {file_path} -> {normalized_target}", level="DEBUG")
 
             if not os.path.exists(target):
                 log_message(f"Deleting broken symlink: {file_path}", level="INFO")
@@ -592,9 +621,9 @@ def get_existing_symlink_info(src_file):
             if os.path.islink(full_path):
                 target_path = os.readlink(full_path)
 
-                # Normalize paths only on Windows
-                normalized_src_file = normalize_path(src_file)
-                normalized_target_path = normalize_path(target_path)
+                # Normalize paths for consistent comparison
+                normalized_src_file = normalize_file_path(src_file)
+                normalized_target_path = normalize_file_path(target_path)
 
                 if normalized_target_path == normalized_src_file:
                     return full_path
