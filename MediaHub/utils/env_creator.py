@@ -6,7 +6,10 @@ def get_env_file_path():
         return '/app/.env'
 
     cwd = os.getcwd()
-    if os.path.basename(cwd) == 'MediaHub':
+    basename = os.path.basename(cwd)
+
+    # Handle both MediaHub and WebDavHub directories (for Python bridge execution)
+    if basename == 'MediaHub' or basename == 'WebDavHub':
         parent_dir = os.path.dirname(cwd)
         return os.path.join(parent_dir, '.env')
 
