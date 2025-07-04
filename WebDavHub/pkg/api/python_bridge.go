@@ -181,13 +181,76 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	var finalAbsPath string
 
-	if filepath.IsAbs(cleanPath) {
-		// For absolute paths, use them directly
+	if strings.HasPrefix(cleanPath, "/") && runtime.GOOS != "windows" {
+		logger.Debug("Unix path detected: '%s'", cleanPath)
+		var foundPath string
+
+		if _, err := os.Lstat(cleanPath); err == nil {
+			foundPath = cleanPath
+			logger.Debug("Found Unix path directly: '%s'", cleanPath)
+		} else {
+			logger.Debug("Absolute path not found, trying as relative to rootDir: '%s'", rootDir)
+			relativePath := strings.TrimPrefix(cleanPath, "/")
+			candidatePath := filepath.Join(rootDir, relativePath)
+			logger.Debug("Trying candidate path relative to rootDir: '%s'", candidatePath)
+
+			if _, err := os.Lstat(candidatePath); err == nil {
+				foundPath = candidatePath
+				logger.Debug("Resolved Unix path '%s' relative to rootDir: '%s'", cleanPath, candidatePath)
+			} else {
+				sourceDirs := env.GetString("SOURCE_DIR", "")
+				logger.Debug("Not found in destination, trying SOURCE_DIR: '%s'", sourceDirs)
+
+				if sourceDirs != "" {
+					sourceDirList := strings.Split(sourceDirs, ",")
+
+					for _, sourceDir := range sourceDirList {
+						sourceDir = strings.TrimSpace(sourceDir)
+						if sourceDir == "" {
+							continue
+						}
+
+						logger.Debug("Checking source directory: '%s'", sourceDir)
+
+						candidatePath := filepath.Join(sourceDir, relativePath)
+						logger.Debug("Trying candidate path (with virtual prefix): '%s'", candidatePath)
+
+						if _, err := os.Lstat(candidatePath); err == nil {
+							foundPath = candidatePath
+							logger.Debug("Resolved Unix-style path '%s' to '%s'", cleanPath, foundPath)
+							break
+						}
+
+						pathParts := strings.Split(relativePath, "/")
+						if len(pathParts) > 1 {
+							withoutPrefix := strings.Join(pathParts[1:], "/")
+							candidatePath2 := filepath.Join(sourceDir, withoutPrefix)
+							logger.Debug("Trying candidate path (without virtual prefix): '%s'", candidatePath2)
+
+							if _, err := os.Lstat(candidatePath2); err == nil {
+								foundPath = candidatePath2
+								logger.Debug("Resolved Unix-style path '%s' to '%s' (removed virtual prefix)", cleanPath, foundPath)
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if foundPath != "" {
+			finalAbsPath = foundPath
+			logger.Debug("Successfully resolved Unix path '%s' to '%s'", cleanPath, foundPath)
+		} else {
+			logger.Error("Unix-style path '%s' not found in destination or source directories", cleanPath)
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+	} else if filepath.IsAbs(cleanPath) {
 		finalAbsPath = cleanPath
 	} else {
 		absPath := filepath.Join(rootDir, cleanPath)
 
-		// Verify the path exists and is within rootDir
 		absRoot, err := filepath.Abs(rootDir)
 		if err != nil {
 			logger.Error("Failed to get absolute root dir for relative path: %v", err)
@@ -208,7 +271,6 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if file or symlink exists
 	fileInfo, err := os.Lstat(finalAbsPath)
 	if os.IsNotExist(err) {
 		logger.Error("File not found: '%s'", finalAbsPath)
@@ -261,7 +323,6 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Prepare command args with resolved real path
 	args := []string{"../MediaHub/main.py", realPath}
 	if req.DisableMonitor {
 		args = append(args, "--disable-monitor")
