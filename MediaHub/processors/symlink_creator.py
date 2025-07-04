@@ -229,6 +229,10 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
     # Skip metadata and auxiliary files
     if should_skip_processing(file):
+        reason = "Metadata or auxiliary file"
+        log_message(f"Skipping metadata/auxiliary file: {file} ({reason})", level="DEBUG")
+        log_message(f"Adding metadata/auxiliary file to database: {src_file} (reason: {reason})", level="DEBUG")
+        save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
     # Check for unsupported file type
@@ -449,6 +453,9 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 cache_first_selection(result_tmdb_id, show_name)
         if result is None or result[0] is None:
             log_message(f"Show processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            reason = "Show processing failed or was skipped"
+            log_message(f"Adding failed show processing to database: {src_file} (reason: {reason})", level="DEBUG")
+            save_processed_file(src_file, None, tmdb_id, season_number, reason)
             if force and 'old_symlink_info' in locals():
                 _cleanup_old_symlink(old_symlink_info)
             return
@@ -477,6 +484,9 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         # Check if result is None or the first item (dest_file) is None
         if result is None or result[0] is None:
             log_message(f"Movie processing failed or was skipped for {file}. Skipping symlink creation.", level="WARNING")
+            reason = "Movie processing failed or was skipped"
+            log_message(f"Adding failed movie processing to database: {src_file} (reason: {reason})", level="DEBUG")
+            save_processed_file(src_file, None, tmdb_id, season_number, reason)
             if force and 'old_symlink_info' in locals():
                 _cleanup_old_symlink(old_symlink_info)
             return
