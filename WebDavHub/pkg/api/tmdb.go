@@ -71,7 +71,7 @@ func getTmdbApiKey() string {
 	return envKey
 }
 
-var tmdbRateLimit = 100 // TMDB can handle much more than 35/10s
+var tmdbRateLimit = 500 // TMDB legacy limits removed, now ~50 req/sec (500 per 10s)
 var tmdbRateWindow = 10 * time.Second
 var tmdbRateMap = make(map[string][]time.Time)
 var tmdbRateMu sync.Mutex
