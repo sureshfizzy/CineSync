@@ -33,6 +33,7 @@ func GetCredentials() Credentials {
 // isAuthEndpoint checks if the request is for an authentication-related endpoint
 func isAuthEndpoint(path string) bool {
 	authEndpoints := []string{
+		"/api/health",
 		"/api/auth/enabled",
 		"/api/auth/test",
 		"/api/auth/login",

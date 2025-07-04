@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           config.headers['Authorization'] = `Bearer ${token}`;
         } else {
           const authOptionalPaths = [
-            '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
+            '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
             '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
             '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error.response && error.response.status === 401) {
           // Check if this is an endpoint where auth might be optional
           const authOptionalPaths = [
-            '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
+            '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
             '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
             '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];

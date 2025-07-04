@@ -106,6 +106,7 @@ func main() {
 
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/health", api.HandleHealth)
 	apiMux.HandleFunc("/api/config-status", api.HandleConfigStatus)
 	apiMux.HandleFunc("/api/files/", api.HandleFiles)
 	apiMux.HandleFunc("/api/source-browse/", api.HandleSourceFiles)
