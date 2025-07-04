@@ -307,7 +307,6 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         if os.path.islink(full_dest_file):
             try:
                 link_target = normalize_file_path(os.readlink(full_dest_file))
-                log_message(f"Checking symlink in dest_index: {full_dest_file} -> {link_target}", level="DEBUG")
                 if link_target == normalized_src_file:
                     existing_symlink = full_dest_file
                     log_message(f"Found existing symlink in dest_index: {existing_symlink}", level="DEBUG")
@@ -753,12 +752,18 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
             log_message(f"Resolved symlink for single_path: {original_single_path} -> {resolved_single_path}", level="INFO")
         src_dirs = [resolved_single_path]
 
-    # Load the record of processed files
-    processed_files_log = load_processed_files()
+    # Fast path for single file processing - defer heavy operations
+    is_single_file = single_path and os.path.isfile(single_path)
+
+    # Only load processed files if not single file or if force mode is disabled
+    processed_files_log = set() if is_single_file and force else load_processed_files()
 
     if auto_select:
         # Use thread pool for parallel processing when auto-select is enabled
         max_workers = get_max_processes()
+
+        # Lazy-load destination index only when needed
+        dest_index = None
 
         tasks = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -773,9 +778,18 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     if should_skip_processing(file):
                         continue
 
-                    # Get appropriate destination index based on mode
-                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                else build_dest_index(dest_dir))
+                    # Skip destination index building for single files or force mode
+                    if dest_index is None:
+                        if is_single_file:
+                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set for single file processing
+                        elif force:
+                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set when using force mode
+                        else:
+                            log_message("Building destination index...", level="INFO")
+                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                        else build_dest_index(dest_dir))
 
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                     tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
@@ -784,9 +798,18 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     actual_dir = os.path.basename(normalize_file_path(src_dir))
                     log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
-                    # Get appropriate destination index based on mode
-                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                else build_dest_index(dest_dir))
+                    # Skip destination index building for single files or force mode
+                    if dest_index is None:
+                        if is_single_file:
+                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set for single file processing
+                        elif force:
+                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set when using force mode
+                        else:
+                            log_message("Building destination index...", level="INFO")
+                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                        else build_dest_index(dest_dir))
 
                     for root, _, files in os.walk(src_dir):
                         for file in files:
@@ -800,8 +823,13 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
                             src_file = os.path.join(root, file)
 
-                            if mode == 'create' and src_file in processed_files_log and not force:
-                                continue
+                            # Fast database check for single files, use set for batch operations
+                            if mode == 'create' and not force:
+                                if is_single_file:
+                                    if is_file_processed(src_file):
+                                        continue
+                                elif src_file in processed_files_log:
+                                    continue
 
                             args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                             tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
@@ -822,6 +850,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     log_message(f"Error processing task: {str(e)}", level="ERROR")
     else:
         # Process sequentially when auto-select is disabled
+        dest_index = None  # Lazy-load destination index
+
         for src_dir in src_dirs:
             if error_event.is_set():
                 log_message("Stopping further processing due to an earlier error.", level="WARNING")
@@ -838,9 +868,18 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     if should_skip_processing(file):
                         continue
 
-                    # Get appropriate destination index based on mode
-                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                else build_dest_index(dest_dir))
+                    # Skip destination index building for single files or force mode
+                    if dest_index is None:
+                        if is_single_file:
+                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set for single file processing
+                        elif force:
+                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set when using force mode
+                        else:
+                            log_message("Building destination index...", level="INFO")
+                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                        else build_dest_index(dest_dir))
 
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                     result = process_file(args, processed_files_log, force, batch_apply)
@@ -854,9 +893,18 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     actual_dir = os.path.basename(normalize_file_path(src_dir))
                     log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
 
-                    # Get appropriate destination index based on mode
-                    dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                else build_dest_index(dest_dir))
+                    # Skip destination index building for single files or force mode
+                    if dest_index is None:
+                        if is_single_file:
+                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set for single file processing
+                        elif force:
+                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
+                            dest_index = set()  # Empty set when using force mode
+                        else:
+                            log_message("Building destination index...", level="INFO")
+                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
+                                        else build_dest_index(dest_dir))
 
                     for root, _, files in os.walk(src_dir):
                         for file in files:
@@ -870,8 +918,13 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
                             src_file = os.path.join(root, file)
 
-                            if mode == 'create' and src_file in processed_files_log and not force:
-                                continue
+                            # Fast database check for single files, use set for batch operations
+                            if mode == 'create' and not force:
+                                if is_single_file:
+                                    if is_file_processed(src_file):
+                                        continue
+                                elif src_file in processed_files_log:
+                                    continue
 
                             args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
                             result = process_file(args, processed_files_log, force, batch_apply)
@@ -882,3 +935,9 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                     update_single_file_index(dest_file, is_symlink, target_path)
             except Exception as e:
                 log_message(f"Error processing directory {src_dir}: {str(e)}", level="ERROR")
+
+    # Log completion message
+    if is_single_file:
+        log_message("Single file processing completed.", level="INFO")
+    else:
+        log_message("All files processed successfully.", level="INFO")

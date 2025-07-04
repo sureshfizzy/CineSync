@@ -592,7 +592,10 @@ def main(dest_dir):
             log_message("Failed to initialize database. Exiting.", level="ERROR")
             return
 
-        if not args.disable_monitor:
+        # Skip heavy background processes for single file operations
+        is_single_file_operation = args.single_path and os.path.isfile(args.single_path) if args.single_path else False
+
+        if not args.disable_monitor and not is_single_file_operation:
             log_message("Starting background processes...", level="INFO")
             log_message("RealTime-Monitoring is enabled", level="INFO")
 
@@ -637,6 +640,8 @@ def main(dest_dir):
             cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
             cleanup_thread.daemon = False
             cleanup_thread.start()
+        elif is_single_file_operation:
+            log_message("Single file operation detected - skipping background processes and dashboard checks for faster startup", level="INFO")
         else:
             log_message("RealTime-Monitoring is disabled", level="INFO")
             # Check dashboard availability even when monitoring is disabled
@@ -651,8 +656,11 @@ def main(dest_dir):
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
     try:
-        # Start RealTime-Monitoring in main thread if not disabled
-        if not args.disable_monitor:
+        # Check if this is a single file operation for optimization
+        is_single_file_operation = args.single_path and os.path.isfile(args.single_path) if args.single_path else False
+
+        # Start RealTime-Monitoring in main thread if not disabled and not single file operation
+        if not args.disable_monitor and not is_single_file_operation:
             start_webdav_server()
             log_message("Starting RealTime-Monitoring...", level="INFO")
             monitor_thread = threading.Thread(target=start_polling_monitor)
@@ -662,6 +670,8 @@ def main(dest_dir):
             create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
             monitor_thread.join()
         else:
+            if is_single_file_operation:
+                log_message("Single file operation - skipping monitoring services for faster processing", level="INFO")
             create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")

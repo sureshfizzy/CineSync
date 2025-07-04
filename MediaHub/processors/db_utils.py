@@ -283,6 +283,21 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
+def is_file_processed(conn, file_path):
+    """Fast check if a single file is already processed without loading all files."""
+    file_path = normalize_file_path(file_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM processed_files WHERE file_path = ? LIMIT 1", (file_path,))
+        return cursor.fetchone() is not None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in is_file_processed: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
 def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
