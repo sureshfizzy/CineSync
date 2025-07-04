@@ -129,6 +129,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if error_event.is_set():
         return
 
+    log_message(f"Processing file: {file} (force={force}, rename_enabled={rename_enabled})", level="DEBUG")
+
     # Track if force_extra was set by user
     user_requested_force_extra = force_extra
 
@@ -221,6 +223,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             log_message(f"Skip mode: No existing symlink found for {file}", level="INFO")
 
         reason = "Skipped by user"
+        log_message(f"Adding skipped file to database: {src_file} (reason: {reason})", level="DEBUG")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
@@ -232,6 +235,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if not get_known_types(file):
         reason = "Unsupported file type"
         log_message(f"Skipping file: {file} ({reason})", level="INFO")
+        log_message(f"Adding unsupported file to database: {src_file} (reason: {reason})", level="DEBUG")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
@@ -264,10 +268,13 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             log_message(f"Force mode: Will process {file} and cleanup old symlink after successful creation", level="INFO")
 
     existing_dest_path = get_destination_path(src_file)
-    existing_dest_path = normalize_file_path(existing_dest_path)
+    if existing_dest_path:
+        log_message(f"Found file in database: {src_file} -> {existing_dest_path}", level="DEBUG")
+        existing_dest_path = normalize_file_path(existing_dest_path)
+    else:
+        log_message(f"File not found in database: {src_file}", level="DEBUG")
 
     if existing_dest_path and not force:
-        return
         if not os.path.exists(existing_dest_path):
             dir_path = os.path.dirname(existing_dest_path)
             if os.path.exists(dir_path):
@@ -282,7 +289,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
             log_message(f"Destination file missing. Re-processing: {src_file}", level="INFO")
         else:
-            log_message(f"File already processed. Source: {src_file}, Existing destination: {existing_dest_path}", level="INFO")
+            log_message(f"File already processed and exists. Source: {src_file}, Existing destination: {existing_dest_path}", level="INFO")
             return
 
     else:
@@ -291,12 +298,28 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             if skip_reason:
                 return
 
-    # Check if a symlink already exists
-    existing_symlink = next((full_dest_file for full_dest_file in dest_index
-                             if os.path.islink(full_dest_file) and normalize_file_path(os.readlink(full_dest_file)) == src_file), None)
+    # Check if a symlink already exists in dest_index
+    normalized_src_file = normalize_file_path(src_file)
+    log_message(f"Checking dest_index for existing symlinks pointing to: {normalized_src_file}", level="DEBUG")
+
+    existing_symlink = None
+    for full_dest_file in dest_index:
+        if os.path.islink(full_dest_file):
+            try:
+                link_target = normalize_file_path(os.readlink(full_dest_file))
+                log_message(f"Checking symlink in dest_index: {full_dest_file} -> {link_target}", level="DEBUG")
+                if link_target == normalized_src_file:
+                    existing_symlink = full_dest_file
+                    log_message(f"Found existing symlink in dest_index: {existing_symlink}", level="DEBUG")
+                    break
+            except (OSError, IOError):
+                # Skip broken symlinks
+                log_message(f"Skipping broken symlink in dest_index: {full_dest_file}", level="DEBUG")
+                continue
 
     if existing_symlink and not force:
-        log_message(f"Symlink already exists for {os.path.basename(file)}", level="INFO")
+        log_message(f"Symlink already exists for {os.path.basename(file)}: {existing_symlink}", level="INFO")
+        log_message(f"Adding existing symlink to database: {src_file} -> {existing_symlink}", level="DEBUG")
         save_processed_file(src_file, existing_symlink, tmdb_id)
         return
 
@@ -312,6 +335,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if is_hash_name and not tmdb_id and not imdb_id:
         log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
         reason = "Missing media identifiers on hash file"
+        log_message(f"Adding hash file without identifiers to database: {src_file} (reason: {reason})", level="DEBUG")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
@@ -385,6 +409,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if is_junk_file(file, src_file):
         log_message(f"Skipping Junk files: {file} based on size", level="DEBUG")
         reason = "File size below minimum threshold"
+        log_message(f"Adding junk file to database: {src_file} (reason: {reason})", level="DEBUG")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         return
 
@@ -444,6 +469,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         if is_extra and not user_requested_force_extra and is_skip_extras_folder_enabled():
             log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
             reason = "Extra/Special Content"
+            log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
             save_processed_file(src_file, None, tmdb_id, season_number, reason)
             return
     else:
@@ -460,6 +486,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
         reason = "Missing destination path"
+        log_message(f"Adding file with missing destination to database: {src_file} (reason: {reason})", level="DEBUG")
         save_processed_file(src_file, None, tmdb_id, season_number, reason)
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info)
@@ -467,16 +494,68 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
     os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
-    # Check if symlink already exists
+    # Comprehensive check for existing symlinks in the destination directory
+    dest_dir = os.path.dirname(dest_file)
+    existing_symlink_for_source = None
+    # normalized_src_file already defined above
+
+    if os.path.exists(dest_dir):
+        log_message(f"Checking destination directory for existing symlinks: {dest_dir}", level="DEBUG")
+        for filename in os.listdir(dest_dir):
+            potential_symlink = os.path.join(dest_dir, filename)
+            if os.path.islink(potential_symlink):
+                try:
+                    link_target = normalize_file_path(os.readlink(potential_symlink))
+                    log_message(f"Found symlink {potential_symlink} -> {link_target}", level="DEBUG")
+                    if link_target == normalized_src_file:
+                        existing_symlink_for_source = potential_symlink
+                        log_message(f"Found existing symlink for source: {existing_symlink_for_source}", level="DEBUG")
+                        break
+                except (OSError, IOError):
+                    # Skip broken symlinks
+                    log_message(f"Skipping broken symlink: {potential_symlink}", level="DEBUG")
+                    continue
+
+    # Check if symlink already exists at the exact destination path
     if os.path.islink(dest_file):
         existing_src = normalize_file_path(os.readlink(dest_file))
-        if existing_src == src_file:
+        if existing_src == normalized_src_file:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+            log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
             save_processed_file(src_file, dest_file, tmdb_id)
             return
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
             os.remove(dest_file)
+    elif existing_symlink_for_source and existing_symlink_for_source != dest_file:
+        # Found existing symlink for same source but with different name (rename scenario)
+        if not force:
+            # If not in force mode, check if this is just a rename case
+            existing_name = os.path.basename(existing_symlink_for_source)
+            new_name = os.path.basename(dest_file)
+            log_message(f"Found existing symlink for source with different name: {existing_name} -> {new_name}", level="INFO")
+
+            # If rename is enabled, we should update the symlink
+            if rename_enabled:
+                log_message(f"Renaming {existing_name}", level="INFO")
+                log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_symlink_for_source})", level="INFO")
+                os.remove(existing_symlink_for_source)
+            else:
+                # If rename is not enabled, keep the existing symlink
+                log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
+                log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
+                save_processed_file(src_file, existing_symlink_for_source, tmdb_id)
+                return
+        else:
+            # In force mode, remove the old symlink
+            log_message(f"Force mode: Removing existing symlink {existing_symlink_for_source} to create new one at {dest_file}", level="INFO")
+            os.remove(existing_symlink_for_source)
+    elif existing_symlink_for_source == dest_file:
+        # This should have been caught by the first check, but just in case
+        log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+        log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
+        save_processed_file(src_file, dest_file, tmdb_id)
+        return
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
@@ -529,6 +608,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         # Send structured data to WebDavHub API
         send_structured_message("symlink_created", structured_data)
 
+        log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number)
 
         # Cleanup old symlink if it exists (force mode)
