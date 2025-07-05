@@ -65,7 +65,12 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
       <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />
 
-      <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+      <Box sx={{
+        display: 'flex',
+        flexGrow: 1,
+        overflow: 'hidden',
+        pt: { xs: '56px', sm: '64px' } // Add top padding to account for fixed header
+      }}>
 
         {!isMobile && (
           <Box
@@ -102,17 +107,16 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
                 borderRight: `1px solid ${theme.palette.divider}`,
                 height: '100vh',
                 overflow: 'hidden',
+                pt: { xs: '56px', sm: '64px' }, // Add top padding for fixed header
               },
             }}
           >
-            <Box sx={{ height: '100%', overflowY: 'auto', '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              <Sidebar
-                onNavigate={handleSidebarNavigate}
-                currentView={view}
-                onViewChange={handleViewChange}
-                onRefresh={handleRefresh}
-              />
-            </Box>
+            <Sidebar
+              onNavigate={handleSidebarNavigate}
+              currentView={view}
+              onViewChange={handleViewChange}
+              onRefresh={handleRefresh}
+            />
           </Drawer>
         )}
 

@@ -207,10 +207,7 @@ const components = {
         width: '100%',
         scrollBehavior: 'smooth',
         overscrollBehavior: 'contain',
-        // iOS specific optimizations
         WebkitOverflowScrolling: 'touch',
-        WebkitTransform: 'translate3d(0, 0, 0)',
-        transform: 'translate3d(0, 0, 0)',
         WebkitBackfaceVisibility: 'hidden',
         backfaceVisibility: 'hidden',
       },

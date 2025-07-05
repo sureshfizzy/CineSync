@@ -6,6 +6,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
+import './topbar-fixes.css';
 
 interface TopbarProps {
   toggleTheme: () => void;
@@ -40,6 +41,14 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
         borderBottom: '1px solid',
         borderColor: alpha(theme.palette.divider, 0.08),
         zIndex: theme.zIndex.drawer + 1,
+        top: 0,
+        left: 0,
+        right: 0,
+        // Ensure fixed positioning works on mobile
+        position: 'fixed !important',
+        transform: 'none !important',
+        WebkitTransform: 'none !important',
+        willChange: 'auto',
       }}
     >
       <Toolbar sx={{

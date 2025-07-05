@@ -325,8 +325,21 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <GlobalStyles styles={{
-        html: { height: '100%', backgroundColor: theme.palette.background.default },
-        body: { minHeight: '100vh', height: '100%', backgroundColor: theme.palette.background.default }
+        html: {
+          height: '100%',
+          backgroundColor: theme.palette.background.default,
+          // Ensure fixed positioning works properly
+          transform: 'none !important',
+          WebkitTransform: 'none !important',
+        },
+        body: {
+          minHeight: '100vh',
+          height: '100%',
+          backgroundColor: theme.palette.background.default,
+          // Override any transforms that might interfere with fixed positioning
+          transform: 'none !important',
+          WebkitTransform: 'none !important',
+        }
       }} />
       <ConfigProvider>
         <AuthProvider>

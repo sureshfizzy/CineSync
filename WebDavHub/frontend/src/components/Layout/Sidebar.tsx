@@ -51,9 +51,33 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
       display: 'flex',
       flexDirection: 'column',
       borderRight: `1px solid ${theme.palette.divider}`,
-      pt: { xs: '56px', md: 0 }
+      overflow: 'hidden', // Prevent the container from scrolling
     }}>
-      <List sx={{ flex: 1, pt: { xs: 1.5, md: 1.5 } }}>
+      {/* Scrollable content container */}
+      <Box sx={{
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        // Custom scrollbar styling
+        '&::-webkit-scrollbar': {
+          width: '6px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: alpha(theme.palette.divider, 0.1),
+          borderRadius: '3px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: alpha(theme.palette.text.secondary, 0.3),
+          borderRadius: '3px',
+          '&:hover': {
+            background: alpha(theme.palette.text.secondary, 0.5),
+          },
+        },
+        // Firefox scrollbar styling
+        scrollbarWidth: 'thin',
+        scrollbarColor: `${alpha(theme.palette.text.secondary, 0.3)} ${alpha(theme.palette.divider, 0.1)}`,
+      }}>
+        <List sx={{ pt: { xs: 1.5, md: 1.5 }, pb: 1 }}>
         {navItems.map((item) => (
           <NavLink
             key={item.text}
@@ -106,9 +130,9 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             )}
           </NavLink>
         ))}
-      </List>
+        </List>
 
-      {isMobileOrTablet && (
+        {isMobileOrTablet && (
         <Box sx={{ px: 1.5, py: 1.5, borderTop: `1px solid ${alpha(theme.palette.divider, 0.5)}` }}>
           <Typography
             variant="subtitle2"
@@ -239,9 +263,9 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             </ListItemButton>
           </List>
         </Box>
-      )}
+        )}
 
-      <Box sx={{ p: 1.5 }}>
+        <Box sx={{ p: 1.5 }}>
         <Typography
           variant="subtitle2"
           sx={{
@@ -326,6 +350,8 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
           </Box>
         </Box>
       </Box>
+      {/* End of scrollable container */}
+    </Box>
     </Box>
   );
 }
