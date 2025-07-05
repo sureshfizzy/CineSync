@@ -270,9 +270,9 @@ const DatabaseSearch: React.FC = () => {
                 },
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <StorageIcon sx={{ color: 'primary.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <StorageIcon sx={{ color: 'primary.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.totalRecords.toLocaleString()}
@@ -310,9 +310,9 @@ const DatabaseSearch: React.FC = () => {
                 },
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <MovieIcon sx={{ color: 'success.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <MovieIcon sx={{ color: 'success.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.movies.toLocaleString()}
@@ -350,9 +350,9 @@ const DatabaseSearch: React.FC = () => {
                 },
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <TvIcon sx={{ color: 'secondary.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <TvIcon sx={{ color: 'secondary.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.tvShows.toLocaleString()}
@@ -390,9 +390,9 @@ const DatabaseSearch: React.FC = () => {
                 },
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <ClearIcon sx={{ color: 'warning.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <ClearIcon sx={{ color: 'warning.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.skippedFiles.toLocaleString()}
@@ -421,9 +421,9 @@ const DatabaseSearch: React.FC = () => {
                 border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <TrendingUpIcon sx={{ color: 'info.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <TrendingUpIcon sx={{ color: 'info.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {formatFileSize(stats.totalSize)}
@@ -452,9 +452,9 @@ const DatabaseSearch: React.FC = () => {
                 border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
               }}
             >
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <StorageIcon sx={{ color: 'success.main', fontSize: 20 }} />
+              <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
+                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                  <StorageIcon sx={{ color: 'success.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.processedFiles.toLocaleString()}
@@ -766,9 +766,9 @@ const DatabaseSearch: React.FC = () => {
                       transition: 'all 0.3s ease',
                     }}
                   >
-                    <CardContent sx={{ p: compactView ? 2 : 3 }}>
+                    <CardContent sx={{ p: { xs: 1.5, sm: compactView ? 2 : 3 }, '&:last-child': { pb: { xs: 1.5, sm: compactView ? 2 : 3 } } }}>
                       {/* Header Row */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: compactView ? 1 : 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, mb: { xs: 1, sm: compactView ? 1 : 2 } }}>
                         {/* Checkbox */}
                         <Checkbox
                           checked={isSelected}
@@ -793,7 +793,7 @@ const DatabaseSearch: React.FC = () => {
                         {/* Type Icon */}
                         <Box
                           sx={{
-                            p: compactView ? 1 : 1.5,
+                            p: { xs: 0.75, sm: compactView ? 1 : 1.5 },
                             borderRadius: 2,
                             bgcolor: theme.palette.mode === 'light'
                               ? alpha(getTypeColor(recordType), 0.08)
@@ -808,12 +808,12 @@ const DatabaseSearch: React.FC = () => {
                         </Box>
 
                         {/* File Info */}
-                        <Box sx={{ flex: 1, minWidth: 0, pr: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0, pr: { xs: 0.5, sm: 1 } }}>
                           <Box sx={{
                             display: 'flex',
                             alignItems: 'flex-start',
-                            gap: 1,
-                            mb: 1,
+                            gap: { xs: 0.5, sm: 1 },
+                            mb: { xs: 0.5, sm: 1 },
                             flexWrap: 'wrap'
                           }}>
                             <Typography
@@ -821,10 +821,12 @@ const DatabaseSearch: React.FC = () => {
                               sx={{
                                 fontWeight: 600,
                                 fontSize: { xs: '1rem', sm: '1.1rem' },
-                                wordBreak: 'break-word',
                                 lineHeight: 1.3,
                                 flex: '1 1 auto',
-                                minWidth: 0
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
                               }}
                             >
                               {fileName}
@@ -850,7 +852,7 @@ const DatabaseSearch: React.FC = () => {
                           </Box>
 
                           {/* Status and TMDB */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 }, flexWrap: 'wrap' }}>
                             <Chip
                               label={record.reason || 'Processed'}
                               size="small"

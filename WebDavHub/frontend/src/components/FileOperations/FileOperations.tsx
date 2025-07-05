@@ -1023,7 +1023,13 @@ function FileOperations() {
                 }}>
                   {file.fileName}
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: isMobile ? 'flex-start' : 'center',
+                  gap: 1,
+                  mt: 0.5,
+                  flexDirection: isMobile ? 'column' : 'row'
+                }}>
                   <Chip
                     label={file.status.toUpperCase()}
                     size="small"
@@ -1040,6 +1046,7 @@ function FileOperations() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0.5,
+                    mt: isMobile ? 0.5 : 0,
                   }}>
                     <ScheduleIcon sx={{ fontSize: 12 }} />
                     {formatTimestamp(file.timestamp)}
