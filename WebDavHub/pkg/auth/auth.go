@@ -195,7 +195,7 @@ func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
 func BasicAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if auth is enabled via environment variable
-		if !env.IsBool("CINESYNC_AUTH_ENABLED", false) { // Default to false if not set, or if explicitly set to false
+		if !env.IsBool("CINESYNC_AUTH_ENABLED", true) { // Default to true if not set, consistent with main server auth
 			next.ServeHTTP(w, r)
 			return
 		}

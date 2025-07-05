@@ -299,8 +299,11 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem', display: 'block', mb: 0.3 }}>
             IP: <span style={{ color: theme.palette.text.primary, fontWeight: 600 }}>{loading ? '...' : webdavStats.ip || 'N/A'}</span>
           </Typography>
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem', display: 'block', mb: 0.8 }}>
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem', display: 'block', mb: 0.3 }}>
             Port: <span style={{ color: theme.palette.text.primary, fontWeight: 600 }}>{loading ? '...' : webdavStats.port || 'N/A'}</span>
+          </Typography>
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: '0.7rem', display: 'block', mb: 0.8 }}>
+            Endpoint: <span style={{ color: '#0ea5e9', fontWeight: 600 }}>/webdav</span>
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <WifiIcon sx={{
