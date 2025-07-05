@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -16,6 +16,7 @@ import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
 import { getTmdbPosterUrl } from '../api/tmdbApi';
 import CategoryPosterDisplay from './CategoryPosterDisplay';
+import './poster-optimizations.css';
 
 interface PosterViewProps {
   files: FileItem[];
@@ -30,7 +31,7 @@ interface PosterViewProps {
   onNavigateBack?: () => void;
 }
 
-export default function PosterView({
+const PosterView = memo(({
   files,
   tmdbData,
   imgLoadedMap,
@@ -41,7 +42,7 @@ export default function PosterView({
   onRename,
   onDeleted,
   onNavigateBack,
-}: PosterViewProps) {
+}: PosterViewProps) => {
   const theme = useTheme();
   const [contextMenu, setContextMenu] = useState<{
     mouseX: number;
@@ -56,25 +57,20 @@ export default function PosterView({
     onDeleted,
   });
 
-
-
-  const handleContextMenu = (event: React.MouseEvent, file: FileItem) => {
+  const handleContextMenu = useCallback((event: React.MouseEvent, file: FileItem) => {
     event.preventDefault();
     event.stopPropagation();
-
     setContextMenu({
       mouseX: event.clientX,
       mouseY: event.clientY,
       file,
     });
-  };
+  }, []);
 
-  // Helper function to join paths (same as in FileActionMenu)
   const joinPaths = (...parts: string[]): string => {
     return parts.join('/').replace(/\/+/g, '/').replace(/\/\//g, '/');
   };
 
-  // Handle view details with proper path resolution
   const handleViewDetails = async (file: FileItem) => {
     const normalizedPath = joinPaths(currentPath);
     const relPath = joinPaths(normalizedPath, file.name);
@@ -97,7 +93,7 @@ export default function PosterView({
 
   if (files.length === 0) {
     return (
-      <Box sx={{ gridColumn: '1/-1', textAlign: 'center', py: 6 }}>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography color="text.secondary">
           This folder is empty.
         </Typography>
@@ -106,148 +102,167 @@ export default function PosterView({
   }
 
   return (
-    <Box sx={{
-      display: 'grid',
-      gridTemplateColumns: {
-        xs: 'repeat(2, 1fr)',
-        sm: 'repeat(3, 1fr)',
-        md: 'repeat(4, 1fr)',
-        lg: 'repeat(5, 1fr)'
-      },
-      gap: 3,
-      p: 1
-    }}>
-      {files.map((file) => {
-        const tmdb = tmdbData[file.name];
-        const isSeasonFolder = file.isSeasonFolder;
-        const loaded = imgLoadedMap[file.name] || false;
+    <Box>
+      <Box
+        className="poster-grid"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(2, 1fr)',
+            sm: 'repeat(3, 1fr)',
+            md: 'repeat(4, 1fr)',
+            lg: 'repeat(5, 1fr)'
+          },
+          gap: 3,
+          p: 1
+        }}>
+        {files.map((file) => {
+          const tmdb = tmdbData[file.name];
+          const loaded = imgLoadedMap[file.name] || false;
+          const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
+          const hasPosterPath = !!posterPath;
 
-        return (
-          <Paper
-            key={file.name}
-            data-file-name={file.name}
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              cursor: file.type === 'directory' ? 'pointer' : 'default',
-              transition: 'all 0.2s ease-in-out',
-              boxShadow: 2,
-              borderRadius: 3,
-              overflow: 'hidden',
-              position: 'relative',
-              '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: 6,
-                background: theme.palette.action.selected
-              },
-              '&.alphabet-highlight': {
-                backgroundColor: theme.palette.primary.main + '20',
-                animation: 'pulse 2s ease-in-out',
-              },
-              '@keyframes pulse': {
-                '0%': { backgroundColor: theme.palette.primary.main + '40' },
-                '50%': { backgroundColor: theme.palette.primary.main + '20' },
-                '100%': { backgroundColor: 'transparent' },
-              }
-            }}
-            onClick={() => onFileClick(file, tmdb)}
-            onContextMenu={(e) => handleContextMenu(e, file)}
-          >
-            {/* Category poster overlay that covers entire card */}
-            {file.isCategoryFolder && file.type === 'directory' && (
-              <CategoryPosterDisplay
-                categoryName={file.name}
-                onLoad={() => onImageLoad(file.name)}
-              />
-            )}
-            <Box sx={{
-              width: '100%',
-              aspectRatio: '3/4',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: theme.palette.background.default,
-              p: 0,
-              position: 'relative',
-              overflow: 'hidden',
-            }}>
-              {(() => {
-                const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
-                const title = file.title || (tmdb && tmdb.title) || file.name;
-                const hasPosterPath = !!posterPath;
-
-                // Handle category folders with special display - now handled at Paper level
-                if (file.isCategoryFolder && file.type === 'directory') {
-                  return null;
+          return (
+            <Paper
+              key={file.name}
+              className="poster-card"
+              data-file-name={file.name}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                cursor: file.type === 'directory' ? 'pointer' : 'default',
+                transition: 'transform 0.15s ease-out, box-shadow 0.15s ease-out',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
+                transform: 'translateZ(0)', // Force hardware acceleration
+                boxShadow: 2,
+                borderRadius: 3,
+                overflow: 'hidden',
+                position: 'relative',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                '&.alphabet-highlight': {
+                  backgroundColor: theme.palette.primary.main + '20',
+                  animation: 'pulse 2s ease-in-out',
+                },
+                '@keyframes pulse': {
+                  '0%': { backgroundColor: theme.palette.primary.main + '40' },
+                  '50%': { backgroundColor: theme.palette.primary.main + '20' },
+                  '100%': { backgroundColor: 'transparent' },
                 }
+              }}
+              onClick={() => onFileClick(file, tmdb)}
+              onContextMenu={(e) => handleContextMenu(e, file)}
+            >
+              {/* Category poster overlay */}
+              {file.isCategoryFolder && file.type === 'directory' && (
+                <CategoryPosterDisplay
+                  categoryName={file.name}
+                  onLoad={() => onImageLoad(file.name)}
+                />
+              )}
 
-                const isPosterCandidate = file.type === 'directory' && !isSeasonFolder && hasPosterPath;
+              <Box
+                className="poster-image-container"
+                sx={{
+                  width: '100%',
+                  aspectRatio: '3/4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: theme.palette.background.default,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                {(() => {
+                  const title = file.title || (tmdb && tmdb.title) || file.name;
 
-                if (isPosterCandidate) {
-                  return (
-                    <>
-                      {/* Show skeleton only if no poster path is available */}
-                      {!loaded && !hasPosterPath && (
-                        <Skeleton variant="rectangular" width="100%" height="100%" animation="wave" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-                      )}
+                  if (file.isCategoryFolder && file.type === 'directory') {
+                    return null;
+                  }
 
-                      {/* Blurred background image (shows immediately if poster path available) */}
-                      {hasPosterPath && !loaded && (
+                  const isPosterCandidate = file.type === 'directory' && !file.isSeasonFolder && hasPosterPath;
+
+                  if (isPosterCandidate) {
+                    return (
+                      <>
+                        {!loaded && !hasPosterPath && (
+                          <Skeleton
+                            variant="rectangular"
+                            width="100%"
+                            height="100%"
+                            animation="wave"
+                            sx={{ position: 'absolute', inset: 0 }}
+                          />
+                        )}
+
+                        {hasPosterPath && !loaded && (
+                          <img
+                            className="poster-image"
+                            src={getTmdbPosterUrl(posterPath, 'w92') || ''}
+                            alt={`${title} (loading)`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              position: 'absolute',
+                              inset: 0,
+                              opacity: 1,
+                              filter: 'blur(8px)',
+                              transform: 'scale(1.1)',
+                            }}
+                            loading="lazy"
+                          />
+                        )}
+
                         <img
-                          src={getTmdbPosterUrl(posterPath, 'w92') || ''}
-                          alt={`${title} (loading)`}
+                          className="poster-image"
+                          src={hasPosterPath ? getTmdbPosterUrl(posterPath) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
+                          alt={title}
                           style={{
                             width: '100%',
                             height: '100%',
                             objectFit: 'cover',
                             position: 'absolute',
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            display: 'block',
-                            opacity: 1,
-                            filter: 'blur(8px)',
-                            transform: 'scale(1.1)',
-                            transition: 'opacity 0.3s ease-in-out',
+                            inset: 0,
+                            opacity: loaded && hasPosterPath ? 1 : 0,
+                            transition: 'opacity 0.2s ease-out',
+                            zIndex: 1,
+                            imageRendering: 'auto',
+                            backfaceVisibility: 'hidden',
+                            transform: 'translateZ(0)',
                           }}
+                          onLoad={() => onImageLoad(file.name)}
+                          onError={() => onImageLoad(file.name)}
+                          loading="lazy"
+                          decoding="async"
                         />
-                      )}
 
-                      {/* Main high-quality image */}
-                      <img
-                        src={hasPosterPath ? getTmdbPosterUrl(posterPath) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
-                        alt={title}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          position: 'absolute',
-                          top: 0, left: 0, right: 0, bottom: 0,
-                          display: 'block',
-                          opacity: loaded && hasPosterPath ? 1 : 0,
-                          filter: 'blur(0px)',
-                          transform: 'scale(1)',
-                          transition: 'opacity 0.4s ease-in-out',
-                          zIndex: 1,
-                        }}
-                        onLoad={() => onImageLoad(file.name)}
-                        onError={() => onImageLoad(file.name)}
-                      />
+                        {!hasPosterPath && loaded && (
+                          <Box sx={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'absolute',
+                            inset: 0
+                          }}>
+                            {getFileIcon(file.name, file.type)}
+                          </Box>
+                        )}
+                      </>
+                    );
+                  } else {
+                    return file.type === 'directory' ? getFileIcon(file.name, file.type) : null;
+                  }
+                })()}
+              </Box>
 
-                      {!hasPosterPath && loaded && (
-                        <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-                          {getFileIcon(file.name, file.type)}
-                        </Box>
-                      )}
-                    </>
-                  );
-                } else {
-                  // Show folder icon for directories without TMDB data
-                  return file.type === 'directory' ? getFileIcon(file.name, file.type) : null;
-                }
-              })()}
-            </Box>
-            {/* Show bottom title section for all folders */}
-            {(
+              {/* Title section */}
               <Box sx={{
                 width: '100%',
                 p: { xs: '6px 8px', sm: '4px 12px' },
@@ -259,14 +274,11 @@ export default function PosterView({
                     fontWeight: 500,
                     textAlign: 'center',
                     fontSize: { xs: '0.9rem', sm: '1rem' },
-                    wordBreak: 'break-all',
                     mb: 0.5,
                     lineHeight: 1.2,
-                    maxHeight: '1.4em',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    display: 'block',
                   }}
                 >
                   {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title
@@ -283,19 +295,17 @@ export default function PosterView({
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      display: 'block',
                     }}
                   >
-                    {tmdb.release_date
-                      ? new Date(tmdb.release_date).getFullYear()
-                      : ''}
+                    {new Date(tmdb.release_date).getFullYear()}
                   </Typography>
                 )}
               </Box>
-            )}
-          </Paper>
-        );
-      })}
+            </Paper>
+          );
+        })}
+      </Box>
+
       {/* Context Menu */}
       <Menu
         open={contextMenu !== null}
@@ -315,9 +325,9 @@ export default function PosterView({
               mt: 1,
               p: 0.5,
             }
-          }
+          },
+          root: { sx: { p: 0 } }
         }}
-        MenuListProps={{ sx: { p: 0 } }}
       >
         {contextMenu && (
           <>
@@ -377,7 +387,8 @@ export default function PosterView({
           </>
         )}
       </Menu>
-      {/* Rename Dialog */}
+
+      {/* Dialogs */}
       <Dialog open={fileActions.renameDialogOpen} onClose={fileActions.handleRenameDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Rename File</DialogTitle>
         <DialogContent>
@@ -389,29 +400,25 @@ export default function PosterView({
             value={fileActions.renameValue}
             onChange={(e) => fileActions.setRenameValue(e.target.value)}
             disabled={fileActions.renameLoading}
-            inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
-            sx={{ mb: 2, background: 'background.paper', borderRadius: 2 }}
-            color="primary"
           />
-          {fileActions.renameError && <Typography color="error" sx={{ mb: 1 }}>{fileActions.renameError}</Typography>}
+          {fileActions.renameError && <Typography color="error" sx={{ mt: 1 }}>{fileActions.renameError}</Typography>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={fileActions.handleRenameDialogClose} disabled={fileActions.renameLoading} color="inherit">Cancel</Button>
+          <Button onClick={fileActions.handleRenameDialogClose} disabled={fileActions.renameLoading}>Cancel</Button>
           <Button
             onClick={fileActions.handleRenameSubmit}
             variant="contained"
-            color="primary"
-            disabled={fileActions.renameLoading || !fileActions.renameValue.trim() || fileActions.renameValue === fileActions.fileBeingRenamed?.name}
+            disabled={fileActions.renameLoading || !fileActions.renameValue.trim()}
           >
             {fileActions.renameLoading ? 'Renaming...' : 'Rename'}
           </Button>
         </DialogActions>
       </Dialog>
-      {/* Delete Dialog */}
+
       <Dialog open={fileActions.deleteDialogOpen} onClose={fileActions.handleDeleteDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to delete <b>{fileActions.fileBeingDeleted?.name}</b>? This action cannot be undone.</Typography>
+          <Typography>Are you sure you want to delete <b>{fileActions.fileBeingDeleted?.name}</b>?</Typography>
           {fileActions.deleteError && <Typography color="error" sx={{ mt: 2 }}>{fileActions.deleteError}</Typography>}
         </DialogContent>
         <DialogActions>
@@ -421,7 +428,7 @@ export default function PosterView({
           </Button>
         </DialogActions>
       </Dialog>
-      {/* Modify Dialog */}
+
       {fileActions.modifyDialogOpen && fileActions.fileBeingModified && (
         <ModifyDialog
           open={fileActions.modifyDialogOpen}
@@ -432,4 +439,8 @@ export default function PosterView({
       )}
     </Box>
   );
-}
+});
+
+PosterView.displayName = 'PosterView';
+
+export default PosterView;

@@ -35,7 +35,7 @@ export default function AlphabetIndex({ files, selectedLetter, onLetterClick }: 
       sx={{
         position: 'fixed',
         right: isMobile ? 4 : isTablet ? 8 : 16,
-        top: isMobile ? '45%' : '50%',
+        top: isMobile ? '45%' : isTablet ? '50%' : '60%',
         transform: 'translateY(-50%)',
         zIndex: 999,
         backgroundColor: theme.palette.mode === 'dark'
@@ -54,6 +54,9 @@ export default function AlphabetIndex({ files, selectedLetter, onLetterClick }: 
         maxHeight: isMobile ? '60vh' : '70vh',
         overflowY: 'auto',
         border: `1px solid ${theme.palette.divider}`,
+        // iOS smooth scrolling optimizations
+        WebkitOverflowScrolling: 'touch',
+        scrollBehavior: 'smooth',
         '&::-webkit-scrollbar': {
           width: isMobile ? 2 : 4,
         },

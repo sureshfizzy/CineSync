@@ -188,6 +188,7 @@ const components = {
         boxSizing: 'border-box',
         margin: 0,
         padding: 0,
+        scrollBehavior: 'smooth',
       },
       html: {
         MozOsxFontSmoothing: 'grayscale',
@@ -196,6 +197,7 @@ const components = {
         flexDirection: 'column',
         minHeight: '100%',
         width: '100%',
+        scrollBehavior: 'smooth',
       },
       body: {
         display: 'flex',
@@ -203,6 +205,14 @@ const components = {
         flexDirection: 'column',
         minHeight: '100%',
         width: '100%',
+        scrollBehavior: 'smooth',
+        overscrollBehavior: 'contain',
+        // iOS specific optimizations
+        WebkitOverflowScrolling: 'touch',
+        WebkitTransform: 'translate3d(0, 0, 0)',
+        transform: 'translate3d(0, 0, 0)',
+        WebkitBackfaceVisibility: 'hidden',
+        backfaceVisibility: 'hidden',
       },
       '#root': {
         display: 'flex',
