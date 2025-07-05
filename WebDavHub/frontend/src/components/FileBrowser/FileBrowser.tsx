@@ -372,55 +372,72 @@ export default function FileBrowser() {
 
     if (itemsToProcess.length === 0) return;
 
-    const processSequentially = async () => {
-      for (let index = 0; index < itemsToProcess.length; index++) {
-        const file = itemsToProcess[index];
+    // Process all items in parallel with concurrency control for better mobile performance
+    const processInParallel = async () => {
+      const CONCURRENT_LIMIT = 100;
 
-        // Double-check if already processed or being processed
-        if (folderFetchRef.current[file.name] || tmdbProcessingRef.current[file.name] || tmdbData[file.name]) {
-          continue;
-        }
-
-        folderFetchRef.current[file.name] = true;
-        tmdbProcessingRef.current[file.name] = true;
-        const mediaType = file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie');
-
-        try {
-          const cached = getTmdbDataFromCache(file.name, mediaType);
-          if (cached?.poster_path) {
-            updateTmdbData(file.name, cached);
-            continue;
+      // Create batches for controlled concurrency
+      const processBatch = async (batch: any[]) => {
+        const promises = batch.map(async (file) => {
+          // Double-check if already processed or being processed
+          if (folderFetchRef.current[file.name] || tmdbProcessingRef.current[file.name] || tmdbData[file.name]) {
+            return;
           }
 
-          const apiResult = await searchTmdb(file.tmdbId || file.name, undefined, mediaType, 3);
-          if (apiResult) {
-            let finalData = { ...apiResult };
-            if (cached) {
-              finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
+          folderFetchRef.current[file.name] = true;
+          tmdbProcessingRef.current[file.name] = true;
+          const mediaType = file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie');
+
+          try {
+            const cached = getTmdbDataFromCache(file.name, mediaType);
+            if (cached?.poster_path) {
+              updateTmdbData(file.name, cached);
+              return;
             }
 
-            if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
-              setPosterInCache(file.name, finalData.media_type, finalData);
-              updateTmdbData(file.name, finalData);
+            const apiResult = await searchTmdb(file.tmdbId || file.name, undefined, mediaType, 3);
+            if (apiResult) {
+              let finalData = { ...apiResult };
+              if (cached) {
+                finalData = { ...cached, ...apiResult, poster_path: apiResult.poster_path || cached.poster_path || null };
+              }
+
+              if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
+                setPosterInCache(file.name, finalData.media_type, finalData);
+                updateTmdbData(file.name, finalData);
+              } else {
+                updateTmdbData(file.name, finalData);
+              }
+            } else if (cached) {
+              updateTmdbData(file.name, cached);
             } else {
-              updateTmdbData(file.name, finalData);
+              updateTmdbData(file.name, null);
             }
-          } else if (cached) {
-            updateTmdbData(file.name, cached);
-          } else {
-            updateTmdbData(file.name, null);
+          } catch (error: any) {
+            console.error(`Failed to fetch TMDB data for ${file.name}:`, error);
+            const cached = getTmdbDataFromCache(file.name, mediaType);
+            updateTmdbData(file.name, cached || null);
+          } finally {
+            tmdbProcessingRef.current[file.name] = false;
           }
-        } catch (error: any) {
-          console.error(`Failed to fetch TMDB data for ${file.name}:`, error);
-          const cached = getTmdbDataFromCache(file.name, mediaType);
-          updateTmdbData(file.name, cached || null);
-        } finally {
-          tmdbProcessingRef.current[file.name] = false;
+        });
+
+        await Promise.allSettled(promises);
+      };
+
+      // Process items in batches to avoid overwhelming the API
+      for (let i = 0; i < itemsToProcess.length; i += CONCURRENT_LIMIT) {
+        const batch = itemsToProcess.slice(i, i + CONCURRENT_LIMIT);
+        await processBatch(batch);
+
+        // Small delay between batches to be respectful to the API
+        if (i + CONCURRENT_LIMIT < itemsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
     };
 
-    processSequentially();
+    processInParallel();
   }, [filteredFiles, view]);
 
   if (loading) {
