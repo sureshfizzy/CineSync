@@ -459,6 +459,34 @@ function FileOperations() {
     }
   );
 
+  useSSEEventListener(
+    ['symlink_created'],
+    (event) => {
+      const data = event.data;
+      if (data.source_file) {
+        removeSourceFile(data.source_file);
+
+        setProcessingFiles(prev => new Map(prev.set(data.source_file, {
+          fileName: data.filename || data.source_file.split('/').pop() || 'Unknown',
+          mediaName: data.media_name,
+          mediaType: data.media_type
+        })));
+
+        setTimeout(() => {
+          setProcessingFiles(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(data.source_file);
+            return newMap;
+          });
+        }, 1500);
+      }
+    },
+    {
+      source: 'mediahub',
+      dependencies: [removeSourceFile]
+    }
+  );
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
     setCurrentPage(1);
@@ -466,7 +494,8 @@ function FileOperations() {
     setSelectedFiles(new Set());
 
     if (newValue === 0) {
-      fetchSourceFilesData(sourcePage, sourceIndex);
+      fetchSourceFilesData(1, sourceIndex);
+      setSourcePage(1);
     }
   };
 
