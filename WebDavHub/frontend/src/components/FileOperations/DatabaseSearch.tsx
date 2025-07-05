@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button } from '@mui/material';
-import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon } from '@mui/icons-material';
+import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button, Checkbox, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
@@ -38,6 +38,12 @@ const DatabaseSearch: React.FC = () => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [compactView, setCompactView] = useState(false);
 
+  // Bulk selection state
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const fetchDatabaseRecords = useCallback(async () => {
     try {
       setLoading(true);
@@ -54,6 +60,9 @@ const DatabaseSearch: React.FC = () => {
       setRecords(response.data.records || []);
       setTotalRecords(response.data.total || 0);
       setStats(response.data.stats || null);
+
+      // Clear selections when records change
+      setSelectedFiles(new Set());
     } catch (error) {
       console.error('Failed to fetch database records:', error);
       setRecords([]);
@@ -79,12 +88,14 @@ const DatabaseSearch: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1);
+      setSelectedFiles(new Set());
       fetchDatabaseRecords();
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, filterType]);
 
   useEffect(() => {
+    setSelectedFiles(new Set());
     fetchDatabaseRecords();
   }, [currentPage]);
 
@@ -94,6 +105,77 @@ const DatabaseSearch: React.FC = () => {
     setSearchQuery('');
     setFilterType('all');
     setCurrentPage(1);
+    setSelectedFiles(new Set());
+  };
+
+  const handleStatsCardClick = (type: string) => {
+    setFilterType(type);
+    setCurrentPage(1);
+    setSelectedFiles(new Set());
+  };
+
+  // Bulk selection handlers
+  const handleFileSelect = (filePath: string, checked: boolean) => {
+    setSelectedFiles(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(filePath);
+      } else {
+        newSet.delete(filePath);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allFilePaths = records.map(record => record.file_path);
+      setSelectedFiles(new Set(allFilePaths));
+    } else {
+      setSelectedFiles(new Set());
+    }
+  };
+
+  const handleBulkAction = () => {
+    setBulkActionDialogOpen(true);
+  };
+
+  const handleBulkActionConfirm = async () => {
+    if (selectedFiles.size === 0) return;
+
+    setBulkActionLoading(true);
+    setError(null);
+    try {
+      const filePaths = Array.from(selectedFiles);
+      const response = await axios.delete('/api/file-operations/bulk', {
+        data: { filePaths }
+      });
+
+      if (response.data.success) {
+        // Remove deleted records from the current view
+        setRecords(prev => prev.filter(record => !selectedFiles.has(record.file_path)));
+        setTotalRecords(prev => prev - (response.data.deletedCount || selectedFiles.size));
+
+        // Update stats
+        if (stats) {
+          setStats(prev => prev ? {
+            ...prev,
+            totalRecords: prev.totalRecords - (response.data.deletedCount || selectedFiles.size)
+          } : null);
+        }
+
+        setSelectedFiles(new Set());
+        setBulkActionDialogOpen(false);
+
+        // Refresh data to ensure consistency
+        fetchDatabaseRecords();
+      }
+    } catch (error: any) {
+      console.error('Failed to delete selected files:', error.response?.data?.error || error.message);
+      setError(error.response?.data?.error || error.message || 'Failed to delete selected files');
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
   const handleExport = async () => {
@@ -128,16 +210,16 @@ const DatabaseSearch: React.FC = () => {
 
   const getRecordType = (record: DatabaseRecord) => {
     if (record.reason) return 'skipped';
-    if (record.tmdb_id && record.season_number) return 'tvshow';
-    if (record.tmdb_id && !record.season_number) return 'movie';
+    if (record.tmdb_id && record.season_number) return 'tvshows';
+    if (record.tmdb_id && !record.season_number) return 'movies';
     return 'other';
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'movie':
-        return <MovieIcon sx={{ fontSize: 16, color: theme.palette.primary.main }} />;
-      case 'tvshow':
+      case 'movies':
+        return <MovieIcon sx={{ fontSize: 16, color: theme.palette.success.main }} />;
+      case 'tvshows':
         return <TvIcon sx={{ fontSize: 16, color: theme.palette.secondary.main }} />;
       case 'skipped':
         return <ClearIcon sx={{ fontSize: 16, color: theme.palette.warning.main }} />;
@@ -148,9 +230,9 @@ const DatabaseSearch: React.FC = () => {
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'movie':
-        return theme.palette.primary.main;
-      case 'tvshow':
+      case 'movies':
+        return theme.palette.success.main;
+      case 'tvshows':
         return theme.palette.secondary.main;
       case 'skipped':
         return theme.palette.warning.main;
@@ -174,9 +256,18 @@ const DatabaseSearch: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
+              onClick={() => handleStatsCardClick('all')}
               sx={{
                 background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                border: `1px solid ${alpha(theme.palette.primary.main, filterType === 'all' ? 0.5 : 0.2)}`,
+                cursor: 'pointer',
+                transform: filterType === 'all' ? 'scale(1.02)' : 'scale(1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'scale(1.02)',
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                },
               }}
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -205,9 +296,18 @@ const DatabaseSearch: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
+              onClick={() => handleStatsCardClick('movies')}
               sx={{
                 background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.1)} 0%, ${alpha(theme.palette.success.main, 0.05)} 100%)`,
-                border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                border: `1px solid ${alpha(theme.palette.success.main, filterType === 'movies' ? 0.5 : 0.2)}`,
+                cursor: 'pointer',
+                transform: filterType === 'movies' ? 'scale(1.02)' : 'scale(1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'scale(1.02)',
+                  border: `1px solid ${alpha(theme.palette.success.main, 0.4)}`,
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.success.main, 0.15)}`,
+                },
               }}
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -236,9 +336,18 @@ const DatabaseSearch: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
+              onClick={() => handleStatsCardClick('tvshows')}
               sx={{
                 background: `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
-                border: `1px solid ${alpha(theme.palette.secondary.main, 0.2)}`,
+                border: `1px solid ${alpha(theme.palette.secondary.main, filterType === 'tvshows' ? 0.5 : 0.2)}`,
+                cursor: 'pointer',
+                transform: filterType === 'tvshows' ? 'scale(1.02)' : 'scale(1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'scale(1.02)',
+                  border: `1px solid ${alpha(theme.palette.secondary.main, 0.4)}`,
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.secondary.main, 0.15)}`,
+                },
               }}
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -267,9 +376,18 @@ const DatabaseSearch: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
+              onClick={() => handleStatsCardClick('skipped')}
               sx={{
                 background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.1)} 0%, ${alpha(theme.palette.warning.main, 0.05)} 100%)`,
-                border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                border: `1px solid ${alpha(theme.palette.warning.main, filterType === 'skipped' ? 0.5 : 0.2)}`,
+                cursor: 'pointer',
+                transform: filterType === 'skipped' ? 'scale(1.02)' : 'scale(1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'scale(1.02)',
+                  border: `1px solid ${alpha(theme.palette.warning.main, 0.4)}`,
+                  boxShadow: `0 4px 12px ${alpha(theme.palette.warning.main, 0.15)}`,
+                },
               }}
             >
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -527,6 +645,91 @@ const DatabaseSearch: React.FC = () => {
             )}
           </Box>
 
+          {/* Bulk Selection Toolbar */}
+          <Collapse in={selectedFiles.size > 0} timeout={300}>
+            <Box sx={{ mb: 3 }}>
+              <Box
+                sx={{
+                  background: theme.palette.mode === 'dark'
+                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.primary.main, 0.06)} 100%)`
+                    : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.06)} 0%, ${alpha(theme.palette.primary.main, 0.03)} 100%)`,
+                  backdropFilter: 'blur(10px)',
+                  borderRadius: 3,
+                  border: `1px solid ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.2 : 0.12)}`,
+                  boxShadow: theme.palette.mode === 'dark'
+                    ? `0 4px 20px ${alpha(theme.palette.primary.main, 0.1)}, 0 1px 4px ${alpha('#000', 0.2)}`
+                    : `0 4px 20px ${alpha(theme.palette.primary.main, 0.06)}, 0 1px 4px ${alpha('#000', 0.05)}`,
+                  p: 2.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'all 0.2s ease-out',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Checkbox
+                    checked={selectedFiles.size === records.length && records.length > 0}
+                    indeterminate={selectedFiles.size > 0 && selectedFiles.size < records.length}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    size="small"
+                    sx={{
+                      p: 0,
+                      color: 'primary.main',
+                      '&.Mui-checked, &.MuiCheckbox-indeterminate': {
+                        color: 'primary.main',
+                      },
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: 'primary.main',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    {selectedFiles.size === records.length && records.length > 0
+                      ? `All ${records.length} selected`
+                      : selectedFiles.size > 0
+                      ? `${selectedFiles.size} selected`
+                      : 'Select all'
+                    }
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  size="medium"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleBulkAction()}
+                  disabled={selectedFiles.size === 0 || bulkActionLoading}
+                  sx={{
+                    bgcolor: 'error.main',
+                    color: 'error.contrastText',
+                    fontWeight: 600,
+                    px: 2.5,
+                    py: 1,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.25)}`,
+                    '&:hover': {
+                      bgcolor: 'error.dark',
+                      boxShadow: `0 4px 12px ${alpha(theme.palette.error.main, 0.35)}`,
+                      transform: 'translateY(-1px)',
+                    },
+                    '&:disabled': {
+                      bgcolor: alpha(theme.palette.error.main, 0.3),
+                      color: alpha(theme.palette.error.contrastText, 0.5),
+                      boxShadow: 'none',
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {bulkActionLoading ? 'Deleting...' : `Delete ${selectedFiles.size}`}
+                </Button>
+              </Box>
+            </Box>
+          </Collapse>
+
           {/* Modern Card-Based Results */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: compactView ? 1 : 2 }}>
             <AnimatePresence>
@@ -534,6 +737,7 @@ const DatabaseSearch: React.FC = () => {
                 const recordType = getRecordType(record);
                 const fileName = record.file_path.split(/[/\\]/).pop() || record.file_path;
                 const isExpanded = expandedRows.has(record.file_path);
+                const isSelected = selectedFiles.has(record.file_path);
 
                 return (
                   <MotionCard
@@ -545,15 +749,15 @@ const DatabaseSearch: React.FC = () => {
                     sx={{
                       borderRadius: 3,
                       border: '1px solid',
-                      borderColor: theme.palette.mode === 'light'
+                      borderColor: isSelected ? 'primary.main' : (theme.palette.mode === 'light'
                         ? alpha(getTypeColor(recordType), 0.3)
-                        : alpha(getTypeColor(recordType), 0.2),
-                      bgcolor: 'background.paper',
+                        : alpha(getTypeColor(recordType), 0.2)),
+                      bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
                       overflow: 'hidden',
                       '&:hover': {
-                        borderColor: theme.palette.mode === 'light'
+                        borderColor: isSelected ? 'primary.main' : (theme.palette.mode === 'light'
                           ? alpha(getTypeColor(recordType), 0.5)
-                          : alpha(getTypeColor(recordType), 0.4),
+                          : alpha(getTypeColor(recordType), 0.4)),
                         boxShadow: theme.palette.mode === 'light'
                           ? `0 4px 20px ${alpha(getTypeColor(recordType), 0.15)}`
                           : `0 4px 20px ${alpha(getTypeColor(recordType), 0.1)}`,
@@ -564,7 +768,28 @@ const DatabaseSearch: React.FC = () => {
                   >
                     <CardContent sx={{ p: compactView ? 2 : 3 }}>
                       {/* Header Row */}
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: compactView ? 1 : 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: compactView ? 1 : 2 }}>
+                        {/* Checkbox */}
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleFileSelect(record.file_path, e.target.checked);
+                          }}
+                          size="small"
+                          sx={{
+                            p: 0.5,
+                            color: 'text.secondary',
+                            flexShrink: 0,
+                            '&.Mui-checked': {
+                              color: 'primary.main',
+                            },
+                            '&:hover': {
+                              bgcolor: 'action.hover',
+                            },
+                          }}
+                        />
+
                         {/* Type Icon */}
                         <Box
                           sx={{
@@ -884,6 +1109,74 @@ const DatabaseSearch: React.FC = () => {
           </Box>
         </>
       )}
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog
+        open={bulkActionDialogOpen}
+        onClose={() => setBulkActionDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+          }
+        }}
+      >
+        <DialogTitle>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Delete Selected Records
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
+            Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected database records?
+          </DialogContentText>
+          <DialogContentText sx={{
+            color: 'text.primary',
+            p: 2,
+            bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.1 : 0.05),
+            borderRadius: 2,
+            borderLeft: `4px solid ${theme.palette.error.main}`,
+          }}>
+            This action will permanently remove the selected file records from the database. The original files will remain untouched in their source locations.
+          </DialogContentText>
+          {error && (
+            <DialogContentText sx={{
+              color: 'error.main',
+              mt: 2,
+              p: 2,
+              bgcolor: alpha(theme.palette.error.main, 0.1),
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+            }}>
+              {error}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button
+            onClick={() => setBulkActionDialogOpen(false)}
+            disabled={bulkActionLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkActionConfirm}
+            color="error"
+            variant="contained"
+            disabled={bulkActionLoading}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 3,
+            }}
+          >
+            {bulkActionLoading ? 'Deleting...' : `Delete ${selectedFiles.size} Records`}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
