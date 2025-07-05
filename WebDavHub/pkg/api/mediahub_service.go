@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -744,6 +745,211 @@ func HandleMediaHubLogs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(activity)
+}
+
+// HandleMediaHubLogsExport handles log file export requests
+func HandleMediaHubLogsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters
+	exportType := r.URL.Query().Get("type") // "current", "all", "date"
+	dateFilter := r.URL.Query().Get("date") // for date-specific exports
+
+	// Get the current working directory and navigate to logs
+	cwd, err := os.Getwd()
+	if err != nil {
+		logger.Error("Failed to get current directory: %v", err)
+		http.Error(w, "Failed to access log directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Go up one level to get to the CineSync root, then to logs
+	rootDir := filepath.Dir(cwd)
+	logsDir := filepath.Join(rootDir, "logs")
+
+	// Check if logs directory exists
+	if _, err := os.Stat(logsDir); os.IsNotExist(err) {
+		logger.Warn("Logs directory not found at %s", logsDir)
+		http.Error(w, "No log files available", http.StatusNotFound)
+		return
+	}
+
+	switch exportType {
+	case "current":
+		exportCurrentLog(w, logsDir)
+	case "all":
+		exportAllLogs(w, logsDir)
+	case "date":
+		if dateFilter == "" {
+			http.Error(w, "Date parameter required for date export", http.StatusBadRequest)
+			return
+		}
+		exportLogsByDate(w, logsDir, dateFilter)
+	default:
+		// Default to current log
+		exportCurrentLog(w, logsDir)
+	}
+}
+
+// exportCurrentLog exports the most recent log file
+func exportCurrentLog(w http.ResponseWriter, logsDir string) {
+	// Find the most recent log file
+	files, err := os.ReadDir(logsDir)
+	if err != nil {
+		logger.Error("Failed to read logs directory: %v", err)
+		http.Error(w, "Failed to read log files", http.StatusInternalServerError)
+		return
+	}
+
+	var mostRecentFile string
+	var mostRecentTime time.Time
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".log") {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(mostRecentTime) {
+				mostRecentTime = info.ModTime()
+				mostRecentFile = file.Name()
+			}
+		}
+	}
+
+	if mostRecentFile == "" {
+		http.Error(w, "No log files found", http.StatusNotFound)
+		return
+	}
+
+	logPath := filepath.Join(logsDir, mostRecentFile)
+	serveLogFile(w, logPath, mostRecentFile)
+}
+
+// exportAllLogs exports all log files as a zip archive
+func exportAllLogs(w http.ResponseWriter, logsDir string) {
+	files, err := os.ReadDir(logsDir)
+	if err != nil {
+		logger.Error("Failed to read logs directory: %v", err)
+		http.Error(w, "Failed to read log files", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter log files
+	var logFiles []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".log") {
+			logFiles = append(logFiles, file.Name())
+		}
+	}
+
+	if len(logFiles) == 0 {
+		http.Error(w, "No log files found", http.StatusNotFound)
+		return
+	}
+
+	// Create zip archive
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=mediahub_logs_%s.zip", time.Now().Format("2006-01-02")))
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	for _, fileName := range logFiles {
+		logPath := filepath.Join(logsDir, fileName)
+		addFileToZip(zipWriter, logPath, fileName)
+	}
+}
+
+// exportLogsByDate exports log files for a specific date
+func exportLogsByDate(w http.ResponseWriter, logsDir string, dateFilter string) {
+	files, err := os.ReadDir(logsDir)
+	if err != nil {
+		logger.Error("Failed to read logs directory: %v", err)
+		http.Error(w, "Failed to read log files", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter log files by date
+	var matchingFiles []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".log") {
+			if strings.Contains(file.Name(), dateFilter) {
+				matchingFiles = append(matchingFiles, file.Name())
+			}
+		}
+	}
+
+	if len(matchingFiles) == 0 {
+		http.Error(w, fmt.Sprintf("No log files found for date %s", dateFilter), http.StatusNotFound)
+		return
+	}
+
+	if len(matchingFiles) == 1 {
+		// Single file - serve directly
+		logPath := filepath.Join(logsDir, matchingFiles[0])
+		serveLogFile(w, logPath, matchingFiles[0])
+	} else {
+		// Multiple files - create zip
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=mediahub_logs_%s.zip", dateFilter))
+
+		zipWriter := zip.NewWriter(w)
+		defer zipWriter.Close()
+
+		for _, fileName := range matchingFiles {
+			logPath := filepath.Join(logsDir, fileName)
+			addFileToZip(zipWriter, logPath, fileName)
+		}
+	}
+}
+
+// serveLogFile serves a single log file for download
+func serveLogFile(w http.ResponseWriter, logPath, fileName string) {
+	file, err := os.Open(logPath)
+	if err != nil {
+		logger.Error("Failed to open log file %s: %v", logPath, err)
+		http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	// Set headers for file download
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+
+	// Copy file content to response
+	_, err = io.Copy(w, file)
+	if err != nil {
+		logger.Error("Failed to serve log file %s: %v", logPath, err)
+	}
+}
+
+// addFileToZip adds a file to a zip archive
+func addFileToZip(zipWriter *zip.Writer, filePath, fileName string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		logger.Error("Failed to open file for zip: %s, error: %v", filePath, err)
+		return err
+	}
+	defer file.Close()
+
+	zipFile, err := zipWriter.Create(fileName)
+	if err != nil {
+		logger.Error("Failed to create zip entry for: %s, error: %v", fileName, err)
+		return err
+	}
+
+	_, err = io.Copy(zipFile, file)
+	if err != nil {
+		logger.Error("Failed to copy file to zip: %s, error: %v", fileName, err)
+		return err
+	}
+
+	return nil
 }
 
 // HandleMediaHubMonitorStart starts only the monitor process

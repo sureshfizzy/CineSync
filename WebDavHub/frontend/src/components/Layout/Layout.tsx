@@ -125,7 +125,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           sx={{
             flexGrow: 1,
             bgcolor: 'background.default',
-            p: { xs: 1.5, sm: 2, md: 3 },
+            p: { xs: 1, sm: 1.5, md: 2 },
             overflowY: 'auto',
             height: '100%',
           }}

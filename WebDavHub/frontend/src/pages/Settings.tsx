@@ -420,9 +420,9 @@ const Settings: React.FC = () => {
         bgcolor: 'background.default',
       }}
     >
-      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4, md: 6 }, px: { xs: 2, sm: 3 } }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 1, sm: 2, md: 2 }, px: { xs: 1, sm: 2 } }}>
         {/* Clean Professional Header */}
-        <Box sx={{ mb: { xs: 3, sm: 4, md: 6 } }}>
+        <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
           <Stack
             direction="row"
             alignItems="flex-start"

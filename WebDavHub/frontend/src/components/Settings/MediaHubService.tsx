@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Switch, FormControlLabel } from '@mui/material';
+import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Switch, FormControlLabel, Menu, MenuItem } from '@mui/material';
 import axios from 'axios';
-import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle } from '@mui/icons-material';
+import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle, Download, ExpandMore } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
 
 interface MediaHubStatus {
@@ -41,6 +41,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
   const [autoStartLoading, setAutoStartLoading] = useState(false);
   const [rtmAutoStart, setRtmAutoStart] = useState(false);
   const [rtmAutoStartLoading, setRtmAutoStartLoading] = useState(false);
+  const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const fetchStatus = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) {
@@ -286,6 +288,60 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     if (status.isRunning) return 'Partial';
     if (status.monitorRunning) return 'Monitor';
     return 'Stopped';
+  };
+
+  const handleExportLogs = async (exportType: 'current' | 'all' | 'date', dateFilter?: string) => {
+    setExportLoading(true);
+    setExportMenuAnchor(null);
+
+    try {
+      const params = new URLSearchParams({ type: exportType });
+      if (dateFilter) {
+        params.append('date', dateFilter);
+      }
+
+      const response = await axios.get(`/api/mediahub/logs/export?${params.toString()}`, {
+        responseType: 'blob',
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Determine filename based on export type
+      const today = new Date().toISOString().split('T')[0];
+      let filename = `mediahub_logs_${today}`;
+
+      if (exportType === 'current') {
+        filename = `mediahub_current_log_${today}.log`;
+      } else if (exportType === 'date' && dateFilter) {
+        filename = `mediahub_logs_${dateFilter}.log`;
+      } else {
+        filename = `mediahub_logs_${today}.zip`;
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setSuccess('Logs exported successfully');
+    } catch (error) {
+      console.error('Failed to export logs:', error);
+      setError('Failed to export logs');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleExportMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setExportMenuAnchor(event.currentTarget);
+  };
+
+  const handleExportMenuClose = () => {
+    setExportMenuAnchor(null);
   };
 
   if (loading) {
@@ -884,12 +940,33 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               borderBottom: '1px solid',
               borderColor: 'divider',
               bgcolor: alpha('#000', 0.02),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
             }}
           >
             <Typography variant="subtitle2" fontWeight="600" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Terminal sx={{ fontSize: 18 }} />
               System Logs
             </Typography>
+
+            <Tooltip title="Export Logs">
+              <IconButton
+                onClick={handleExportMenuOpen}
+                disabled={exportLoading}
+                size="small"
+                sx={{
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'action.selected' },
+                }}
+              >
+                {exportLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <Download sx={{ fontSize: 16 }} />
+                )}
+              </IconButton>
+            </Tooltip>
           </Box>
 
           {/* Logs Content */}
@@ -946,6 +1023,36 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           )}
         </Box>
       </Collapse>
+
+      {/* Export Menu */}
+      <Menu
+        anchorEl={exportMenuAnchor}
+        open={Boolean(exportMenuAnchor)}
+        onClose={handleExportMenuClose}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            minWidth: 200,
+            boxShadow: 3,
+          },
+        }}
+      >
+        <MenuItem onClick={() => handleExportLogs('current')}>
+          <Download sx={{ fontSize: 18, mr: 1 }} />
+          Current Log
+        </MenuItem>
+        <MenuItem onClick={() => handleExportLogs('all')}>
+          <Download sx={{ fontSize: 18, mr: 1 }} />
+          All Logs (ZIP)
+        </MenuItem>
+        <MenuItem onClick={() => {
+          const today = new Date().toISOString().split('T')[0];
+          handleExportLogs('date', today);
+        }}>
+          <Download sx={{ fontSize: 18, mr: 1 }} />
+          Today's Logs
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };

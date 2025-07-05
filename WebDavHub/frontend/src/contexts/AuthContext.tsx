@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           const authOptionalPaths = [
             '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
-            '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
+            '/api/mediahub/events', '/api/mediahub/logs', '/api/file-operations', '/api/source-browse',
             '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];
 
@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Check if this is an endpoint where auth might be optional
           const authOptionalPaths = [
             '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
-            '/api/mediahub/events', '/api/file-operations', '/api/source-browse',
+            '/api/mediahub/events', '/api/mediahub/logs', '/api/file-operations', '/api/source-browse',
             '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
           ];
 

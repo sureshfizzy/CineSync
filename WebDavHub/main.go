@@ -158,6 +158,7 @@ func main() {
 	apiMux.HandleFunc("/api/mediahub/stop", api.HandleMediaHubStop)
 	apiMux.HandleFunc("/api/mediahub/restart", api.HandleMediaHubRestart)
 	apiMux.HandleFunc("/api/mediahub/logs", api.HandleMediaHubLogs)
+	apiMux.HandleFunc("/api/mediahub/logs/export", api.HandleMediaHubLogsExport)
 	apiMux.HandleFunc("/api/mediahub/monitor/start", api.HandleMediaHubMonitorStart)
 	apiMux.HandleFunc("/api/mediahub/monitor/stop", api.HandleMediaHubMonitorStop)
 
