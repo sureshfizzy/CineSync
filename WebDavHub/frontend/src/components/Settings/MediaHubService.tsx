@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Switch, FormControlLabel, Menu, MenuItem } from '@mui/material';
 import axios from 'axios';
-import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle, Download, ExpandMore } from '@mui/icons-material';
+import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle, Download } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
 
 interface MediaHubStatus {

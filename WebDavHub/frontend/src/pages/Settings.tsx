@@ -16,6 +16,10 @@ interface ConfigValue {
   category: string;
   type: 'string' | 'boolean' | 'integer' | 'array';
   required: boolean;
+  beta?: boolean;
+  disabled?: boolean;
+  locked?: boolean;
+  lockedBy?: string;
 }
 
 interface ConfigResponse {
@@ -1207,6 +1211,11 @@ const Settings: React.FC = () => {
                                 options={getFieldOptions(item)}
                                 multiline={item.type === 'array' || item.key.includes('TAGS')}
                                 rows={item.type === 'array' ? 2 : 1}
+                                beta={item.beta}
+                                disabled={item.disabled}
+                                disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                                locked={item.locked}
+                                lockedBy={item.lockedBy}
                               />
                             </Stack>
                           </Box>
@@ -1324,6 +1333,11 @@ const Settings: React.FC = () => {
                               options={getFieldOptions(item)}
                               multiline={item.type === 'array' || item.key.includes('TAGS')}
                               rows={item.type === 'array' ? 2 : 1}
+                              beta={item.beta}
+                              disabled={item.disabled}
+                              disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                              locked={item.locked}
+                              lockedBy={item.lockedBy}
                             />
                           </Stack>
                         </Box>
@@ -1438,6 +1452,11 @@ const Settings: React.FC = () => {
                               options={getFieldOptions(item)}
                               multiline={item.type === 'array' || item.key.includes('TAGS')}
                               rows={item.type === 'array' ? 2 : 1}
+                              beta={item.beta}
+                              disabled={item.disabled}
+                              disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                              locked={item.locked}
+                              lockedBy={item.lockedBy}
                             />
                           </Stack>
                         </Box>
@@ -1526,6 +1545,11 @@ const Settings: React.FC = () => {
                         options={getFieldOptions(item)}
                         multiline={item.type === 'array' || item.key.includes('TAGS')}
                         rows={item.type === 'array' ? 2 : 1}
+                        beta={item.beta}
+                        disabled={item.disabled}
+                        disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                        locked={item.locked}
+                        lockedBy={item.lockedBy}
                       />
                     </Stack>
                   </Box>

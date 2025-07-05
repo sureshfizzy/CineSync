@@ -5,6 +5,78 @@ import requests
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 
+# Beta features that are currently disabled (HARDCODED)
+BETA_DISABLED_FEATURES = {
+    'MEDIAINFO_PARSER': 'MediaInfo Parser is a beta feature currently disabled for usage.',
+    'MEDIAINFO_TAGS': 'MediaInfo Tags is a beta feature currently disabled for usage.'
+}
+
+# Client locked settings - loaded from JSON file if available
+def load_client_locked_settings():
+    """Load client locked settings from MediaHub/utils folder if available"""
+    import json
+
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'utils', 'client_locked_settings.json')
+
+    try:
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+                return data.get('locked_settings', {})
+    except (json.JSONDecodeError, IOError):
+        pass
+
+    # No JSON file found or readable, return empty dict
+    return {}
+
+def is_beta_feature_disabled(feature_name):
+    """Check if a beta feature is disabled and log warning if attempted to use"""
+    if feature_name in BETA_DISABLED_FEATURES:
+        log_message(f"{BETA_DISABLED_FEATURES[feature_name]} This setting will be ignored.", level="WARNING")
+        return True
+    return False
+
+def get_setting_with_client_lock(setting_name, default_value, value_type='string'):
+    """
+    Get a setting value with client lock support.
+    Client locks are loaded from MediaHub/utils/client_locked_settings.json if available.
+    """
+    # Load client locked settings from JSON file
+    client_locked_settings = load_client_locked_settings()
+
+    # Check if setting is locked by client (from JSON file)
+    if setting_name in client_locked_settings and client_locked_settings[setting_name].get('locked', False):
+        locked_value = client_locked_settings[setting_name]['value']
+        env_value = os.getenv(setting_name)
+
+        # Log warning if user tries to override locked setting
+        if env_value and str(env_value) != str(locked_value):
+            log_message(f"{setting_name} is locked by System Administrator. Environment value '{env_value}' ignored, using '{locked_value}'.", level="WARNING")
+
+        # Convert type if needed
+        if value_type == 'int':
+            return int(locked_value)
+        elif value_type == 'bool':
+            return bool(locked_value)
+        else:
+            return locked_value
+
+    env_value = os.getenv(setting_name)
+    if env_value:
+        if value_type == 'int':
+            try:
+                return int(env_value)
+            except ValueError:
+                log_message(f"Invalid integer value for {setting_name}: '{env_value}'. Using default.", level="WARNING")
+                return default_value
+        elif value_type == 'bool':
+            return env_value.lower() in ['true', '1', 'yes']
+        else:
+            return env_value
+
+    # No environment variable, use default
+    return default_value
+
 api_key = None
 api_warning_logged = False
 
@@ -113,6 +185,10 @@ def custom_kids_show_layout():
 
 def get_mediainfo_tags():
     """Get mediainfo tags from environment variable and properly clean them"""
+    # Check if this beta feature is disabled
+    if is_beta_feature_disabled('MEDIAINFO_TAGS'):
+        return []
+
     tags_env = os.getenv('MEDIAINFO_TAGS', '')
     if not tags_env:
         return []
@@ -184,12 +260,17 @@ def tmdb_api_language():
 
 def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""
+    # Check if this beta feature is disabled
+    if is_beta_feature_disabled('MEDIAINFO_PARSER'):
+        return False
+
     return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
 def get_max_cores():
     """Get the maximum number of CPU cores for CPU-bound operations"""
     try:
-        max_cores = int(os.getenv('MAX_CORES', '0'))
+        # Use hardcoded client lock system
+        max_cores = get_setting_with_client_lock('MAX_CORES', 0, 'int')
         from multiprocessing import cpu_count
 
         cpu_cores = cpu_count()
@@ -207,7 +288,8 @@ def get_max_cores():
 def get_max_processes():
     """Get the maximum number of processes for I/O-bound parallel processing (API calls, file operations)"""
     try:
-        max_processes = get_env_int('MAX_PROCESSES', 8)
+        # Use hardcoded client lock system
+        max_processes = get_setting_with_client_lock('MAX_PROCESSES', 8, 'int')
         from multiprocessing import cpu_count
 
         # Respect user's MAX_PROCESSES setting, but ensure it's reasonable

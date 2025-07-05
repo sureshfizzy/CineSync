@@ -38,6 +38,10 @@ type ConfigValue struct {
 	Category    string `json:"category"`
 	Type        string `json:"type"` // string, boolean, integer, array
 	Required    bool   `json:"required"`
+	Beta        bool   `json:"beta,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"`
+	Locked      bool   `json:"locked,omitempty"`
+	LockedBy    string `json:"lockedBy,omitempty"`
 }
 
 // ConfigResponse represents the response structure for configuration
@@ -74,6 +78,89 @@ func getEnvFilePath() string {
 
 	return filepath.Join(cwd, ".env")
 }
+
+// isConfigLocked checks if a configuration key is locked
+func isConfigLocked(key string) (bool, string) {
+	// Check MediaHub utils folder for client locked settings JSON
+	if isMediaHubSettingLocked(key) {
+		return true, "System Administrator"
+	}
+
+	return false, ""
+}
+
+// ClientLockedSetting represents a locked setting from JSON
+type ClientLockedSetting struct {
+	Locked bool        `json:"locked"`
+	Value  interface{} `json:"value"`
+}
+
+// ClientLockedSettingsFile represents the JSON structure
+type ClientLockedSettingsFile struct {
+	LockedSettings map[string]ClientLockedSetting `json:"locked_settings"`
+}
+
+var (
+	clientLockedCache *ClientLockedSettingsFile
+	clientLockedMutex sync.RWMutex
+)
+
+// loadClientLockedSettings loads settings from MediaHub/utils/client_locked_settings.json
+func loadClientLockedSettings() *ClientLockedSettingsFile {
+	clientLockedMutex.RLock()
+	if clientLockedCache != nil {
+		defer clientLockedMutex.RUnlock()
+		return clientLockedCache
+	}
+	clientLockedMutex.RUnlock()
+
+	clientLockedMutex.Lock()
+	defer clientLockedMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if clientLockedCache != nil {
+		return clientLockedCache
+	}
+
+	jsonPath := filepath.Join("..", "MediaHub", "utils", "client_locked_settings.json")
+
+	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
+		// No JSON file exists, return empty structure
+		clientLockedCache = &ClientLockedSettingsFile{
+			LockedSettings: make(map[string]ClientLockedSetting),
+		}
+		return clientLockedCache
+	}
+
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		clientLockedCache = &ClientLockedSettingsFile{
+			LockedSettings: make(map[string]ClientLockedSetting),
+		}
+		return clientLockedCache
+	}
+
+	var lockData ClientLockedSettingsFile
+	if err := json.Unmarshal(data, &lockData); err != nil {
+		clientLockedCache = &ClientLockedSettingsFile{
+			LockedSettings: make(map[string]ClientLockedSetting),
+		}
+		return clientLockedCache
+	}
+
+	clientLockedCache = &lockData
+	return clientLockedCache
+}
+
+// isMediaHubSettingLocked checks if a setting is locked in MediaHub/utils JSON file
+func isMediaHubSettingLocked(key string) bool {
+	lockData := loadClientLockedSettings()
+	if setting, exists := lockData.LockedSettings[key]; exists {
+		return setting.Locked
+	}
+	return false
+}
+
 
 // GetConfigDefinitions returns the configuration definitions with categories and descriptions (exported)
 func GetConfigDefinitions() []ConfigValue {
@@ -150,9 +237,9 @@ func getConfigDefinitions() []ConfigValue {
 
 		// Renaming Structure Configuration
 		{Key: "RENAME_ENABLED", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Enable or disable file renaming based on TMDb data"},
-		{Key: "MEDIAINFO_PARSER", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Determines if MediaInfo will be used to gather metadata information"},
+		{Key: "MEDIAINFO_PARSER", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Determines if MediaInfo will be used to gather metadata information", Beta: true, Disabled: true},
 		{Key: "RENAME_TAGS", Category: "Renaming Structure Configuration", Type: "array", Required: false, Description: "Optional tags to include in file renaming"},
-		{Key: "MEDIAINFO_TAGS", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Specifies the tags from MediaInfo to be used for renaming"},
+		{Key: "MEDIAINFO_TAGS", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Specifies the tags from MediaInfo to be used for renaming", Beta: true, Disabled: true},
 
 		// Movie Collection Settings
 		{Key: "MOVIE_COLLECTION_ENABLED", Category: "Movie Collection Settings", Type: "boolean", Required: false, Description: "Enable or disable separating movie files based on collections"},
@@ -454,6 +541,26 @@ func writeEnvFile(envVars map[string]string) error {
 
 // validateConfigValue validates a configuration value based on its type
 func validateConfigValue(config ConfigValue) error {
+	// Get the definition for this config key to check if it's disabled
+	definitions := getConfigDefinitions()
+	var def *ConfigValue
+	for _, d := range definitions {
+		if d.Key == config.Key {
+			def = &d
+			break
+		}
+	}
+
+	// Check if the configuration is disabled (beta features that are blocked)
+	if def != nil && def.Disabled {
+		return fmt.Errorf("configuration %s is currently disabled and cannot be modified", config.Key)
+	}
+
+	// Check if the configuration is locked by an administrator
+	if locked, lockedBy := isConfigLocked(config.Key); locked {
+		return fmt.Errorf("configuration %s is locked by %s and cannot be modified", config.Key, lockedBy)
+	}
+
 	switch config.Type {
 	case "boolean":
 		if config.Value != "" {
@@ -501,6 +608,7 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 	var configValues []ConfigValue
 	for _, def := range definitions {
 		value := envVars[def.Key]
+		locked, lockedBy := isConfigLocked(def.Key)
 		configValues = append(configValues, ConfigValue{
 			Key:         def.Key,
 			Value:       value,
@@ -508,6 +616,10 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 			Category:    def.Category,
 			Type:        def.Type,
 			Required:    def.Required,
+			Beta:        def.Beta,
+			Disabled:    def.Disabled,
+			Locked:      locked,
+			LockedBy:    lockedBy,
 		})
 	}
 

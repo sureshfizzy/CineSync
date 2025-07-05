@@ -1,13 +1,21 @@
 import subprocess
 import json
+import os
 from MediaHub.utils.ffprobe_parser import *
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import is_beta_feature_disabled
 
 def get_ffprobe_media_info(file_path):
     """
     Use ffprobe to extract media information from the file
     This function directly parses ffprobe output for detailed media information
     """
+    # Check if MediaInfo parser is disabled (beta feature)
+    if is_beta_feature_disabled('MEDIAINFO_PARSER'):
+        log_message("Falling back to filename-based parsing as MediaInfo Parser is disabled.", level="INFO")
+        from MediaHub.utils.mediainfo import extract_media_info, keywords
+        return extract_media_info(os.path.basename(file_path), keywords)
+
     try:
         cmd = [
             'ffprobe',
