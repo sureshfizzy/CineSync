@@ -131,12 +131,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                     all_paths = set()
                     for symlink_path, source_path in file_index_results:
                         if symlink_path:
-                            if search_database_silent and callable(search_database_silent):
-                                is_valid = search_database_silent(symlink_path)
-                                if not is_valid:
-                                    log_message(f"Skipping non-symlink entry: {symlink_path}", level="DEBUG")
-                                    continue
-
                             cursor1.execute("""
                                 SELECT tmdb_id, season_number
                                 FROM processed_files
@@ -187,12 +181,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         file_results = cursor2.fetchall()
 
                                         for symlink_path, source_path in file_results:
-                                            # Verify if this is a valid symlink entry
-                                            if search_database_silent and callable(search_database_silent):
-                                                is_valid = search_database_silent(symlink_path)
-                                                if not is_valid:
-                                                    continue
-
                                             cursor1.execute("""
                                                 SELECT tmdb_id, season_number
                                                 FROM processed_files
@@ -321,11 +309,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                     all_paths = set()
                     for symlink_path, target_path in file_index_results:
                         if symlink_path:
-                            if search_database_silent and callable(search_database_silent):
-                                is_valid = search_database_silent(symlink_path)
-                                if not is_valid:
-                                        continue
-
                             cursor1.execute("""
                                 SELECT tmdb_id, season_number
                                 FROM processed_files
