@@ -707,6 +707,12 @@ if __name__ == "__main__":
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
+    except BrokenPipeError:
+        log_message("Broken pipe error detected, cleaning up and exiting...", level="INFO")
+        terminate_flag.set()
+        terminate_subprocesses()
+        remove_lock_file()
+        sys.exit(0)
     except Exception as e:
         log_message(f"Unhandled exception: {str(e)}", level="ERROR")
         log_message(traceback.format_exc(), level="DEBUG")

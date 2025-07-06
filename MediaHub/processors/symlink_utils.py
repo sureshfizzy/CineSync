@@ -260,11 +260,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 log_message(f"Path not found with os.path.lexists, trying alternative check for: {safe_path}", level="DEBUG")
 
                                 try:
-                                    result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                                    result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=10)
                                     if result.returncode == 0:
                                         log_message(f"File found with ls command: {safe_path}", level="INFO")
                                         log_message(f"Trying to delete symlink using rm command: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
-                                        rm_result = subprocess.run(['rm', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                                        rm_result = subprocess.run(['rm', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=10)
 
                                         if rm_result.returncode == 0:
                                             log_message(f"Successfully deleted symlink using rm command: {safe_path}", level="INFO")
@@ -294,6 +294,10 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+                                except subprocess.TimeoutExpired:
+                                    log_message(f"Timeout checking file with subprocess: {safe_path}", level="WARNING")
+                                except BrokenPipeError:
+                                    log_message(f"Broken pipe error checking file: {safe_path}", level="DEBUG")
                                 except Exception as e:
                                     log_message(f"Error checking file with subprocess: {e}", level="ERROR")
                         except Exception as e:
@@ -516,13 +520,13 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                 # Try executing a command to check if the file exists
                                 try:
-                                    result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                                    result = subprocess.run(['ls', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=10)
                                     if result.returncode == 0:
                                         log_message(f"File found with ls command: {safe_path}", level="INFO")
 
                                         # Try to delete the symlink using subprocess
                                         log_message(f"Trying to delete symlink using rm command: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
-                                        rm_result = subprocess.run(['rm', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                                        rm_result = subprocess.run(['rm', safe_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=10)
 
                                         if rm_result.returncode == 0:
                                             log_message(f"Successfully deleted symlink using rm command: {safe_path}", level="INFO")
@@ -552,6 +556,10 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             track_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+                                except subprocess.TimeoutExpired:
+                                    log_message(f"Timeout checking file with subprocess: {safe_path}", level="WARNING")
+                                except BrokenPipeError:
+                                    log_message(f"Broken pipe error checking file: {safe_path}", level="DEBUG")
                                 except Exception as e:
                                     log_message(f"Error checking file with subprocess: {e}", level="ERROR")
                         except Exception as e:

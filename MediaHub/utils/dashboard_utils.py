@@ -128,30 +128,43 @@ def force_dashboard_recheck():
     """Force a recheck of dashboard availability."""
     _dashboard_checker.force_recheck()
 
-def send_dashboard_notification(url, payload, operation_type="notification"):
+def send_dashboard_notification(url, payload, operation_type="notification", max_retries=2):
     """
-    Send notification to dashboard with availability checking.
+    Send notification to dashboard with retry logic.
     Returns True if sent successfully, False otherwise.
     """
     if not is_dashboard_available():
         return False
-    
-    try:
-        timeout = get_dashboard_timeout()
-        response = requests.post(url, json=payload, timeout=timeout)
-        
-        if response.status_code == 200:
-            return True
-        else:
-            log_message(f"Dashboard {operation_type} failed with status {response.status_code}", level="DEBUG")
-            if response.status_code >= 500:  # Server error, mark as unavailable
+
+    for attempt in range(max_retries + 1):
+        try:
+            timeout = get_dashboard_timeout()
+            response = requests.post(url, json=payload, timeout=timeout)
+
+            if response.status_code == 200:
+                return True
+            elif response.status_code >= 500 and attempt < max_retries:
+                time.sleep(1)
+                continue
+            elif response.status_code >= 500:
                 mark_dashboard_unavailable()
             return False
-            
-    except requests.exceptions.RequestException as e:
-        log_message(f"Dashboard {operation_type} unavailable: {e}", level="DEBUG")
-        mark_dashboard_unavailable()
-        return False
-    except Exception as e:
-        log_message(f"Error sending dashboard {operation_type}: {e}", level="DEBUG")
-        return False
+
+        except (requests.exceptions.ConnectionError, BrokenPipeError) as e:
+            if "broken pipe" in str(e).lower():
+                log_message(f"Dashboard {operation_type} broken pipe (attempt {attempt + 1})", level="DEBUG")
+
+            if attempt < max_retries:
+                time.sleep(1)
+                continue
+            mark_dashboard_unavailable()
+            return False
+
+        except Exception as e:
+            log_message(f"Dashboard {operation_type} error: {e}", level="DEBUG")
+            if attempt < max_retries:
+                time.sleep(1)
+                continue
+            return False
+
+    return False

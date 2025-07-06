@@ -615,7 +615,10 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             })
 
         # Send structured data to WebDavHub API
-        send_structured_message("symlink_created", structured_data)
+        try:
+            send_structured_message("symlink_created", structured_data)
+        except Exception as e:
+            log_message(f"Error sending symlink notification: {e}", level="DEBUG")
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number)

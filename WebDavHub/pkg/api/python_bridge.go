@@ -430,22 +430,41 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	// Use a mutex to synchronize writes to ResponseWriter
 	var mu sync.Mutex
 
-	// Function to send JSON response
+	// Optimized function to send JSON response with minimal retry for transient issues
 	sendResponse := func(resp PythonBridgeResponse) error {
 		mu.Lock()
 		defer mu.Unlock()
+
+		// Check if client connection is still active
+		select {
+		case <-r.Context().Done():
+			return fmt.Errorf("client disconnected")
+		default:
+		}
+
 		data, err := json.Marshal(resp)
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(data)
-		if err != nil {
+
+		// Single attempt with immediate failure detection
+		if _, err = w.Write(data); err != nil {
+			if isClientDisconnectError(err) {
+				logger.Debug("Client disconnected during response write")
+				return fmt.Errorf("client disconnected: %v", err)
+			}
 			return err
 		}
-		_, err = w.Write([]byte("\n"))
-		if err != nil {
+
+		if _, err = w.Write([]byte("\n")); err != nil {
+			if isClientDisconnectError(err) {
+				logger.Debug("Client disconnected during newline write")
+				return fmt.Errorf("client disconnected: %v", err)
+			}
 			return err
 		}
+
+		// Successful write, flush and return
 		flusher.Flush()
 		return nil
 	}
@@ -455,7 +474,14 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
-			sendResponse(PythonBridgeResponse{Output: line})
+			if err := sendResponse(PythonBridgeResponse{Output: line}); err != nil {
+				if isClientDisconnectError(err) {
+					logger.Debug("Client disconnected, stopping stdout reading")
+				} else {
+					logger.Error("Error sending stdout response: %v", err)
+				}
+				break
+			}
 		}
 	}()
 
@@ -467,13 +493,27 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 			// Check if this is a structured message
 			if structuredMsg := parseStructuredMessage(line); structuredMsg != nil {
 				// Send structured data along with the output
-				sendResponse(PythonBridgeResponse{
+				if err := sendResponse(PythonBridgeResponse{
 					Output:         line,
 					StructuredData: structuredMsg,
-				})
+				}); err != nil {
+					if isClientDisconnectError(err) {
+						logger.Debug("Client disconnected, stopping stderr reading")
+					} else {
+						logger.Error("Error sending structured stderr response: %v", err)
+					}
+					break
+				}
 			} else {
 				// Regular stderr output
-				sendResponse(PythonBridgeResponse{Output: line})
+				if err := sendResponse(PythonBridgeResponse{Output: line}); err != nil {
+					if isClientDisconnectError(err) {
+						logger.Debug("Client disconnected, stopping stderr reading")
+					} else {
+						logger.Error("Error sending stderr response: %v", err)
+					}
+					break
+				}
 			}
 		}
 	}()
@@ -489,10 +529,18 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	case err := <-doneChan:
 		if err != nil {
 			logger.Error("Python bridge processing failed for '%s': %v", filepath.Base(realPath), err)
-			sendResponse(PythonBridgeResponse{Error: err.Error(), Done: true})
+			if sendErr := sendResponse(PythonBridgeResponse{Error: err.Error(), Done: true}); sendErr != nil {
+				if !isClientDisconnectError(sendErr) {
+					logger.Error("Error sending error response: %v", sendErr)
+				}
+			}
 		} else {
 			logger.Info("Python bridge processing completed successfully for: %s", filepath.Base(realPath))
-			sendResponse(PythonBridgeResponse{Done: true})
+			if sendErr := sendResponse(PythonBridgeResponse{Done: true}); sendErr != nil {
+				if !isClientDisconnectError(sendErr) {
+					logger.Error("Error sending completion response: %v", sendErr)
+				}
+			}
 		}
 	case <-r.Context().Done():
 		// Client closed connection

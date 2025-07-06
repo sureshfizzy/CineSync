@@ -353,6 +353,8 @@ func clearLiveLogs() {
 
 // streamOutput reads from a pipe and adds to live logs
 func streamOutput(pipe io.ReadCloser, prefix string) {
+	defer pipe.Close()
+
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -360,10 +362,12 @@ func streamOutput(pipe io.ReadCloser, prefix string) {
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
 			logEntry := fmt.Sprintf("[%s] %s: %s", timestamp, prefix, line)
 			addLiveLog(logEntry)
-
-			// Output MediaHub logs directly to terminal without extra prefix
 			fmt.Println(line)
 		}
+	}
+
+	if err := scanner.Err(); err != nil && !strings.Contains(err.Error(), "file already closed") {
+		logger.Debug("Stream output error for %s: %v", prefix, err)
 	}
 }
 
@@ -439,23 +443,8 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 	go streamOutput(stdout, "STDOUT")
 	go streamOutput(stderr, "STDERR")
 
-	// Start a goroutine to wait for the process to finish
-	go func() {
-		err := mediaHubProcess.Wait()
-		mediaHubProcessMux.Lock()
-		if err != nil {
-			logger.Error("MediaHub process exited with error: %v", err)
-			addLiveLog(fmt.Sprintf("[%s] ERROR: MediaHub process exited with error: %v",
-				time.Now().Format("2006-01-02 15:04:05"), err))
-		} else {
-			logger.Info("MediaHub process exited normally")
-			addLiveLog(fmt.Sprintf("[%s] INFO: MediaHub process exited normally",
-				time.Now().Format("2006-01-02 15:04:05")))
-		}
-		mediaHubProcess = nil
-		mediaHubStartTime = time.Time{}
-		mediaHubProcessMux.Unlock()
-	}()
+	// Start optimized goroutine to monitor process with auto-restart capability
+	go monitorMediaHubProcess()
 
 	mediaHubProcessMux.Unlock()
 
@@ -1092,4 +1081,43 @@ func HandleMediaHubMonitorStop(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "MediaHub monitor stopped successfully",
 	})
+}
+
+// monitorMediaHubProcess monitors the MediaHub process with auto-restart for connection issues
+func monitorMediaHubProcess() {
+	err := mediaHubProcess.Wait()
+
+	mediaHubProcessMux.Lock()
+	defer func() {
+		mediaHubProcess = nil
+		mediaHubStartTime = time.Time{}
+		mediaHubProcessMux.Unlock()
+	}()
+
+	if err != nil {
+		logger.Error("MediaHub process exited with error: %v", err)
+		addLiveLog(fmt.Sprintf("[%s] ERROR: MediaHub process exited with error: %v",
+			time.Now().Format("2006-01-02 15:04:05"), err))
+
+		// Auto-restart only for connection issues
+		errorMsg := err.Error()
+		if strings.Contains(errorMsg, "broken pipe") || strings.Contains(errorMsg, "connection reset") {
+			logger.Info("Connection issue detected, attempting auto-restart")
+			mediaHubProcess = nil
+			mediaHubStartTime = time.Time{}
+			mediaHubProcessMux.Unlock()
+
+			time.Sleep(2 * time.Second)
+			if restartErr := StartMediaHubService(); restartErr != nil {
+				logger.Error("Auto-restart failed: %v", restartErr)
+			} else {
+				logger.Info("MediaHub auto-restart successful")
+			}
+			return
+		}
+	} else {
+		logger.Info("MediaHub process exited normally")
+		addLiveLog(fmt.Sprintf("[%s] INFO: MediaHub process exited normally",
+			time.Now().Format("2006-01-02 15:04:05")))
+	}
 }
