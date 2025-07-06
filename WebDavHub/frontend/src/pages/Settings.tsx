@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
 import axios from 'axios';
-import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded } from '@mui/icons-material';
+import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded, FilterListRounded } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
@@ -158,6 +158,13 @@ const Settings: React.FC = () => {
         color: '#6b7280',
         gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
       },
+      'File Handling Configuration': {
+        name: 'File Handling',
+        description: 'File processing & filtering settings',
+        icon: <FilterListRounded sx={{ fontSize: 28 }} />,
+        color: '#ef4444',
+        gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      },
       'Services': {
         name: 'Services',
         description: 'Service management & control',
@@ -310,6 +317,7 @@ const Settings: React.FC = () => {
     'Resolution Folder Mappings Configuration', // Resolution Mappings - quality-based folders
     'TMDb/IMDB Configuration', // TMDB Configuration - movie & TV metadata
     'Renaming Structure Configuration', // Renaming Structure - file renaming & metadata
+    'File Handling Configuration', // File processing & filtering
     'Plex Integration Configuration', // Plex Integration
     'Database Configuration', // Database
     'Real-Time Monitoring Configuration', // Monitoring
