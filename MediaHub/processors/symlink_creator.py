@@ -715,8 +715,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         return (dest_file, True, src_file)
 
     except FileExistsError:
-        log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="WARNING")
-        track_file_failure(src_file, tmdb_id, season_number, "File already exists", f"File already exists: {dest_file}")
+        log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="DEBUG")
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info, dest_file)
     except OSError as e:
