@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button, Checkbox, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +26,7 @@ interface DatabaseStats {
 }
 
 const DatabaseSearch: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,9 +34,26 @@ const DatabaseSearch: React.FC = () => {
   const [records, setRecords] = useState<DatabaseRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<DatabaseStats | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // URL-synchronized pagination
+  const pageFromUrl = parseInt(searchParams.get('dbPage') || '1', 10);
+  const [currentPageState, setCurrentPageState] = useState(pageFromUrl);
   const [recordsPerPage] = useState(50);
   const [totalRecords, setTotalRecords] = useState(0);
+
+  // Function to update both page state and URL
+  const setCurrentPage = useCallback((newPage: number) => {
+    setCurrentPageState(newPage);
+    const newSearchParams = new URLSearchParams(searchParams);
+    if (newPage === 1) {
+      newSearchParams.delete('dbPage');
+    } else {
+      newSearchParams.set('dbPage', newPage.toString());
+    }
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const currentPage = currentPageState;
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [compactView, setCompactView] = useState(false);
 
@@ -84,6 +103,13 @@ const DatabaseSearch: React.FC = () => {
   useEffect(() => {
     fetchDatabaseStats();
   }, [fetchDatabaseStats]);
+
+  useEffect(() => {
+    const urlPage = parseInt(searchParams.get('dbPage') || '1', 10);
+    if (urlPage !== currentPageState) {
+      setCurrentPageState(urlPage);
+    }
+  }, [searchParams, currentPageState]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

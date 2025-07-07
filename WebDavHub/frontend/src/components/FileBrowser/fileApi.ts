@@ -27,7 +27,9 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
     params.append('search', search.trim());
   }
 
-  const response = await axios.get<FileItem[]>('/api/files' + path + '?' + params.toString(), { headers });
+  const url = '/api/files' + path + '?' + params.toString();
+  console.log('fileApi: Making request to:', url);
+  const response = await axios.get<FileItem[]>(url, { headers });
 
   return {
     data: response.data,

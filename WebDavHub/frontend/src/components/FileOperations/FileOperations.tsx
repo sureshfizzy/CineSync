@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse } from '@mui/material';
 import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -57,6 +58,7 @@ function a11yProps(index: number) {
 }
 
 function FileOperations() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [mainTabValue, setMainTabValue] = useState(0);
   const [tabValue, setTabValue] = useState(0);
   const [operations, setOperations] = useState<FileOperation[]>([]);
@@ -64,7 +66,10 @@ function FileOperations() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // URL-synchronized pagination for operations
+  const currentPageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+  const [currentPageState, setCurrentPageState] = useState(currentPageFromUrl);
   const [recordsPerPage] = useState(25);
   const [totalOperations, setTotalOperations] = useState(0);
   const [statusCounts, setStatusCounts] = useState({
@@ -74,12 +79,41 @@ function FileOperations() {
     deleted: 0,
   });
 
+  // URL-synchronized pagination for source files
+  const sourcePageFromUrl = parseInt(searchParams.get('sourcePage') || '1', 10);
+  const [sourcePageState, setSourcePageState] = useState(sourcePageFromUrl);
+
+  // Functions to update both state and URL
+  const setCurrentPage = useCallback((newPage: number) => {
+    setCurrentPageState(newPage);
+    const newSearchParams = new URLSearchParams(searchParams);
+    if (newPage === 1) {
+      newSearchParams.delete('page');
+    } else {
+      newSearchParams.set('page', newPage.toString());
+    }
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const setSourcePage = useCallback((newPage: number) => {
+    setSourcePageState(newPage);
+    const newSearchParams = new URLSearchParams(searchParams);
+    if (newPage === 1) {
+      newSearchParams.delete('sourcePage');
+    } else {
+      newSearchParams.set('sourcePage', newPage.toString());
+    }
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const currentPage = currentPageState;
+  const sourcePage = sourcePageState;
+
   // Source File Browser state
   const [sourceFiles, setSourceFiles] = useState<FileItem[]>([]);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState('');
   const [sourceIndex] = useState<number | undefined>(undefined);
-  const [sourcePage, setSourcePage] = useState(1);
   const [sourceTotalPages, setSourceTotalPages] = useState(1);
   const [sourceTotalFiles, setSourceTotalFiles] = useState(0);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
@@ -306,7 +340,17 @@ function FileOperations() {
     }
   }, []);
 
+  useEffect(() => {
+    const urlCurrentPage = parseInt(searchParams.get('page') || '1', 10);
+    const urlSourcePage = parseInt(searchParams.get('sourcePage') || '1', 10);
 
+    if (urlCurrentPage !== currentPageState) {
+      setCurrentPageState(urlCurrentPage);
+    }
+    if (urlSourcePage !== sourcePageState) {
+      setSourcePageState(urlSourcePage);
+    }
+  }, [searchParams, currentPageState, sourcePageState]);
 
   useEffect(() => {
     if (tabValue === 0) return;

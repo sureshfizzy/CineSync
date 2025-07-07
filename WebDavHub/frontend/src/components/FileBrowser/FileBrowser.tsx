@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { debounce } from '@mui/material/utils';
@@ -56,6 +56,7 @@ const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: {
 export default function FileBrowser() {
   const navigate = useNavigate();
   const params = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { view, setView, handleRefresh } = useLayoutContext();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -64,12 +65,23 @@ export default function FileBrowser() {
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
 
+  // Get page from URL, default to 1
+  const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+  const [page, setPageState] = useState(pageFromUrl);
+
+  // Function to update both page state and URL
+  const setPage = useCallback((newPage: number) => {
+    setPageState(newPage);
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('page', newPage.toString());
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams, setSearchParams, page]);
+
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [page, setPage] = useState(1);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const [configStatus, setConfigStatus] = useState<{
@@ -99,12 +111,20 @@ export default function FileBrowser() {
   }, [files, selectedLetter, sortOption]);
 
   const [totalPages, setTotalPages] = useState(1);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
 
   useEffect(() => {
-    if (page > totalPages) {
+    const urlPage = parseInt(searchParams.get('page') || '1', 10);
+    if (urlPage !== page) {
+      setPageState(urlPage);
+    }
+  }, [searchParams.get('page'), page]);
+
+  useEffect(() => {
+    if (hasLoadedData && page > totalPages && totalPages > 0) {
       setPage(1);
     }
-  }, [totalPages, page]);
+  }, [totalPages, page, setPage, hasLoadedData]);
 
   useEffect(() => {
     folderFetchRef.current = {};
@@ -184,6 +204,7 @@ export default function FileBrowser() {
 
       setFiles(filesWithTmdb);
       setTotalPages(response.totalPages);
+      setHasLoadedData(true);
 
       if (response.tmdbId && response.mediaType) {
         searchTmdb(response.tmdbId, undefined, response.mediaType).then(result => {
@@ -195,6 +216,7 @@ export default function FileBrowser() {
     } catch (err) {
       setError('Failed to fetch files');
       setFiles([]);
+      setHasLoadedData(true);
     } finally {
       if (!isSearchOperation) {
         setLoading(false);
@@ -211,10 +233,22 @@ export default function FileBrowser() {
   );
 
   useEffect(() => {
-    fetchFiles(currentPath, page, search);
+    const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
+    fetchFiles(currentPath, currentUrlPage, search);
   }, [currentPath]);
 
   useEffect(() => {
+    const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
+    if (currentUrlPage !== page) {
+      fetchFiles(currentPath, currentUrlPage, search);
+    }
+  }, [searchParams.get('page')]);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      return;
+    }
+
     setIsSearching(true);
 
     const timeoutId = setTimeout(() => {
