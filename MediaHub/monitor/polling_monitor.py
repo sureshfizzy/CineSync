@@ -1,9 +1,7 @@
 import os
 import time
 import subprocess
-import logging
 import sys
-import io
 from dotenv import load_dotenv, find_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event
@@ -17,6 +15,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.processors.symlink_utils import delete_broken_symlinks, delete_broken_symlinks_batch
+from MediaHub.utils.logging_utils import log_message
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -25,31 +24,11 @@ if not dotenv_path:
 else:
     load_dotenv(dotenv_path)
 
-# Define the logging level dictionary
-LOG_LEVELS = {
-    "DEBUG": logging.DEBUG,
-    "INFO": logging.INFO,
-    "WARNING": logging.WARNING,
-    "ERROR": logging.ERROR,
-    "CRITICAL": logging.CRITICAL,
-}
-
-# Get LOG_LEVEL from environment variable
-log_level = LOG_LEVELS.get(os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-
-# Configure logging with UTF-8 encoding support
-utf8_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', stream=utf8_stdout)
-
 # Add state variables for mount status tracking
 mount_state = None
 
 # Global error event for parallel processing
 error_event = Event()
-
-def log_message(message, level="INFO"):
-    """Logs a message at the specified level with additional context."""
-    logging.log(LOG_LEVELS.get(level.upper(), logging.INFO), message)
 
 def get_mount_point(path):
     """

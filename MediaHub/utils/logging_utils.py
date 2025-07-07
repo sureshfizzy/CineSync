@@ -139,11 +139,11 @@ def log_message(message, level="INFO", output="stdout"):
         # Only apply colors if not on Windows
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
 
-        # Print to console
+        # Print to console with immediate flush
         if output == "stdout":
-            print(colored_message.rstrip())
+            print(colored_message.rstrip(), flush=True)
         elif output == "stderr":
-            print(colored_message.rstrip(), file=sys.stderr)
+            print(colored_message.rstrip(), file=sys.stderr, flush=True)
 
         # Write to log file
         with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
