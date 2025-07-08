@@ -9,6 +9,7 @@ import sqlite3
 import platform
 import traceback
 import requests
+import re
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
@@ -183,8 +184,7 @@ def initialize_db(conn):
                 year TEXT,
                 episode_number TEXT,
                 imdb_id TEXT,
-                is_anime_genre INTEGER,
-                is_kids_content INTEGER
+                is_anime_genre INTEGER
             )
         """)
 
@@ -245,10 +245,6 @@ def initialize_db(conn):
             cursor.execute("ALTER TABLE processed_files ADD COLUMN is_anime_genre INTEGER")
             log_message("Added is_anime_genre column to processed_files table.", level="INFO")
 
-        if "is_kids_content" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN is_kids_content INTEGER")
-            log_message("Added is_kids_content column to processed_files table.", level="INFO")
-
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
@@ -264,14 +260,12 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_kids_content ON processed_files(is_kids_content)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_proper_name ON processed_files(proper_name)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_year ON processed_files(year)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_kids_content ON processed_files(is_kids_content)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -347,7 +341,7 @@ def is_file_processed(conn, file_path):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -372,23 +366,23 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         columns = [column[1] for column in cursor.fetchall()]
         has_processed_at = "processed_at" in columns
         has_error_message = "error_message" in columns
-        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
 
         if has_processed_at and has_error_message and has_new_columns:
             cursor.execute("""
-                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
-                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
-            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
         elif has_error_message and has_new_columns:
             cursor.execute("""
-                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
         elif has_new_columns:
             cursor.execute("""
-                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
         elif has_processed_at and has_error_message:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at)
@@ -683,8 +677,7 @@ def reset_database(conn):
                 year TEXT,
                 episode_number TEXT,
                 imdb_id TEXT,
-                is_anime_genre INTEGER,
-                is_kids_content INTEGER
+                is_anime_genre INTEGER
             )
         """)
 
@@ -965,7 +958,7 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
     except Exception as e:
         log_message(f"Error tracking file deletion: {e}", level="DEBUG")
 
-def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
+def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
     """Save file processing failure directly to database"""
     try:
         save_processed_file(
@@ -980,16 +973,15 @@ def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", 
             year=year,
             episode_number=episode_number,
             imdb_id=imdb_id,
-            is_anime_genre=is_anime_genre,
-            is_kids_content=is_kids_content
+            is_anime_genre=is_anime_genre
         )
         log_message(f"Saved failure to database: {source_path} - {reason}", level="DEBUG")
     except Exception as e:
         log_message(f"Failed to save failure to database: {e}", level="DEBUG")
 
-def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
+def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
     """Track file processing failure in both database and WebDavHub"""
-    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
 
     try:
         payload = {
@@ -1233,13 +1225,13 @@ def search_database(conn, pattern):
         # Check which columns exist
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
-        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
 
         if has_new_columns:
             cursor.execute("""
                 SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
                        media_type, proper_name, year, episode_number, imdb_id,
-                       is_anime_genre, is_kids_content, error_message, processed_at
+                       is_anime_genre, error_message, processed_at
                 FROM processed_files
                 WHERE file_path LIKE ?
                 OR destination_path LIKE ?
@@ -1265,7 +1257,7 @@ def search_database(conn, pattern):
                 if has_new_columns:
                     (file_path, dest_path, tmdb_id, season_number, reason, file_size,
                      media_type, proper_name, year, episode_number, imdb_id,
-                     is_anime_genre, is_kids_content, error_message, processed_at) = row
+                     is_anime_genre, error_message, processed_at) = row
 
                     if media_type:
                         log_message(f"Media Type: {media_type}", level="INFO")
@@ -1282,8 +1274,6 @@ def search_database(conn, pattern):
                         log_message(f"Episode Number: {episode_number}", level="INFO")
                     if is_anime_genre is not None:
                         log_message(f"Anime Genre: {'Yes' if is_anime_genre else 'No'}", level="INFO")
-                    if is_kids_content is not None:
-                        log_message(f"Kids Content: {'Yes' if is_kids_content else 'No'}", level="INFO")
                 else:
                     # Old format
                     file_path, dest_path, tmdb_id, season_number, reason, file_size = row
@@ -1328,13 +1318,13 @@ def search_database_silent(conn, pattern):
         # Check which columns exist
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
-        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
 
         if has_new_columns:
             cursor.execute("""
                 SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
                        media_type, proper_name, year, episode_number, imdb_id,
-                       is_anime_genre, is_kids_content, error_message, processed_at
+                       is_anime_genre, error_message, processed_at
                 FROM processed_files
                 WHERE file_path LIKE ?
                 OR destination_path LIKE ?
@@ -1402,4 +1392,204 @@ def optimize_database(conn):
         return True
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error optimizing database: {e}", level="ERROR")
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def update_database_to_new_format(conn):
+    """Update database entries using TMDB API calls."""
+    try:
+        cursor = conn.cursor()
+
+        # Check if new columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+
+        if not has_new_columns:
+            log_message("Database schema is missing new columns. Creating them now...", level="INFO")
+
+            # Add missing columns
+            missing_columns = {
+                "media_type": "TEXT",
+                "proper_name": "TEXT",
+                "year": "TEXT",
+                "episode_number": "TEXT",
+                "imdb_id": "TEXT",
+                "is_anime_genre": "INTEGER"
+            }
+
+            for column_name, column_type in missing_columns.items():
+                if column_name not in columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE processed_files ADD COLUMN {column_name} {column_type}")
+                        log_message(f"Added {column_name} column to processed_files table.", level="INFO")
+                    except sqlite3.Error as e:
+                        log_message(f"Error adding column {column_name}: {e}", level="ERROR")
+                        return False
+
+            conn.commit()
+            log_message("Database schema updated successfully.", level="INFO")
+
+        # Find entries that need migration (missing new metadata)
+        cursor.execute("""
+            SELECT file_path, destination_path, tmdb_id, season_number
+            FROM processed_files
+            WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
+            AND reason IS NULL
+            AND file_path IS NOT NULL
+        """)
+
+        entries_to_migrate = cursor.fetchall()
+        total_entries = len(entries_to_migrate)
+
+        if total_entries == 0:
+            log_message("No entries found that need migration to new format.", level="INFO")
+            return True
+
+        log_message(f"Found {total_entries} entries that need migration to new format.", level="INFO")
+        log_message("Starting database migration using TMDB API calls...", level="INFO")
+
+        # Import TMDB functions here to avoid circular imports
+        from MediaHub.api.tmdb_api import search_movie, search_tv_show, get_external_ids, get_movie_genres, get_show_genres
+        from MediaHub.utils.file_utils import clean_query, extract_year
+        from MediaHub.processors.anime_processor import is_anime_file
+
+        migrated_count = 0
+        failed_count = 0
+
+        for i, (file_path, dest_path, existing_tmdb_id, season_number) in enumerate(entries_to_migrate, 1):
+            try:
+                log_message(f"Processing entry {i}/{total_entries}: {os.path.basename(file_path)}", level="INFO")
+
+                # Parse the filename using the existing parser
+                filename = os.path.basename(file_path)
+                file_metadata = clean_query(filename)
+
+                # Extract folder name for fallback title extraction
+                if dest_path and os.path.exists(dest_path):
+                    folder_name = os.path.basename(os.path.dirname(dest_path))
+                else:
+                    folder_name = os.path.basename(os.path.dirname(file_path))
+
+                # Extract basic info from parser
+                title = file_metadata.get('title', '')
+                year = file_metadata.get('year') or extract_year(folder_name)
+                season_num = file_metadata.get('season')
+                ep_num = file_metadata.get('episode')
+
+                # If no title from filename, try folder name
+                if not title:
+                    folder_metadata = clean_query(folder_name)
+                    title = folder_metadata.get('title', '')
+                    if not year:
+                        year = folder_metadata.get('year')
+
+                if not title:
+                    log_message(f"Could not extract title from: {filename} or {folder_name}", level="WARNING")
+                    failed_count += 1
+                    continue
+
+                # Check if it's anime
+                is_anime = is_anime_file(file_path)
+
+                log_message(f"Parsed: title='{title}', season={season_num}, episode={ep_num}, year={year}", level="DEBUG")
+
+                # Perform TMDB search
+                tmdb_result = None
+                media_type = None
+                proper_name = title
+                extracted_year = year
+                episode_number = None
+                imdb_id = None
+                tmdb_id = None
+                is_anime_genre = 1 if is_anime else 0
+
+                # Try TV show search first if we have season/episode info, otherwise try movie
+                if season_num or ep_num:
+                    # Search as TV show
+                    tmdb_result = search_tv_show(
+                        title,
+                        year=year,
+                        auto_select=True,
+                        tmdb_id=existing_tmdb_id if existing_tmdb_id else None,
+                        season_number=season_num,
+                        episode_number=ep_num
+                    )
+
+                    if tmdb_result and isinstance(tmdb_result, tuple) and len(tmdb_result) >= 6:
+                        proper_name, _, is_anime_genre, season_num, ep_num, tmdb_id = tmdb_result[:6]
+
+                        media_type = "TV"
+                        episode_number = str(ep_num) if ep_num else None
+
+                        # Extract year from proper_name if available
+                        year_match = re.search(r'\((\d{4})\)', proper_name)
+                        if year_match:
+                            extracted_year = year_match.group(1)
+                            proper_name = re.sub(r'\s*\(\d{4}\)', '', proper_name).strip()
+
+                        # Remove TMDB/IMDB IDs from proper_name
+                        proper_name = re.sub(r'\s*\{[^}]+\}', '', proper_name).strip()
+
+                if not tmdb_result:
+                    # Search as movie
+                    tmdb_result = search_movie(
+                        title,
+                        year=year,
+                        auto_select=True,
+                        tmdb_id=existing_tmdb_id if existing_tmdb_id else None
+                    )
+
+                    if tmdb_result and isinstance(tmdb_result, tuple) and len(tmdb_result) >= 5:
+                        tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = tmdb_result[:5]
+
+                        media_type = "Movie"
+                        extracted_year = str(movie_year) if movie_year else extracted_year
+
+                        # Remove TMDB/IMDB IDs from proper_name
+                        proper_name = re.sub(r'\s*\{[^}]+\}', '', proper_name).strip()
+                        proper_name = re.sub(r'\s*\(\d{4}\)', '', proper_name).strip()
+
+                # Update the database entry with new metadata
+                if tmdb_result:
+                    cursor.execute("""
+                        UPDATE processed_files
+                        SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
+                            imdb_id = ?, is_anime_genre = ?
+                        WHERE file_path = ?
+                    """, (str(tmdb_id) if tmdb_id else None, media_type, proper_name, extracted_year,
+                          str(season_num) if season_num else None, episode_number,
+                          imdb_id, is_anime_genre, file_path))
+
+                    migrated_count += 1
+                    log_message(f"Successfully migrated: {proper_name} ({extracted_year}) - {media_type}", level="DEBUG")
+                else:
+                    log_message(f"TMDB search failed for: {title}", level="WARNING")
+                    failed_count += 1
+
+                # Commit every 10 entries to avoid large transactions
+                if i % 10 == 0:
+                    conn.commit()
+                    log_message(f"Progress: {i}/{total_entries} processed ({migrated_count} migrated, {failed_count} failed)", level="INFO")
+
+            except Exception as e:
+                log_message(f"Error processing entry {file_path}: {str(e)}", level="ERROR")
+                failed_count += 1
+                continue
+
+        # Final commit
+        conn.commit()
+
+        log_message(f"Database migration completed!", level="INFO")
+        log_message(f"Total entries processed: {total_entries}", level="INFO")
+        log_message(f"Successfully migrated: {migrated_count}", level="INFO")
+        log_message(f"Failed migrations: {failed_count}", level="INFO")
+
+        return True
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during database migration: {e}", level="ERROR")
+        conn.rollback()
         return False

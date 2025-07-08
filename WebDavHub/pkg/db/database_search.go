@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -512,6 +514,53 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 	}
 
 	return stats, nil
+}
+
+// HandleDatabaseUpdate handles database update/migration requests
+func HandleDatabaseUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Start database update in background
+	go func() {
+		if err := runDatabaseUpdate(); err != nil {
+			logger.Error("Database update failed: %v", err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Database update started",
+		"status":  "running",
+	})
+}
+
+// runDatabaseUpdate executes the MediaHub database update command
+func runDatabaseUpdate() error {
+	logger.Info("Starting database update to new format...")
+
+	// Execute the MediaHub update database command
+	cmd := exec.Command("python", "main.py", "--update-database")
+	cmd.Dir = "../MediaHub"
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		logger.Error("Database update failed: %v, output: %s", err, string(output))
+		return fmt.Errorf("database update failed: %v", err)
+	}
+
+	logger.Info("Database update completed successfully")
+	logger.Info("Update output: %s", string(output))
+
+	// Parse output for success/failure counts
+	outputStr := string(output)
+	if strings.Contains(outputStr, "Successfully migrated") {
+		logger.Info("Database migration completed with results logged above")
+	}
+
+	return nil
 }
 
 

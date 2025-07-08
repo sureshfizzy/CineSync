@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button, Checkbox, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
-import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Box, Typography, TextField, Card, CardContent, Chip, IconButton, CircularProgress, useTheme, useMediaQuery, alpha, Stack, Tooltip, InputAdornment, Collapse, FormControl, InputLabel, Select, MenuItem, Pagination, Grid, Button, Checkbox, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert } from '@mui/material';
+import { Search as SearchIcon, Clear as ClearIcon, GetApp as ExportIcon, Refresh as RefreshIcon, Movie as MovieIcon, Tv as TvIcon, Folder as FolderIcon, Storage as StorageIcon, TrendingUp as TrendingUpIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, ViewList as CompactViewIcon, ViewModule as CardViewIcon, Delete as DeleteIcon, Update as UpdateIcon, CheckCircle } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 
@@ -62,6 +62,12 @@ const DatabaseSearch: React.FC = () => {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Database update state
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
 
   const fetchDatabaseRecords = useCallback(async () => {
     try {
@@ -227,6 +233,39 @@ const DatabaseSearch: React.FC = () => {
     }
   };
 
+  const handleDatabaseUpdate = async () => {
+    try {
+      setUpdateLoading(true);
+      setError(null);
+      setUpdateSuccess(false);
+      setUpdateMessage('Starting database update...');
+
+      const response = await axios.post('/api/database/update');
+
+      if (response.data.status === 'running') {
+        setUpdateSuccess(true);
+        setUpdateMessage('Database update started successfully! The migration process is running in the background. Check the MediaHub logs for detailed progress and results.');
+
+        // Keep the dialog open to show success message
+        setTimeout(() => {
+          setUpdateDialogOpen(false);
+          setUpdateSuccess(false);
+          setUpdateMessage('');
+          // Refresh data after update completes to show new metadata
+          fetchDatabaseRecords();
+          fetchDatabaseStats();
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Failed to update database:', error);
+      setError('Failed to start database update. Please try again.');
+      setUpdateSuccess(false);
+      setUpdateMessage('');
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'N/A';
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -269,6 +308,30 @@ const DatabaseSearch: React.FC = () => {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
+      {/* Database Update Status Alert */}
+      {updateLoading && (
+        <Alert
+          severity="info"
+          sx={{
+            mb: 3,
+            borderRadius: 2,
+            '& .MuiAlert-icon': {
+              alignItems: 'center'
+            }
+          }}
+          icon={<CircularProgress size={20} />}
+        >
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Database Update in Progress
+            </Typography>
+            <Typography variant="body2">
+              Migrating old entries to new format using TMDB API calls. This may take several minutes...
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       {/* Stats Cards */}
       {stats && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -284,15 +347,23 @@ const DatabaseSearch: React.FC = () => {
               transition={{ delay: 0.1 }}
               onClick={() => handleStatsCardClick('all')}
               sx={{
-                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
+                background: theme.palette.mode === 'dark'
+                  ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, ${alpha(theme.palette.primary.main, 0.08)} 100%)`
+                  : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
+                bgcolor: theme.palette.mode === 'dark' ? '#000000' : 'background.paper',
                 border: `1px solid ${alpha(theme.palette.primary.main, filterType === 'all' ? 0.5 : 0.2)}`,
                 cursor: 'pointer',
                 transform: filterType === 'all' ? 'scale(1.02)' : 'scale(1)',
                 transition: 'all 0.2s ease',
+                boxShadow: theme.palette.mode === 'dark'
+                  ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+                  : '0 1px 3px rgba(0, 0, 0, 0.06)',
                 '&:hover': {
                   transform: 'scale(1.02)',
                   border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-                  boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                  boxShadow: theme.palette.mode === 'dark'
+                    ? `0 4px 16px rgba(0, 0, 0, 0.6)`
+                    : `0 2px 8px ${alpha(theme.palette.primary.main, 0.1)}`,
                 },
               }}
             >
@@ -496,7 +567,15 @@ const DatabaseSearch: React.FC = () => {
         </Grid>
       )}
       {/* Search and Filter Controls */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+      <Card sx={{
+        mb: 3,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: theme.palette.mode === 'dark' ? '#000000' : 'background.paper',
+        boxShadow: theme.palette.mode === 'dark'
+          ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+          : '0 1px 3px rgba(0, 0, 0, 0.06)',
+      }}>
         <CardContent sx={{ p: { xs: 2, sm: 2 } }}>
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
@@ -593,6 +672,24 @@ const DatabaseSearch: React.FC = () => {
                   }}
                 >
                   <ExportIcon />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Update Database to New Format">
+                <IconButton
+                  onClick={() => setUpdateDialogOpen(true)}
+                  disabled={updateLoading}
+                  sx={{
+                    bgcolor: updateLoading ? alpha(theme.palette.warning.main, 0.1) : alpha(theme.palette.warning.main, 0.1),
+                    color: updateLoading ? 'warning.main' : 'warning.main',
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                    '&:hover': {
+                      bgcolor: updateLoading ? alpha(theme.palette.warning.main, 0.1) : alpha(theme.palette.warning.main, 0.2),
+                      borderColor: theme.palette.warning.main,
+                    },
+                  }}
+                >
+                  {updateLoading ? <CircularProgress size={20} color="warning" /> : <UpdateIcon />}
                 </IconButton>
               </Tooltip>
 
@@ -778,15 +875,20 @@ const DatabaseSearch: React.FC = () => {
                       borderColor: isSelected ? 'primary.main' : (theme.palette.mode === 'light'
                         ? alpha(getTypeColor(recordType), 0.3)
                         : alpha(getTypeColor(recordType), 0.2)),
-                      bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
+                      bgcolor: isSelected
+                        ? alpha(theme.palette.primary.main, 0.05)
+                        : (theme.palette.mode === 'dark' ? '#000000' : 'background.paper'),
                       overflow: 'hidden',
+                      boxShadow: theme.palette.mode === 'dark'
+                        ? '0 1px 4px rgba(0, 0, 0, 0.3)'
+                        : '0 1px 3px rgba(0, 0, 0, 0.04)',
                       '&:hover': {
                         borderColor: isSelected ? 'primary.main' : (theme.palette.mode === 'light'
                           ? alpha(getTypeColor(recordType), 0.5)
                           : alpha(getTypeColor(recordType), 0.4)),
                         boxShadow: theme.palette.mode === 'light'
-                          ? `0 4px 20px ${alpha(getTypeColor(recordType), 0.15)}`
-                          : `0 4px 20px ${alpha(getTypeColor(recordType), 0.1)}`,
+                          ? `0 2px 8px ${alpha(getTypeColor(recordType), 0.1)}`
+                          : `0 2px 12px rgba(0, 0, 0, 0.5)`,
                         transform: 'translateY(-2px)',
                       },
                       transition: 'all 0.3s ease',
@@ -1144,10 +1246,23 @@ const DatabaseSearch: React.FC = () => {
         onClose={() => setBulkActionDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+          }
+        }}
         PaperProps={{
           sx: {
             borderRadius: 3,
-            bgcolor: 'background.paper',
+            bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            border: theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.8)'
+              : '0 4px 20px rgba(0, 0, 0, 0.08)',
           }
         }}
       >
@@ -1163,9 +1278,10 @@ const DatabaseSearch: React.FC = () => {
           <DialogContentText sx={{
             color: 'text.primary',
             p: 2,
-            bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.1 : 0.05),
+            bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.15 : 0.05),
             borderRadius: 2,
             borderLeft: `4px solid ${theme.palette.error.main}`,
+            border: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.error.main, 0.2)}` : 'none',
           }}>
             This action will permanently remove the selected file records from the database. The original files will remain untouched in their source locations.
           </DialogContentText>
@@ -1174,9 +1290,9 @@ const DatabaseSearch: React.FC = () => {
               color: 'error.main',
               mt: 2,
               p: 2,
-              bgcolor: alpha(theme.palette.error.main, 0.1),
+              bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.15 : 0.1),
               borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+              border: `1px solid ${alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.3 : 0.3)}`,
             }}>
               {error}
             </DialogContentText>
@@ -1203,6 +1319,150 @@ const DatabaseSearch: React.FC = () => {
           >
             {bulkActionLoading ? 'Deleting...' : `Delete ${selectedFiles.size} Records`}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Database Update Dialog */}
+      <Dialog
+        open={updateDialogOpen}
+        onClose={() => !updateLoading && setUpdateDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+          }
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
+            border: theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.8)'
+              : '0 4px 20px rgba(0, 0, 0, 0.08)',
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          pb: 1,
+          fontSize: '1.25rem',
+          fontWeight: 600,
+          color: 'text.primary',
+        }}>
+          Update Database
+        </DialogTitle>
+        <DialogContent>
+          {!updateSuccess && !updateLoading && (
+            <>
+              <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
+                This will migrate your database entries to the using TMDB API calls to populate missing metadata fields.
+              </DialogContentText>
+              <DialogContentText sx={{
+                color: 'text.primary',
+                p: 2,
+                bgcolor: alpha(theme.palette.info.main, theme.palette.mode === 'dark' ? 0.15 : 0.05),
+                borderRadius: 2,
+                borderLeft: `4px solid ${theme.palette.info.main}`,
+                border: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.info.main, 0.2)}` : 'none',
+                mb: 2,
+              }}>
+                <strong>What this does:</strong>
+                <br />• Finds entries missing new metadata
+                <br />• Uses TMDB API to fetch accurate information
+                <br />• Updates database with proper titles, seasons, episodes, and more
+                <br />• Improves search and browsing experience
+              </DialogContentText>
+              <DialogContentText sx={{
+                color: 'text.primary',
+                p: 2,
+                bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === 'dark' ? 0.15 : 0.05),
+                borderRadius: 2,
+                borderLeft: `4px solid ${theme.palette.warning.main}`,
+                border: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.warning.main, 0.2)}` : 'none',
+              }}>
+                <strong>Note:</strong> This process may take several minutes depending on the number of entries to update. The operation runs in the background.
+              </DialogContentText>
+            </>
+          )}
+
+          {updateLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2 }}>
+              <CircularProgress size={24} color="warning" />
+              <Typography color="text.primary">{updateMessage}</Typography>
+            </Box>
+          )}
+
+          {updateSuccess && (
+            <Box sx={{
+              color: 'success.main',
+              p: 2,
+              bgcolor: alpha(theme.palette.success.main, theme.palette.mode === 'dark' ? 0.15 : 0.05),
+              borderRadius: 2,
+              borderLeft: `4px solid ${theme.palette.success.main}`,
+              border: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.success.main, 0.2)}` : 'none',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1,
+            }}>
+              <CheckCircle sx={{ fontSize: 20, mt: 0.2, flexShrink: 0 }} />
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: 'success.main' }}>
+                  Update Started Successfully!
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.primary', mt: 0.5 }}>
+                  {updateMessage}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {error && (
+            <DialogContentText sx={{
+              color: 'error.main',
+              mt: 2,
+              p: 2,
+              bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.15 : 0.1),
+              borderRadius: 2,
+              border: `1px solid ${alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.3 : 0.3)}`,
+            }}>
+              {error}
+            </DialogContentText>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button
+            onClick={() => {
+              setUpdateDialogOpen(false);
+              setUpdateSuccess(false);
+              setUpdateMessage('');
+              setError(null);
+            }}
+            disabled={updateLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            {updateSuccess ? 'Close' : 'Cancel'}
+          </Button>
+          {!updateSuccess && (
+            <Button
+              onClick={handleDatabaseUpdate}
+              color="warning"
+              variant="contained"
+              disabled={updateLoading}
+              startIcon={updateLoading ? <CircularProgress size={16} color="inherit" /> : <UpdateIcon />}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {updateLoading ? 'Starting Update...' : 'Start Update'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

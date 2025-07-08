@@ -475,7 +475,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             reason = "Extra/Special Content"
             log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
             save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
             return
     else:
         result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
@@ -491,7 +491,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             return
 
         # Handle movie processor return format
-        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
+        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -533,7 +533,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
             save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
             return
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
@@ -566,7 +566,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
         return
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
@@ -625,7 +625,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
 
         # Cleanup old symlink if it exists (force mode)
         if force and 'old_symlink_info' in locals():

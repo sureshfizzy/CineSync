@@ -198,10 +198,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"TMDB ID {tmdb_id} is a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data, manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
                 if movie_result:
-                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content = movie_result
-                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre
                 else:
                     return movie_result
             elif media_type is None:
@@ -224,10 +224,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"Manual search selected a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'), manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
                 if movie_result:
-                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content = movie_result
-                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre
                 else:
                     return movie_result
 
@@ -243,11 +243,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
         elif isinstance(result, tuple) and len(result) >= 6:
-            if len(result) == 7:
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
-            else:
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result
-                is_kids_content = False
+            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result[:6]
             episode_identifier = f"S{season_number}E{episode_number}"
 
             if season_number is not None and episode_number is not None:
@@ -298,9 +294,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Check if file is 4K/2160p
     is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
 
-    # Log kids content detection if enabled
-    if is_kids_content and is_kids_separation_enabled():
-        log_message(f"TV show identified as kids/family content: {proper_show_name}", level="INFO")
+
 
     # Modified destination path determination
     if is_extra:
@@ -526,4 +520,4 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, None,
-            1 if is_anime_genre else 0, 1 if is_kids_content else 0)
+            1 if is_anime_genre else 0)

@@ -143,6 +143,7 @@ func main() {
 	apiMux.HandleFunc("/api/database/search", db.HandleDatabaseSearch)
 	apiMux.HandleFunc("/api/database/stats", db.HandleDatabaseStats)
 	apiMux.HandleFunc("/api/database/export", db.HandleDatabaseExport)
+	apiMux.HandleFunc("/api/database/update", db.HandleDatabaseUpdate)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)

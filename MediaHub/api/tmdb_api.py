@@ -852,3 +852,29 @@ def process_chosen_movie(chosen_movie):
         return {'id': imdb_id, 'title': movie_name, 'release_date': release_date, 'imdb_id': imdb_id}
     else:
         return {'id': tmdb_id, 'title': movie_name, 'release_date': release_date}
+
+def get_external_ids(tmdb_id, media_type):
+    """Get external IDs for a given TMDB ID and media type."""
+    if media_type == 'movie':
+        movie_data = get_movie_data(tmdb_id)
+        return {'imdb_id': movie_data.get('imdb_id', '')}
+    elif media_type == 'tv':
+        show_data = get_show_data(tmdb_id)
+        return show_data.get('external_ids', {})
+    else:
+        log_message(f"Unknown media type: {media_type}", level="ERROR")
+        return {}
+
+def get_movie_genres(tmdb_id):
+    """Get genre information for a movie."""
+    movie_data = get_movie_data(tmdb_id)
+    return {
+        'is_anime_genre': movie_data.get('is_anime_genre', False)
+    }
+
+def get_show_genres(tmdb_id):
+    """Get genre information for a TV show."""
+    show_data = get_show_data(tmdb_id)
+    return {
+        'is_anime_genre': show_data.get('is_anime_genre', False)
+    }

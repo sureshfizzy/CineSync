@@ -81,11 +81,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
-                if len(result) == 6:
-                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
-                else:
-                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
-                    is_kids_content = False
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result[:5]
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
@@ -134,7 +130,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
-            is_kids_content = False
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -143,9 +138,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')
 
-    # Ensure is_kids_content is defined
-    if 'is_kids_content' not in locals():
-        is_kids_content = False
+
 
     # Extract resolution from filename and parent folder
     file_resolution = extract_resolution_from_filename(file)
@@ -158,9 +151,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Check if file is 4K/2160p for custom layout selection
     is_4k = '2160' in file or '4k' in file.lower() or 'uhd' in file.lower()
 
-    # Log kids content detection if enabled
-    if is_kids_content and is_kids_separation_enabled():
-        log_message(f"Movie identified as kids/family content: {proper_movie_name}", level="INFO")
+
 
     # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():
@@ -449,4 +440,4 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     # Return all fields
     return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
-            None, imdb_id, 1 if is_anime_genre else 0, 1 if is_kids_content else 0)
+            None, imdb_id, 1 if is_anime_genre else 0)

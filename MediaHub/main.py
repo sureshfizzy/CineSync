@@ -511,6 +511,8 @@ def main(dest_dir):
                          help="Search for files in database matching the given pattern")
     db_group.add_argument("--optimize", action="store_true",
                          help="Optimize database indexes and analyze tables")
+    db_group.add_argument("--update-database", action="store_true",
+                         help="Update database entries using TMDB API calls")
 
     args = parser.parse_args()
 
@@ -552,6 +554,10 @@ def main(dest_dir):
 
     if args.optimize:
         optimize_database()
+        return
+
+    if args.update_database:
+        update_database_to_new_format()
         return
 
     if args.reset:
