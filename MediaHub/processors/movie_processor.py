@@ -431,4 +431,22 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         new_name = file
 
     dest_file = os.path.join(dest_path, new_name)
-    return dest_file, tmdb_id
+
+    # Extract clean name from proper_name which may include TMDB/IMDB IDs
+    clean_name = proper_name
+    extracted_year = movie_year or year
+
+    # Parse proper_name to extract clean name and year
+    if proper_name:
+        clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_name)
+
+        if not extracted_year:
+            year_match = re.search(r'\((\d{4})\)', clean_name)
+            if year_match:
+                extracted_year = year_match.group(1)
+
+        clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
+
+    # Return all fields
+    return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
+            None, imdb_id, 1 if is_anime_genre else 0, 1 if is_kids_content else 0)

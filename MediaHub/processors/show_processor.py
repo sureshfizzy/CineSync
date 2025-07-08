@@ -198,10 +198,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"TMDB ID {tmdb_id} is a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data, manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
-                if movie_result and len(movie_result) == 2:
-                    dest_file, movie_tmdb_id = movie_result
-                    return dest_file, movie_tmdb_id, None, False
+                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                if movie_result:
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content
                 else:
                     return movie_result
             elif media_type is None:
@@ -224,10 +224,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"Manual search selected a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'), manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id), but show processor expects (dest_file, tmdb_id, season_number, is_extra)
-                if movie_result and len(movie_result) == 2:
-                    dest_file, movie_tmdb_id = movie_result
-                    return dest_file, movie_tmdb_id, None, False
+                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                if movie_result:
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content
                 else:
                     return movie_result
 
@@ -509,4 +509,21 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             dest_file = os.path.join(season_dest_path, file)
 
-    return dest_file, tmdb_id, season_number, is_extra
+    # Extract clean name and year from proper_show_name which may include TMDB ID
+    clean_name = proper_show_name
+    extracted_year = year
+
+    # Parse proper_show_name to extract clean name and year
+    if proper_show_name:
+        clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_show_name)
+
+        year_match = re.search(r'\((\d{4})\)', clean_name)
+        if year_match:
+            extracted_year = year_match.group(1)
+            clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
+
+    # Return all fields
+    return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
+            clean_name, str(extracted_year) if extracted_year else None,
+            str(episode_number) if episode_number else None, None,
+            1 if is_anime_genre else 0, 1 if is_kids_content else 0)

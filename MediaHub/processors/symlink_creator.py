@@ -460,23 +460,22 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 _cleanup_old_symlink(old_symlink_info)
             return
 
-        if len(result) == 5:
-            dest_file, tmdb_id, season_number, is_extra, show_metadata = result
-            if show_metadata and 'episode_number' in show_metadata:
-                episode_number = show_metadata['episode_number']
-        else:
-            dest_file, tmdb_id, season_number, is_extra = result
-            if episode_number is None and season_number is not None:
-                episode_match_result = re.search(r'[Ee](\d{2})', file, re.IGNORECASE)
-                if episode_match_result:
-                    episode_number = int(episode_match_result.group(1))
+        # Handle show processor return format
+        dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
+        # Convert string episode number back to int if needed
+        if episode_number_str:
+            try:
+                episode_number = int(episode_number_str)
+            except (ValueError, TypeError):
+                episode_number = None
 
         # Skip symlink creation for extras unless skipped from env or user explicitly requested force_extra
         if is_extra and not user_requested_force_extra and is_skip_extras_folder_enabled():
             log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
             reason = "Extra/Special Content"
             log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
-            save_processed_file(src_file, None, tmdb_id, season_number, reason)
+            save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
             return
     else:
         result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
@@ -490,7 +489,9 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             if force and 'old_symlink_info' in locals():
                 _cleanup_old_symlink(old_symlink_info)
             return
-        dest_file, tmdb_id = result
+
+        # Handle movie processor return format
+        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -531,7 +532,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         if existing_src == normalized_src_file:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-            save_processed_file(src_file, dest_file, tmdb_id)
+            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
             return
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
@@ -563,7 +565,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         # This should have been caught by the first check, but just in case
         log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
         log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
-        save_processed_file(src_file, dest_file, tmdb_id)
+        save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
         return
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
@@ -621,7 +624,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             log_message(f"Error sending symlink notification: {e}", level="DEBUG")
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-        save_processed_file(src_file, dest_file, tmdb_id, season_number)
+        save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content)
 
         # Cleanup old symlink if it exists (force mode)
         if force and 'old_symlink_info' in locals():

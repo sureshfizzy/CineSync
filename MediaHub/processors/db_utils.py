@@ -177,7 +177,14 @@ def initialize_db(conn):
                 destination_path TEXT,
                 tmdb_id TEXT,
                 season_number TEXT,
-                reason TEXT
+                reason TEXT,
+                media_type TEXT,
+                proper_name TEXT,
+                year TEXT,
+                episode_number TEXT,
+                imdb_id TEXT,
+                is_anime_genre INTEGER,
+                is_kids_content INTEGER
             )
         """)
 
@@ -214,6 +221,34 @@ def initialize_db(conn):
             cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
             log_message("Added processed_at column to processed_files table.", level="INFO")
 
+        if "media_type" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN media_type TEXT")
+            log_message("Added media_type column to processed_files table.", level="INFO")
+
+        if "proper_name" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN proper_name TEXT")
+            log_message("Added proper_name column to processed_files table.", level="INFO")
+
+        if "year" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN year TEXT")
+            log_message("Added year column to processed_files table.", level="INFO")
+
+        if "episode_number" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN episode_number TEXT")
+            log_message("Added episode_number column to processed_files table.", level="INFO")
+
+        if "imdb_id" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN imdb_id TEXT")
+            log_message("Added imdb_id column to processed_files table.", level="INFO")
+
+        if "is_anime_genre" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN is_anime_genre INTEGER")
+            log_message("Added is_anime_genre column to processed_files table.", level="INFO")
+
+        if "is_kids_content" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN is_kids_content INTEGER")
+            log_message("Added is_kids_content column to processed_files table.", level="INFO")
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
@@ -223,6 +258,20 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_message ON processed_files(error_message)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_files(processed_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proper_name ON processed_files(proper_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_year ON processed_files(year)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_kids_content ON processed_files(is_kids_content)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proper_name ON processed_files(proper_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_year ON processed_files(year)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_kids_content ON processed_files(is_kids_content)")
 
         conn.commit()
         log_message("Database schema is up to date.", level="INFO")
@@ -298,7 +347,7 @@ def is_file_processed(conn, file_path):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -318,13 +367,29 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (source_path,))
         is_new_file = cursor.fetchone()[0] == 0
 
-        # Check if processed_at and error_message columns exist
+        # Check if columns exist
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
         has_processed_at = "processed_at" in columns
         has_error_message = "error_message" in columns
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
 
-        if has_processed_at and has_error_message:
+        if has_processed_at and has_error_message and has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+        elif has_error_message and has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+        elif has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content))
+        elif has_processed_at and has_error_message:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -609,7 +674,17 @@ def reset_database(conn):
         cursor.execute("""
             CREATE TABLE processed_files (
                 file_path TEXT PRIMARY KEY,
-                destination_path TEXT
+                destination_path TEXT,
+                tmdb_id TEXT,
+                season_number TEXT,
+                reason TEXT,
+                media_type TEXT,
+                proper_name TEXT,
+                year TEXT,
+                episode_number TEXT,
+                imdb_id TEXT,
+                is_anime_genre INTEGER,
+                is_kids_content INTEGER
             )
         """)
 
@@ -890,7 +965,7 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
     except Exception as e:
         log_message(f"Error tracking file deletion: {e}", level="DEBUG")
 
-def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
+def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
     """Save file processing failure directly to database"""
     try:
         save_processed_file(
@@ -899,15 +974,22 @@ def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", 
             tmdb_id=tmdb_id,
             season_number=season_number,
             reason=reason,
-            error_message=error_message
+            error_message=error_message,
+            media_type=media_type,
+            proper_name=proper_name,
+            year=year,
+            episode_number=episode_number,
+            imdb_id=imdb_id,
+            is_anime_genre=is_anime_genre,
+            is_kids_content=is_kids_content
         )
         log_message(f"Saved failure to database: {source_path} - {reason}", level="DEBUG")
     except Exception as e:
         log_message(f"Failed to save failure to database: {e}", level="DEBUG")
 
-def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message=""):
+def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, is_kids_content=None):
     """Track file processing failure in both database and WebDavHub"""
-    save_file_failure(source_path, tmdb_id, season_number, reason, error_message)
+    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, is_kids_content)
 
     try:
         payload = {
@@ -1147,23 +1229,68 @@ def search_database(conn, pattern):
     try:
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
-        cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
-            FROM processed_files
-            WHERE file_path LIKE ?
-            OR destination_path LIKE ?
-            OR tmdb_id LIKE ?
-        """, (search_pattern, search_pattern, search_pattern))
+
+        # Check which columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
+
+        if has_new_columns:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, is_kids_content, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern))
+
         results = cursor.fetchall()
         if results:
             log_message("-" * 50, level="INFO")
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
             for row in results:
-                file_path, dest_path, tmdb_id, season_number, reason, file_size = row
-                log_message(f"TMDB ID: {tmdb_id}", level="INFO")
-                if season_number is not None:
-                    log_message(f"Season Number: {season_number}", level="INFO")
+                if has_new_columns:
+                    (file_path, dest_path, tmdb_id, season_number, reason, file_size,
+                     media_type, proper_name, year, episode_number, imdb_id,
+                     is_anime_genre, is_kids_content, error_message, processed_at) = row
+
+                    if media_type:
+                        log_message(f"Media Type: {media_type}", level="INFO")
+                    if proper_name:
+                        log_message(f"Title: {proper_name}", level="INFO")
+                    if year:
+                        log_message(f"Year: {year}", level="INFO")
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if imdb_id:
+                        log_message(f"IMDB ID: {imdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+                    if episode_number is not None:
+                        log_message(f"Episode Number: {episode_number}", level="INFO")
+                    if is_anime_genre is not None:
+                        log_message(f"Anime Genre: {'Yes' if is_anime_genre else 'No'}", level="INFO")
+                    if is_kids_content is not None:
+                        log_message(f"Kids Content: {'Yes' if is_kids_content else 'No'}", level="INFO")
+                else:
+                    # Old format
+                    file_path, dest_path, tmdb_id, season_number, reason, file_size = row
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+
                 log_message(f"Source: {file_path}", level="INFO")
                 log_message(f"Destination: {dest_path if dest_path else 'None'}", level="INFO")
                 if file_size is not None:
@@ -1197,13 +1324,33 @@ def search_database_silent(conn, pattern):
     try:
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
-        cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
-            FROM processed_files
-            WHERE file_path LIKE ?
-            OR destination_path LIKE ?
-            OR tmdb_id LIKE ?
-        """, (search_pattern, search_pattern, search_pattern))
+
+        # Check which columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre", "is_kids_content"])
+
+        if has_new_columns:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, is_kids_content, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern))
+
         return cursor.fetchall()
     except (sqlite3.Error, DatabaseError):
         return []
