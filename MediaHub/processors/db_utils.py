@@ -1444,8 +1444,58 @@ def update_database_to_new_format(conn):
         entries_to_migrate = cursor.fetchall()
         total_entries = len(entries_to_migrate)
 
+        def cleanup_tmdb_files():
+            """Helper function to clean up .tmdb files."""
+            tmdb_files_removed = 0
+            cursor.execute("""
+                SELECT DISTINCT destination_path
+                FROM processed_files
+                WHERE destination_path IS NOT NULL
+                AND destination_path != ''
+            """)
+
+            destination_paths = cursor.fetchall()
+            processed_dirs = set()
+
+            for (dest_path,) in destination_paths:
+                if not dest_path or not os.path.exists(dest_path):
+                    continue
+
+                dest_dir = os.path.dirname(dest_path)
+                if not os.path.exists(dest_dir):
+                    continue
+
+                dirs_to_check = [dest_dir]
+
+                parent_dir = os.path.dirname(dest_dir)
+                if parent_dir and os.path.exists(parent_dir):
+                    dir_name = os.path.basename(dest_dir).lower()
+                    if ('season' in dir_name or 'series' in dir_name or
+                        dir_name.startswith('s') and dir_name[1:].isdigit()):
+                        dirs_to_check.append(parent_dir)
+
+                for check_dir in dirs_to_check:
+                    if check_dir in processed_dirs:
+                        continue
+                    processed_dirs.add(check_dir)
+
+                    try:
+                        for item in os.listdir(check_dir):
+                            if item.endswith('.tmdb'):
+                                tmdb_file_path = os.path.join(check_dir, item)
+                                try:
+                                    os.remove(tmdb_file_path)
+                                    tmdb_files_removed += 1
+                                except (OSError, IOError):
+                                    pass
+                    except (OSError, IOError):
+                        continue
+
+            return tmdb_files_removed
+
         if total_entries == 0:
             log_message("No entries found that need migration to new format.", level="INFO")
+            cleanup_tmdb_files()
             return True
 
         log_message(f"Found {total_entries} entries that need migration to new format.", level="INFO")
@@ -1581,6 +1631,8 @@ def update_database_to_new_format(conn):
 
         # Final commit
         conn.commit()
+
+        cleanup_tmdb_files()
 
         log_message(f"Database migration completed!", level="INFO")
         log_message(f"Total entries processed: {total_entries}", level="INFO")
