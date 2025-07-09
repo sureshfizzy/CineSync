@@ -1398,7 +1398,7 @@ def optimize_database(conn):
 @retry_on_db_lock
 @with_connection(main_pool)
 def update_database_to_new_format(conn):
-    """Update database entries using TMDB API calls."""
+    """Update database entries using TMDB API calls with optimized parallel processing."""
     try:
         cursor = conn.cursor()
 
@@ -1494,25 +1494,25 @@ def update_database_to_new_format(conn):
             return tmdb_files_removed
 
         if total_entries == 0:
-            log_message("No entries found that need migration to new format.", level="INFO")
+            log_message("No entries found that need migration.", level="INFO")
             cleanup_tmdb_files()
             return True
 
-        log_message(f"Found {total_entries} entries that need migration to new format.", level="INFO")
-        log_message("Starting database migration using TMDB API calls...", level="INFO")
+        log_message(f"Found {total_entries} entries that need migration.", level="INFO")
+        # Get performance configuration
+        from MediaHub.config.config import get_max_processes, get_db_batch_size, get_db_max_workers
+        max_workers = min(get_max_processes(), get_db_max_workers(), 32)
+        batch_size = get_db_batch_size()
 
         # Import TMDB functions here to avoid circular imports
         from MediaHub.api.tmdb_api import search_movie, search_tv_show, get_external_ids, get_movie_genres, get_show_genres
         from MediaHub.utils.file_utils import clean_query, extract_year
         from MediaHub.processors.anime_processor import is_anime_file
 
-        migrated_count = 0
-        failed_count = 0
-
-        for i, (file_path, dest_path, existing_tmdb_id, season_number) in enumerate(entries_to_migrate, 1):
+        def process_single_entry(entry_data):
+            """Process a single database entry for migration."""
+            file_path, dest_path, existing_tmdb_id, season_number = entry_data
             try:
-                log_message(f"Processing entry {i}/{total_entries}: {os.path.basename(file_path)}", level="INFO")
-
                 # Parse the filename using the existing parser
                 filename = os.path.basename(file_path)
                 file_metadata = clean_query(filename)
@@ -1537,14 +1537,14 @@ def update_database_to_new_format(conn):
                         year = folder_metadata.get('year')
 
                 if not title:
-                    log_message(f"Could not extract title from: {filename} or {folder_name}", level="WARNING")
-                    failed_count += 1
-                    continue
+                    return {
+                        'success': False,
+                        'file_path': file_path,
+                        'error': f"Could not extract title from: {filename} or {folder_name}"
+                    }
 
                 # Check if it's anime
                 is_anime = is_anime_file(file_path)
-
-                log_message(f"Parsed: title='{title}', season={season_num}, episode={ep_num}, year={year}", level="DEBUG")
 
                 # Perform TMDB search
                 tmdb_result = None
@@ -1602,35 +1602,95 @@ def update_database_to_new_format(conn):
                         proper_name = re.sub(r'\s*\{[^}]+\}', '', proper_name).strip()
                         proper_name = re.sub(r'\s*\(\d{4}\)', '', proper_name).strip()
 
-                # Update the database entry with new metadata
+                # Return result for batch processing
                 if tmdb_result:
-                    cursor.execute("""
-                        UPDATE processed_files
-                        SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
-                            imdb_id = ?, is_anime_genre = ?
-                        WHERE file_path = ?
-                    """, (str(tmdb_id) if tmdb_id else None, media_type, proper_name, extracted_year,
-                          str(season_num) if season_num else None, episode_number,
-                          imdb_id, is_anime_genre, file_path))
-
-                    migrated_count += 1
-                    log_message(f"Successfully migrated: {proper_name} ({extracted_year}) - {media_type}", level="DEBUG")
+                    return {
+                        'success': True,
+                        'file_path': file_path,
+                        'tmdb_id': str(tmdb_id) if tmdb_id else None,
+                        'media_type': media_type,
+                        'proper_name': proper_name,
+                        'year': extracted_year,
+                        'season_number': str(season_num) if season_num else None,
+                        'episode_number': episode_number,
+                        'imdb_id': imdb_id,
+                        'is_anime_genre': is_anime_genre
+                    }
                 else:
-                    log_message(f"TMDB search failed for: {title}", level="WARNING")
-                    failed_count += 1
-
-                # Commit every 10 entries to avoid large transactions
-                if i % 10 == 0:
-                    conn.commit()
-                    log_message(f"Progress: {i}/{total_entries} processed ({migrated_count} migrated, {failed_count} failed)", level="INFO")
+                    return {
+                        'success': False,
+                        'file_path': file_path,
+                        'error': f"TMDB search failed for: {title}"
+                    }
 
             except Exception as e:
-                log_message(f"Error processing entry {file_path}: {str(e)}", level="ERROR")
-                failed_count += 1
-                continue
+                return {
+                    'success': False,
+                    'file_path': file_path,
+                    'error': f"Error processing entry: {str(e)}"
+                }
 
-        # Final commit
-        conn.commit()
+        # Process entries in parallel batches
+        migrated_count = 0
+        failed_count = 0
+
+        # Split entries into batches for processing
+        def batch_entries(entries, batch_size):
+            for i in range(0, len(entries), batch_size):
+                yield entries[i:i + batch_size]
+
+        def update_batch_in_db(results):
+            """Update a batch of results in the database."""
+            batch_migrated = 0
+            batch_failed = 0
+
+            for result in results:
+                if result['success']:
+                    try:
+                        cursor.execute("""
+                            UPDATE processed_files
+                            SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
+                                imdb_id = ?, is_anime_genre = ?
+                            WHERE file_path = ?
+                        """, (result['tmdb_id'], result['media_type'], result['proper_name'], result['year'],
+                              result['season_number'], result['episode_number'], result['imdb_id'],
+                              result['is_anime_genre'], result['file_path']))
+                        batch_migrated += 1
+                    except sqlite3.Error as e:
+                        log_message(f"Database error updating {result['file_path']}: {e}", level="ERROR")
+                        batch_failed += 1
+                else:
+                    log_message(result['error'], level="WARNING")
+                    batch_failed += 1
+
+            conn.commit()
+            return batch_migrated, batch_failed
+
+        # Process entries in batches with parallel TMDB API calls
+        batch_num = 0
+        for batch in batch_entries(entries_to_migrate, batch_size):
+            batch_num += 1
+            batch_start_time = time.time()
+
+            log_message(f"Processing batch {batch_num}/{(total_entries + batch_size - 1) // batch_size} "
+                       f"({len(batch)} entries)...", level="INFO")
+
+            # Process batch in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                batch_results = list(executor.map(process_single_entry, batch))
+
+            # Update database with batch results
+            batch_migrated, batch_failed = update_batch_in_db(batch_results)
+            migrated_count += batch_migrated
+            failed_count += batch_failed
+
+            batch_time = time.time() - batch_start_time
+            processed_so_far = min(batch_num * batch_size, total_entries)
+
+            log_message(f"Batch {batch_num} completed in {batch_time:.1f}s: "
+                       f"{batch_migrated} migrated, {batch_failed} failed", level="INFO")
+            log_message(f"Overall progress: {processed_so_far}/{total_entries} "
+                       f"({migrated_count} migrated, {failed_count} failed)", level="INFO")
 
         cleanup_tmdb_files()
 

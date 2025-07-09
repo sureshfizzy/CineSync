@@ -514,7 +514,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                      any(part.lower().startswith('season ') for part in dest_parts) or
                      any(part.lower() == 'extras' for part in dest_parts))
         if is_tv_show:
-            media_type = "tvshow"
+            media_type = "tv"
 
         # Prepare structured data for WebDavHub API
         structured_data = {
@@ -531,7 +531,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         }
 
         # Add metadata for TV shows
-        if show_metadata and media_type == "tvshow":
+        if show_metadata and media_type == "tv":
             structured_data.update({
                 "show_name": show_metadata.get('show_name'),
                 "proper_show_name": show_metadata.get('proper_show_name'),
