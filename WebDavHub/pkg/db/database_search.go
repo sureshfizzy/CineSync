@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	_ "modernc.org/sqlite"
 )
@@ -248,6 +249,169 @@ func GetFileSizeFromDatabase(filePath string) (int64, bool) {
 		return fileSize.Int64, true
 	}
 	return 0, false
+}
+
+// FolderInfo represents folder information from database
+type FolderInfo struct {
+	FolderName   string `json:"folder_name"`
+	FolderPath   string `json:"folder_path"`
+	TmdbID       string `json:"tmdb_id,omitempty"`
+	MediaType    string `json:"media_type,omitempty"`
+	Year         string `json:"year,omitempty"`
+	ProperName   string `json:"proper_name,omitempty"`
+	SeasonNumber int    `json:"season_number,omitempty"`
+	FileCount    int    `json:"file_count"`
+}
+
+// GetFoldersFromDatabase retrieves folder information from processed_files table for a given path
+func GetFoldersFromDatabase(basePath string) ([]FolderInfo, error) {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Debug("Failed to get database connection for folder lookup: %v", err)
+		return nil, err
+	}
+
+	// Load DESTINATION_DIR once at the top of the function
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		logger.Error("DESTINATION_DIR environment variable is not set")
+		return nil, fmt.Errorf("DESTINATION_DIR environment variable is required")
+	}
+	destDir = filepath.Clean(destDir)
+
+	// Clean the base path - remove leading/trailing slashes for consistency
+	cleanBasePath := strings.Trim(basePath, "/\\")
+
+	if cleanBasePath == "" {
+
+		destDirPattern := destDir + string(filepath.Separator) + "%"
+		separator := string(filepath.Separator)
+
+		query := `
+			SELECT DISTINCT
+				CASE
+					WHEN INSTR(SUBSTR(destination_path, LENGTH(?) + 2), ?) > 0
+					THEN SUBSTR(SUBSTR(destination_path, LENGTH(?) + 2), 1, INSTR(SUBSTR(destination_path, LENGTH(?) + 2), ?) - 1)
+					ELSE SUBSTR(destination_path, LENGTH(?) + 2)
+				END as folder_name,
+				COUNT(*) as file_count
+			FROM processed_files
+			WHERE destination_path IS NOT NULL
+			AND destination_path != ''
+			AND destination_path LIKE ?
+			AND LENGTH(SUBSTR(destination_path, LENGTH(?) + 2)) > 0
+			GROUP BY folder_name
+			HAVING folder_name != ''
+			ORDER BY folder_name`
+
+		rows, err := mediaHubDB.Query(query, destDir, separator, destDir, destDir, separator, destDir, destDirPattern, destDir)
+		if err != nil {
+			logger.Debug("Failed to query root folders from database: %v", err)
+			return nil, err
+		}
+		defer rows.Close()
+
+		var folders []FolderInfo
+		for rows.Next() {
+			var folderName string
+			var fileCount int
+
+			err := rows.Scan(&folderName, &fileCount)
+			if err != nil {
+				logger.Debug("Failed to scan root folder row: %v", err)
+				continue
+			}
+
+			if folderName == "" {
+				continue
+			}
+
+			folder := FolderInfo{
+				FolderName: folderName,
+				FolderPath: "/" + folderName,
+				FileCount:  fileCount,
+			}
+
+			folders = append(folders, folder)
+		}
+
+		logger.Debug("Found %d root folders from database (destDir: %s)", len(folders), destDir)
+		return folders, nil
+	}
+
+	// Build the expected directory path
+	expectedDirPath := destDir + string(filepath.Separator) + strings.ReplaceAll(cleanBasePath, "/", string(filepath.Separator))
+
+	if strings.Contains(cleanBasePath, "(") && strings.Contains(cleanBasePath, ")") {
+		return []FolderInfo{}, nil
+	}
+
+	// For category levels (Movies, Shows, etc.), get the movie/show folders
+	searchPattern := expectedDirPath + string(filepath.Separator) + "%"
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, '') as season_number,
+			COUNT(*) as file_count
+		FROM processed_files
+		WHERE destination_path IS NOT NULL
+		AND destination_path != ''
+		AND destination_path LIKE ?
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		AND destination_path NOT LIKE ?
+		GROUP BY proper_name, year, tmdb_id, media_type
+		ORDER BY proper_name, year`
+
+	// Exclude paths that go deeper than one level from current path
+	excludePattern := expectedDirPath + string(filepath.Separator) + "%" + string(filepath.Separator) + "%" + string(filepath.Separator) + "%"
+
+	rows, err := mediaHubDB.Query(query, searchPattern, excludePattern)
+	if err != nil {
+		logger.Debug("Failed to query folders from database: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	for rows.Next() {
+		var folder FolderInfo
+		var seasonNumberStr string
+
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &seasonNumberStr, &folder.FileCount)
+		if err != nil {
+			logger.Debug("Failed to scan folder row: %v", err)
+			continue
+		}
+
+		// Build folder name from proper_name and year (this is what the user wants)
+		if folder.ProperName != "" && folder.Year != "" {
+			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
+		} else if folder.ProperName != "" {
+			folder.FolderName = folder.ProperName
+		} else {
+			continue
+		}
+
+		// Build the folder path for the API
+		folder.FolderPath = "/" + cleanBasePath + "/" + folder.FolderName
+
+		// Parse season number if available
+		if seasonNumberStr != "" {
+			if seasonNum, err := strconv.Atoi(seasonNumberStr); err == nil {
+				folder.SeasonNumber = seasonNum
+			}
+		}
+
+		folders = append(folders, folder)
+	}
+
+	logger.Debug("Found %d folders from database for path: %s", len(folders), basePath)
+	return folders, nil
 }
 
 // GetFileInfoFromDatabase retrieves comprehensive file information from the processed_files table

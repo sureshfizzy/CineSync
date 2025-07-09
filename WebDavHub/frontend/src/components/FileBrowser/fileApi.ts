@@ -77,20 +77,6 @@ export const fetchSourceFiles = async (path: string, sourceIndex?: number, page:
   };
 };
 
-export const fetchTmdbInfo = async (path: string) => {
-  try {
-    const response = await axios.get(`/api/files${path}/.tmdb`, {
-      headers: {
-        'X-Raw-Response': 'true'
-      }
-    });
-  return response.data;
-  } catch (error) {
-    console.error('Failed to fetch TMDB info:', error);
-    return null;
-}
-};
-
 export async function downloadFile(path: string, fileName: string): Promise<void> {
   const response = await axios.get(`/api/files${path}`, { responseType: 'blob' });
   const blob = response.data;

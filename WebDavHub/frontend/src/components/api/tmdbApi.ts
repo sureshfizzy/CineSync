@@ -23,7 +23,9 @@ function makeTmdbCacheKey(query: string, year?: string, mediaType?: string) {
 export async function searchTmdb(query: string, year?: string, mediaType?: 'movie' | 'tv', maxRetries = 3, skipCache = false): Promise<TmdbResult | null> {
   // If query is a TMDB ID (all digits), try cache first (unless skipCache is true)
   if (/^\d+$/.test(query)) {
-    const cacheKey = `id:${query}:${mediaType || ''}`;
+    // Normalize media type to lowercase for cache key consistency
+    const normalizedMediaType = (mediaType || '').toLowerCase();
+    const cacheKey = `id:${query}:${normalizedMediaType}`;
 
     // Only check cache if skipCache is false
     if (!skipCache) {
@@ -52,7 +54,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
 
     // Fetch from details endpoint
     try {
-      const params: any = { id: query, mediaType };
+      const params: any = { id: query, mediaType: normalizedMediaType };
       if (skipCache) params.skipCache = 'true';
       const res = await axios.get('/api/tmdb/details', {
         params,

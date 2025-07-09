@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 )
 
@@ -450,7 +451,7 @@ func updateScanRecord(scanID int64, status string, totalFiles, discovered, updat
 
 // getSourceDirectories retrieves source directories from config
 func getSourceDirectories() ([]string, error) {
-	sourceDir := os.Getenv("SOURCE_DIR")
+	sourceDir := env.GetString("SOURCE_DIR", "")
 	if sourceDir == "" {
 		return []string{}, nil
 	}

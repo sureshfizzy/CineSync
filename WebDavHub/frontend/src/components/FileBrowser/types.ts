@@ -19,6 +19,7 @@ export interface FileItem {
   mediaType?: 'movie' | 'tv';
   posterPath?: string;
   title?: string;
+  releaseDate?: string;
   isSourceRoot?: boolean;
   isSourceFile?: boolean;
   isMediaFile?: boolean;

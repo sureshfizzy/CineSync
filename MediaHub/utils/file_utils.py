@@ -510,13 +510,13 @@ def normalize_query(query: str) -> str:
 def should_skip_processing(filename: str) -> bool:
     """
     Determine if a file should be skipped from MediaHub processing.
-    Returns True if the file should be skipped (metadata files like .tmdb)
+    Returns True if the file should be skipped (metadata files)
     """
     if not isinstance(filename, str):
         return False
 
-    # Skip only metadata files (.tmdb files) - allow .srt and .strm to be processed
-    return filename.lower().endswith(('.sub', '.idx', '.vtt', '.tmdb'))
+    # Skip only metadata files - allow .srt and .strm to be processed
+    return filename.lower().endswith(('.sub', '.idx', '.vtt'))
 
 def is_junk_file(file: str, file_path: str) -> bool:
     """Determine if the file is junk based on size and type."""

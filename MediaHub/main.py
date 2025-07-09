@@ -28,7 +28,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
-from MediaHub.utils.id_refresh import refresh_tmdb_files
+# id_refresh removed - using database instead
 from MediaHub.utils.file_utils import resolve_symlink_to_source
 from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
 from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
@@ -576,7 +576,7 @@ def main(dest_dir):
         return
 
     if args.id_refresh:
-        refresh_tmdb_files()
+        log_message("id_refresh is deprecated - using database instead of .tmdb files", level="INFO")
         return
 
     # Handle monitor-only mode

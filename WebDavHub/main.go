@@ -45,7 +45,7 @@ func main() {
 	logger.Init()
 	env.LoadEnv()
 
-	rootDir := os.Getenv("DESTINATION_DIR")
+	rootDir := env.GetString("DESTINATION_DIR", "")
 	if rootDir == "" {
 		logger.Warn("DESTINATION_DIR not set in .env file")
 		logger.Warn("Using current directory as fallback. Some functionality may not work properly.")

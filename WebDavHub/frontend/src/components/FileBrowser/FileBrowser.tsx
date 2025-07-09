@@ -190,6 +190,22 @@ export default function FileBrowser() {
 
       const filesWithTmdb = response.data.map(file => {
         if (file.type === 'directory') {
+          if (file.tmdbId) {
+            if (file.posterPath && file.mediaType) {
+              const normalizedMediaType = file.mediaType.toLowerCase();
+              const tmdbData = {
+                id: parseInt(file.tmdbId),
+                title: file.title || file.name,
+                poster_path: file.posterPath,
+                backdrop_path: null,
+                media_type: normalizedMediaType,
+                release_date: file.releaseDate || '',
+                overview: ''
+              };
+              updateTmdbData(file.name, tmdbData);
+              setPosterInCache(file.name, normalizedMediaType, tmdbData);
+            }
+          }
 
           if (!file.tmdbId && response.tmdbId) {
             return {
@@ -406,30 +422,74 @@ export default function FileBrowser() {
 
     if (itemsToProcess.length === 0) return;
 
-    // Process all items in parallel with concurrency control for better mobile performance
     const processInParallel = async () => {
-      const CONCURRENT_LIMIT = 100;
+      const CONCURRENT_LIMIT = 50;
+      const BATCH_SIZE = 20;
 
-      // Create batches for controlled concurrency
       const processBatch = async (batch: any[]) => {
         const promises = batch.map(async (file) => {
-          // Double-check if already processed or being processed
           if (folderFetchRef.current[file.name] || tmdbProcessingRef.current[file.name] || tmdbData[file.name]) {
             return;
           }
 
           folderFetchRef.current[file.name] = true;
           tmdbProcessingRef.current[file.name] = true;
-          const mediaType = file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie');
+          const mediaType = (file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie')).toLowerCase();
 
           try {
+            if (file.posterPath && file.tmdbId && file.mediaType) {
+              const normalizedMediaType = file.mediaType.toLowerCase();
+              const dbData = {
+                id: parseInt(file.tmdbId),
+                title: file.title || file.name,
+                poster_path: file.posterPath,
+                backdrop_path: null,
+                media_type: normalizedMediaType,
+                release_date: file.releaseDate || '',
+                overview: ''
+              };
+              updateTmdbData(file.name, dbData);
+              setPosterInCache(file.name, normalizedMediaType, dbData);
+              return;
+            }
+
             const cached = getTmdbDataFromCache(file.name, mediaType);
             if (cached?.poster_path) {
               updateTmdbData(file.name, cached);
               return;
             }
 
-            const apiResult = await searchTmdb(file.tmdbId || file.name, undefined, mediaType, 3);
+            if (file.tmdbId && file.mediaType) {
+              const normalizedFileMediaType = file.mediaType.toLowerCase() as 'movie' | 'tv';
+              const apiResult = await searchTmdb(file.tmdbId, undefined, normalizedFileMediaType, 3);
+              if (apiResult) {
+                let finalPosterPath = apiResult.poster_path;
+                if (file.posterPath) {
+                  finalPosterPath = file.posterPath;
+                }
+
+                let finalData = {
+                  ...apiResult,
+                  poster_path: finalPosterPath,
+                  id: parseInt(file.tmdbId),
+                  media_type: file.mediaType
+                };
+
+                if (cached) {
+                  finalData = { ...cached, ...finalData };
+                }
+
+                if (finalData.media_type === 'movie' || finalData.media_type === 'tv') {
+                  setPosterInCache(file.name, finalData.media_type, finalData);
+                  updateTmdbData(file.name, finalData);
+                } else {
+                  updateTmdbData(file.name, finalData);
+                }
+                return;
+              }
+            }
+
+            const apiResult = await searchTmdb(file.name, undefined, mediaType, 3);
             if (apiResult) {
               let finalData = { ...apiResult };
               if (cached) {
@@ -459,20 +519,26 @@ export default function FileBrowser() {
         await Promise.allSettled(promises);
       };
 
-      // Process items in batches to avoid overwhelming the API
-      for (let i = 0; i < itemsToProcess.length; i += CONCURRENT_LIMIT) {
-        const batch = itemsToProcess.slice(i, i + CONCURRENT_LIMIT);
-        await processBatch(batch);
+      // Process ALL items in controlled batches
+      for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
+        const batch = itemsToProcess.slice(i, i + BATCH_SIZE);
+        console.log(`🎬 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(itemsToProcess.length / BATCH_SIZE)}: ${batch.length} items`);
+
+        // Process items in this batch with concurrency control
+        for (let j = 0; j < batch.length; j += CONCURRENT_LIMIT) {
+          const concurrentBatch = batch.slice(j, j + CONCURRENT_LIMIT);
+          await processBatch(concurrentBatch);
+        }
 
         // Small delay between batches to be respectful to the API
-        if (i + CONCURRENT_LIMIT < itemsToProcess.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (i + BATCH_SIZE < itemsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     };
 
     processInParallel();
-  }, [filteredFiles, view]);
+  }, [filteredFiles, view, page]);
 
   if (loading) {
     return (

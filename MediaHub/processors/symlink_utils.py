@@ -567,34 +567,14 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
     return symlinks_deleted
 
 def _cleanup_empty_dirs(dir_path):
-    """Helper function to clean up empty directories and associated .tmdb files."""
+    """Helper function to clean up empty directories."""
     while dir_path and os.path.isdir(dir_path):
         try:
             # Get directory contents
             dir_contents = os.listdir(dir_path)
-            tmdb_files = [f for f in dir_contents if f.endswith('.tmdb')]
-            non_tmdb_files = [f for f in dir_contents if not f.endswith('.tmdb')]
 
-            # Only proceed with cleanup if directory is empty except for .tmdb files
-            if not non_tmdb_files:
-                # Directory is empty except for .tmdb files, safe to remove everything
-
-                # Remove any .tmdb files found
-                for tmdb_file in tmdb_files:
-                    tmdb_path = os.path.join(dir_path, tmdb_file)
-                    try:
-                        # On Windows, remove hidden attribute if present
-                        if platform.system() == "Windows":
-                            try:
-                                import ctypes
-                                FILE_ATTRIBUTE_NORMAL = 0x80
-                                ctypes.windll.kernel32.SetFileAttributesW(tmdb_path, FILE_ATTRIBUTE_NORMAL)
-                            except Exception:
-                                pass
-
-                        os.remove(tmdb_path)
-                    except Exception as e:
-                        log_message(f"Error deleting .tmdb file {tmdb_path}: {e}", level="WARNING")
+            # Only proceed with cleanup if directory is empty
+            if not dir_contents:
 
                 # Now delete the empty directory
                 log_message(f"Deleting empty folder: {dir_path}", level="INFO")

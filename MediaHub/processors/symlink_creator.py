@@ -45,37 +45,6 @@ def _cleanup_old_symlink(old_symlink_info, new_dest_file=None):
                 os.remove(old_symlink_info['path'])
                 log_message(f"Force mode: Removed old symlink at {old_symlink_info['path']}", level="INFO")
 
-            # Check if we should delete .tmdb file
-            if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
-                should_delete_tmdb = True
-
-                # Check if this is a TV show by looking for season folders
-                old_parts = old_symlink_info['path'].split(os.sep)
-                if any(part.lower().startswith('season ') for part in old_parts):
-                    show_root = None
-                    for i, part in enumerate(old_parts):
-                        if part.lower().startswith('season '):
-                            show_root = os.sep.join(old_parts[:i])
-                            break
-
-                    if show_root and os.path.exists(show_root):
-                        remaining_episodes = 0
-                        for root_dir, dirs, files in os.walk(show_root):
-                            for file_name in files:
-                                file_path = os.path.join(root_dir, file_name)
-                                if os.path.islink(file_path) and file_path != old_symlink_info['path']:
-                                    remaining_episodes += 1
-
-                        # Only delete .tmdb if no other episodes remain
-                        should_delete_tmdb = remaining_episodes == 0
-
-                if should_delete_tmdb:
-                    try:
-                        os.remove(old_symlink_info['tmdb_file_path'])
-                        log_message(f"Deleted old .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
-                    except Exception as e:
-                        log_message(f"Error deleting old .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
-
             # Delete if parent directory is empty
             if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
                 log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
@@ -164,49 +133,13 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
                 old_symlink_info = {
                     'path': existing_dest_path,
                     'parent_dir': os.path.dirname(existing_dest_path),
-                    'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path)),
-                    'tmdb_file_path': None
+                    'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path))
                 }
-
-                # Get .tmdb file path if it exists
-                parts = existing_dest_path.split(os.sep)
-                if any(part.lower().startswith('season ') for part in parts):
-                    for i, part in enumerate(parts):
-                        if part.lower().startswith('season '):
-                            show_root = os.sep.join(parts[:i])
-                            break
-                    old_symlink_info['tmdb_file_path'] = os.path.join(show_root, ".tmdb")
-                else:
-                    old_symlink_info['tmdb_file_path'] = os.path.join(os.path.dirname(existing_dest_path), ".tmdb")
+                # .tmdb file handling removed - using database instead
 
                 # Remove the symlink
                 os.remove(existing_dest_path)
                 log_message(f"Skip mode: Removed existing symlink for {file}", level="INFO")
-
-                # Delete .tmdb file if it exists
-                if old_symlink_info['tmdb_file_path'] and os.path.exists(old_symlink_info['tmdb_file_path']):
-                    should_delete_tmdb = True
-                    if any(part.lower().startswith('season ') for part in parts):
-                        show_root = os.path.dirname(old_symlink_info['tmdb_file_path'])
-                        if os.path.exists(show_root):
-                            remaining_episodes = 0
-                            for root_dir, dirs, files in os.walk(show_root):
-                                for file_name in files:
-                                    file_path = os.path.join(root_dir, file_name)
-                                    if os.path.islink(file_path) and file_path != existing_dest_path:
-                                        remaining_episodes += 1
-
-                            # Only delete .tmdb if no other episodes remain
-                            should_delete_tmdb = remaining_episodes == 0
-                            if not should_delete_tmdb:
-                                log_message(f"Skip mode: Keeping .tmdb file - {remaining_episodes} other episodes remain in show", level="INFO")
-
-                    if should_delete_tmdb:
-                        try:
-                            os.remove(old_symlink_info['tmdb_file_path'])
-                            log_message(f"Skip mode: Deleted .tmdb file at {old_symlink_info['tmdb_file_path']}", level="INFO")
-                        except Exception as e:
-                            log_message(f"Error deleting .tmdb file at {old_symlink_info['tmdb_file_path']}: {e}", level="WARNING")
 
                 # Delete empty directories
                 if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
@@ -254,20 +187,10 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             old_symlink_info = {
                 'path': existing_symlink_path,
                 'parent_dir': os.path.dirname(existing_symlink_path),
-                'parent_parent_dir': os.path.dirname(os.path.dirname(existing_symlink_path)),
-                'tmdb_file_path': None
+                'parent_parent_dir': os.path.dirname(os.path.dirname(existing_symlink_path))
             }
 
-            # Get .tmdb file path if it exists
-            parts = existing_symlink_path.split(os.sep)
-            if any(part.lower().startswith('season ') for part in parts):
-                for i, part in enumerate(parts):
-                    if part.lower().startswith('season '):
-                        show_root = os.sep.join(parts[:i])
-                        break
-                old_symlink_info['tmdb_file_path'] = os.path.join(show_root, ".tmdb")
-            else:
-                old_symlink_info['tmdb_file_path'] = os.path.join(os.path.dirname(existing_symlink_path), ".tmdb")
+            # .tmdb file handling removed - using database instead
 
             log_message(f"Force mode: Will process {file} and cleanup old symlink after successful creation", level="INFO")
 
@@ -643,75 +566,8 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             # Create content in format: tmdb_id:media_type
             tmdb_content = f"{tmdb_id_str}:{media_type}"
 
-            # For shows, place .tmdb in the show root (parent of 'Season xx' or 'Extras')
-            if is_tv_show:
-                show_root = None
-                for i, part in enumerate(parts):
-                    if part.lower().startswith('season ') or part.lower() == 'extras':
-                        show_root = os.sep.join(parts[:i])
-                        break
-
-                if show_root:
-                    tmdb_file_path = normalize_file_path(os.path.join(show_root, ".tmdb"))
-                else:
-                    # Fallback: if no Season or Extras folder found, use parent directory
-                    tmdb_file_path = normalize_file_path(os.path.join(os.path.dirname(dest_file), ".tmdb"))
-            else:
-                tmdb_file_path = normalize_file_path(os.path.join(os.path.dirname(dest_file), ".tmdb"))
-
-            try:
-                # Ensure the directory exists before creating the file
-                tmdb_dir = os.path.dirname(tmdb_file_path)
-                os.makedirs(tmdb_dir, exist_ok=True)
-
-                # Check if file already exists and has the same content
-                file_needs_update = True
-                if os.path.exists(tmdb_file_path):
-                    try:
-                        with open(tmdb_file_path, "r") as existing_file:
-                            existing_content = existing_file.read().strip()
-                            if existing_content == tmdb_content or existing_content == tmdb_id_str:
-                                if existing_content == tmdb_id_str:
-                                    log_message(f"Updating .tmdb file format to include media type: {tmdb_file_path}", level="DEBUG")
-                                else:
-                                    file_needs_update = False
-                    except Exception:
-                        pass
-
-                if file_needs_update:
-                    # On Windows, handle hidden file attributes properly
-                    file_was_hidden = False
-                    if platform.system() == "Windows" and os.path.exists(tmdb_file_path):
-                        try:
-                            # Check if file is currently hidden
-                            FILE_ATTRIBUTE_HIDDEN = 0x02
-                            current_attrs = ctypes.windll.kernel32.GetFileAttributesW(tmdb_file_path)
-                            if current_attrs != -1 and (current_attrs & FILE_ATTRIBUTE_HIDDEN):
-                                file_was_hidden = True
-                                FILE_ATTRIBUTE_NORMAL = 0x80
-                                ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_NORMAL)
-                        except Exception as e:
-                            log_message(f"Warning: Could not handle hidden attribute before writing: {e}", level="DEBUG")
-
-                    # Write the file content
-                    try:
-                        with open(tmdb_file_path, "w") as tmdb_file:
-                            tmdb_file.write(tmdb_content)
-                    except Exception as e:
-                        log_message(f"Error writing .tmdb file content: {e}", level="WARNING")
-                        raise
-
-                # Set hidden attribute on Windows (always set it, whether it was hidden before or not)
-                if platform.system() == "Windows":
-                    try:
-                        import ctypes
-                        FILE_ATTRIBUTE_HIDDEN = 0x02
-                        result = ctypes.windll.kernel32.SetFileAttributesW(tmdb_file_path, FILE_ATTRIBUTE_HIDDEN)
-                    except Exception as e:
-                        log_message(f"Warning: Could not set hidden attribute on .tmdb file: {e}", level="DEBUG")
-
-            except Exception as e:
-                log_message(f"Error creating .tmdb file at {tmdb_file_path}: {e}", level="WARNING")
+            # .tmdb file creation disabled - using database instead
+            log_message(f"Skipping .tmdb file creation (using database) for {dest_file}", level="DEBUG")
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)
