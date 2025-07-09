@@ -28,7 +28,6 @@ from MediaHub.processors.db_utils import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
-# id_refresh removed - using database instead
 from MediaHub.utils.file_utils import resolve_symlink_to_source
 from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
 from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
@@ -492,7 +491,6 @@ def main(dest_dir):
     parser.add_argument("--skip", action="store_true", help="Skip processing the file and mark it as 'Skipped by user' in the database")
     parser.add_argument("--batch-apply", action="store_true", help="Apply the first manual selection to all subsequent files in the batch")
     parser.add_argument("--manual-search", action="store_true", help="Allow manual TMDB search when automatic search fails")
-    parser.add_argument("--id-refresh", action="store_true", help="Create missing .tmdb files for existing symlinks using the database.")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -573,10 +571,6 @@ def main(dest_dir):
             log_message(f"Archived Records: {stats['archived_records']}", level="INFO")
             log_message(f"Main DB Size: {stats['main_db_size']:.2f} MB", level="INFO")
             log_message(f"Archive DB Size: {stats['archive_db_size']:.2f} MB", level="INFO")
-        return
-
-    if args.id_refresh:
-        log_message("id_refresh is deprecated - using database instead of .tmdb files", level="INFO")
         return
 
     # Handle monitor-only mode
