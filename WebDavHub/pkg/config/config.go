@@ -234,15 +234,14 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "TMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable TMDb folder ID functionality"},
 		{Key: "IMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable IMDb folder ID functionality"},
 		{Key: "TVDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable TVDb folder ID functionality"},
+		{Key: "MOVIE_COLLECTION_ENABLED", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable separating movie files based on collections"},
+		{Key: "MOVIE_COLLECTIONS_FOLDER", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Folder name for movie collections"},
 
 		// Renaming Structure Configuration
 		{Key: "RENAME_ENABLED", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Enable or disable file renaming based on TMDb data"},
 		{Key: "MEDIAINFO_PARSER", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Determines if MediaInfo will be used to gather metadata information", Beta: true, Disabled: true},
 		{Key: "RENAME_TAGS", Category: "Renaming Structure Configuration", Type: "array", Required: false, Description: "Optional tags to include in file renaming"},
 		{Key: "MEDIAINFO_TAGS", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Specifies the tags from MediaInfo to be used for renaming", Beta: true, Disabled: true},
-
-		// Movie Collection Settings
-		{Key: "MOVIE_COLLECTION_ENABLED", Category: "Movie Collection Settings", Type: "boolean", Required: false, Description: "Enable or disable separating movie files based on collections"},
 
 		// System Configuration
 		{Key: "RELATIVE_SYMLINK", Category: "System Configuration", Type: "boolean", Required: false, Description: "Create relative symlinks instead of absolute symlinks"},

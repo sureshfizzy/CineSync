@@ -111,7 +111,7 @@ const Settings: React.FC = () => {
       },
       'TMDb/IMDB Configuration': {
         name: 'TMDB Configuration',
-        description: 'Movie & TV show metadata',
+        description: 'Movie & TV metadata, collections',
         icon: <VideoLibraryRounded sx={{ fontSize: 28 }} />,
         color: '#f59e0b',
         gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
@@ -120,6 +120,20 @@ const Settings: React.FC = () => {
         name: 'Renaming Structure',
         description: 'File renaming & metadata parsing',
         icon: <DriveFileRenameOutlineRounded sx={{ fontSize: 28 }} />,
+        color: '#10b981',
+        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      },
+      'Movie Collection Settings': {
+        name: 'Movie Collections',
+        description: 'Movie collection organization',
+        icon: <VideoLibraryRounded sx={{ fontSize: 28 }} />,
+        color: '#f59e0b',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      },
+      'MediaHub Service Configuration': {
+        name: 'MediaHub Service',
+        description: 'Service startup & control settings',
+        icon: <SettingsApplicationsRounded sx={{ fontSize: 28 }} />,
         color: '#10b981',
         gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       },
@@ -144,6 +158,13 @@ const Settings: React.FC = () => {
         color: '#06b6d4',
         gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
       },
+      'Rclone Mount Configuration': {
+        name: 'Rclone Mount',
+        description: 'Mount verification & monitoring',
+        icon: <StorageRounded sx={{ fontSize: 28 }} />,
+        color: '#8b5cf6',
+        gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+      },
       'CineSync Configuration': {
         name: 'CineSync',
         description: 'Server settings & authentication',
@@ -164,6 +185,13 @@ const Settings: React.FC = () => {
         icon: <FilterListRounded sx={{ fontSize: 28 }} />,
         color: '#ef4444',
         gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      },
+      'Logging Configuration': {
+        name: 'Logging',
+        description: 'Log level & output settings',
+        icon: <Build sx={{ fontSize: 28 }} />,
+        color: '#f59e0b',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
       },
       'Services': {
         name: 'Services',
@@ -321,6 +349,8 @@ const Settings: React.FC = () => {
     'Plex Integration Configuration', // Plex Integration
     'Database Configuration', // Database
     'Real-Time Monitoring Configuration', // Monitoring
+    'Rclone Mount Configuration', // Mount verification & monitoring
+    'Logging Configuration', // Logging - log level & output settings
     'System Configuration', // Advanced
   ];
 
