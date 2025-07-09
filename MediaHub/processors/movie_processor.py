@@ -112,12 +112,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
             return None, None
 
-        elif isinstance(result, tuple) and len(result) >= 5:
-            if len(result) == 6:
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
-            else:
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
-                is_kids_content = False
+        elif isinstance(result, tuple) and len(result) >= 6:
+            tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
             year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
@@ -440,4 +436,4 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     # Return all fields
     return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
-            None, imdb_id, 1 if is_anime_genre else 0)
+            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content)

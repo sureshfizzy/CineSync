@@ -198,10 +198,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"TMDB ID {tmdb_id} is a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=None, file_metadata=None, movie_data=media_data, manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                # Movie processor returns
                 if movie_result:
-                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre = movie_result
-                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, movie_is_kids_content = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, movie_is_kids_content
                 else:
                     return movie_result
             elif media_type is None:
@@ -224,10 +224,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 log_message(f"Manual search selected a movie. Redirecting to movie processor for: {file}", level="INFO")
                 movie_result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=result.get('movie_data'), manual_search=manual_search)
 
-                # Movie processor returns (dest_file, tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                # Movie processor returns
                 if movie_result:
-                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre = movie_result
-                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre
+                    dest_file, movie_tmdb_id, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, movie_is_kids_content = movie_result
+                    return dest_file, movie_tmdb_id, None, False, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, movie_is_kids_content
                 else:
                     return movie_result
 
@@ -242,8 +242,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"TMDB search failed for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
-        elif isinstance(result, tuple) and len(result) >= 6:
-            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id = result[:6]
+        elif isinstance(result, tuple) and len(result) >= 7:
+            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
             episode_identifier = f"S{season_number}E{episode_number}"
 
             if season_number is not None and episode_number is not None:
@@ -520,4 +520,4 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, None,
-            1 if is_anime_genre else 0)
+            1 if is_anime_genre else 0, is_kids_content)

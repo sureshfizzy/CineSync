@@ -414,7 +414,7 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             return
 
         # Handle movie processor return format
-        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre = result
+        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -553,21 +553,6 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
         # Cleanup old symlink if it exists (force mode)
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info, dest_file)
-
-        if tmdb_id:
-            tmdb_id_str = str(tmdb_id)
-
-            # Determine media type based on whether it was processed as show or movie
-            # Check if this is a show by looking at the destination path structure
-            parts = normalize_file_path(dest_file).split(os.sep)
-            is_tv_show = any(part.lower().startswith('season ') for part in parts) or any(part.lower() == 'extras' for part in parts)
-            media_type = "tv" if is_tv_show else "movie"
-
-            # Create content in format: tmdb_id:media_type
-            tmdb_content = f"{tmdb_id_str}:{media_type}"
-
-            # .tmdb file creation disabled - using database instead
-            log_message(f"Skipping .tmdb file creation (using database) for {dest_file}", level="DEBUG")
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)
