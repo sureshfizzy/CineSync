@@ -81,6 +81,16 @@ func SetRootDir(dir string) {
 			}()
 		}
 	}
+
+	// Initialize folder cache for fast navigation
+	if !isPlaceholderConfig {
+		go func() {
+			time.Sleep(2 * time.Second)
+			if err := db.InitializeFolderCache(); err != nil {
+				logger.Warn("Failed to initialize folder cache: %v", err)
+			}
+		}()
+	}
 }
 
 // UpdateRootDir updates the root directory when configuration changes
@@ -327,32 +337,46 @@ func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, 
 		return "", "", "", ""
 	}
 
-	// Normalize media type to lowercase for cache key consistency
-	normalizedMediaType := strings.ToLower(mediaType)
-	cacheKey := "id:" + tmdbID + ":" + normalizedMediaType
+	// Try multiple media type variations to handle mixed database values
+	mediaTypeVariations := []string{
+		strings.ToLower(mediaType),
+		mediaType,                 
+		strings.ToUpper(mediaType),
+	}
 
-	if result, err := db.GetTmdbCache(cacheKey); err == nil && result != "" {
-		var tmdbData map[string]interface{}
-		if err := json.Unmarshal([]byte(result), &tmdbData); err == nil {
-			posterPath := ""
-			title := ""
-			resultMediaType := ""
-			releaseDate := ""
+	// For TV shows, also try common variations
+	if strings.ToLower(mediaType) == "tv" || strings.ToLower(mediaType) == "tvshow" {
+		mediaTypeVariations = append(mediaTypeVariations, "tv", "TV", "tvshow", "tvShow", "TvShow")
+	}
 
-			if pp, ok := tmdbData["poster_path"].(string); ok {
-				posterPath = pp
-			}
-			if t, ok := tmdbData["title"].(string); ok {
-				title = t
-			}
-			if mt, ok := tmdbData["media_type"].(string); ok {
-				resultMediaType = mt
-			}
-			if rd, ok := tmdbData["release_date"].(string); ok {
-				releaseDate = rd
-			}
+	for _, mt := range mediaTypeVariations {
+		cacheKey := "id:" + tmdbID + ":" + mt
 
-			return posterPath, title, resultMediaType, releaseDate
+		if result, err := db.GetTmdbCache(cacheKey); err == nil && result != "" {
+			var tmdbData map[string]interface{}
+			if err := json.Unmarshal([]byte(result), &tmdbData); err == nil {
+				posterPath := ""
+				title := ""
+				resultMediaType := ""
+				releaseDate := ""
+
+				if pp, ok := tmdbData["poster_path"].(string); ok {
+					posterPath = pp
+				}
+				if t, ok := tmdbData["title"].(string); ok {
+					title = t
+				}
+				if mt, ok := tmdbData["media_type"].(string); ok {
+					resultMediaType = mt
+				}
+				if rd, ok := tmdbData["release_date"].(string); ok {
+					releaseDate = rd
+				}
+
+				if posterPath != "" {
+					return posterPath, title, resultMediaType, releaseDate
+				}
+			}
 		}
 	}
 
@@ -443,35 +467,51 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	dir := filepath.Join(rootDir, path)
 	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 
-	// Try database-first approach for folder listing
+	// Try database-first approach for folder listing with pagination
 	var dbFolders []db.FolderInfo
+	var totalDbFolders int
 	var dbErr error
 	var useDatabase bool
 
-	if searchQuery == "" { // Only use database for non-search requests
-		dbFolders, dbErr = db.GetFoldersFromDatabase(path)
+	if searchQuery == "" {
+		// Regular folder listing - use cached database approach
+		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, page, limit)
 		if dbErr != nil {
 			logger.Debug("Failed to get folders from database, falling back to readdir: %v", dbErr)
 			useDatabase = false
 		} else {
 			useDatabase = len(dbFolders) > 0
 		}
+	} else {
+		// Search query - use database search instead of filesystem
+		logger.Debug("Using database search for query: '%s'", searchQuery)
+		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabase(path, searchQuery, page, limit)
+		if dbErr != nil {
+			logger.Debug("Failed to search folders in database: %v", dbErr)
+			// For search queries, if database fails, return empty results instead of filesystem fallback
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Total-Count", "0")
+			w.Header().Set("X-Page", fmt.Sprintf("%d", page))
+			w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
+			w.Header().Set("X-Total-Pages", "0")
+			w.Header().Set("X-Search-Query", searchQuery)
+			json.NewEncoder(w).Encode([]FileInfo{})
+			return
+		} else {
+			useDatabase = true // Always use database for search, never filesystem
+			logger.Debug("Database search returned %d folders", len(dbFolders))
+		}
 	}
 
-	// Only read filesystem if database is not available or for search
+	// Only read filesystem if database is not available AND it's not a search query
 	var entries []os.DirEntry
-	if !useDatabase || searchQuery != "" {
+	if !useDatabase && searchQuery == "" {
 		var err error
 		entries, err = os.ReadDir(dir)
 		if err != nil {
 			logger.Warn("Failed to read directory: %s - %v", dir, err)
-			// If database also failed, return error
-			if !useDatabase {
-				http.Error(w, "Failed to read directory", http.StatusInternalServerError)
-				return
-			}
-			// Continue with database results only
-			entries = []os.DirEntry{}
+			http.Error(w, "Failed to read directory", http.StatusInternalServerError)
+			return
 		}
 	} else {
 		entries = []os.DirEntry{}
@@ -502,7 +542,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	processedFolders := make(map[string]bool)
 
 	// First, add folders from database
-	if searchQuery == "" && len(dbFolders) > 0 {
+	if len(dbFolders) > 0 {
+		logger.Debug("Processing %d database folders", len(dbFolders), searchQuery)
 		for _, dbFolder := range dbFolders {
 			fileInfo := FileInfo{
 				Name:     dbFolder.FolderName,
@@ -655,7 +696,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 			// Get TMDB info from database if using database mode
 			if !isSubdirCategoryFolder && useDatabase {
-				// Try to find TMDB info from database folders for this subdirectory
 				for _, dbFolder := range dbFolders {
 					if dbFolder.FolderName == entry.Name() {
 						subDirTmdbID = dbFolder.TmdbID
@@ -758,18 +798,23 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	// Apply pagination after filtering
-	totalFiles := len(files)
-	startIndex := (page - 1) * limit
-	endIndex := startIndex + limit
-
-	if startIndex >= totalFiles {
-		files = []FileInfo{}
+	// Apply pagination
+	var totalFiles int
+	if useDatabase && searchQuery == "" {
+		totalFiles = totalDbFolders
 	} else {
-		if endIndex > totalFiles {
-			endIndex = totalFiles
+		totalFiles = len(files)
+		startIndex := (page - 1) * limit
+		endIndex := startIndex + limit
+
+		if startIndex >= totalFiles {
+			files = []FileInfo{}
+		} else {
+			if endIndex > totalFiles {
+				endIndex = totalFiles
+			}
+			files = files[startIndex:endIndex]
 		}
-		files = files[startIndex:endIndex]
 	}
 
 	// Add pagination headers

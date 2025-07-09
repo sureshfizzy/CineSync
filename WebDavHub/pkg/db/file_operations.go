@@ -125,6 +125,7 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	switch req.Operation {
 	case "add":
 		message = "Addition tracked successfully"
+		UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
 
 	case "delete":
 		err = TrackFileDeletion(req.SourcePath, req.DestinationPath, req.TmdbID, req.SeasonNumber, req.Reason)
@@ -134,6 +135,7 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		message = "Deletion tracked successfully"
+		RemoveFolderFromCacheFromDB(req.DestinationPath, req.TmdbID)
 
 	case "failed":
 		err = TrackFileFailure(req.SourcePath, req.TmdbID, req.SeasonNumber, req.Reason, req.Error)

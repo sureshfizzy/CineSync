@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
@@ -68,48 +69,337 @@ type DatabaseSearchResponse struct {
 	Total   int              `json:"total"`
 }
 
-// HandleDatabaseSearch handles database search requests
-func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// FolderCache represents a cache for folder structure similar to Jellyfin's approach
+type FolderCache struct {
+	mu           sync.RWMutex
+	rootFolders  map[string][]FolderInfo
+	pathFolders  map[string][]FolderInfo
+	totalCounts  map[string]int
+	lastUpdated  time.Time
+	initialized  bool
+}
+
+var (
+	globalFolderCache *FolderCache
+	cacheOnce         sync.Once
+)
+
+// GetFolderCache returns the global folder cache instance
+func GetFolderCache() *FolderCache {
+	cacheOnce.Do(func() {
+		globalFolderCache = &FolderCache{
+			rootFolders: make(map[string][]FolderInfo),
+			pathFolders: make(map[string][]FolderInfo),
+			totalCounts: make(map[string]int),
+		}
+	})
+	return globalFolderCache
+}
+
+// InitializeFolderCache loads folder structure at startup with performance monitoring
+func InitializeFolderCache() error {
+	cache := GetFolderCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	// Get common categories from filesystem (since root level uses filesystem anyway)
+	commonCategories := []string{"Movies", "Shows", "AnimeMovies", "AnimeShows", "KidsMovies", "KidsShows", "4KMovies"}
+
+	// Pre-load first 2000 items for each category (better cache coverage)
+	for _, category := range commonCategories {
+		// Smart caching: Load first 2000 folders (covers most navigation patterns)
+		// This balances memory usage vs performance for large libraries
+		categoryFolders, totalCategory, err := GetFoldersFromDatabasePaginated(category, 1, 2000)
+		if err != nil {
+			continue
+		}
+
+		if len(categoryFolders) > 0 {
+			cache.pathFolders[category] = categoryFolders
+			cache.totalCounts[category] = totalCategory
+		}
+	}
+
+	cache.lastUpdated = time.Now()
+	cache.initialized = true
+	return nil
+}
+
+// InvalidateFolderCache clears the cache when database is updated (legacy function)
+func InvalidateFolderCache() {
+	cache := GetFolderCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	cache.rootFolders = make(map[string][]FolderInfo)
+	cache.pathFolders = make(map[string][]FolderInfo)
+	cache.totalCounts = make(map[string]int)
+	cache.initialized = false
+
+	logger.Info("Folder cache invalidated")
+}
+
+// UpdateFolderCacheForNewFile adds a new file to the cache instead of invalidating everything
+func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, mediaType string, seasonNumber int) {
+	if destinationPath == "" || properName == "" {
 		return
 	}
 
-	// Get query parameters
-	query := r.URL.Query().Get("query")
-	filterType := r.URL.Query().Get("type")
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
+	cache := GetFolderCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 
-	limit := 50
-	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
+	if !cache.initialized {
+		return
+	}
+
+	// Extract the category from destination path
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		return
+	}
+
+	// Remove destination directory prefix to get relative path
+	relativePath := strings.TrimPrefix(destinationPath, destDir)
+	relativePath = strings.Trim(relativePath, "/\\")
+
+	// Split path to get category (Movies, TV Shows, etc.)
+	pathParts := strings.Split(relativePath, string(filepath.Separator))
+	if len(pathParts) == 0 {
+		return
+	}
+
+	category := pathParts[0]
+
+	// Build folder name from proper_name and year
+	var folderName string
+	if year != "" {
+		folderName = properName + " (" + year + ")"
+	} else {
+		folderName = properName
+	}
+
+	// Check if this folder already exists in cache
+	if cachedFolders, exists := cache.pathFolders[category]; exists {
+		// Check if folder already exists
+		folderExists := false
+		for i, folder := range cachedFolders {
+			if folder.FolderName == folderName {
+				cache.pathFolders[category][i].FileCount++
+				folderExists = true
+				break
+			}
+		}
+
+		// If folder doesn't exist, add it
+		if !folderExists {
+			newFolder := FolderInfo{
+				FolderName:   folderName,
+				FolderPath:   "/" + category + "/" + folderName,
+				ProperName:   properName,
+				Year:         year,
+				TmdbID:       tmdbID,
+				MediaType:    mediaType,
+				SeasonNumber: seasonNumber,
+				FileCount:    1,
+			}
+
+			// Insert in alphabetical order
+			inserted := false
+			for i, folder := range cachedFolders {
+				if strings.ToLower(folderName) < strings.ToLower(folder.FolderName) {
+					cache.pathFolders[category] = append(cachedFolders[:i], append([]FolderInfo{newFolder}, cachedFolders[i:]...)...)
+					inserted = true
+					break
+				}
+			}
+			if !inserted {
+				cache.pathFolders[category] = append(cachedFolders, newFolder)
+			}
+			cache.totalCounts[category]++
 		}
 	}
 
-	offset := 0
-	if offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
-			offset = parsedOffset
+	// Update root folder counts
+	if rootFolders, exists := cache.rootFolders[""]; exists {
+		for i, folder := range rootFolders {
+			if folder.FolderName == category {
+				cache.rootFolders[""][i].FileCount++
+				break
+			}
+		}
+	}
+}
+
+// RemoveFolderFromCache removes a folder from cache when files are deleted
+func RemoveFolderFromCache(destinationPath, properName, year string) {
+	if destinationPath == "" || properName == "" {
+		return
+	}
+
+	cache := GetFolderCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if !cache.initialized {
+		return
+	}
+
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		return
+	}
+
+	relativePath := strings.TrimPrefix(destinationPath, destDir)
+	relativePath = strings.Trim(relativePath, "/\\")
+
+	pathParts := strings.Split(relativePath, string(filepath.Separator))
+	if len(pathParts) == 0 {
+		return
+	}
+
+	category := pathParts[0]
+
+	var folderName string
+	if year != "" {
+		folderName = properName + " (" + year + ")"
+	} else {
+		folderName = properName
+	}
+
+	// Update cache
+	if cachedFolders, exists := cache.pathFolders[category]; exists {
+		for i, folder := range cachedFolders {
+			if folder.FolderName == folderName {
+				cache.pathFolders[category][i].FileCount--
+
+				if cache.pathFolders[category][i].FileCount <= 0 {
+					cache.pathFolders[category] = append(cachedFolders[:i], cachedFolders[i+1:]...)
+					cache.totalCounts[category]--
+
+				}
+				break
+			}
 		}
 	}
 
-	// Use the database connection pool
+	// Update root folder counts
+	if rootFolders, exists := cache.rootFolders[""]; exists {
+		for i, folder := range rootFolders {
+			if folder.FolderName == category {
+				if cache.rootFolders[""][i].FileCount > 0 {
+					cache.rootFolders[""][i].FileCount--
+				}
+				break
+			}
+		}
+	}
+}
+
+// UpdateFolderCacheForNewFileFromDB adds a new file to cache by looking up metadata from database
+func UpdateFolderCacheForNewFileFromDB(destinationPath, tmdbID, seasonNumberStr string) {
+	if destinationPath == "" {
+		return
+	}
+
+	// Get database connection
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		logger.Error("Failed to get database connection: %v", err)
-		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		logger.Debug("Failed to get database connection for cache update: %v", err)
 		return
 	}
 
-	// Build WHERE clause for both count and data queries
+	// Query database for file metadata
+	var properName, year, mediaType string
+	var seasonNumber int
+
+	query := `
+		SELECT COALESCE(proper_name, ''), COALESCE(year, ''), COALESCE(media_type, ''), COALESCE(season_number, 0)
+		FROM processed_files
+		WHERE destination_path = ?
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, destinationPath).Scan(&properName, &year, &mediaType, &seasonNumber)
+	if err != nil {
+		if tmdbID != "" {
+			query = `
+				SELECT COALESCE(proper_name, ''), COALESCE(year, ''), COALESCE(media_type, ''), COALESCE(season_number, 0)
+				FROM processed_files
+				WHERE tmdb_id = ?
+				LIMIT 1`
+
+			err = mediaHubDB.QueryRow(query, tmdbID).Scan(&properName, &year, &mediaType, &seasonNumber)
+			if err != nil {
+				logger.Debug("Failed to find file metadata for cache update: %v", err)
+				return
+			}
+		} else {
+			logger.Debug("Failed to find file metadata for cache update: %v", err)
+			return
+		}
+	}
+
+	if seasonNumberStr != "" {
+		if sn, err := strconv.Atoi(seasonNumberStr); err == nil {
+			seasonNumber = sn
+		}
+	}
+
+	UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, mediaType, seasonNumber)
+}
+
+// RemoveFolderFromCacheFromDB removes a file from cache by looking up metadata from database
+func RemoveFolderFromCacheFromDB(destinationPath, tmdbID string) {
+	if destinationPath == "" {
+		return
+	}
+
+	// Get database connection
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Debug("Failed to get database connection for cache removal: %v", err)
+		return
+	}
+
+	// Query database for file metadata
+	var properName, year string
+
+	query := `
+		SELECT COALESCE(proper_name, ''), COALESCE(year, '')
+		FROM processed_files
+		WHERE destination_path = ?
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, destinationPath).Scan(&properName, &year)
+	if err != nil {
+		if tmdbID != "" {
+			query = `
+				SELECT COALESCE(proper_name, ''), COALESCE(year, '')
+				FROM processed_files
+				WHERE tmdb_id = ?
+				LIMIT 1`
+
+			err = mediaHubDB.QueryRow(query, tmdbID).Scan(&properName, &year)
+			if err != nil {
+				logger.Debug("Failed to find file metadata for cache removal: %v", err)
+				return
+			}
+		} else {
+			logger.Debug("Failed to find file metadata for cache removal: %v", err)
+			return
+		}
+	}
+	RemoveFolderFromCache(destinationPath, properName, year)
+}
+
+// buildSearchWhereClause builds optimized WHERE clause for database searches
+func buildSearchWhereClause(query, filterType string) (string, []interface{}) {
 	var whereClause strings.Builder
 	var whereArgs []interface{}
 
 	whereClause.WriteString(`WHERE 1=1`)
 
-	// Add search filter
+	// Add search filter with optimized LIKE patterns
 	if query != "" {
 		whereClause.WriteString(` AND (
 			file_path LIKE ? OR
@@ -121,7 +411,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 		whereArgs = append(whereArgs, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 
-	// Add type filter
+	// Add type filter with optimized conditions
 	switch filterType {
 	case "movies":
 		whereClause.WriteString(` AND tmdb_id IS NOT NULL AND tmdb_id != '' AND (season_number IS NULL OR season_number = '')`)
@@ -132,24 +422,53 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 	case "skipped":
 		whereClause.WriteString(` AND reason IS NOT NULL AND reason != ''`)
 	}
+	return whereClause.String(), whereArgs
+}
 
-	// First, get the total count
-	countQuery := "SELECT COUNT(*) FROM processed_files " + whereClause.String()
-	var totalCount int
-	err = mediaHubDB.QueryRow(countQuery, whereArgs...).Scan(&totalCount)
-	if err != nil {
-		logger.Error("Failed to get total count: %v", err)
-		http.Error(w, "Failed to get total count", http.StatusInternalServerError)
+// HandleDatabaseSearch handles database search requests
+func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Build data query with pagination
+	query := r.URL.Query().Get("query")
+	filterType := r.URL.Query().Get("type")
+
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+			limit = parsedLimit
+		}
+	}
+
+	// Parse offset with bounds checking
+	offset := 0
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Get database connection once
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+
+	// Build optimized WHERE clause
+	whereClause, whereArgs := buildSearchWhereClause(query, filterType)
+
+	// Use optimized single query with window function for count
 	hasFileSizeColumn := checkFileSizeColumnExists()
 	fileSizeSelect := "NULL as file_size"
 	if hasFileSizeColumn {
 		fileSizeSelect = "file_size"
 	}
 
+	// Single query that gets both data and total count
 	dataQuery := `
 		SELECT
 			file_path,
@@ -157,8 +476,9 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason,
-			` + fileSizeSelect + `
-		FROM processed_files ` + whereClause.String() + `
+			` + fileSizeSelect + `,
+			COUNT(*) OVER() as total_count
+		FROM processed_files ` + whereClause + `
 		ORDER BY rowid DESC LIMIT ? OFFSET ?`
 
 	dataArgs := append(whereArgs, limit, offset)
@@ -173,6 +493,8 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var records []DatabaseRecord
+	var totalCount int
+
 	for rows.Next() {
 		var record DatabaseRecord
 		var fileSize sql.NullInt64
@@ -184,6 +506,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 			&record.SeasonNumber,
 			&record.Reason,
 			&fileSize,
+			&totalCount,
 		)
 		if err != nil {
 			logger.Warn("Failed to scan database record: %v", err)
@@ -263,91 +586,44 @@ type FolderInfo struct {
 	FileCount    int    `json:"file_count"`
 }
 
-// GetFoldersFromDatabase retrieves folder information from processed_files table for a given path
-func GetFoldersFromDatabase(basePath string) ([]FolderInfo, error) {
+// GetFoldersFromDatabasePaginated retrieves folder information with optimized queries
+func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		logger.Debug("Failed to get database connection for folder lookup: %v", err)
-		return nil, err
+		return nil, 0, err
 	}
 
-	// Load DESTINATION_DIR once at the top of the function
-	destDir := env.GetString("DESTINATION_DIR", "")
-	if destDir == "" {
-		logger.Error("DESTINATION_DIR environment variable is not set")
-		return nil, fmt.Errorf("DESTINATION_DIR environment variable is required")
-	}
-	destDir = filepath.Clean(destDir)
-
-	// Clean the base path - remove leading/trailing slashes for consistency
+	// Clean the base path
 	cleanBasePath := strings.Trim(basePath, "/\\")
 
 	if cleanBasePath == "" {
-
-		destDirPattern := destDir + string(filepath.Separator) + "%"
-		separator := string(filepath.Separator)
-
-		query := `
-			SELECT DISTINCT
-				CASE
-					WHEN INSTR(SUBSTR(destination_path, LENGTH(?) + 2), ?) > 0
-					THEN SUBSTR(SUBSTR(destination_path, LENGTH(?) + 2), 1, INSTR(SUBSTR(destination_path, LENGTH(?) + 2), ?) - 1)
-					ELSE SUBSTR(destination_path, LENGTH(?) + 2)
-				END as folder_name,
-				COUNT(*) as file_count
-			FROM processed_files
-			WHERE destination_path IS NOT NULL
-			AND destination_path != ''
-			AND destination_path LIKE ?
-			AND LENGTH(SUBSTR(destination_path, LENGTH(?) + 2)) > 0
-			GROUP BY folder_name
-			HAVING folder_name != ''
-			ORDER BY folder_name`
-
-		rows, err := mediaHubDB.Query(query, destDir, separator, destDir, destDir, separator, destDir, destDirPattern, destDir)
-		if err != nil {
-			logger.Debug("Failed to query root folders from database: %v", err)
-			return nil, err
-		}
-		defer rows.Close()
-
-		var folders []FolderInfo
-		for rows.Next() {
-			var folderName string
-			var fileCount int
-
-			err := rows.Scan(&folderName, &fileCount)
-			if err != nil {
-				logger.Debug("Failed to scan root folder row: %v", err)
-				continue
-			}
-
-			if folderName == "" {
-				continue
-			}
-
-			folder := FolderInfo{
-				FolderName: folderName,
-				FolderPath: "/" + folderName,
-				FileCount:  fileCount,
-			}
-
-			folders = append(folders, folder)
-		}
-
-		logger.Debug("Found %d root folders from database (destDir: %s)", len(folders), destDir)
-		return folders, nil
+		// Root level - don't query database, let filesystem handle it
+		// This is much simpler and works perfectly as shown in your logs
+		return nil, 0, fmt.Errorf("root level should use filesystem")
 	}
 
-	// Build the expected directory path
-	expectedDirPath := destDir + string(filepath.Separator) + strings.ReplaceAll(cleanBasePath, "/", string(filepath.Separator))
+	// Category level - get movies/shows using optimized database query
+	offset := (page - 1) * limit
+	return getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset)
+}
 
-	if strings.Contains(cleanBasePath, "(") && strings.Contains(cleanBasePath, ")") {
-		return []FolderInfo{}, nil
+
+
+// getCategoryFoldersPaginated gets folders within a category using destination path matching
+func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offset int) ([]FolderInfo, int, error) {
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
 	}
+	destDir = filepath.Clean(destDir)
 
-	// For category levels (Movies, Shows, etc.), get the movie/show folders
+	// Build expected directory path for this category
+	expectedDirPath := destDir + string(filepath.Separator) + category
 	searchPattern := expectedDirPath + string(filepath.Separator) + "%"
+
+	if strings.Contains(category, "(") && strings.Contains(category, ")") {
+		return []FolderInfo{}, 0, nil
+	}
 
 	query := `
 		SELECT
@@ -355,40 +631,200 @@ func GetFoldersFromDatabase(basePath string) ([]FolderInfo, error) {
 			COALESCE(year, '') as year,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(media_type, '') as media_type,
-			COALESCE(season_number, '') as season_number,
-			COUNT(*) as file_count
+			COALESCE(season_number, 0) as season_number,
+			COUNT(*) as file_count,
+			COUNT(*) OVER() as total_count
 		FROM processed_files
 		WHERE destination_path IS NOT NULL
 		AND destination_path != ''
 		AND destination_path LIKE ?
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
-		AND destination_path NOT LIKE ?
-		GROUP BY proper_name, year, tmdb_id, media_type
-		ORDER BY proper_name, year`
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
 
-	// Exclude paths that go deeper than one level from current path
-	excludePattern := expectedDirPath + string(filepath.Separator) + "%" + string(filepath.Separator) + "%" + string(filepath.Separator) + "%"
-
-	rows, err := mediaHubDB.Query(query, searchPattern, excludePattern)
+	rows, err := db.Query(query, searchPattern, limit, offset)
 	if err != nil {
-		logger.Debug("Failed to query folders from database: %v", err)
-		return nil, err
+		logger.Debug("Failed to query category folders: %v", err)
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var folders []FolderInfo
+	var totalCount int
+	rowCount := 0
+
 	for rows.Next() {
 		var folder FolderInfo
-		var seasonNumberStr string
+		rowCount++
 
-		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &seasonNumberStr, &folder.FileCount)
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &totalCount)
 		if err != nil {
-			logger.Debug("Failed to scan folder row: %v", err)
+			logger.Debug("Failed to scan folder row %d: %v", rowCount, err)
 			continue
 		}
 
-		// Build folder name from proper_name and year (this is what the user wants)
+		// Build folder name from proper_name and year
+		if folder.ProperName != "" && folder.Year != "" {
+			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
+		} else if folder.ProperName != "" {
+			folder.FolderName = folder.ProperName
+		} else {
+
+			continue
+		}
+
+		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		folders = append(folders, folder)
+	}
+
+	return folders, totalCount, nil
+}
+
+// GetFoldersFromDatabaseCached tries to use cache first with improved page handling
+func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInfo, int, error) {
+
+	if basePath == "" {
+		return GetFoldersFromDatabasePaginated(basePath, page, limit)
+	}
+
+	cleanBasePath := strings.TrimPrefix(basePath, "/")
+
+	cache := GetFolderCache()
+
+	cache.mu.RLock()
+
+	if cache.initialized {
+		// Check category folders
+		if cachedFolders, exists := cache.pathFolders[cleanBasePath]; exists {
+			totalCount := cache.totalCounts[cleanBasePath]
+			startIdx := (page - 1) * limit
+
+			// If request is within cached range, serve from cache
+			if startIdx < len(cachedFolders) {
+				cache.mu.RUnlock()
+
+				endIdx := startIdx + limit
+				if endIdx > len(cachedFolders) {
+					endIdx = len(cachedFolders)
+				}
+
+				result := cachedFolders[startIdx:endIdx]
+
+				return result, totalCount, nil
+			} else {
+				// Expand cache by loading more data
+				cache.mu.RUnlock()
+				expandedLimit := startIdx + limit + 500 // Add 500 item buffer
+				expandedFolders, expandedTotal, err := GetFoldersFromDatabasePaginated(cleanBasePath, 1, expandedLimit)
+				if err == nil && len(expandedFolders) > len(cachedFolders) {
+					cache.mu.Lock()
+					cache.pathFolders[cleanBasePath] = expandedFolders
+					cache.totalCounts[cleanBasePath] = expandedTotal
+					cache.mu.Unlock()
+
+					// Serve the requested page from expanded cache
+					if startIdx < len(expandedFolders) {
+						endIdx := startIdx + limit
+						if endIdx > len(expandedFolders) {
+							endIdx = len(expandedFolders)
+						}
+						result := expandedFolders[startIdx:endIdx]
+
+						return result, expandedTotal, nil
+					}
+				}
+				cache.mu.RLock()
+			}
+		} else {
+
+		}
+	}
+	cache.mu.RUnlock()
+
+	// Cache miss - query database directly
+	return GetFoldersFromDatabasePaginated(basePath, page, limit)
+}
+
+// SearchFoldersFromDatabase searches folders in the database using proper_name and folder_name
+func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Clean the base path
+	cleanBasePath := strings.Trim(basePath, "/\\")
+
+	if cleanBasePath == "" {
+		// Root level search - search across all categories
+		return searchRootFolders(mediaHubDB, searchQuery, page, limit)
+	}
+
+	// Category level search - search within specific category
+	return searchCategoryFolders(mediaHubDB, cleanBasePath, searchQuery, page, limit)
+}
+
+// searchRootFolders searches across all categories
+func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
+	}
+	destDir = filepath.Clean(destDir)
+
+	searchPattern := "%" + searchQuery + "%"
+	searchPathPattern := destDir + string(filepath.Separator) + "%"
+	offset := (page - 1) * limit
+
+	// Optimized direct query for root folder search
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, 0) as season_number,
+			COUNT(*) as file_count,
+			destination_path,
+			COUNT(*) OVER() as total_count
+		FROM processed_files
+		WHERE destination_path IS NOT NULL
+		AND destination_path != ''
+		AND destination_path LIKE ?
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		AND (proper_name LIKE ? OR year LIKE ?)
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+
+	rows, err := db.Query(query, searchPathPattern, searchPattern, searchPattern, limit, offset)
+	if err != nil {
+		logger.Debug("Failed to search root folders: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	var totalCount int
+
+	for rows.Next() {
+		var folder FolderInfo
+		var destPath string
+
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
+			&folder.SeasonNumber, &folder.FileCount, &destPath, &totalCount)
+		if err != nil {
+			logger.Debug("Failed to scan search result: %v", err)
+			continue
+		}
+
+		// Extract category from destination path
+		category := extractCategoryFromPath(destPath, destDir)
+
+		// Build folder name and path
 		if folder.ProperName != "" && folder.Year != "" {
 			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
 		} else if folder.ProperName != "" {
@@ -397,21 +833,94 @@ func GetFoldersFromDatabase(basePath string) ([]FolderInfo, error) {
 			continue
 		}
 
-		// Build the folder path for the API
-		folder.FolderPath = "/" + cleanBasePath + "/" + folder.FolderName
-
-		// Parse season number if available
-		if seasonNumberStr != "" {
-			if seasonNum, err := strconv.Atoi(seasonNumberStr); err == nil {
-				folder.SeasonNumber = seasonNum
-			}
-		}
-
+		folder.FolderPath = "/" + category + "/" + folder.FolderName
 		folders = append(folders, folder)
 	}
 
-	logger.Debug("Found %d folders from database for path: %s", len(folders), basePath)
-	return folders, nil
+	return folders, totalCount, nil
+}
+
+// searchCategoryFolders searches within a specific category
+func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+	destDir := env.GetString("DESTINATION_DIR", "")
+	if destDir == "" {
+		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
+	}
+	destDir = filepath.Clean(destDir)
+
+	searchPattern := "%" + searchQuery + "%"
+	categoryPathPattern := destDir + string(filepath.Separator) + category + string(filepath.Separator) + "%"
+	offset := (page - 1) * limit
+
+	// Optimized direct query for category search
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, 0) as season_number,
+			COUNT(*) as file_count,
+			COUNT(*) OVER() as total_count
+		FROM processed_files
+		WHERE destination_path IS NOT NULL
+		AND destination_path != ''
+		AND destination_path LIKE ?
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		AND (proper_name LIKE ? OR year LIKE ?)
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+
+	rows, err := db.Query(query, categoryPathPattern, searchPattern, searchPattern, limit, offset)
+	if err != nil {
+		logger.Debug("Failed to search category folders: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	var totalCount int
+
+	for rows.Next() {
+		var folder FolderInfo
+
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
+			&folder.SeasonNumber, &folder.FileCount, &totalCount)
+		if err != nil {
+			logger.Debug("Failed to scan category search result: %v", err)
+			continue
+		}
+
+		// Build folder name and path
+		if folder.ProperName != "" && folder.Year != "" {
+			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
+		} else if folder.ProperName != "" {
+			folder.FolderName = folder.ProperName
+		} else {
+			continue
+		}
+
+		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		folders = append(folders, folder)
+	}
+
+	return folders, totalCount, nil
+}
+
+// extractCategoryFromPath extracts the category name from a destination path
+func extractCategoryFromPath(destPath, destDir string) string {
+	relativePath := strings.TrimPrefix(destPath, destDir)
+	relativePath = strings.TrimPrefix(relativePath, string(filepath.Separator))
+
+	// Get the first directory component
+	parts := strings.Split(relativePath, string(filepath.Separator))
+	if len(parts) > 0 && parts[0] != "" {
+		return parts[0]
+	}
+
+	return "Unknown"
 }
 
 // GetFileInfoFromDatabase retrieves comprehensive file information from the processed_files table
@@ -726,5 +1235,3 @@ func runDatabaseUpdate() error {
 
 	return nil
 }
-
-

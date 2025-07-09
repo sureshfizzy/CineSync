@@ -65,8 +65,9 @@ export default function FileBrowser() {
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
 
-  // Get page from URL, default to 1
+  // Get page and search from URL
   const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+  const searchFromUrl = searchParams.get('search') || '';
   const [page, setPageState] = useState(pageFromUrl);
 
   // Function to update both page state and URL
@@ -80,7 +81,7 @@ export default function FileBrowser() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
   const [isSearching, setIsSearching] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
@@ -99,6 +100,7 @@ export default function FileBrowser() {
   // Refs for tracking requests
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
   const tmdbProcessingRef = useRef<{ [key: string]: boolean }>({});
+  const isInitialMount = useRef(true);
 
   const filteredFiles = useMemo(() => {
     let result = files;
@@ -115,10 +117,16 @@ export default function FileBrowser() {
 
   useEffect(() => {
     const urlPage = parseInt(searchParams.get('page') || '1', 10);
+    const urlSearch = searchParams.get('search') || '';
+
     if (urlPage !== page) {
       setPageState(urlPage);
     }
-  }, [searchParams.get('page'), page]);
+
+    if (urlSearch !== search) {
+      setSearch(urlSearch);
+    }
+  }, [searchParams.get('page'), searchParams.get('search')]);
 
   useEffect(() => {
     if (hasLoadedData && page > totalPages && totalPages > 0) {
@@ -261,25 +269,42 @@ export default function FileBrowser() {
   }, [searchParams.get('page')]);
 
   useEffect(() => {
-    if (!search.trim()) {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
       return;
     }
 
-    setIsSearching(true);
+    const loadingTimeoutId = setTimeout(() => {
+      setIsSearching(true);
+    }, 400);
 
     const timeoutId = setTimeout(() => {
-      if (page !== 1) {
-        setPage(1);
+      const newSearchParams = new URLSearchParams(searchParams);
+      if (search.trim()) {
+        newSearchParams.set('search', search.trim());
+        if (page !== 1) {
+          setPage(1);
+          newSearchParams.set('page', '1');
+        }
+      } else {
+        newSearchParams.delete('search');
+        if (page !== 1) {
+          setPage(1);
+          newSearchParams.set('page', '1');
+        }
       }
-      fetchFiles(currentPath, 1, search, true);
+      setSearchParams(newSearchParams);
+
+      fetchFiles(currentPath, search.trim() ? 1 : page, search.trim() || undefined, true);
       setIsSearching(false);
-    }, 300);
+    }, 800);
 
     return () => {
+      clearTimeout(loadingTimeoutId);
       clearTimeout(timeoutId);
       setIsSearching(false);
     };
-  }, [search]); // Only search changes trigger this
+  }, [search]);
 
   // Helper function to check if a symlink affects the current directory
   const symlinkAffectsCurrentDirectory = useCallback((data: any) => {

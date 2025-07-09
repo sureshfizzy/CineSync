@@ -54,9 +54,9 @@ export default function ListView({
 
   if (isMobile) {
     return (
-      <Paper 
-        elevation={3} 
-        sx={{ 
+      <Paper
+        elevation={3}
+        sx={{
           borderRadius: 3,
           overflow: 'hidden',
         }}
