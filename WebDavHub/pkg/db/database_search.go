@@ -23,6 +23,7 @@ import (
 type DatabaseRecord struct {
 	FilePath        string `json:"file_path"`
 	DestinationPath string `json:"destination_path,omitempty"`
+	BasePath        string `json:"base_path,omitempty"`
 	TmdbID          string `json:"tmdb_id,omitempty"`
 	SeasonNumber    string `json:"season_number,omitempty"`
 	Reason          string `json:"reason,omitempty"`
@@ -504,6 +505,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 		err := rows.Scan(
 			&record.FilePath,
 			&record.DestinationPath,
+			&record.BasePath,
 			&record.TmdbID,
 			&record.SeasonNumber,
 			&record.Reason,
