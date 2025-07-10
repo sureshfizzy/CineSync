@@ -64,9 +64,6 @@ def refresh_plex_for_file(file_path: str) -> None:
 def update_plex_after_symlink(dest_file: str) -> None:
     """Wrapper function to trigger Plex refresh after symlink creation."""
     try:
-        if not logging.getLogger().handlers:
-            setup_logging()
-
         if os.path.exists(dest_file):
             refresh_plex_for_file(dest_file)
         else:

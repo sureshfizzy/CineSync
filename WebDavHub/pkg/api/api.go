@@ -477,7 +477,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		// Regular folder listing - use cached database approach
 		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, page, limit)
 		if dbErr != nil {
-			logger.Debug("Failed to get folders from database, falling back to readdir: %v", dbErr)
 			useDatabase = false
 		} else {
 			useDatabase = len(dbFolders) > 0
