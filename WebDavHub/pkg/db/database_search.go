@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1291,12 +1292,28 @@ func HandleDatabaseUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getPythonCommand determines the correct Python executable based on the OS and environment
+func getPythonCommand() string {
+	if customPython := env.GetString("PYTHON_COMMAND", ""); customPython != "" {
+		return customPython
+	}
+
+	// Default platform-specific behavior
+	if runtime.GOOS == "windows" {
+		return "python"
+	}
+	return "python3"
+}
+
 // runDatabaseUpdate executes the MediaHub database update command
 func runDatabaseUpdate() error {
 	logger.Info("Starting database update to new format...")
 
+	// Get the appropriate Python command for this platform
+	pythonCmd := getPythonCommand()
+
 	// Execute the MediaHub update database command
-	cmd := exec.Command("python", "main.py", "--update-database")
+	cmd := exec.Command(pythonCmd, "main.py", "--update-database")
 	cmd.Dir = "../MediaHub"
 
 	output, err := cmd.CombinedOutput()

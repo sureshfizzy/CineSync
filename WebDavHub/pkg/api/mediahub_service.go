@@ -112,6 +112,10 @@ func checkProcessExists(pid int) bool {
 
 // getPythonCommandForMediaHub returns the appropriate Python command
 func getPythonCommandForMediaHub() string {
+	if customPython := env.GetString("PYTHON_COMMAND", ""); customPython != "" {
+		return customPython
+	}
+
 	if runtime.GOOS == "windows" {
 		return "python"
 	}

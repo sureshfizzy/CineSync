@@ -21,8 +21,12 @@ func fileExists(path string) bool {
 	return !os.IsNotExist(err)
 }
 
-// getPythonCommand determines the correct Python executable based on the OS
+// getPythonCommand determines the correct Python executable based on the OS and environment
 func getPythonCommand() string {
+	if customPython := env.GetString("PYTHON_COMMAND", ""); customPython != "" {
+		return customPython
+	}
+
 	// Default platform-specific behavior
 	if runtime.GOOS == "windows" {
 		return "python"
