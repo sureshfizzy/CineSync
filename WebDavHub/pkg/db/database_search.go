@@ -404,11 +404,12 @@ func buildSearchWhereClause(query, filterType string) (string, []interface{}) {
 		whereClause.WriteString(` AND (
 			file_path LIKE ? OR
 			destination_path LIKE ? OR
+			base_path LIKE ? OR
 			tmdb_id LIKE ? OR
 			reason LIKE ?
 		)`)
 		searchPattern := "%" + query + "%"
-		whereArgs = append(whereArgs, searchPattern, searchPattern, searchPattern, searchPattern)
+		whereArgs = append(whereArgs, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 
 	// Add type filter with optimized conditions
@@ -473,6 +474,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 		SELECT
 			file_path,
 			COALESCE(destination_path, '') as destination_path,
+			COALESCE(base_path, '') as base_path,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(reason, '') as reason,
@@ -609,7 +611,7 @@ func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]Folder
 
 
 
-// getCategoryFoldersPaginated gets folders within a category using destination path matching
+// getCategoryFoldersPaginated gets folders within a category using base_path field
 func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offset int) ([]FolderInfo, int, error) {
 	destDir := env.GetString("DESTINATION_DIR", "")
 	if destDir == "" {
@@ -617,11 +619,91 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 	}
 	destDir = filepath.Clean(destDir)
 
-	// Build expected directory path for this category
-	expectedDirPath := destDir + string(filepath.Separator) + category
-	searchPattern := expectedDirPath + string(filepath.Separator) + "%"
+	// Normalize path separators - database stores with backslashes, API uses forward slashes
+	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
 
-	if strings.Contains(category, "(") && strings.Contains(category, ")") {
+	// Simplified approach: check if we have any base_path that starts with this category
+	// For category "Hunch", look for base_path values like "Hunch\1080p"
+	// For category "Hunch/1080p", look for exact match "Hunch\1080p"
+
+	// First check for exact match (leaf category with content)
+	exactMatchQuery := `SELECT COUNT(*) FROM processed_files WHERE base_path = ?`
+	var exactCount int
+	err := db.QueryRow(exactMatchQuery, normalizedCategory).Scan(&exactCount)
+	if err != nil {
+		logger.Debug("Failed to check exact match: %v", err)
+		return nil, 0, err
+	}
+
+	if exactCount > 0 {
+		// This is a leaf category, return content folders
+		return getCategoryContentFolders(db, normalizedCategory, page, limit, offset)
+	}
+
+	// No exact match, look for subcategories
+	subcategoryQuery := `
+		SELECT DISTINCT base_path
+		FROM processed_files
+		WHERE base_path IS NOT NULL
+		AND base_path != ''
+		AND base_path LIKE ?
+		ORDER BY base_path`
+
+	likePattern := normalizedCategory + string(filepath.Separator) + "%"
+
+	rows, err := db.Query(subcategoryQuery, likePattern)
+	if err != nil {
+		logger.Debug("Failed to query subcategories: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var subcategoryBasePaths []string
+	for rows.Next() {
+		var basePath string
+		if err := rows.Scan(&basePath); err != nil {
+			continue
+		}
+		subcategoryBasePaths = append(subcategoryBasePaths, basePath)
+	}
+
+
+
+	// Extract the next level folder names from subcategory base_paths
+	subfolderMap := make(map[string]bool)
+	for _, basePath := range subcategoryBasePaths {
+		// For base_path "Hunch\1080p" and category "Hunch", extract "1080p"
+		if strings.HasPrefix(basePath, normalizedCategory+string(filepath.Separator)) {
+			remainder := basePath[len(normalizedCategory)+1:] // Remove "Hunch\"
+			parts := strings.Split(remainder, string(filepath.Separator))
+			if len(parts) > 0 && parts[0] != "" {
+				subfolderMap[parts[0]] = true
+			}
+		}
+	}
+
+	var folders []FolderInfo
+
+	// If we have subfolders, return them as folders
+	if len(subfolderMap) > 0 {
+		for subfolder := range subfolderMap {
+			folders = append(folders, FolderInfo{
+				FolderName: subfolder,
+				FolderPath: "/" + category + "/" + subfolder,
+				TmdbID:     "",
+				MediaType:  "",
+			})
+		}
+		return folders, len(folders), nil
+	}
+
+	// No subcategories found, return empty result
+	return []FolderInfo{}, 0, nil
+}
+
+// getCategoryContentFolders gets content folders for a leaf category
+func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset int) ([]FolderInfo, int, error) {
+	if strings.Contains(basePath, "(") && strings.Contains(basePath, ")") {
 		return []FolderInfo{}, 0, nil
 	}
 
@@ -635,33 +717,28 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 			COUNT(*) as file_count,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
-		WHERE destination_path IS NOT NULL
-		AND destination_path != ''
-		AND destination_path LIKE ?
+		WHERE base_path = ?
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, searchPattern, limit, offset)
+	rows, err := db.Query(query, basePath, limit, offset)
 	if err != nil {
-		logger.Debug("Failed to query category folders: %v", err)
+		logger.Debug("Failed to query content folders: %v", err)
 		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var folders []FolderInfo
 	var totalCount int
-	rowCount := 0
 
 	for rows.Next() {
 		var folder FolderInfo
-		rowCount++
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &totalCount)
 		if err != nil {
-			logger.Debug("Failed to scan folder row %d: %v", rowCount, err)
 			continue
 		}
 
@@ -671,11 +748,13 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 		} else if folder.ProperName != "" {
 			folder.FolderName = folder.ProperName
 		} else {
-
 			continue
 		}
 
-		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		// Set folder path - convert base_path back to API path format
+		apiPath := "/" + strings.ReplaceAll(basePath, string(filepath.Separator), "/") + "/" + folder.FolderName
+		folder.FolderPath = apiPath
+
 		folders = append(folders, folder)
 	}
 

@@ -176,6 +176,7 @@ def initialize_db(conn):
             CREATE TABLE IF NOT EXISTS processed_files (
                 file_path TEXT PRIMARY KEY,
                 destination_path TEXT,
+                base_path TEXT,
                 tmdb_id TEXT,
                 season_number TEXT,
                 reason TEXT,
@@ -195,6 +196,10 @@ def initialize_db(conn):
         if "destination_path" not in columns:
             cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
             log_message("Added destination_path column to processed_files table.", level="INFO")
+
+        if "base_path" not in columns:
+            cursor.execute("ALTER TABLE processed_files ADD COLUMN base_path TEXT")
+            log_message("Added base_path column to processed_files table.", level="INFO")
 
         if "tmdb_id" not in columns:
             cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
@@ -248,6 +253,7 @@ def initialize_db(conn):
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
@@ -338,6 +344,54 @@ def is_file_processed(conn, file_path):
         conn.rollback()
         return False
 
+def extract_base_path_from_destination_path(dest_path, proper_name=None):
+    """Extract base path - everything between DESTINATION_DIR and the title folder
+
+    Args:
+        dest_path: Full destination path
+        proper_name: The proper name from database (e.g., "Movie Title (2023)")
+                    If provided, will be used to identify the title folder precisely
+    """
+    if not dest_path:
+        return None
+
+    # Get the destination directory from environment
+    dest_dir = os.getenv("DESTINATION_DIR", "")
+    if not dest_dir:
+        return None
+
+    # Normalize paths
+    dest_dir = os.path.normpath(dest_dir)
+    dest_path = os.path.normpath(dest_path)
+
+    # Remove destination directory prefix to get relative path
+    if dest_path.startswith(dest_dir):
+        relative_path = dest_path[len(dest_dir):].lstrip(os.sep)
+        parts = relative_path.split(os.sep)
+
+        if proper_name:
+            for i, part in enumerate(parts[:-1]):
+                if part == proper_name or part.startswith(proper_name):
+                    if i > 0:
+                        return os.sep.join(parts[:i])
+                    else:
+                        return None
+
+        if len(parts) >= 4:
+            extras_keywords = ['extras', 'specials']
+            for i, part in enumerate(parts[:-1]):
+                if part.lower() in extras_keywords:
+                    return parts[0]
+            return os.sep.join(parts[:-2])
+        elif len(parts) >= 3:
+            return os.sep.join(parts[:-2])
+        elif len(parts) >= 2:
+            return parts[0]
+        elif len(parts) >= 1:
+            return parts[0]
+
+    return None
+
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
@@ -345,6 +399,9 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
+
+    # Extract base path from destination path using proper_name if available
+    base_path = extract_base_path_from_destination_path(dest_path, proper_name)
 
     # Get file size if not provided and source file exists
     if file_size is None and source_path and os.path.exists(source_path):
@@ -366,18 +423,34 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         columns = [column[1] for column in cursor.fetchall()]
         has_processed_at = "processed_at" in columns
         has_error_message = "error_message" in columns
+        has_base_path = "base_path" in columns
         has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
 
-        if has_processed_at and has_error_message and has_new_columns:
+        if has_processed_at and has_error_message and has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_processed_at and has_error_message and has_new_columns:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)
             """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_error_message and has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
         elif has_error_message and has_new_columns:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
         elif has_new_columns:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
@@ -669,6 +742,7 @@ def reset_database(conn):
             CREATE TABLE processed_files (
                 file_path TEXT PRIMARY KEY,
                 destination_path TEXT,
+                base_path TEXT,
                 tmdb_id TEXT,
                 season_number TEXT,
                 reason TEXT,
@@ -1226,8 +1300,22 @@ def search_database(conn, pattern):
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
         has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
 
-        if has_new_columns:
+        if has_new_columns and has_base_path:
+            cursor.execute("""
+                SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR base_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        elif has_new_columns:
             cursor.execute("""
                 SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
                        media_type, proper_name, year, episode_number, imdb_id,
@@ -1254,7 +1342,29 @@ def search_database(conn, pattern):
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
             for row in results:
-                if has_new_columns:
+                if has_new_columns and has_base_path:
+                    (file_path, dest_path, base_path, tmdb_id, season_number, reason, file_size,
+                     media_type, proper_name, year, episode_number, imdb_id,
+                     is_anime_genre, error_message, processed_at) = row
+
+                    if media_type:
+                        log_message(f"Media Type: {media_type}", level="INFO")
+                    if proper_name:
+                        log_message(f"Title: {proper_name}", level="INFO")
+                    if year:
+                        log_message(f"Year: {year}", level="INFO")
+                    if base_path:
+                        log_message(f"Base Path: {base_path}", level="INFO")
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if imdb_id:
+                        log_message(f"IMDB ID: {imdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+                    if episode_number is not None:
+                        log_message(f"Episode Number: {episode_number}", level="INFO")
+                    if is_anime_genre is not None:
+                        log_message(f"Anime Genre: {'Yes' if is_anime_genre else 'No'}", level="INFO")
+                elif has_new_columns:
                     (file_path, dest_path, tmdb_id, season_number, reason, file_size,
                      media_type, proper_name, year, episode_number, imdb_id,
                      is_anime_genre, error_message, processed_at) = row
@@ -1319,8 +1429,22 @@ def search_database_silent(conn, pattern):
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
         has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
 
-        if has_new_columns:
+        if has_new_columns and has_base_path:
+            cursor.execute("""
+                SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR base_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        elif has_new_columns:
             cursor.execute("""
                 SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
                        media_type, proper_name, year, episode_number, imdb_id,
@@ -1406,12 +1530,14 @@ def update_database_to_new_format(conn):
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
         has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
 
-        if not has_new_columns:
+        if not has_new_columns or not has_base_path:
             log_message("Database schema is missing new columns. Creating them now...", level="INFO")
 
             # Add missing columns
             missing_columns = {
+                "base_path": "TEXT",
                 "media_type": "TEXT",
                 "proper_name": "TEXT",
                 "year": "TEXT",
@@ -1429,8 +1555,41 @@ def update_database_to_new_format(conn):
                         log_message(f"Error adding column {column_name}: {e}", level="ERROR")
                         return False
 
+            # Create indexes for new columns
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
+
             conn.commit()
             log_message("Database schema updated successfully.", level="INFO")
+
+        # Update base_path field for existing entries that have destination_path but no base_path
+        cursor.execute("""
+            SELECT file_path, destination_path
+            FROM processed_files
+            WHERE base_path IS NULL AND destination_path IS NOT NULL AND destination_path != ''
+        """)
+
+        entries_to_update_base_path = cursor.fetchall()
+        updated_base_paths = 0
+
+        for file_path, dest_path in entries_to_update_base_path:
+            # Get proper_name for this entry to help with base_path extraction
+            cursor.execute("SELECT proper_name FROM processed_files WHERE file_path = ?", (file_path,))
+            result = cursor.fetchone()
+            proper_name = result[0] if result and result[0] else None
+
+            base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+            if base_path:
+                cursor.execute("""
+                    UPDATE processed_files
+                    SET base_path = ?
+                    WHERE file_path = ?
+                """, (base_path, file_path))
+                updated_base_paths += 1
+
+        if updated_base_paths > 0:
+            log_message(f"Updated base_path field for {updated_base_paths} existing entries.", level="INFO")
+
+        conn.commit()
 
         # Find entries that need migration (missing new metadata)
         cursor.execute("""
@@ -1647,14 +1806,27 @@ def update_database_to_new_format(conn):
             for result in results:
                 if result['success']:
                     try:
+                        # Extract base_path from destination path if not already set
+                        cursor.execute("SELECT destination_path, base_path FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                        row = cursor.fetchone()
+                        current_base_path = row[1] if row else None
+                        dest_path = row[0] if row else None
+
+                        if not current_base_path and dest_path:
+                            # Get proper_name for more accurate base_path extraction
+                            cursor.execute("SELECT proper_name FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                            proper_name_row = cursor.fetchone()
+                            proper_name = proper_name_row[0] if proper_name_row and proper_name_row[0] else None
+                            current_base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+
                         cursor.execute("""
                             UPDATE processed_files
                             SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
-                                imdb_id = ?, is_anime_genre = ?
+                                imdb_id = ?, is_anime_genre = ?, base_path = ?
                             WHERE file_path = ?
                         """, (result['tmdb_id'], result['media_type'], result['proper_name'], result['year'],
                               result['season_number'], result['episode_number'], result['imdb_id'],
-                              result['is_anime_genre'], result['file_path']))
+                              result['is_anime_genre'], current_base_path, result['file_path']))
                         batch_migrated += 1
                     except sqlite3.Error as e:
                         log_message(f"Database error updating {result['file_path']}: {e}", level="ERROR")

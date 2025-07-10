@@ -522,7 +522,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	var mediaType string
 
 	folderName := filepath.Base(dir)
-	isCurrentDirCategoryFolder := isCategoryFolder(folderName)
+	isCurrentDirCategoryFolder := isCategoryFolderFromDB(folderName)
 
 	if useDatabase {
 		if !isCurrentDirCategoryFolder && len(dbFolders) > 0 {
@@ -584,7 +584,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Check if it's a category folder
-			if isCategoryFolder(dbFolder.FolderName) {
+			if isCategoryFolderFromDB(dbFolder.FolderName) {
 				fileInfo.IsCategoryFolder = true
 			}
 
@@ -689,7 +689,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			subDirMediaType := ""
 
 			// Check if it's a category folder
-			isSubdirCategoryFolder := isCategoryFolder(entry.Name())
+			isSubdirCategoryFolder := isCategoryFolderFromDB(entry.Name())
 			if isSubdirCategoryFolder {
 				fileInfo.IsCategoryFolder = true
 			}
@@ -1104,6 +1104,79 @@ func getCategoryFolders() map[string]bool {
 
 func isCategoryFolder(folderName string) bool {
 	return getCategoryFolders()[strings.ToLower(folderName)]
+}
+
+// Cache for category folders to avoid repeated database queries
+var (
+	categoryFoldersCache map[string]bool
+	categoryFoldersMutex sync.RWMutex
+	categoryFoldersExpiry time.Time
+	categoryFoldersCacheDuration = 5 * time.Minute
+)
+
+// getCategoryFoldersFromDB gets all category folders from the database base_path field with caching
+func getCategoryFoldersFromDB() map[string]bool {
+	categoryFoldersMutex.RLock()
+	if categoryFoldersCache != nil && time.Now().Before(categoryFoldersExpiry) {
+		defer categoryFoldersMutex.RUnlock()
+		return categoryFoldersCache
+	}
+	categoryFoldersMutex.RUnlock()
+
+	categoryFoldersMutex.Lock()
+	defer categoryFoldersMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if categoryFoldersCache != nil && time.Now().Before(categoryFoldersExpiry) {
+		return categoryFoldersCache
+	}
+
+	folders := make(map[string]bool)
+
+	// First add traditional category folders
+	for folderName := range getCategoryFolders() {
+		folders[folderName] = true
+	}
+
+	// Then add categories from database base_path field
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return folders
+	}
+
+	// Get all unique base_path values
+	query := `SELECT DISTINCT base_path FROM processed_files WHERE base_path IS NOT NULL AND base_path != ''`
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		return folders
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var basePath string
+		if err := rows.Scan(&basePath); err != nil {
+			continue
+		}
+
+		parts := strings.Split(basePath, string(filepath.Separator))
+		for _, part := range parts {
+			if part != "" {
+				folders[strings.ToLower(part)] = true
+			}
+		}
+	}
+
+	// Cache the results
+	categoryFoldersCache = folders
+	categoryFoldersExpiry = time.Now().Add(categoryFoldersCacheDuration)
+
+	return folders
+}
+
+// isCategoryFolderFromDB checks if a folder is a category folder using database-driven logic
+func isCategoryFolderFromDB(folderName string) bool {
+	categoryFolders := getCategoryFoldersFromDB()
+	return categoryFolders[strings.ToLower(folderName)]
 }
 
 func isNumeric(s string) bool {
