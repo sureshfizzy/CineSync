@@ -696,9 +696,15 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         return clean_title_string(title)
 
     # Pattern 1b: "Title_(Year)_[technical]_-_Group" without extension (simplified)
-    underscore_pattern2 = re.match(r'^([^_]+)_\((\d{4})\)_.*', parsed.filename_no_ext)
+    underscore_pattern2 = re.match(r'^(.+?)_\((\d{4})\)_.*', parsed.filename_no_ext)
     if underscore_pattern2:
         title = underscore_pattern2.group(1).replace('_', ' ')
+        return clean_title_string(title)
+
+    # Pattern 1c: "Title (Year) [technical]" for space-separated files
+    space_pattern = re.match(r'^(.+?)\s+\((\d{4})\)\s+.*', parsed.filename_no_ext)
+    if space_pattern:
+        title = space_pattern.group(1)
         return clean_title_string(title)
 
     # Pattern 2: "prefix-title-suffix" (wmt-fullmetalalchemist pattern)
