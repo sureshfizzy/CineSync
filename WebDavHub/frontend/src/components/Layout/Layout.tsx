@@ -1,5 +1,5 @@
 import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
-import { Outlet, useOutletContext } from 'react-router-dom';
+import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -23,6 +23,9 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  const isMediaDetailsPage = location.pathname.startsWith('/media/');
 
   // Get initial view from localStorage or default to 'poster'
   const getInitialView = () => {
@@ -72,7 +75,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
         pt: { xs: '56px', sm: '64px' } // Add top padding to account for fixed header
       }}>
 
-        {!isMobile && (
+        {!isMobile && !isMediaDetailsPage && (
           <Box
             component="nav"
             sx={{
