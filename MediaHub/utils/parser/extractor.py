@@ -758,8 +758,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 not clean_part.lower() in technical_keywords
             )
 
+            # Check for resolution patterns (including resolution-release group combinations)
+            if (re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
+                re.match(r'^\d{3,4}p-[A-Za-z0-9]+$', clean_part, re.IGNORECASE)):
+                title_end = i
+                break
+
             if not is_likely_title_word and (
-                re.match(r'^\d{3,4}p$', clean_part, re.IGNORECASE) or
                 re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or
                 clean_part.lower() in technical_keywords or
                 re.match(r'^AI[_-]?UPSCALE', clean_part, re.IGNORECASE) or
