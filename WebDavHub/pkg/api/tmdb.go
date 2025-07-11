@@ -351,9 +351,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 				}
 				posterPath, _ := tmdbObj["poster_path"].(string)
 				releaseDate, _ := tmdbObj["release_date"].(string)
-				if releaseDate == "" {
-					releaseDate, _ = tmdbObj["first_air_date"].(string)
-				}
+				firstAirDate, _ := tmdbObj["first_air_date"].(string)
 
 				// Determine actual media type from the response if not provided
 				actualMediaType := mediaType
@@ -373,8 +371,8 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 
 				// Only cache if we have a valid media type
 				if actualMediaType == "movie" || actualMediaType == "tv" {
-					resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-						int(idVal), title, posterPath, releaseDate, actualMediaType)
+					resultJson := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"first_air_date":%q,"media_type":%q}`,
+						int(idVal), title, posterPath, releaseDate, firstAirDate, actualMediaType)
 					db.UpsertTmdbCache(cacheKey, resultJson)
 				}
 			}

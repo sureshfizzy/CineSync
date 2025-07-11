@@ -20,6 +20,7 @@ export interface FileItem {
   posterPath?: string;
   title?: string;
   releaseDate?: string;
+  firstAirDate?: string;
   isSourceRoot?: boolean;
   isSourceFile?: boolean;
   isMediaFile?: boolean;

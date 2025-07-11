@@ -100,6 +100,7 @@ export default function FileBrowser() {
   // Refs for tracking requests
   const folderFetchRef = useRef<{ [key: string]: boolean }>({});
   const tmdbProcessingRef = useRef<{ [key: string]: boolean }>({});
+  const batchProcessingRef = useRef<boolean>(false);
   const isInitialMount = useRef(true);
 
   const filteredFiles = useMemo(() => {
@@ -114,6 +115,7 @@ export default function FileBrowser() {
 
   const [totalPages, setTotalPages] = useState(1);
   const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState<{current: number, total: number} | null>(null);
 
   useEffect(() => {
     const urlPage = parseInt(searchParams.get('page') || '1', 10);
@@ -141,7 +143,9 @@ export default function FileBrowser() {
   useEffect(() => {
     folderFetchRef.current = {};
     tmdbProcessingRef.current = {};
+    batchProcessingRef.current = false;
     setSelectedLetter(null);
+    setProcessingProgress(null);
   }, [currentPath]);
 
   useEffect(() => {
@@ -208,6 +212,7 @@ export default function FileBrowser() {
                 backdrop_path: null,
                 media_type: normalizedMediaType,
                 release_date: file.releaseDate || '',
+                first_air_date: file.firstAirDate || '',
                 overview: ''
               };
               updateTmdbData(file.name, tmdbData);
@@ -417,7 +422,9 @@ export default function FileBrowser() {
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: fullPath,
-            tmdbData: tmdb
+            tmdbData: tmdb,
+            returnPage: page, // Preserve current page for navigation back
+            returnSearch: search // Preserve current search for navigation back
           }
         });
       } else {
@@ -437,9 +444,38 @@ export default function FileBrowser() {
   useEffect(() => {
     if (view !== 'poster') return;
 
+    // First, process files that already have poster data from the backend
+    const filesWithPosterData = filteredFiles.filter((file: any) =>
+      file.type === 'directory' &&
+      file.posterPath && // Backend already provided poster data
+      !tmdbData[file.name] // Only if we don't already have the data in state
+    );
+
+    // Immediately update state with backend-provided data
+    if (filesWithPosterData.length > 0) {
+      console.log(`🎬 Using backend poster data for ${filesWithPosterData.length} items`);
+    }
+
+    filesWithPosterData.forEach((file: any) => {
+      const dbData = {
+        id: parseInt(file.tmdbId || '0'),
+        title: file.title || file.name,
+        poster_path: file.posterPath,
+        backdrop_path: null,
+        media_type: file.mediaType?.toLowerCase() || 'movie',
+        release_date: file.releaseDate || '',
+        first_air_date: file.firstAirDate || '',
+        overview: ''
+      };
+      updateTmdbData(file.name, dbData);
+      setPosterInCache(file.name, dbData.media_type, dbData);
+    });
+
+    // Only process items that need TMDB API calls (no poster data from backend)
     const itemsToProcess = filteredFiles.filter((file: any) =>
       file.type === 'directory' &&
       file.tmdbId && // Only check directories with TMDB IDs
+      !file.posterPath && // Backend didn't provide poster data
       !tmdbData[file.name] && // Only if we don't already have the data
       !folderFetchRef.current[file.name] &&
       !tmdbProcessingRef.current[file.name]
@@ -447,9 +483,25 @@ export default function FileBrowser() {
 
     if (itemsToProcess.length === 0) return;
 
+    // Prevent multiple batch processing sessions
+    if (batchProcessingRef.current) {
+      console.log(`🎬 Batch processing already in progress, skipping`);
+      return;
+    }
+
+    console.log(`🎬 Need to fetch TMDB data for ${itemsToProcess.length} items without backend poster data`);
+
+    // Set initial processing progress
+    if (itemsToProcess.length > 0) {
+      setProcessingProgress({ current: 0, total: itemsToProcess.length });
+    }
+
+    batchProcessingRef.current = true;
+
     const processInParallel = async () => {
-      const CONCURRENT_LIMIT = 50;
-      const BATCH_SIZE = 20;
+      // Optimized settings for faster loading while maintaining UI responsiveness
+      const CONCURRENT_LIMIT = 8; // Increased for faster loading
+      const BATCH_SIZE = 12; // Larger batches for efficiency
 
       const processBatch = async (batch: any[]) => {
         const promises = batch.map(async (file) => {
@@ -555,14 +607,30 @@ export default function FileBrowser() {
           await processBatch(concurrentBatch);
         }
 
-        // Small delay between batches to be respectful to the API
+        // Update progress
+        const processed = Math.min(i + BATCH_SIZE, itemsToProcess.length);
+        setProcessingProgress({ current: processed, total: itemsToProcess.length });
+
+        // Yield control to browser for UI updates with minimal delay
         if (i + BATCH_SIZE < itemsToProcess.length) {
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => {
+            requestAnimationFrame(() => {
+              setTimeout(resolve, 50); // Further reduced delay for faster loading
+            });
+          });
         }
       }
+
+      // Clear processing progress when done
+      setProcessingProgress(null);
+      batchProcessingRef.current = false;
     };
 
-    processInParallel();
+    processInParallel().catch((error) => {
+      console.error('Batch processing failed:', error);
+      setProcessingProgress(null);
+      batchProcessingRef.current = false;
+    });
   }, [filteredFiles, view, page]);
 
   if (loading) {
@@ -606,6 +674,36 @@ export default function FileBrowser() {
         onSortChange={setSortOption}
         onRefresh={handleRefresh}
       />
+
+      {/* Processing Progress Indicator */}
+      {processingProgress && (
+        <Box sx={{
+          position: 'fixed',
+          top: 70,
+          right: 16,
+          zIndex: 1000,
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          p: 2,
+          boxShadow: 2,
+          minWidth: 200
+        }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Loading posters... {processingProgress.current}/{processingProgress.total}
+          </Typography>
+          <Box sx={{ width: '100%', bgcolor: 'grey.300', borderRadius: 1, height: 4 }}>
+            <Box
+              sx={{
+                width: `${(processingProgress.current / processingProgress.total) * 100}%`,
+                bgcolor: 'primary.main',
+                height: '100%',
+                borderRadius: 1,
+                transition: 'width 0.3s ease'
+              }}
+            />
+          </Box>
+        </Box>
+      )}
 
       {/* Alphabet Index */}
       <AlphabetIndex

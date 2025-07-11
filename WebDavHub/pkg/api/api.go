@@ -181,6 +181,7 @@ type FileInfo struct {
 	PosterPath string `json:"posterPath,omitempty"`
 	Title    string `json:"title,omitempty"`
 	ReleaseDate string `json:"releaseDate,omitempty"`
+	FirstAirDate string `json:"firstAirDate,omitempty"`
 	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
 	IsSourceFile bool `json:"isSourceFile,omitempty"`
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
@@ -332,9 +333,9 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, string, string) {
+func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, string, string, string) {
 	if tmdbID == "" {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
 
 	// Try multiple media type variations to handle mixed database values
@@ -359,6 +360,7 @@ func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, 
 				title := ""
 				resultMediaType := ""
 				releaseDate := ""
+				firstAirDate := ""
 
 				if pp, ok := tmdbData["poster_path"].(string); ok {
 					posterPath = pp
@@ -372,18 +374,21 @@ func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, 
 				if rd, ok := tmdbData["release_date"].(string); ok {
 					releaseDate = rd
 				}
+				if fad, ok := tmdbData["first_air_date"].(string); ok {
+					firstAirDate = fad
+				}
 
 				if posterPath != "" {
-					return posterPath, title, resultMediaType, releaseDate
+					return posterPath, title, resultMediaType, releaseDate, firstAirDate
 				}
 			}
 		}
 	}
 
-	return "", "", "", ""
+	return "", "", "", "", ""
 }
 
-func getTmdbDataFromCache(folderName string) (string, string, string, string) {
+func getTmdbDataFromCache(folderName string) (string, string, string, string, string) {
 	cacheKeys := []string{
 		folderName + "||movie",
 		folderName + "||tv",
@@ -403,6 +408,7 @@ func getTmdbDataFromCache(folderName string) (string, string, string, string) {
 				title := ""
 				mediaType := ""
 				releaseDate := ""
+				firstAirDate := ""
 
 				if pp, ok := tmdbData["poster_path"].(string); ok {
 					posterPath = pp
@@ -416,13 +422,16 @@ func getTmdbDataFromCache(folderName string) (string, string, string, string) {
 				if rd, ok := tmdbData["release_date"].(string); ok {
 					releaseDate = rd
 				}
+				if fad, ok := tmdbData["first_air_date"].(string); ok {
+					firstAirDate = fad
+				}
 
-				return posterPath, title, mediaType, releaseDate
+				return posterPath, title, mediaType, releaseDate, firstAirDate
 			}
 		}
 	}
 
-	return "", "", "", ""
+	return "", "", "", "", ""
 }
 
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
@@ -565,13 +574,16 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 			// Get poster path from TMDB cache using database metadata
 			if dbFolder.TmdbID != "" && dbFolder.MediaType != "" {
-				posterPath, _, _, releaseDate := getTmdbDataFromCacheByID(dbFolder.TmdbID, dbFolder.MediaType)
+				posterPath, title, _, releaseDate, firstAirDate := getTmdbDataFromCacheByID(dbFolder.TmdbID, dbFolder.MediaType)
 				if posterPath != "" {
 					fileInfo.PosterPath = posterPath
-					// Prefer database title over cache title for accuracy
-					fileInfo.Title = dbFolder.FolderName
+					// Use clean title from TMDB cache (consistent with subdirectory handling)
+					fileInfo.Title = title
 					if releaseDate != "" {
 						fileInfo.ReleaseDate = releaseDate
+					}
+					if firstAirDate != "" {
+						fileInfo.FirstAirDate = firstAirDate
 					}
 				}
 			}
@@ -709,23 +721,23 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			var posterPath, title, cachedMediaType, releaseDate string
+			var posterPath, title, cachedMediaType, releaseDate, firstAirDate string
 
 			// Only get poster data if it's not a category folder
 			if !isSubdirCategoryFolder {
 				if subDirTmdbID != "" && subDirMediaType != "" {
-					posterPath, title, cachedMediaType, releaseDate = getTmdbDataFromCacheByID(subDirTmdbID, subDirMediaType)
+					posterPath, title, cachedMediaType, releaseDate, firstAirDate = getTmdbDataFromCacheByID(subDirTmdbID, subDirMediaType)
 				}
 
 				if posterPath == "" && subDirTmdbID != "" {
-					posterPath, title, cachedMediaType, releaseDate = getTmdbDataFromCacheByID(subDirTmdbID, "movie")
+					posterPath, title, cachedMediaType, releaseDate, firstAirDate = getTmdbDataFromCacheByID(subDirTmdbID, "movie")
 					if posterPath == "" {
-						posterPath, title, cachedMediaType, releaseDate = getTmdbDataFromCacheByID(subDirTmdbID, "tv")
+						posterPath, title, cachedMediaType, releaseDate, firstAirDate = getTmdbDataFromCacheByID(subDirTmdbID, "tv")
 					}
 				}
 
 				if posterPath == "" {
-					posterPath, title, cachedMediaType, releaseDate = getTmdbDataFromCache(entry.Name())
+					posterPath, title, cachedMediaType, releaseDate, firstAirDate = getTmdbDataFromCache(entry.Name())
 				}
 			}
 
@@ -734,6 +746,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				fileInfo.Title = title
 				if releaseDate != "" {
 					fileInfo.ReleaseDate = releaseDate
+				}
+				if firstAirDate != "" {
+					fileInfo.FirstAirDate = firstAirDate
 				}
 				if subDirMediaType == "" && cachedMediaType != "" {
 					fileInfo.MediaType = cachedMediaType
@@ -1176,6 +1191,11 @@ func getCategoryFoldersFromDB() map[string]bool {
 func isCategoryFolderFromDB(folderName string) bool {
 	categoryFolders := getCategoryFoldersFromDB()
 	return categoryFolders[strings.ToLower(folderName)]
+}
+
+func extractTitleFromFolderName(folderName string) string {
+	re := regexp.MustCompile(`\s*\(\d{4}\)$`)
+	return strings.TrimSpace(re.ReplaceAllString(folderName, ""))
 }
 
 func isNumeric(s string) bool {

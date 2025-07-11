@@ -43,32 +43,19 @@ func StartTmdbCacheWriter() {
 	}()
 }
 
-// InitDB initializes the SQLite database under the project directory (data/cinefiles.db)
 func InitDB(_ string) error {
 	dbDir := filepath.Join("../db")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return fmt.Errorf("failed to create db directory: %w", err)
 	}
 	dbPath := filepath.Join(dbDir, "cinesync.db")
+
 	var err error
-	db, err = sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=20000&_foreign_keys=ON&_temp_store=MEMORY")
+	db, err = OpenAndConfigureDatabase(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open db: %w", err)
 	}
-
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(time.Hour * 24)
-
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
 	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA cache_size=20000",
-		"PRAGMA temp_store=MEMORY",
 		"PRAGMA mmap_size=268435456",
 		"PRAGMA busy_timeout=60000",
 		"PRAGMA auto_vacuum=FULL",
@@ -81,8 +68,7 @@ func InitDB(_ string) error {
 			logger.Warn("Failed to set pragma %s: %v", pragma, err)
 		}
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+
 	StartTmdbCacheWriter()
 	return createTable()
 }
@@ -207,6 +193,7 @@ func InitTmdbCacheTable() error {
 		title TEXT,
 		poster_path TEXT,
 		year TEXT, -- Stores release_date string, frontend parses year
+		first_air_date TEXT, -- Stores first_air_date string for TV shows
 		local_poster_path TEXT, -- Path to locally cached poster image
 		poster_cached_at INTEGER, -- Unix timestamp when poster was cached
 		last_updated INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), -- Unix timestamp of last update
@@ -214,6 +201,12 @@ func InitTmdbCacheTable() error {
 	);`
 	if _, err := db.Exec(queryEntities); err != nil {
 		return fmt.Errorf("failed to create tmdb_entities table: %w", err)
+	}
+
+	// Add first_air_date column if it doesn't exist (migration)
+	_, err := db.Exec(`ALTER TABLE tmdb_entities ADD COLUMN first_air_date TEXT`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add first_air_date column: %w", err)
 	}
 
 	// Add new columns to existing tmdb_entities table if they don't exist (migration)
@@ -239,23 +232,24 @@ func InitTmdbCacheTable() error {
 }
 
 type TmdbEntity struct {
-	TmdbID     int
-	MediaType  string
-	Title      string
-	PosterPath string
-	Year       string // Represents release_date
+	TmdbID       int
+	MediaType    string
+	Title        string
+	PosterPath   string
+	Year         string // Represents release_date
+	FirstAirDate string // Represents first_air_date for TV shows
 }
 
 func GetTmdbCache(cacheKey string) (string, error) {
 	query := `
-		SELECT e.tmdb_id, e.media_type, e.title, e.poster_path, e.year
+		SELECT e.tmdb_id, e.media_type, e.title, e.poster_path, e.year, COALESCE(e.first_air_date, '')
 		FROM tmdb_cache_keys k
 		JOIN tmdb_entities e ON k.tmdb_id = e.tmdb_id AND k.media_type = e.media_type
 		WHERE k.cache_key = ?;
 	`
 	row := db.QueryRow(query, cacheKey)
 	var entity TmdbEntity
-	err := row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year)
+	err := row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year, &entity.FirstAirDate)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -263,18 +257,19 @@ func GetTmdbCache(cacheKey string) (string, error) {
 		return "", fmt.Errorf("failed to scan tmdb cache data: %w", err)
 	}
 
-	jsonStr := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"media_type":%q}`,
-		entity.TmdbID, entity.Title, entity.PosterPath, entity.Year, entity.MediaType)
+	jsonStr := fmt.Sprintf(`{"id":%d,"title":%q,"poster_path":%q,"release_date":%q,"first_air_date":%q,"media_type":%q}`,
+		entity.TmdbID, entity.Title, entity.PosterPath, entity.Year, entity.FirstAirDate, entity.MediaType)
 	return jsonStr, nil
 }
 
 func upsertTmdbCacheDirect(cacheKey, result string) error {
 	var entryData struct {
-		ID          int    `json:"id"`
-		Title       string `json:"title"`
-		PosterPath  string `json:"poster_path"`
-		ReleaseDate string `json:"release_date"`
-		MediaType   string `json:"media_type"`
+		ID           int    `json:"id"`
+		Title        string `json:"title"`
+		PosterPath   string `json:"poster_path"`
+		ReleaseDate  string `json:"release_date"`
+		FirstAirDate string `json:"first_air_date"`
+		MediaType    string `json:"media_type"`
 	}
 	err := json.Unmarshal([]byte(result), &entryData)
 	if err != nil {
@@ -311,14 +306,15 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 
 	// Upsert into tmdb_entities with timestamp
 	_, err = tx.Exec(`
-		INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year, last_updated)
-		VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'))
+		INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year, first_air_date, last_updated)
+		VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
 		ON CONFLICT(tmdb_id, media_type) DO UPDATE SET
 			title=excluded.title,
 			poster_path=excluded.poster_path,
 			year=excluded.year,
+			first_air_date=excluded.first_air_date,
 			last_updated=excluded.last_updated;
-	`, entryData.ID, entryData.MediaType, entryData.Title, entryData.PosterPath, entryData.ReleaseDate)
+	`, entryData.ID, entryData.MediaType, entryData.Title, entryData.PosterPath, entryData.ReleaseDate, entryData.FirstAirDate)
 	if err != nil {
 		return fmt.Errorf("failed to upsert into tmdb_entities: %w", err)
 	}

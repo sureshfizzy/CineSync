@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"cinesync/pkg/logger"
 	_ "modernc.org/sqlite"
 )
@@ -21,45 +20,25 @@ var (
 	sourceDBSemaphore chan struct{}
 )
 
-// GetSourceDatabaseConnection returns a shared source database connection with proper SQLite settings
 func GetSourceDatabaseConnection() (*sql.DB, error) {
 	sourceDBPoolOnce.Do(func() {
-		sourceDBSemaphore = make(chan struct{}, 5)
+		maxProcesses := GetMaxProcesses(8)
+		sourceDBSemaphore = make(chan struct{}, maxProcesses)
 
 		dbDir := filepath.Join("../db")
 
-		// Ensure the directory exists
 		if err := os.MkdirAll(dbDir, 0755); err != nil {
 			logger.Error("Failed to create database directory: %v", err)
 			return
 		}
 
-		// Open the source database with optimized SQLite settings for concurrent access
 		dbPath := filepath.Join(dbDir, "source_files.db")
-		db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=60000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=20000&_foreign_keys=ON&_temp_store=MEMORY")
+		db, err := OpenAndConfigureDatabase(dbPath)
 		if err != nil {
 			logger.Error("Failed to open source database pool: %v", err)
 			return
 		}
-
-		// Configure connection pool for optimal performance with SQLite
-		db.SetMaxOpenConns(1)
-		db.SetMaxIdleConns(1)
-		db.SetConnMaxLifetime(time.Hour * 24)
-
-		// Test the connection and set additional pragmas
-		if err := db.Ping(); err != nil {
-			logger.Error("Failed to ping source database: %v", err)
-			db.Close()
-			return
-		}
-
-		// Set additional SQLite pragmas for better concurrency
 		pragmas := []string{
-			"PRAGMA journal_mode=WAL",
-			"PRAGMA synchronous=NORMAL",
-			"PRAGMA cache_size=20000",
-			"PRAGMA temp_store=MEMORY",
 			"PRAGMA mmap_size=268435456",
 			"PRAGMA optimize",
 		}

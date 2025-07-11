@@ -282,10 +282,10 @@ const PosterView = memo(({
                   }}
                 >
                   {file.type === 'directory' && !file.isSeasonFolder && tmdb && tmdb.title
-                    ? (tmdb.release_date ? tmdb.title.replace(/\s*\(\d{4}\)$/, '') : tmdb.title)
+                    ? ((tmdb.release_date || tmdb.first_air_date) ? tmdb.title.replace(/\s*\(\d{4}\)$/, '') : tmdb.title)
                     : file.name}
                 </Typography>
-                {tmdb && tmdb.release_date && (
+                {tmdb && (tmdb.release_date || tmdb.first_air_date) && (
                   <Typography
                     variant="body2"
                     color="text.secondary"
@@ -297,7 +297,10 @@ const PosterView = memo(({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {new Date(tmdb.release_date).getFullYear()}
+                    {(() => {
+                      const dateStr = tmdb.release_date || tmdb.first_air_date;
+                      return dateStr ? new Date(dateStr).getFullYear() : '';
+                    })()}
                   </Typography>
                 )}
               </Box>

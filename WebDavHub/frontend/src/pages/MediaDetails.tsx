@@ -29,6 +29,8 @@ export default function MediaDetails() {
   const pathParts = fullPath.split('/').filter(Boolean);
   const folderName = pathParts.pop() || '';
   const currentPath = location.state?.currentPath || ('/' + pathParts.join('/') + (pathParts.length > 0 ? '/' : ''));
+  const returnPage = location.state?.returnPage || 1;
+  const returnSearch = location.state?.returnSearch || '';
 
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -301,7 +303,18 @@ export default function MediaDetails() {
       )}
       {/* Back button at very top left, always visible */}
       <IconButton
-        onClick={() => navigate(-1)}
+        onClick={() => {
+          const urlPath = currentPath.replace(/\/$/, '');
+          const searchParams = new URLSearchParams();
+          if (returnPage > 1) {
+            searchParams.set('page', returnPage.toString());
+          }
+          if (returnSearch) {
+            searchParams.set('search', returnSearch);
+          }
+          const queryString = searchParams.toString();
+          navigate(`/files${urlPath}${queryString ? `?${queryString}` : ''}`);
+        }}
         sx={{
           position: 'fixed',
           top: { xs: 8, md: 16 },

@@ -98,27 +98,125 @@ func GetFolderCache() *FolderCache {
 	return globalFolderCache
 }
 
-// InitializeFolderCache loads folder structure at startup with performance monitoring
+// getCategoriesFromBasePath gets actual categories from database base_path field
+func getCategoriesFromBasePath() []string {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		return nil
+	}
+
+	// Get all unique base_path values
+	query := `SELECT DISTINCT base_path FROM processed_files WHERE base_path IS NOT NULL AND base_path != '' ORDER BY base_path`
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		logger.Debug("Failed to query base_path for category discovery: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	categorySet := make(map[string]bool)
+
+	for rows.Next() {
+		var basePath string
+		if err := rows.Scan(&basePath); err != nil {
+			continue
+		}
+
+		apiPath := strings.ReplaceAll(basePath, string(filepath.Separator), "/")
+
+		categorySet[apiPath] = true
+
+		parts := strings.Split(apiPath, "/")
+		currentPath := ""
+		for i, part := range parts {
+			if i == 0 {
+				currentPath = part
+			} else {
+				currentPath = currentPath + "/" + part
+			}
+			if currentPath != "" {
+				categorySet[currentPath] = true
+			}
+		}
+	}
+
+	// Convert set to slice
+	var categories []string
+	for category := range categorySet {
+		categories = append(categories, category)
+	}
+
+	return categories
+}
+
 func InitializeFolderCache() error {
 	cache := GetFolderCache()
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	// Get common categories from filesystem (since root level uses filesystem anyway)
-	commonCategories := []string{"Movies", "Shows", "AnimeMovies", "AnimeShows", "KidsMovies", "KidsShows", "4KMovies"}
+	// Get actual categories from database base_path field
+	commonCategories := getCategoriesFromBasePath()
+	if len(commonCategories) == 0 {
+		cache.initialized = true
+		return nil
+	}
 
-	// Pre-load first 2000 items for each category (better cache coverage)
+	maxProcesses := GetMaxProcesses(len(commonCategories))
+
+	// Channel to control concurrency
+	semaphore := make(chan struct{}, maxProcesses)
+	var wg sync.WaitGroup
+
+	// Results channel to collect category data
+	type categoryResult struct {
+		category string
+		folders  []FolderInfo
+		total    int
+		err      error
+	}
+	results := make(chan categoryResult, len(commonCategories))
+
+	// Pre-load first 2000 items for each category in parallel (better cache coverage)
 	for _, category := range commonCategories {
-		// Smart caching: Load first 2000 folders (covers most navigation patterns)
-		// This balances memory usage vs performance for large libraries
-		categoryFolders, totalCategory, err := GetFoldersFromDatabasePaginated(category, 1, 2000)
-		if err != nil {
+		wg.Add(1)
+		go func(cat string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Smart caching: Load first 2000 folders (covers most navigation patterns)
+			// This balances memory usage vs performance for large libraries
+			categoryFolders, totalCategory, err := GetFoldersFromDatabasePaginated(cat, 1, 2000)
+
+			results <- categoryResult{
+				category: cat,
+				folders:  categoryFolders,
+				total:    totalCategory,
+				err:      err,
+			}
+		}(category)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	successCount := 0
+	for result := range results {
+		if result.err != nil {
+			logger.Debug("Failed to load cache for category %s: %v", result.category, result.err)
 			continue
 		}
 
-		if len(categoryFolders) > 0 {
-			cache.pathFolders[category] = categoryFolders
-			cache.totalCounts[category] = totalCategory
+		if len(result.folders) > 0 {
+			cache.pathFolders[result.category] = result.folders
+			cache.totalCounts[result.category] = result.total
+			successCount++
 		}
 	}
 
@@ -591,7 +689,6 @@ type FolderInfo struct {
 	FileCount    int    `json:"file_count"`
 }
 
-// GetFoldersFromDatabasePaginated retrieves folder information with optimized queries
 func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
@@ -609,7 +706,8 @@ func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]Folder
 
 	// Category level - get movies/shows using optimized database query
 	offset := (page - 1) * limit
-	return getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset)
+	result, total, err := getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset)
+	return result, total, err
 }
 
 
@@ -764,9 +862,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 	return folders, totalCount, nil
 }
 
-// GetFoldersFromDatabaseCached tries to use cache first with improved page handling
 func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInfo, int, error) {
-
 	if basePath == "" {
 		return GetFoldersFromDatabasePaginated(basePath, page, limit)
 	}
@@ -793,7 +889,6 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 				}
 
 				result := cachedFolders[startIdx:endIdx]
-
 				return result, totalCount, nil
 			} else {
 				// Expand cache by loading more data
@@ -825,8 +920,36 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 	}
 	cache.mu.RUnlock()
 
-	// Cache miss - query database directly
-	return GetFoldersFromDatabasePaginated(basePath, page, limit)
+	// Load more data than requested to populate cache for future requests
+	cacheLimit := limit
+	if limit < 500 {
+		cacheLimit = 500
+	}
+
+	result, total, err := GetFoldersFromDatabasePaginated(basePath, 1, cacheLimit)
+
+	if err == nil {
+
+		// Populate cache with the results
+		cache.mu.Lock()
+		cache.pathFolders[cleanBasePath] = result
+		cache.totalCounts[cleanBasePath] = total
+		cache.mu.Unlock()
+
+		// Return the requested page from the cached results
+		startIdx := (page - 1) * limit
+		if startIdx < len(result) {
+			endIdx := startIdx + limit
+			if endIdx > len(result) {
+				endIdx = len(result)
+			}
+			return result[startIdx:endIdx], total, nil
+		}
+
+		return result, total, nil
+	}
+
+	return result, total, err
 }
 
 // SearchFoldersFromDatabase searches folders in the database using proper_name and folder_name

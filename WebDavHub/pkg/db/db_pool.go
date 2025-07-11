@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"cinesync/pkg/logger"
 	_ "modernc.org/sqlite"
@@ -16,32 +15,21 @@ var (
 	dbPoolMux  sync.RWMutex
 )
 
-// GetDatabaseConnection returns a shared database connection with proper SQLite settings
 func GetDatabaseConnection() (*sql.DB, error) {
 	dbPoolOnce.Do(func() {
 		mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
 
-		db, err := sql.Open("sqlite", mediaHubDBPath+"?_busy_timeout=60000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=20000&_foreign_keys=ON&_temp_store=MEMORY")
+		absPath, _ := filepath.Abs(mediaHubDBPath)
+		logger.Info("Connecting to MediaHub database at: %s", absPath)
+
+		db, err := OpenAndConfigureDatabase(mediaHubDBPath)
 		if err != nil {
 			logger.Error("Failed to open MediaHub database pool: %v", err)
 			return
 		}
 
-		db.SetMaxOpenConns(1)
-		db.SetMaxIdleConns(1)
-		db.SetConnMaxLifetime(time.Hour * 24)
-
-		if err := db.Ping(); err != nil {
-			logger.Error("Failed to ping MediaHub database: %v", err)
-			db.Close()
-			return
-		}
 
 		pragmas := []string{
-			"PRAGMA journal_mode=WAL",
-			"PRAGMA synchronous=NORMAL",
-			"PRAGMA cache_size=20000",
-			"PRAGMA temp_store=MEMORY",
 			"PRAGMA mmap_size=268435456",
 			"PRAGMA optimize",
 		}
@@ -53,7 +41,7 @@ func GetDatabaseConnection() (*sql.DB, error) {
 		}
 
 		dbPool = db
-		logger.Info("Database connection pool initialized successfully")
+		logger.Info("MediaHub database connection pool initialized successfully")
 	})
 
 	dbPoolMux.RLock()
