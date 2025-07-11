@@ -234,7 +234,8 @@ def _extract_title_from_content(content: str) -> str:
         return clean_title_string(title)
 
     # Pattern 2: Handle season patterns FIRST (before dash and space patterns)
-    season_match = re.match(r'^(.+?)(?:\s*\(\d{4}\))?\s+(?:S\d+(?:E\d+)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+)(?:\s|$|\[)', content, re.IGNORECASE)
+    # Include both "Season X" and ordinal patterns like "3rd Season"
+    season_match = re.match(r'^(.+?)(?:\s*\(\d{4}\))?\s+(?:S\d+(?:E\d+)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
     if season_match:
         title = season_match.group(1).strip()
         return clean_title_string(title)

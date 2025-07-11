@@ -1326,6 +1326,8 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         r'\bSeason\s+(\d{1,2})\b',          # "Season 2" anywhere in filename
         r'\bS(\d{1,2})\s*\[',               # "S2 [quality]"
         r'\bS(\d{1,2})\s*\(',               # "S2 (year)"
+        # Ordinal season patterns like "3rd Season", "2nd Season", etc.
+        r'\b(\d{1,2})(?:st|nd|rd|th)\s+Season\b',  # "3rd Season", "2nd Season"
         # Season x episode patterns in the full filename
         r'\b(\d{1,2})x\d{1,3}(?:-\d{1,3})?\b',  # "1x18" or "1x18-20"
     ]
