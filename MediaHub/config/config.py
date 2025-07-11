@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import requests
+import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 
@@ -14,7 +15,6 @@ BETA_DISABLED_FEATURES = {
 # Client locked settings - loaded from JSON file if available
 def load_client_locked_settings():
     """Load client locked settings from MediaHub/utils folder if available"""
-    import json
 
     json_path = os.path.join(os.path.dirname(__file__), '..', 'utils', 'client_locked_settings.json')
 
@@ -51,13 +51,18 @@ def get_setting_with_client_lock(setting_name, default_value, value_type='string
 
         # Log warning if user tries to override locked setting
         if env_value and str(env_value) != str(locked_value):
-            log_message(f"{setting_name} is locked by System Administrator. Environment value '{env_value}' ignored, using '{locked_value}'.", level="WARNING")
+            log_message(f"{setting_name} is locked by System Administrator. Environment value '{env_value}' ignored, using '{locked_value}'.", level="DEBUG")
 
         # Convert type if needed
         if value_type == 'int':
             return int(locked_value)
         elif value_type == 'bool':
-            return bool(locked_value)
+            if isinstance(locked_value, bool):
+                return locked_value
+            elif isinstance(locked_value, str):
+                return locked_value.lower() in ['true', '1', 'yes']
+            else:
+                return str(locked_value).lower() in ['true', '1', 'yes']
         else:
             return locked_value
 
@@ -253,7 +258,7 @@ def is_4k_separation_enabled():
 
 def is_kids_separation_enabled():
     """Check if kids content separation should be enabled"""
-    return os.getenv('KIDS_SEPARATION', 'false').lower() == 'true'
+    return get_setting_with_client_lock('KIDS_SEPARATION', False, 'bool')
 
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()

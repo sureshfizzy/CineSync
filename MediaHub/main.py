@@ -614,7 +614,11 @@ def main(dest_dir):
                     if missing_files_list:
                         log_message(f"Found {len(missing_files_list)} missing files. Attempting to recreate symlinks.", level="INFO")
                         # Get source directories for create_symlinks
-                        src_dirs, _ = get_directories()
+                        src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+                        if not src_dirs_str:
+                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
+                            return
+                        src_dirs = src_dirs_str.split(',')
                         if not src_dirs:
                             log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
                             return
@@ -647,10 +651,12 @@ def main(dest_dir):
             # Check dashboard availability even when monitoring is disabled
             check_dashboard_availability()
 
-    src_dirs, dest_dir = get_directories()
-    if not src_dirs or not dest_dir:
+    src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+    dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
+    if not src_dirs_str or not dest_dir:
         log_message("Source or destination directory not set in environment variables.", level="ERROR")
         exit(1)
+    src_dirs = src_dirs_str.split(',')
 
     # Wait for mount before creating symlinks if needed
     if is_rclone_mount_enabled() and not check_rclone_mount():
@@ -697,7 +703,12 @@ if __name__ == "__main__":
     log_system_configuration()
 
     # Get directories and start main process
-    src_dirs, dest_dir = get_directories()
+    src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+    dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
+    if not src_dirs_str or not dest_dir:
+        log_message("Source or destination directory not set.", level="ERROR")
+        exit(1)
+    src_dirs = src_dirs_str.split(',')
 
     try:
         main(dest_dir)
