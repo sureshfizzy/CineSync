@@ -959,9 +959,6 @@ func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit 
 		return nil, 0, err
 	}
 
-	// Clean the base path
-	cleanBasePath := strings.Trim(basePath, "/\\")
-
 	// For search operations, always search across all categories for better user experience
 	return searchRootFolders(mediaHubDB, searchQuery, page, limit)
 }
