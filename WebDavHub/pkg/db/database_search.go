@@ -962,13 +962,8 @@ func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit 
 	// Clean the base path
 	cleanBasePath := strings.Trim(basePath, "/\\")
 
-	if cleanBasePath == "" {
-		// Root level search - search across all categories
-		return searchRootFolders(mediaHubDB, searchQuery, page, limit)
-	}
-
-	// Category level search - search within specific category
-	return searchCategoryFolders(mediaHubDB, cleanBasePath, searchQuery, page, limit)
+	// For search operations, always search across all categories for better user experience
+	return searchRootFolders(mediaHubDB, searchQuery, page, limit)
 }
 
 // searchRootFolders searches across all categories
@@ -983,7 +978,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 	searchPathPattern := destDir + string(filepath.Separator) + "%"
 	offset := (page - 1) * limit
 
-	// Optimized direct query for root folder search
+	// Optimized direct query for root folder search using base_path
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -992,7 +987,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
-			destination_path,
+			COALESCE(base_path, '') as base_path,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
 		WHERE destination_path IS NOT NULL
@@ -1017,17 +1012,14 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 
 	for rows.Next() {
 		var folder FolderInfo
-		var destPath string
+		var basePath string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &destPath, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &basePath, &totalCount)
 		if err != nil {
 			logger.Debug("Failed to scan search result: %v", err)
 			continue
 		}
-
-		// Extract category from destination path
-		category := extractCategoryFromPath(destPath, destDir)
 
 		// Build folder name and path
 		if folder.ProperName != "" && folder.Year != "" {
@@ -1038,7 +1030,14 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			continue
 		}
 
-		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		// Use base_path
+		if basePath != "" {
+			apiBasePath := strings.ReplaceAll(basePath, "\\", "/")
+			folder.FolderPath = "/" + apiBasePath + "/" + folder.FolderName
+		} else {
+			folder.FolderPath = "/" + folder.FolderName
+		}
+
 		folders = append(folders, folder)
 	}
 

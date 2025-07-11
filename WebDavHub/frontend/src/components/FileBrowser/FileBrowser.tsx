@@ -414,30 +414,41 @@ export default function FileBrowser() {
       if (tmdb || file.tmdbId) {
         const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
         const tmdbId = tmdb?.id || file.tmdbId;
-        const fullPath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
-        const mediaPath = joinPaths(currentPath, file.name);
+
+        // Use the correct path from search results (with base_path)
+        const mediaPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
+
+        // Calculate the correct parent path for the media item
+        const mediaPathParts = mediaPath.split('/').filter(Boolean);
+        mediaPathParts.pop();
+        const parentPath = '/' + mediaPathParts.join('/') + (mediaPathParts.length > 0 ? '/' : '');
+
         navigate(`/media${mediaPath}`, {
           state: {
             mediaType: isTvShow ? 'tv' : 'movie',
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
-            currentPath: fullPath,
+            currentPath: parentPath,
             tmdbData: tmdb,
             returnPage: page, // Preserve current page for navigation back
             returnSearch: search // Preserve current search for navigation back
           }
         });
       } else {
-        handlePathClick(joinPaths(currentPath, file.name));
+        const targetPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
+        handlePathClick(targetPath);
       }
     } else if (file.type === 'directory' && file.isSeasonFolder) {
-      handlePathClick(joinPaths(currentPath, file.name));
+      const targetPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
+      handlePathClick(targetPath);
     }
   };
 
   const handleListViewFileClick = (file: FileItem) => {
     if (file.type === 'directory') {
-      handlePathClick(joinPaths(currentPath, file.name));
+      // Use the correct path from search results (with base_path) or construct from current path
+      const targetPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
+      handlePathClick(targetPath);
     }
   };
 
