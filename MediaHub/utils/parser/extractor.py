@@ -454,8 +454,11 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
     ]
 
     for part in parsed.parts:
+        clean_part = part.strip()
         for pattern in episode_patterns:
-            if re.match(pattern, part, re.IGNORECASE):
+            if re.match(pattern, clean_part, re.IGNORECASE):
+                return True
+            if re.search(pattern, clean_part, re.IGNORECASE):
                 return True
 
     for i, part in enumerate(parsed.parts):
@@ -655,6 +658,18 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 re.match(r'E\d{1,3}', clean_part, re.IGNORECASE) or
                 re.match(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'\d{1,2}x\d{1,3}(?:-\d{1,3})?', clean_part, re.IGNORECASE)):
+                break
+
+            if (re.search(r'\bS\d{1,2}E\d{1,2}\b', clean_part, re.IGNORECASE) or
+                re.search(r'\bS\d{1,2}\b(?!E)', clean_part, re.IGNORECASE) or
+                re.search(r'\bE\d{1,3}\b', clean_part, re.IGNORECASE) or
+                re.search(r'\bSeason\s+\d{1,2}\b', clean_part, re.IGNORECASE) or
+                re.search(r'\b\d{1,2}x\d{1,3}(?:-\d{1,3})?\b', clean_part, re.IGNORECASE)):
+                season_episode_match = re.search(r'\b(S\d{1,2}E\d{1,2}|S\d{1,2}|E\d{1,3}|Season\s+\d{1,2}|\d{1,2}x\d{1,3}(?:-\d{1,3})?)\b', clean_part, re.IGNORECASE)
+                if season_episode_match:
+                    before_season = clean_part[:season_episode_match.start()].strip()
+                    if before_season:
+                        title_parts.append(before_season)
                 break
 
             # Stop at "Season" keyword
