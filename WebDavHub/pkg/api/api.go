@@ -2160,7 +2160,7 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	// Determine folder name based on media type
 	folderName := "Movies"
-	if mediaType == "tvshow" {
+	if mediaType == "tvshow" || mediaType == "tv" {
 		folderName = "TV Shows"
 	}
 
@@ -2176,30 +2176,24 @@ func handleSymlinkCreated(data map[string]interface{}) {
 	}
 
 	// For TV shows, use rich data directly from MediaHub
-	if mediaType == "tvshow" {
-		// Season number
+	if mediaType == "tvshow" || mediaType == "tv" {
 		if seasonInterface, exists := data["season_number"]; exists {
 			if season, ok := seasonInterface.(float64); ok {
 				newMedia.SeasonNumber = int(season)
-			} else if seasonStr, ok := seasonInterface.(string); ok {
-				if season, err := strconv.Atoi(seasonStr); err == nil {
-					newMedia.SeasonNumber = season
-				}
+			} else if season, ok := seasonInterface.(int); ok {
+				newMedia.SeasonNumber = season
 			}
 		}
 
-		// Episode number
 		if episodeInterface, exists := data["episode_number"]; exists {
 			if episode, ok := episodeInterface.(float64); ok {
 				newMedia.EpisodeNumber = int(episode)
-			} else if episodeStr, ok := episodeInterface.(string); ok {
-				if episode, err := strconv.Atoi(episodeStr); err == nil {
-					newMedia.EpisodeNumber = episode
-				}
+			} else if episode, ok := episodeInterface.(int); ok {
+				newMedia.EpisodeNumber = episode
 			}
 		}
 
-		// Show name (prefer show_name, fallback to cleaned proper_show_name)
+		// Use show name from MediaHub
 		if showNameInterface, exists := data["show_name"]; exists {
 			if showName, ok := showNameInterface.(string); ok && showName != "" {
 				newMedia.ShowName = showName
