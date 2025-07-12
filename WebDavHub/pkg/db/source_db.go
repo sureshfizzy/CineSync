@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/env"
 	_ "modernc.org/sqlite"
 )
 
@@ -18,12 +19,22 @@ var (
 	sourceDBPoolOnce sync.Once
 	sourceDBPoolMux  sync.RWMutex
 	sourceDBSemaphore chan struct{}
+	sourceDBWriteQueue chan func()
+	sourceDBWriteQueueOnce sync.Once
 )
 
 func GetSourceDatabaseConnection() (*sql.DB, error) {
 	sourceDBPoolOnce.Do(func() {
-		maxProcesses := GetMaxProcesses(8)
-		sourceDBSemaphore = make(chan struct{}, maxProcesses)
+
+		maxWorkers := env.GetInt("DB_MAX_WORKERS", 8)
+		if maxWorkers > 10 {
+			maxWorkers = 10
+		}
+		if maxWorkers < 1 {
+			maxWorkers = 1
+		}
+
+		sourceDBSemaphore = make(chan struct{}, maxWorkers)
 
 		dbDir := filepath.Join("../db")
 
@@ -38,19 +49,22 @@ func GetSourceDatabaseConnection() (*sql.DB, error) {
 			logger.Error("Failed to open source database pool: %v", err)
 			return
 		}
-		pragmas := []string{
-			"PRAGMA mmap_size=268435456",
-			"PRAGMA optimize",
+
+		// pragmas specific to source database
+		additionalPragmas := []string{
+			"PRAGMA auto_vacuum=INCREMENTAL",
 		}
 
-		for _, pragma := range pragmas {
+		for _, pragma := range additionalPragmas {
 			if _, err := db.Exec(pragma); err != nil {
-				logger.Warn("Failed to set pragma %s: %v", pragma, err)
+				logger.Warn("Failed to set additional pragma %s: %v", pragma, err)
 			}
 		}
 
 		sourceDBPool = db
 		logger.Info("Source database connection pool initialized successfully")
+
+		initSourceDBWriteQueue()
 	})
 
 	sourceDBPoolMux.RLock()
@@ -61,6 +75,28 @@ func GetSourceDatabaseConnection() (*sql.DB, error) {
 	}
 
 	return sourceDBPool, nil
+}
+
+// initSourceDBWriteQueue initializes the write queue for serializing write operations
+func initSourceDBWriteQueue() {
+	sourceDBWriteQueueOnce.Do(func() {
+		sourceDBWriteQueue = make(chan func(), 1000)
+
+		go func() {
+			for writeOp := range sourceDBWriteQueue {
+				writeOp()
+			}
+		}()
+	})
+}
+
+// executeWriteOperation queues a write operation for serial execution
+func executeWriteOperation(operation func()) {
+	if sourceDBWriteQueue != nil {
+		sourceDBWriteQueue <- operation
+	} else {
+		operation()
+	}
 }
 
 // executeWithSemaphore executes a database operation with semaphore control
@@ -75,6 +111,62 @@ func executeWithSemaphore(operation func(*sql.DB) error) error {
 
 	return operation(db)
 }
+
+// executeReadOperation executes a read operation with semaphore control (allows concurrent reads)
+func executeReadOperation(operation func(*sql.DB) error) error {
+	sourceDBSemaphore <- struct{}{}
+	defer func() { <-sourceDBSemaphore }()
+
+	db, err := GetSourceDatabaseConnection()
+	if err != nil {
+		return fmt.Errorf("failed to get source database connection: %w", err)
+	}
+
+	return operation(db)
+}
+
+// executeWriteOperationSync executes a write operation through the write queue (serialized)
+func executeWriteOperationSync(operation func(*sql.DB) error) error {
+	resultChan := make(chan error, 1)
+
+	executeWriteOperation(func() {
+		db, err := GetSourceDatabaseConnection()
+		if err != nil {
+			resultChan <- fmt.Errorf("failed to get source database connection: %w", err)
+			return
+		}
+
+		// Apply retry logic for SQLITE_BUSY errors
+		maxRetries := 5
+		baseDelay := 100 * time.Millisecond
+
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			err := operation(db)
+			if err == nil {
+				resultChan <- nil
+				return
+			}
+
+			// Check if it's a SQLite busy error
+			if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+				if attempt < maxRetries-1 {
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+					time.Sleep(delay + jitter)
+					continue
+				}
+			}
+			resultChan <- err
+			return
+		}
+
+		resultChan <- fmt.Errorf("operation failed after %d retries", maxRetries)
+	})
+
+	return <-resultChan
+}
+
+
 
 // InitSourceDB initializes the source files database
 func InitSourceDB() error {
@@ -223,9 +315,9 @@ func SourceFileExists(filePath string) (bool, error) {
 	return count > 0, nil
 }
 
-// InsertSourceFile inserts a new source file into the database with semaphore control
+// InsertSourceFile inserts a new source file into the database using write queue
 func InsertSourceFile(file SourceFile) error {
-	return executeWithSemaphore(func(db *sql.DB) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
 		query := `INSERT INTO source_files
 			(file_path, file_name, file_size, file_size_formatted, modified_time,
 			 is_media_file, media_type, source_index, source_directory, relative_path,
@@ -242,9 +334,9 @@ func InsertSourceFile(file SourceFile) error {
 	})
 }
 
-// UpdateSourceFile updates an existing source file in the database with semaphore control
+// UpdateSourceFile updates an existing source file in the database using write queue
 func UpdateSourceFile(file SourceFile) error {
-	return executeWithSemaphore(func(db *sql.DB) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
 		query := `UPDATE source_files SET
 			file_size = ?, file_size_formatted = ?, modified_time = ?,
 			is_media_file = ?, media_type = ?, last_seen_at = ?, is_active = ?
@@ -259,9 +351,9 @@ func UpdateSourceFile(file SourceFile) error {
 	})
 }
 
-// UpdateSourceFileProcessingStatus updates the processing status of a source file with semaphore control
+// UpdateSourceFileProcessingStatus updates the processing status of a source file using write queue
 func UpdateSourceFileProcessingStatus(filePath, status, tmdbID string, seasonNumber *int) error {
-	return executeWithSemaphore(func(db *sql.DB) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
 		query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
 				  WHERE file_path = ?`
 
@@ -290,16 +382,16 @@ func UpdateSourceFileProcessingStatus(filePath, status, tmdbID string, seasonNum
 
 // MarkAllSourceFilesInactive marks all source files as inactive (for scanning)
 func MarkAllSourceFilesInactive() error {
-	return executeWithSemaphore(func(db *sql.DB) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
 		query := `UPDATE source_files SET is_active = FALSE`
 		_, err := db.Exec(query)
 		return err
 	})
 }
 
-// BatchUpdateSourceFiles performs batch operations within a transaction for better performance
+// BatchUpdateSourceFiles performs batch operations within a transaction using write queue
 func BatchUpdateSourceFiles(operations []func(*sql.Tx) error) error {
-	return executeWithSemaphore(func(db *sql.DB) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction: %w", err)

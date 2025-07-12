@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,11 +13,13 @@ import (
 	"time"
 	_ "modernc.org/sqlite"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/env"
 )
 
 var db *sql.DB
 var tmdbCacheWriteQueue chan tmdbCacheWriteReq
 var tmdbCacheMutex sync.Mutex
+var tmdbCacheSemaphore chan struct{}
 
 const MAX_TMDB_CACHE_ENTRIES = 5000
 
@@ -59,18 +62,32 @@ func InitDB(_ string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open db: %w", err)
 	}
-	pragmas := []string{
-		"PRAGMA mmap_size=268435456",
-		"PRAGMA busy_timeout=60000",
+
+	// pragmas specific to TMDB database
+	additionalPragmas := []string{
 		"PRAGMA auto_vacuum=FULL",
 		"PRAGMA page_size=4096",
-		"PRAGMA optimize",
 	}
 
-	for _, pragma := range pragmas {
+	for _, pragma := range additionalPragmas {
 		if _, err := db.Exec(pragma); err != nil {
-			logger.Warn("Failed to set pragma %s: %v", pragma, err)
+			logger.Warn("Failed to set additional pragma %s: %v", pragma, err)
 		}
+	}
+
+	// Get max workers for semaphore
+	maxWorkers := env.GetInt("DB_MAX_WORKERS", 8)
+	if maxWorkers > 10 {
+		maxWorkers = 10
+	}
+	if maxWorkers < 1 {
+		maxWorkers = 1
+	}
+
+	// Initialize semaphore for controlling concurrent TMDB cache operations
+	tmdbCacheSemaphore = make(chan struct{}, maxWorkers)
+	for i := 0; i < maxWorkers; i++ {
+		tmdbCacheSemaphore <- struct{}{}
 	}
 
 	StartTmdbCacheWriter()
@@ -245,15 +262,53 @@ type TmdbEntity struct {
 }
 
 func GetTmdbCache(cacheKey string) (string, error) {
+	// Acquire semaphore to limit concurrent operations
+	<-tmdbCacheSemaphore
+	defer func() { tmdbCacheSemaphore <- struct{}{} }()
+
+	var result string
+	var err error
+
+	// Retry logic for database busy errors
+	for attempt := 0; attempt < 5; attempt++ {
+		result, err = getTmdbCacheWithoutRetry(cacheKey)
+		if err == nil {
+			return result, nil
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < 4 {
+				// Exponential backoff with jitter
+				delay := time.Duration(50*(1<<uint(attempt))) * time.Millisecond
+				time.Sleep(delay)
+				continue
+			}
+		}
+		return "", err
+	}
+
+	return result, err
+}
+
+func getTmdbCacheWithoutRetry(cacheKey string) (string, error) {
+	// Use a fresh connection for each query to avoid lock contention
+	dbPath := filepath.Join("../db", "cinesync.db")
+	tempDB, err := OpenAndConfigureDatabase(dbPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open database connection: %w", err)
+	}
+	defer tempDB.Close()
+
 	query := `
 		SELECT e.tmdb_id, e.media_type, e.title, e.poster_path, e.year, COALESCE(e.first_air_date, '')
 		FROM tmdb_cache_keys k
 		JOIN tmdb_entities e ON k.tmdb_id = e.tmdb_id AND k.media_type = e.media_type
 		WHERE k.cache_key = ?;
 	`
-	row := db.QueryRow(query, cacheKey)
+	row := tempDB.QueryRow(query, cacheKey)
 	var entity TmdbEntity
-	err := row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year, &entity.FirstAirDate)
+	err = row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year, &entity.FirstAirDate)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -271,6 +326,14 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	tmdbCacheMutex.Lock()
 	defer tmdbCacheMutex.Unlock()
 
+	// Use a fresh connection for each write operation to avoid lock contention
+	dbPath := filepath.Join("../db", "cinesync.db")
+	tempDB, err := OpenAndConfigureDatabase(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database connection: %w", err)
+	}
+	defer tempDB.Close()
+
 	var entryData struct {
 		ID           int    `json:"id"`
 		Title        string `json:"title"`
@@ -279,7 +342,7 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 		FirstAirDate string `json:"first_air_date"`
 		MediaType    string `json:"media_type"`
 	}
-	err := json.Unmarshal([]byte(result), &entryData)
+	err = json.Unmarshal([]byte(result), &entryData)
 	if err != nil {
 		return fmt.Errorf("failed to parse TMDB cache JSON for upsert: %w", err)
 	}
@@ -289,7 +352,8 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 		return fmt.Errorf("invalid media_type for TMDB cache upsert: '%s'. Must be 'movie' or 'tv'", entryData.MediaType)
 	}
 
-	tx, err := db.Begin()
+	// Try to begin transaction
+	tx, err := tempDB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for tmdb cache upsert: %w", err)
 	}
@@ -348,6 +412,46 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	return nil
 }
 
+// upsertTmdbCacheWithoutTransaction performs upsert without starting a new transaction
+func upsertTmdbCacheWithoutTransaction(db *sql.DB, entryData struct {
+	ID           int    `json:"id"`
+	Title        string `json:"title"`
+	PosterPath   string `json:"poster_path"`
+	ReleaseDate  string `json:"release_date"`
+	FirstAirDate string `json:"first_air_date"`
+	MediaType    string `json:"media_type"`
+}) error {
+	// Check if the entity exists
+	var existingCount int
+	checkQuery := `SELECT COUNT(*) FROM tmdb_entities WHERE tmdb_id = ? AND media_type = ?`
+	err := db.QueryRow(checkQuery, entryData.ID, entryData.MediaType).Scan(&existingCount)
+	if err != nil {
+		return fmt.Errorf("failed to check existing entity: %w", err)
+	}
+
+	if existingCount == 0 {
+		// Insert new entity
+		insertQuery := `INSERT INTO tmdb_entities (tmdb_id, media_type, title, poster_path, year, first_air_date)
+						VALUES (?, ?, ?, ?, ?, ?)`
+		_, err = db.Exec(insertQuery, entryData.ID, entryData.MediaType, entryData.Title,
+			entryData.PosterPath, entryData.ReleaseDate, entryData.FirstAirDate)
+		if err != nil {
+			return fmt.Errorf("failed to insert TMDB entity: %w", err)
+		}
+	} else {
+		// Update existing entity
+		updateQuery := `UPDATE tmdb_entities SET title = ?, poster_path = ?, year = ?, first_air_date = ?
+						WHERE tmdb_id = ? AND media_type = ?`
+		_, err = db.Exec(updateQuery, entryData.Title, entryData.PosterPath,
+			entryData.ReleaseDate, entryData.FirstAirDate, entryData.ID, entryData.MediaType)
+		if err != nil {
+			return fmt.Errorf("failed to update TMDB entity: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // UpsertTmdbCache stores or updates a TMDB cache entry (async, robust)
 func UpsertTmdbCache(cacheKey, result string) error {
 	tmdbCacheWriteQueue <- tmdbCacheWriteReq{query: cacheKey, result: result}
@@ -356,13 +460,50 @@ func UpsertTmdbCache(cacheKey, result string) error {
 
 // GetTmdbCacheByTmdbIdAndType returns the first cache entry for a given tmdb_id and media_type
 func GetTmdbCacheByTmdbIdAndType(tmdbIDStr, mediaType string) (string, error) {
+	// Acquire semaphore to limit concurrent operations
+	<-tmdbCacheSemaphore
+	defer func() { tmdbCacheSemaphore <- struct{}{} }()
+
 	tmdbID, err := strconv.Atoi(tmdbIDStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid tmdbID format: %w", err)
 	}
 
+	var result string
+
+	// Retry logic for database busy errors
+	for attempt := 0; attempt < 5; attempt++ {
+		result, err = getTmdbCacheByTmdbIdAndTypeWithoutRetry(tmdbID, mediaType)
+		if err == nil {
+			return result, nil
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < 4 {
+				// Exponential backoff with jitter
+				delay := time.Duration(50*(1<<uint(attempt))) * time.Millisecond
+				time.Sleep(delay)
+				continue
+			}
+		}
+		return "", err
+	}
+
+	return result, err
+}
+
+func getTmdbCacheByTmdbIdAndTypeWithoutRetry(tmdbID int, mediaType string) (string, error) {
+	// Use a fresh connection for each query to avoid lock contention
+	dbPath := filepath.Join("../db", "cinesync.db")
+	tempDB, err := OpenAndConfigureDatabase(dbPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open database connection: %w", err)
+	}
+	defer tempDB.Close()
+
 	query := `SELECT tmdb_id, media_type, title, poster_path, year FROM tmdb_entities WHERE tmdb_id = ? AND media_type = ?;`
-	row := db.QueryRow(query, tmdbID, mediaType)
+	row := tempDB.QueryRow(query, tmdbID, mediaType)
 	var entity TmdbEntity
 	err = row.Scan(&entity.TmdbID, &entity.MediaType, &entity.Title, &entity.PosterPath, &entity.Year)
 	if err == sql.ErrNoRows {
@@ -434,7 +575,16 @@ func ClearTmdbCache() error {
 	tmdbCacheMutex.Lock()
 	defer tmdbCacheMutex.Unlock()
 
-	tx, err := db.Begin()
+	// Use a fresh connection for clear operation to avoid lock contention
+	dbPath := filepath.Join("../db", "cinesync.db")
+	tempDB, err := OpenAndConfigureDatabase(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database connection: %w", err)
+	}
+	defer tempDB.Close()
+
+	// Try to begin transaction
+	tx, err := tempDB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for cache clear: %w", err)
 	}
@@ -477,6 +627,34 @@ type RecentMedia struct {
 
 // AddRecentMedia adds a new recent media item to the database, replacing duplicates
 func AddRecentMedia(media RecentMedia) error {
+	// Retry logic for database busy errors
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := addRecentMediaWithoutRetry(media)
+		if err == nil {
+			return nil
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				// Exponential backoff with jitter
+				delay := baseDelay * time.Duration(1<<uint(attempt))
+				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+				time.Sleep(delay + jitter)
+				continue
+			}
+		}
+		return err
+	}
+
+	return fmt.Errorf("operation failed after %d retries", maxRetries)
+}
+
+// addRecentMediaWithoutRetry performs the actual database operation without retry logic
+func addRecentMediaWithoutRetry(media RecentMedia) error {
 	if (media.Type == "tvshow" || media.Type == "tv") && media.TmdbId != "" && media.SeasonNumber > 0 && media.EpisodeNumber > 0 {
 		deleteQuery := `DELETE FROM recent_media WHERE tmdb_id = ? AND type IN ('tvshow', 'tv') AND season_number = ? AND episode_number = ?`
 		_, err := db.Exec(deleteQuery, media.TmdbId, media.SeasonNumber, media.EpisodeNumber)
@@ -533,55 +711,81 @@ func GetMediaCounts(rootDir string) (movieCount int, showCount int, err error) {
 
 // GetAllStatsFromDB returns all stats from MediaHub database - no file system scanning
 func GetAllStatsFromDB() (totalFiles int, totalFolders int, totalSize int64, movieCount int, showCount int, err error) {
-	// Use the database connection pool
+	// Retry logic for database busy errors
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		totalFiles, totalFolders, totalSize, movieCount, showCount, err = getAllStatsFromDBWithoutRetry()
+		if err == nil {
+			return totalFiles, totalFolders, totalSize, movieCount, showCount, nil
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				// Exponential backoff with jitter
+				delay := baseDelay * time.Duration(1<<uint(attempt))
+				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+				time.Sleep(delay + jitter)
+				continue
+			}
+		}
+		// For non-busy errors, return immediately
+		logger.Warn("Failed to get database stats: %v", err)
+		return 0, 0, 0, 0, 0, nil
+	}
+
+	logger.Warn("Failed to get database stats after %d retries: %v", maxRetries, err)
+	return 0, 0, 0, 0, 0, nil
+}
+
+// getAllStatsFromDBWithoutRetry performs the actual database queries without retry logic
+func getAllStatsFromDBWithoutRetry() (totalFiles int, totalFolders int, totalSize int64, movieCount int, showCount int, err error) {
+	// Use a fresh connection to avoid lock contention during bulk operations
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
-		logger.Warn("Failed to get database connection: %v", err)
-		return 0, 0, 0, 0, 0, nil
+		return 0, 0, 0, 0, 0, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
 	// Get total file count (count files that have destination paths)
 	err = mediaHubDB.QueryRow(`SELECT COUNT(*) FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''`).Scan(&totalFiles)
 	if err != nil {
-		totalFiles = 0
+		return 0, 0, 0, 0, 0, fmt.Errorf("failed to get total files: %w", err)
 	}
 
 	// Get unique folder count by extracting directories from DESTINATION paths
 	rows, err := mediaHubDB.Query(`SELECT DISTINCT destination_path FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''`)
 	if err != nil {
-		totalFolders = 0
-	} else {
-		defer rows.Close()
-		folderSet := make(map[string]bool)
-
-		for rows.Next() {
-			var destinationPath string
-			if err := rows.Scan(&destinationPath); err != nil {
-				continue
-			}
-
-			// Extract directory path from destination
-			dir := filepath.Dir(destinationPath)
-			if dir != "." && dir != "/" && dir != "\\" && dir != "" {
-				folderSet[dir] = true
-			}
-		}
-		totalFolders = len(folderSet)
+		return 0, 0, 0, 0, 0, fmt.Errorf("failed to get folder paths: %w", err)
 	}
+	defer rows.Close()
+	folderSet := make(map[string]bool)
 
-	// Calculate storage size from database - fast and accurate!
-	totalSize = 0
+	for rows.Next() {
+		var destinationPath string
+		if err := rows.Scan(&destinationPath); err != nil {
+			continue
+		}
+
+		// Extract directory path from destination
+		dir := filepath.Dir(destinationPath)
+		if dir != "." && dir != "/" && dir != "\\" && dir != "" {
+			folderSet[dir] = true
+		}
+	}
+	totalFolders = len(folderSet)
 
 	// Get total size from stored file_size column
 	err = mediaHubDB.QueryRow(`SELECT COALESCE(SUM(file_size), 0) FROM processed_files WHERE file_size IS NOT NULL`).Scan(&totalSize)
 	if err != nil {
-		totalSize = 0
+		return 0, 0, 0, 0, 0, fmt.Errorf("failed to get total size: %w", err)
 	}
 
 	// Get movie and show counts (reuse existing logic)
 	movieCount, showCount, err = GetMediaCounts("")
 	if err != nil {
-		movieCount, showCount = 0, 0
+		return 0, 0, 0, 0, 0, fmt.Errorf("failed to get media counts: %w", err)
 	}
 
 	return totalFiles, totalFolders, totalSize, movieCount, showCount, nil
@@ -593,6 +797,41 @@ func GetRecentMedia(limit int) ([]RecentMedia, error) {
 		limit = 10
 	}
 
+	var results []RecentMedia
+	var err error
+
+	// Retry logic for database busy errors
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		results, err = getRecentMediaWithoutRetry()
+		if err == nil {
+			break
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				// Exponential backoff with jitter
+				delay := baseDelay * time.Duration(1<<uint(attempt))
+				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+				time.Sleep(delay + jitter)
+				continue
+			}
+		}
+		return nil, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+// getRecentMediaWithoutRetry performs the actual database query without retry logic
+func getRecentMediaWithoutRetry() ([]RecentMedia, error) {
 	// Get all recent media items
 	query := `SELECT id, name, path, folder_name, updated_at, type, tmdb_id, show_name, season_number, episode_number, episode_title, filename, created_at
 		FROM recent_media ORDER BY created_at DESC`

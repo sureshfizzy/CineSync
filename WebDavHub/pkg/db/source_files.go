@@ -288,52 +288,48 @@ func handleUpdateFileStatuses(w http.ResponseWriter, files []struct {
 	TmdbID           string `json:"tmdbId,omitempty"`
 	SeasonNumber     *int   `json:"seasonNumber,omitempty"`
 }) {
-	// Get database connection
-	sourceDB, err := GetSourceDatabaseConnection()
-	if err != nil {
-		logger.Error("Failed to get source database connection: %v", err)
-		http.Error(w, "Source database not available", http.StatusServiceUnavailable)
-		return
-	}
+	var updated int
+	var err error
 
-	tx, err := sourceDB.Begin()
-	if err != nil {
-		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
+	// Use batch update with retry logic
+	operations := make([]func(*sql.Tx) error, 0, len(files))
 
-	updated := 0
 	for _, file := range files {
-		query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
-				  WHERE file_path = ?`
+		f := file
+		operations = append(operations, func(tx *sql.Tx) error {
+			query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
+					  WHERE file_path = ?`
 
-		var tmdbID sql.NullString
-		var seasonNumber sql.NullInt64
+			var tmdbID sql.NullString
+			var seasonNumber sql.NullInt64
 
-		if file.TmdbID != "" {
-			tmdbID.String = file.TmdbID
-			tmdbID.Valid = true
-		}
+			if f.TmdbID != "" {
+				tmdbID.String = f.TmdbID
+				tmdbID.Valid = true
+			}
 
-		if file.SeasonNumber != nil {
-			seasonNumber.Int64 = int64(*file.SeasonNumber)
-			seasonNumber.Valid = true
-		}
+			if f.SeasonNumber != nil {
+				seasonNumber.Int64 = int64(*f.SeasonNumber)
+				seasonNumber.Valid = true
+			}
 
-		result, err := tx.Exec(query, file.ProcessingStatus, time.Now().Unix(), tmdbID, seasonNumber, file.FilePath)
-		if err != nil {
-			logger.Error("Failed to update source file status: %v", err)
-			continue
-		}
+			result, err := tx.Exec(query, f.ProcessingStatus, time.Now().Unix(), tmdbID, seasonNumber, f.FilePath)
+			if err != nil {
+				return err
+			}
 
-		if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
-			updated++
-		}
+			if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+				updated++
+			}
+			return nil
+		})
 	}
 
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+	// Execute batch update with retry logic
+	err = BatchUpdateSourceFiles(operations)
+	if err != nil {
+		logger.Error("Failed to batch update file statuses: %v", err)
+		http.Error(w, "Failed to update file statuses", http.StatusInternalServerError)
 		return
 	}
 
@@ -663,17 +659,50 @@ func updateProcessingStatusFromMediaHub() error {
 		filePaths = append(filePaths, filePath)
 	}
 
-	// Check each file against MediaHub database
+	// Check each file against MediaHub database and batch updates
+	var batchOperations []func(*sql.Tx) error
 	updated := 0
+
 	for _, filePath := range filePaths {
 		status, tmdbID, seasonNumber := checkFileInMediaHub(mediaHubDB, filePath)
 		if status != "unprocessed" {
-			err := UpdateSourceFileProcessingStatus(filePath, status, tmdbID, seasonNumber)
-			if err != nil {
-				logger.Error("Failed to update processing status for %s: %v", filePath, err)
-			} else {
-				updated++
-			}
+			// Capture variables in closure
+			fp, st, tid, sn := filePath, status, tmdbID, seasonNumber
+			batchOperations = append(batchOperations, func(tx *sql.Tx) error {
+				query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
+						  WHERE file_path = ?`
+
+				var tmdbIDVal sql.NullString
+				var seasonNumberVal sql.NullInt64
+
+				if tid != "" {
+					tmdbIDVal.String = tid
+					tmdbIDVal.Valid = true
+				}
+
+				if sn != nil {
+					seasonNumberVal.Int64 = int64(*sn)
+					seasonNumberVal.Valid = true
+				}
+
+				result, err := tx.Exec(query, st, time.Now().Unix(), tmdbIDVal, seasonNumberVal, fp)
+				if err != nil {
+					return err
+				}
+
+				if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+					updated++
+				}
+				return nil
+			})
+		}
+	}
+
+	// Execute batch updates if any
+	if len(batchOperations) > 0 {
+		err := BatchUpdateSourceFiles(batchOperations)
+		if err != nil {
+			logger.Error("Failed to batch update processing status: %v", err)
 		}
 	}
 

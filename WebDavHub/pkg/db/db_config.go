@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"cinesync/pkg/env"
-	"cinesync/pkg/logger"
 )
 
 // DatabaseConfig holds common database configuration
@@ -36,10 +35,10 @@ func GetDefaultDatabaseConfig() DatabaseConfig {
 		MaxOpenConns:    maxConnections,
 		MaxIdleConns:    maxConnections,
 		ConnMaxLifetime: time.Hour * 24,
-		BusyTimeout:     "60000",
+		BusyTimeout:     "30000",
 		JournalMode:     "WAL",
 		Synchronous:     "NORMAL",
-		CacheSize:       "20000",
+		CacheSize:       "50000",
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}
@@ -79,7 +78,6 @@ func OpenAndConfigureDatabase(dbPath string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	logger.Info("Database connection configured: %s (max_connections: %d)", dbPath, config.MaxOpenConns)
 	return db, nil
 }
 

@@ -28,15 +28,14 @@ func GetDatabaseConnection() (*sql.DB, error) {
 			return
 		}
 
-
-		pragmas := []string{
-			"PRAGMA mmap_size=268435456",
-			"PRAGMA optimize",
+		// pragmas specific to MediaHub database
+		additionalPragmas := []string{
+			"PRAGMA auto_vacuum=INCREMENTAL",
 		}
 
-		for _, pragma := range pragmas {
+		for _, pragma := range additionalPragmas {
 			if _, err := db.Exec(pragma); err != nil {
-				logger.Warn("Failed to set pragma %s: %v", pragma, err)
+				logger.Warn("Failed to set additional pragma %s: %v", pragma, err)
 			}
 		}
 
