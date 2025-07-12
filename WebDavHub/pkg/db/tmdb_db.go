@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	_ "modernc.org/sqlite"
 	"cinesync/pkg/logger"
@@ -15,6 +16,7 @@ import (
 
 var db *sql.DB
 var tmdbCacheWriteQueue chan tmdbCacheWriteReq
+var tmdbCacheMutex sync.Mutex
 
 const MAX_TMDB_CACHE_ENTRIES = 5000
 
@@ -32,8 +34,10 @@ func StartTmdbCacheWriter() {
 				if err == nil {
 					break
 				}
-				if strings.Contains(err.Error(), "database is locked") {
-					time.Sleep(100 * time.Millisecond)
+				if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+					// Exponential backoff with jitter
+					delay := time.Duration(100*(1<<uint(i))) * time.Millisecond
+					time.Sleep(delay)
 					continue
 				}
 				fmt.Printf("TMDB cache write error: %v\n", err)
@@ -263,6 +267,10 @@ func GetTmdbCache(cacheKey string) (string, error) {
 }
 
 func upsertTmdbCacheDirect(cacheKey, result string) error {
+	// Use mutex to prevent concurrent TMDB cache operations
+	tmdbCacheMutex.Lock()
+	defer tmdbCacheMutex.Unlock()
+
 	var entryData struct {
 		ID           int    `json:"id"`
 		Title        string `json:"title"`
@@ -279,11 +287,6 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 	// Validate MediaType: must be 'movie' or 'tv'
 	if entryData.MediaType != "movie" && entryData.MediaType != "tv" {
 		return fmt.Errorf("invalid media_type for TMDB cache upsert: '%s'. Must be 'movie' or 'tv'", entryData.MediaType)
-	}
-
-	// Check cache size and cleanup if needed before adding new entries
-	if err := cleanupTmdbCacheIfNeeded(); err != nil {
-		fmt.Printf("Warning: TMDB cache cleanup failed: %v\n", err)
 	}
 
 	tx, err := db.Begin()
@@ -332,7 +335,17 @@ func upsertTmdbCacheDirect(cacheKey, result string) error {
 		return fmt.Errorf("failed to upsert into tmdb_cache_keys: %w", err)
 	}
 
-	return tx.Commit()
+	// Commit the transaction first
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Check cache size and cleanup if needed after successful commit
+	if err := cleanupTmdbCacheIfNeeded(); err != nil {
+		fmt.Printf("Warning: TMDB cache cleanup failed: %v\n", err)
+	}
+
+	return nil
 }
 
 // UpsertTmdbCache stores or updates a TMDB cache entry (async, robust)
@@ -366,6 +379,7 @@ func GetTmdbCacheByTmdbIdAndType(tmdbIDStr, mediaType string) (string, error) {
 
 // cleanupTmdbCacheIfNeeded removes old cache entries if the cache exceeds the size limit
 func cleanupTmdbCacheIfNeeded() error {
+
 	// Count current cache entries
 	var count int
 	err := db.QueryRow(`SELECT COUNT(*) FROM tmdb_cache_keys`).Scan(&count)
@@ -378,10 +392,9 @@ func cleanupTmdbCacheIfNeeded() error {
 		return nil
 	}
 
-	// Remove oldest 20% of entries to make room for new ones
 	entriesToRemove := count / 5
 	if entriesToRemove < 100 {
-		entriesToRemove = 100 // Remove at least 100 entries
+		entriesToRemove = 100
 	}
 
 	// Delete oldest entries based on last_accessed timestamp
@@ -418,6 +431,9 @@ func cleanupTmdbCacheIfNeeded() error {
 
 // ClearTmdbCache removes all TMDB cache entries
 func ClearTmdbCache() error {
+	tmdbCacheMutex.Lock()
+	defer tmdbCacheMutex.Unlock()
+
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for cache clear: %w", err)
@@ -489,16 +505,14 @@ func AddRecentMedia(media RecentMedia) error {
 	return cleanupRecentMedia()
 }
 
-// Uses efficient database queries on the processed_files table - no file system scanning needed
+// Uses efficient database queries on the processed_files table
 func GetMediaCounts(rootDir string) (movieCount int, showCount int, err error) {
-	mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
-	mediaHubDB, err := sql.Open("sqlite", mediaHubDBPath)
+	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		db.QueryRow(`SELECT COUNT(DISTINCT tmdb_id) FROM tmdb_entities WHERE media_type = 'movie'`).Scan(&movieCount)
 		db.QueryRow(`SELECT COUNT(DISTINCT tmdb_id) FROM tmdb_entities WHERE media_type = 'tv'`).Scan(&showCount)
 		return movieCount, showCount, nil
 	}
-	defer mediaHubDB.Close()
 
 	// Count unique TV shows (entries with season_number)
 	showQuery := `SELECT COUNT(DISTINCT tmdb_id) FROM processed_files WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND tmdb_id != 'NULL' AND season_number IS NOT NULL AND season_number != '' AND season_number != 'NULL'`

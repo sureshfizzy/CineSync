@@ -342,11 +342,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     base_dest_path = os.path.join(dest_dir, 'CineSync', source_folder, show_folder, 'Extras')
         else:
             if is_anime_genre and is_anime_separation_enabled():
-                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
             elif is_4k and is_4k_separation_enabled():
-                base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', 'Extras', show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder, 'Extras')
             else:
-                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+                base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
 
         season_dest_path = base_dest_path
     else:
@@ -412,13 +412,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             if is_anime_genre and is_anime_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder)
-                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', 'Extras', show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeShows', show_folder, 'Extras')
             elif is_4k and is_4k_separation_enabled():
                 base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder)
-                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', 'Extras', show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', '4KShows', show_folder, 'Extras')
             else:
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
-                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', 'Extras', show_folder)
+                extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
 
         # Use anime season number if available, otherwise use the default season handling
         if anime_result:

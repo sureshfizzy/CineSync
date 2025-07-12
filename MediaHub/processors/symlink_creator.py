@@ -7,11 +7,15 @@ import sqlite3
 import json
 import sys
 import ctypes
+import hashlib
+import signal
+import sys
 from ctypes import wintypes
 from threading import Thread
 from queue import Queue, Empty
 from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 from multiprocessing import cpu_count
 from threading import Event
 from MediaHub.processors.movie_processor import process_movie
@@ -31,6 +35,310 @@ from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
 error_event = Event()
 log_imported_db = False
 db_initialized = False
+
+class ProcessingManager:
+    """Streaming manager that coordinates file processing with real-time analysis and dispatch"""
+
+    def __init__(self, max_workers):
+        self.max_workers = max_workers
+        self.seen_destinations = set()
+        self.processing_stats = {
+            'total_files': 0,
+            'files_processed': 0,
+            'files_skipped': 0,
+            'duplicate_destinations': 0
+        }
+
+    def should_process_file(self, task):
+        """Quick check if file should be processed (streaming analysis)"""
+        src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set = task
+
+        self.processing_stats['total_files'] += 1
+
+        # Generate destination key for this file
+        dest_key = self._generate_destination_key(file, dest_dir, force_show, force_movie)
+
+        # Check if we've already seen this destination
+        if dest_key in self.seen_destinations:
+            self.processing_stats['files_skipped'] += 1
+            self.processing_stats['duplicate_destinations'] += 1
+            return False
+
+        # Mark this destination as seen
+        self.seen_destinations.add(dest_key)
+        self.processing_stats['files_processed'] += 1
+        return True
+
+    def _generate_destination_key(self, filename, dest_dir, force_show, force_movie):
+        """Generate a key that represents the likely destination path"""
+        # Extract title and year for grouping
+        from MediaHub.utils.file_utils import clean_query
+
+        try:
+            parsed = clean_query(filename)
+            title = parsed.get('title', filename)
+            year = parsed.get('year', '')
+            episode_identifier = parsed.get('episode_identifier', '')
+
+            # Create a normalized key
+            if force_show or episode_identifier:
+                media_type = "show"
+                dest_key = f"{media_type}_{title}_{year}_{episode_identifier}".lower()
+            elif force_movie:
+                media_type = "movie"
+                dest_key = f"{media_type}_{title}_{year}".lower()
+            else:
+                media_type = "movie"
+                dest_key = f"{media_type}_{title}_{year}".lower()
+
+            dest_key = re.sub(r'[^\w\s-]', '', dest_key).strip()
+            dest_key = re.sub(r'[-\s]+', '_', dest_key)
+
+            return dest_key
+
+        except Exception as e:
+            return hashlib.md5(filename.encode()).hexdigest()[:16]
+
+    def process_files_truly_parallel(self, src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file):
+        """Smart parallel processing: pre-filter unprocessed files only"""
+        log_message(f"Manager: Starting smart parallel processing with {self.max_workers} workers", level="INFO")
+
+        if not force:
+            try:
+                from MediaHub.processors.db_utils import get_dest_index_from_processed_files
+                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
+                log_message(f"Loaded database: {len(dest_index)} destinations, {len(reverse_index)} symlinks, {len(processed_files_set)} processed files", level="INFO")
+            except Exception as e:
+                log_message(f"Failed to load database: {e}", level="WARNING")
+                dest_index, reverse_index, processed_files_set = set(), {}, set()
+        else:
+            dest_index, reverse_index, processed_files_set = set(), {}, set()
+
+        log_message("Pre-filtering: Finding unprocessed files only...", level="INFO")
+        unprocessed_files = self._find_unprocessed_files_only(src_dirs, processed_files_set, mode, force, is_single_file)
+
+        if not unprocessed_files:
+            log_message("Smart filtering complete: No unprocessed files found. All files are already processed!", level="INFO")
+            return []
+
+        log_message(f"Smart filtering complete: Found {len(unprocessed_files)} unprocessed files (skipped {len(processed_files_set)} already processed)", level="INFO")
+
+        results = []
+        active_futures = {}
+
+        executor = None
+        try:
+            executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+            for src_file in unprocessed_files:
+                if error_event.is_set():
+                    log_message("Manager: Stopping due to error event", level="WARNING")
+                    break
+
+                future = executor.submit(self._process_unprocessed_file, src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index)
+                active_futures[future] = src_file
+
+            completed_count = 0
+            total_futures = len(active_futures)
+
+            while active_futures and not error_event.is_set():
+                try:
+                    done_futures = []
+                    for future in list(active_futures.keys()):
+                        try:
+                            if future.done():
+                                done_futures.append(future)
+                        except Exception:
+                            done_futures.append(future)
+
+                    # Process completed futures
+                    for future in done_futures:
+                        try:
+                            result = future.result(timeout=0.1)
+                            if result:
+                                results.extend(result if isinstance(result, list) else [result])
+                            completed_count += 1
+                            if completed_count % 5 == 0:
+                                log_message(f"Manager: Completed {completed_count}/{total_futures} tasks", level="INFO")
+                        except Exception as e:
+                            src_path = active_futures[future]
+                            log_message(f"Manager: Worker failed processing {src_path}: {str(e)}", level="ERROR")
+                        finally:
+                            del active_futures[future]
+
+                    # Short sleep to allow signal handling
+                    import time
+                    time.sleep(0.1)
+
+                except KeyboardInterrupt:
+                    error_event.set()
+                    break
+
+        except KeyboardInterrupt:
+            error_event.set()
+        except Exception as e:
+            error_event.set()
+        finally:
+            if executor:
+                log_message("Manager: Shutting down thread pool...", level="INFO")
+                try:
+                    for future in active_futures.keys():
+                        future.cancel()
+
+                    executor.shutdown(wait=False)
+                    log_message("Manager: Thread pool shutdown complete", level="INFO")
+                except Exception as e:
+                    log_message(f"Manager: Error during thread pool shutdown: {e}", level="WARNING")
+
+            if error_event.is_set():
+                log_message("Manager: Processing interrupted by user", level="INFO")
+                return results
+
+        log_message(f"Manager: Smart parallel processing complete. Processed {len(results)} files", level="INFO")
+        return results
+
+    def _find_unprocessed_files_only(self, src_dirs, processed_files_set, mode, force, is_single_file):
+        """Pre-filter to find only unprocessed files - MUCH faster than scanning everything"""
+        from MediaHub.processors.db_utils import normalize_file_path
+
+        unprocessed_files = []
+        total_scanned = 0
+        total_skipped = 0
+
+        for src_dir in src_dirs:
+            if error_event.is_set():
+                break
+
+            if os.path.isfile(src_dir):
+                total_scanned += 1
+                file = os.path.basename(src_dir)
+
+                if should_skip_processing(file):
+                    continue
+
+                # Check if already processed
+                if mode == 'create' and not force:
+                    normalized_src = normalize_file_path(src_dir)
+                    if processed_files_set and normalized_src in processed_files_set:
+                        total_skipped += 1
+                        continue
+
+                unprocessed_files.append(src_dir)
+
+            else:
+                for root, _, files in os.walk(src_dir):
+                    for file in files:
+                        if error_event.is_set():
+                            break
+
+                        total_scanned += 1
+
+                        if should_skip_processing(file):
+                            continue
+
+                        src_file = os.path.join(root, file)
+
+                        if mode == 'create' and not force:
+                            normalized_src = normalize_file_path(src_file)
+                            if processed_files_set and normalized_src in processed_files_set:
+                                total_skipped += 1
+                                continue
+
+                        unprocessed_files.append(src_file)
+
+                        if total_scanned % 1000 == 0:
+                            log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
+
+        log_message(f"Smart scan complete: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
+        return unprocessed_files
+
+    def _process_unprocessed_file(self, src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index):
+        """Process a file that's guaranteed to need processing - no filtering needed!"""
+        root = os.path.dirname(src_file)
+        file = os.path.basename(src_file)
+        actual_dir = os.path.basename(root)
+
+        # Check for early termination
+        if error_event.is_set():
+            return None
+
+        # Quick destination check for duplicate prevention
+        dest_key = self._generate_destination_key(file, dest_dir, force_show, force_movie)
+        if dest_key in self.seen_destinations:
+            return None
+
+        self.seen_destinations.add(dest_key)
+
+        # Process the file directly 
+        args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, set())
+        return process_file(args, force, batch_apply)
+
+    def _process_single_file(self, src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, processed_files_set, dest_index, reverse_index):
+        """Process a single file in a worker thread"""
+        root = os.path.dirname(src_file)
+        file = os.path.basename(src_file)
+        actual_dir = os.path.basename(root)
+
+        if error_event.is_set():
+            return None
+
+        if should_skip_processing(file):
+            return None
+
+        if mode == 'create' and not force:
+            from MediaHub.processors.db_utils import normalize_file_path
+            normalized_src = normalize_file_path(src_file)
+            if processed_files_set and normalized_src in processed_files_set:
+                return None
+
+        dest_key = self._generate_destination_key(file, dest_dir, force_show, force_movie)
+        if dest_key in self.seen_destinations:
+            return None
+
+        self.seen_destinations.add(dest_key)
+
+        args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set)
+        return process_file(args, force, batch_apply)
+
+    def _process_directory(self, src_dir, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, processed_files_set, dest_index, reverse_index):
+        """Process all files in a directory in a worker thread"""
+        from MediaHub.processors.db_utils import normalize_file_path
+
+        results = []
+        actual_dir = os.path.basename(normalize_file_path(src_dir))
+
+        for root, _, files in os.walk(src_dir):
+            for file in files:
+                if error_event.is_set():
+                    log_message(f"Worker: Stopping directory scan due to error event", level="DEBUG")
+                    break
+
+                # Skip metadata and auxiliary files
+                if should_skip_processing(file):
+                    continue
+
+                src_file = os.path.join(root, file)
+
+                # Check if file was already processed
+                if mode == 'create' and not force:
+                    normalized_src = normalize_file_path(src_file)
+                    if processed_files_set and normalized_src in processed_files_set:
+                        continue
+
+                # Quick destination check
+                dest_key = self._generate_destination_key(file, dest_dir, force_show, force_movie)
+                if dest_key in self.seen_destinations:
+                    continue
+
+                self.seen_destinations.add(dest_key)
+
+                # Process the file with shared data
+                args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set)
+                result = process_file(args, force, batch_apply)
+                if result:
+                    results.append(result)
+
+        return results
 
 def _cleanup_old_symlink(old_symlink_info, new_dest_file=None):
     """Helper function to cleanup old symlinks and associated files."""
@@ -92,8 +400,8 @@ def get_cached_selection():
         return first_selection_cache['tmdb_id'], first_selection_cache['show_name'], first_selection_cache['year']
     return None, None, None
 
-def process_file(args, processed_files_log, force=False, batch_apply=False):
-    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search = args
+def process_file(args, force=False, batch_apply=False):
+    src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set = args
 
     if error_event.is_set():
         return
@@ -225,25 +533,17 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
             if skip_reason:
                 return
 
-    # Check if a symlink already exists in dest_index
+    # Check if a symlink already exists using reverse index (O(1) lookup instead of O(n) loop)
     normalized_src_file = normalize_file_path(src_file)
-    log_message(f"Checking dest_index for existing symlinks pointing to: {normalized_src_file}", level="DEBUG")
+    log_message(f"Checking reverse index for existing symlinks pointing to: {normalized_src_file}", level="DEBUG")
 
+    # Use reverse index if available, otherwise skip this check (for single file/force mode)
     existing_symlink = None
-    for full_dest_file in dest_index:
-        if os.path.islink(full_dest_file):
-            try:
-                link_target = normalize_file_path(os.readlink(full_dest_file))
-                if link_target == normalized_src_file:
-                    existing_symlink = full_dest_file
-                    log_message(f"Found existing symlink in dest_index: {existing_symlink}", level="DEBUG")
-                    break
-            except (OSError, IOError):
-                # Skip broken symlinks
-                log_message(f"Skipping broken symlink in dest_index: {full_dest_file}", level="DEBUG")
-                continue
+    if reverse_index:
+        existing_symlink = reverse_index.get(normalized_src_file)
 
     if existing_symlink and not force:
+        log_message(f"Found existing symlink in reverse index: {existing_symlink}", level="DEBUG")
         log_message(f"Symlink already exists for {os.path.basename(file)}: {existing_symlink}", level="INFO")
         log_message(f"Adding existing symlink to database: {src_file} -> {existing_symlink}", level="DEBUG")
         save_processed_file(src_file, existing_symlink, tmdb_id)
@@ -577,8 +877,20 @@ def process_file(args, processed_files_log, force=False, batch_apply=False):
 
     return None
 
+def signal_handler(signum, frame):
+    """Handle Ctrl+C gracefully"""
+    log_message("Received interrupt signal, stopping all processing...", level="WARNING")
+    error_event.set()
+    # Don't call sys.exit(0) here - let the main thread handle cleanup
+
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False, manual_search=False):
+    """Create symlinks for media files from source directories to destination directory."""
     global log_imported_db
+
+    # Set up signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, signal_handler)
 
     if batch_apply:
         reset_first_selection_cache()
@@ -609,105 +921,48 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
             log_message(f"Resolved symlink for single_path: {original_single_path} -> {resolved_single_path}", level="INFO")
         src_dirs = [resolved_single_path]
 
-    # Fast path for single file processing - defer heavy operations
+    # Fast path for single file processing
     is_single_file = single_path and os.path.isfile(single_path)
 
-    # Only load processed files if not single file or if force mode is disabled
-    processed_files_log = set() if is_single_file and force else load_processed_files()
-
     if auto_select:
-        # Use thread pool for parallel processing when auto-select is enabled
+        # Use manager-coordinated parallel processing when auto-select is enabled
         max_workers = get_max_processes()
 
-        # Lazy-load destination index only when needed
+        # Initialize processing manager
+        manager = ProcessingManager(max_workers)
+        log_message(f"Initialized ProcessingManager with {max_workers} workers", level="INFO")
+
+        # Initialize destination index
         dest_index = None
+        reverse_index = {}
+        processed_files_set = set()
 
-        tasks = []
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for src_dir in src_dirs:
-                if os.path.isfile(src_dir):
-                    src_file = src_dir
-                    root = os.path.dirname(src_file)
-                    file = os.path.basename(src_file)
-                    actual_dir = os.path.basename(root)
+        # Manager: Scan and process simultaneously
+        try:
+            results = manager.process_files_truly_parallel(src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file)
 
-                    # Skip metadata and auxiliary files
-                    if should_skip_processing(file):
-                        continue
+            # Process results
+            for result in results:
+                if result and isinstance(result, tuple) and len(result) == 3:
+                    dest_file, is_symlink, target_path = result
+                    if mode == 'monitor':
+                        update_single_file_index(dest_file, is_symlink, target_path)
 
-                    # Skip destination index building for single files or force mode
-                    if dest_index is None:
-                        if is_single_file:
-                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set for single file processing
-                        elif force:
-                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set when using force mode
-                        else:
-                            log_message("Building destination index...", level="INFO")
-                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                        else build_dest_index(dest_dir))
-
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
-                    tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
+            # Show completion message
+            if error_event.is_set():
+                log_message("Processing interrupted by user (Ctrl+C)", level="INFO")
+            else:
+                if is_single_file:
+                    log_message("Single file processing completed.", level="INFO")
                 else:
-                    # Handle directory
-                    actual_dir = os.path.basename(normalize_file_path(src_dir))
-                    log_message(f"Scanning source directory: {src_dir} (actual: {actual_dir})", level="INFO")
+                    log_message("All files processed successfully.", level="INFO")
 
-                    # Skip destination index building for single files or force mode
-                    if dest_index is None:
-                        if is_single_file:
-                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set for single file processing
-                        elif force:
-                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set when using force mode
-                        else:
-                            log_message("Building destination index...", level="INFO")
-                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                        else build_dest_index(dest_dir))
+        except KeyboardInterrupt:
+            log_message("Processing interrupted by user (Ctrl+C)", level="INFO")
+            return
 
-                    for root, _, files in os.walk(src_dir):
-                        for file in files:
-                            if error_event.is_set():
-                                log_message("Stopping further processing due to an earlier error.", level="WARNING")
-                                return
-
-                            # Skip metadata and auxiliary files
-                            if should_skip_processing(file):
-                                continue
-
-                            src_file = os.path.join(root, file)
-
-                            # Fast database check for single files, use set for batch operations
-                            if mode == 'create' and not force:
-                                if is_single_file:
-                                    if is_file_processed(src_file):
-                                        continue
-                                elif src_file in processed_files_log:
-                                    continue
-
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
-                            tasks.append(executor.submit(process_file, args, processed_files_log, force, batch_apply))
-
-            # Process completed tasks
-            for task in as_completed(tasks):
-                if error_event.is_set():
-                    log_message("Error detected during task execution. Stopping all tasks.", level="WARNING")
-                    return
-
-                try:
-                    result = task.result()
-                    if result and isinstance(result, tuple) and len(result) == 3:
-                        dest_file, is_symlink, target_path = result
-                        if mode == 'monitor':
-                            update_single_file_index(dest_file, is_symlink, target_path)
-                except Exception as e:
-                    log_message(f"Error processing task: {str(e)}", level="ERROR")
     else:
-        # Process sequentially when auto-select is disabled
-        dest_index = None  # Lazy-load destination index
+        dest_index = None
 
         for src_dir in src_dirs:
             if error_event.is_set():
@@ -729,17 +984,23 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     if dest_index is None:
                         if is_single_file:
                             log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set for single file processing
+                            dest_index = set()
+                            reverse_index = {}
                         elif force:
                             log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set when using force mode
+                            dest_index = set()
+                            reverse_index = {}
                         else:
-                            log_message("Building destination index...", level="INFO")
-                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                        else build_dest_index(dest_dir))
+                            log_message("Loading destination index from database...", level="INFO")
+                            if mode == 'monitor':
+                                dest_index = get_dest_index_from_db()
+                                reverse_index = {}
+                                processed_files_set = set()
+                            else:
+                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
 
-                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
-                    result = process_file(args, processed_files_log, force, batch_apply)
+                    args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set)
+                    result = process_file(args, force, batch_apply)
 
                     if result and isinstance(result, tuple) and len(result) == 3:
                         dest_file, is_symlink, target_path = result
@@ -754,14 +1015,22 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     if dest_index is None:
                         if is_single_file:
                             log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set for single file processing
+                            dest_index = set()
+                            reverse_index = {}
+                            processed_files_set = set()
                         elif force:
                             log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
-                            dest_index = set()  # Empty set when using force mode
+                            dest_index = set()
+                            reverse_index = {}
+                            processed_files_set = set()
                         else:
-                            log_message("Building destination index...", level="INFO")
-                            dest_index = (get_dest_index_from_db() if mode == 'monitor'
-                                        else build_dest_index(dest_dir))
+                            log_message("Loading destination index from database...", level="INFO")
+                            if mode == 'monitor':
+                                dest_index = get_dest_index_from_db()
+                                reverse_index = {}
+                                processed_files_set = set()
+                            else:
+                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
 
                     for root, _, files in os.walk(src_dir):
                         for file in files:
@@ -775,16 +1044,20 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
                             src_file = os.path.join(root, file)
 
-                            # Fast database check for single files, use set for batch operations
+                            # Fast check using processed files set and reverse index
                             if mode == 'create' and not force:
                                 if is_single_file:
                                     if is_file_processed(src_file):
                                         continue
-                                elif src_file in processed_files_log:
-                                    continue
+                                else:
+                                    normalized_src = normalize_file_path(src_file)
+                                    if processed_files_set and normalized_src in processed_files_set:
+                                        continue
+                                    else:
+                                        log_message(f"File not in processed files set, will process: {src_file}", level="DEBUG")
 
-                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search)
-                            result = process_file(args, processed_files_log, force, batch_apply)
+                            args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set)
+                            result = process_file(args, force, batch_apply)
 
                             if result and isinstance(result, tuple) and len(result) == 3:
                                 dest_file, is_symlink, target_path = result
@@ -792,9 +1065,3 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                     update_single_file_index(dest_file, is_symlink, target_path)
             except Exception as e:
                 log_message(f"Error processing directory {src_dir}: {str(e)}", level="ERROR")
-
-    # Log completion message
-    if is_single_file:
-        log_message("Single file processing completed.", level="INFO")
-    else:
-        log_message("All files processed successfully.", level="INFO")

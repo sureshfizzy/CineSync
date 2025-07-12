@@ -727,6 +727,88 @@ def get_destination_path(conn, source_path):
         conn.rollback()
         return None
 
+def _check_path_exists_batch(paths_batch):
+    """Check existence of a batch of paths and build reverse index - used for parallel processing"""
+    existing_paths = []
+    reverse_index = {}
+
+    for path in paths_batch:
+        if os.path.exists(path):
+            existing_paths.append(path)
+            if os.path.islink(path):
+                try:
+                    link_target = normalize_file_path(os.readlink(path))
+                    reverse_index[link_target] = path
+                except (OSError, IOError):
+                    pass
+
+    return existing_paths, reverse_index
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_dest_index_from_processed_files(conn):
+    """Get destination index from processed_files table, filtered by actual filesystem existence using parallel workers
+    Returns destination paths set, reverse index for symlinks, and processed files set for skip checking"""
+    start_time = time.time()
+    try:
+        cursor = conn.cursor()
+
+        # Get destination paths for symlink checking
+        cursor.execute("SELECT destination_path FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''")
+        all_dest_paths = []
+        while True:
+            batch = cursor.fetchmany(BATCH_SIZE)
+            if not batch:
+                break
+            all_dest_paths.extend([row[0] for row in batch if row[0]])
+
+        # Get ALL processed files (including failed/skipped) for duplicate checking
+        cursor.execute("SELECT file_path FROM processed_files WHERE file_path IS NOT NULL")
+        all_processed_files = set()
+        while True:
+            batch = cursor.fetchmany(BATCH_SIZE)
+            if not batch:
+                break
+            all_processed_files.update(normalize_file_path(row[0]) for row in batch if row[0])
+
+        total_dest_count = len(all_dest_paths)
+        total_processed_count = len(all_processed_files)
+        log_message(f"Checking existence of {total_dest_count} destination paths using {get_db_max_workers()} workers...", level="INFO")
+
+        # Use parallel workers to check file existence and build reverse index
+        dest_paths = set()
+        reverse_index = {}
+        max_workers = get_db_max_workers()
+        batch_size = max(1, total_dest_count // max_workers) if max_workers > 0 else BATCH_SIZE
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            path_batches = [all_dest_paths[i:i + batch_size] for i in range(0, total_dest_count, batch_size)]
+            future_to_batch = {executor.submit(_check_path_exists_batch, batch): batch for batch in path_batches}
+
+            # Collect results
+            for future in concurrent.futures.as_completed(future_to_batch):
+                try:
+                    existing_paths, batch_reverse_index = future.result()
+                    dest_paths.update(existing_paths)
+                    reverse_index.update(batch_reverse_index)
+                except Exception as e:
+                    log_message(f"Error checking path batch: {e}", level="WARNING")
+
+        existing_count = len(dest_paths)
+        reverse_count = len(reverse_index)
+        elapsed_time = time.time() - start_time
+        log_message(f"Database destination index loaded: {existing_count}/{total_dest_count} existing paths, {reverse_count} symlinks indexed in {elapsed_time:.2f}s using {max_workers} workers", level="INFO")
+
+        if reverse_index:
+            sample_entries = list(reverse_index.items())[:3]
+
+        return dest_paths, reverse_index, all_processed_files
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_dest_index_from_processed_files: {e}", level="ERROR")
+        conn.rollback()
+        return set(), {}, set()
+
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
