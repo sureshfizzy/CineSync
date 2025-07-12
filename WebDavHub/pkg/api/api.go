@@ -2358,7 +2358,7 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 
 	// Convert database format to API format for compatibility
 	// Initialize as empty slice to ensure JSON encodes as [] not null
-	result := make([]map[string]interface{}, 0)
+	var result []map[string]interface{}
 	for _, media := range recentMedia {
 		item := map[string]interface{}{
 			"name":       media.Name,
