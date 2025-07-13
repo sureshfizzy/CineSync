@@ -18,7 +18,10 @@ def set_shutdown():
     terminate_flag.set()
     error_event.set()
     shutdown_event.set()
-    log_message("Global shutdown events set", level="DEBUG")
+    try:
+        log_message("Global shutdown events set", level="DEBUG")
+    except (ValueError, OSError):
+        pass
 
 def is_shutdown_requested():
     """Check if any shutdown event has been set"""
@@ -33,26 +36,25 @@ def reset_events():
 def setup_signal_handlers():
     """Setup signal handlers for graceful shutdown"""
     def signal_handler(signum, frame):
-        log_message(f"Received signal {signum}, initiating graceful shutdown", level="INFO")
-        set_shutdown()
+        try:
+            log_message(f"Received signal {signum}, initiating graceful shutdown", level="INFO")
+        except (ValueError, OSError):
+            pass
 
-        # Import here to avoid circular imports
-        import platform
+        set_shutdown()
 
         # Terminate subprocesses and cleanup
         try:
             from MediaHub.main import terminate_subprocesses, remove_lock_file
             terminate_subprocesses()
             remove_lock_file()
-        except ImportError:
-            log_message("Could not import cleanup functions", level="WARNING")
+        except (ImportError, ValueError, OSError):
+            pass
 
         # Give threads a moment to see the shutdown events
         import time
         time.sleep(0.5)
 
-        # Force exit to prevent hanging
-        log_message("Forcing exit to prevent hanging", level="DEBUG")
         os._exit(0)
 
     # Register handlers for both Windows and Unix signals

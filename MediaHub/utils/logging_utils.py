@@ -140,14 +140,20 @@ def log_message(message, level="INFO", output="stdout"):
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
 
         # Print to console with immediate flush
-        if output == "stdout":
-            print(colored_message.rstrip(), flush=True)
-        elif output == "stderr":
-            print(colored_message.rstrip(), file=sys.stderr, flush=True)
+        try:
+            if output == "stdout":
+                print(colored_message.rstrip(), flush=True)
+            elif output == "stderr":
+                print(colored_message.rstrip(), file=sys.stderr, flush=True)
+        except (ValueError, OSError):
+            pass
 
         # Write to log file
-        with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
-            log_file.write(log_entry)
+        try:
+            with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
+                log_file.write(log_entry)
+        except (OSError, IOError):
+            pass
 
 def log_unsupported_file_type(file_type):
     """
