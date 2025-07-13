@@ -216,7 +216,6 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             if scored_results and year:
                 best_score = scored_results[0][0]
                 if best_score < 75:
-                    log_message(f"Best score with year ({best_score:.1f}) is low, trying without year for better matches.", "DEBUG", "stdout")
                     params_no_year = {'api_key': api_key, 'query': query, 'language': language_iso}
                     response_no_year = perform_search(params_no_year, url)
 
@@ -234,6 +233,28 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                             return [r[1] for r in scored_results_no_year]
 
             if scored_results:
+                # Check if we should try fallback even with results if scores are low
+                best_score = scored_results[0][0]
+                if best_score < 60:
+                    fallback_query = remove_country_suffix(query)
+                    if fallback_query != query:
+                        params_fallback = {'api_key': api_key, 'query': fallback_query, 'language': language_iso}
+                        if year:
+                            params_fallback['first_air_date_year'] = year
+
+                        response_fallback = perform_search(params_fallback, url)
+                        if response_fallback:
+                            scored_results_fallback = []
+                            for result in response_fallback:
+                                score = calculate_score(result, fallback_query, year)
+                                if score >= 40:
+                                    scored_results_fallback.append((score, result))
+
+                            scored_results_fallback.sort(reverse=True, key=lambda x: x[0])
+                            if scored_results_fallback and scored_results_fallback[0][0] > best_score + 15:
+                                log_message(f"Fallback search found better match (score: {scored_results_fallback[0][0]:.1f} vs {best_score:.1f})", "DEBUG", "stdout")
+                                return [r[1] for r in scored_results_fallback]
+
                 return [r[1] for r in scored_results]
 
 
@@ -411,7 +432,7 @@ def perform_search(params, url):
             return []
 
         # Optimized scoring with early filtering
-        MIN_SCORE_THRESHOLD = 50
+        MIN_SCORE_THRESHOLD = 40
         scored_results = []
 
         for result in results:
@@ -528,6 +549,93 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         log_message(f"Fetching results from URL: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
         response = perform_search(params, url)
+
+        # Check if we should try adjacent years when scores are low
+        if response and year:
+            scored_results = []
+            for result in response:
+                score = calculate_score(result, query, year)
+                if score >= 40:
+                    scored_results.append((score, result))
+
+            if scored_results:
+                best_score = max(scored_results, key=lambda x: x[0])[0]
+                if best_score < 60:
+
+                    params_plus = params.copy()
+                    params_plus['primary_release_year'] = int(year) + 1
+                    response_plus = perform_search(params_plus, url)
+
+                    params_minus = params.copy()
+                    params_minus['primary_release_year'] = int(year) - 1
+                    response_minus = perform_search(params_minus, url)
+
+                    all_results = response[:]
+                    if response_plus:
+                        all_results.extend(response_plus)
+                    if response_minus:
+                        all_results.extend(response_minus)
+
+                    # Remove duplicates based on TMDB ID
+                    seen_ids = set()
+                    unique_results = []
+                    for result in all_results:
+                        tmdb_id = result.get('id')
+                        if tmdb_id not in seen_ids:
+                            seen_ids.add(tmdb_id)
+                            unique_results.append(result)
+
+                    # Score all unique results
+                    all_scored = []
+                    for result in unique_results:
+                        score = calculate_score(result, query, year)
+                        if score >= 40:
+                            all_scored.append((score, result))
+
+                    if all_scored:
+                        all_scored.sort(reverse=True, key=lambda x: x[0])
+                        new_best_score = all_scored[0][0]
+                        if new_best_score > best_score + 10:
+                            log_message(f"Adjacent year search found better match (score: {new_best_score:.1f} vs {best_score:.1f})", "DEBUG", "stdout")
+                            return [r[1] for r in all_scored]
+
+                # Try character variations if still low score
+                if best_score < 50:
+                    log_message(f"Score still low ({best_score:.1f}), trying character variations", "DEBUG", "stdout")
+
+                    # Generate character variations
+                    variations = []
+                    if ' ' in query:
+                        variations.append(query.replace(' ', '/'))
+                        variations.append(query.replace(' ', '-'))
+                        variations.append(query.replace(' ', ''))
+                    if '/' in query:
+                        variations.append(query.replace('/', ' '))
+                        variations.append(query.replace('/', '-'))
+                    if '-' in query:
+                        variations.append(query.replace('-', ' '))
+                        variations.append(query.replace('-', '/'))
+
+                    # Test each variation
+                    for variation in variations:
+                        if variation != query:
+                            params_var = params.copy()
+                            params_var['query'] = variation
+                            response_var = perform_search(params_var, url)
+
+                            if response_var:
+                                var_scored = []
+                                for result in response_var:
+                                    score = calculate_score(result, variation, year)
+                                    if score >= 40:
+                                        var_scored.append((score, result))
+
+                                if var_scored:
+                                    var_best_score = max(var_scored, key=lambda x: x[0])[0]
+                                    if var_best_score > best_score + 15:
+                                        log_message(f"Character variation '{variation}' found better match (score: {var_best_score:.1f} vs {best_score:.1f})", "DEBUG", "stdout")
+                                        var_scored.sort(reverse=True, key=lambda x: x[0])
+                                        return [r[1] for r in var_scored]
 
         if not response and year:
             log_message("No results found with year, retrying without year.", "DEBUG", "stdout")

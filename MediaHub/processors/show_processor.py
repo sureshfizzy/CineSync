@@ -177,8 +177,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             create_extras_folder = True
             is_extra = True
 
-    # Extract year from parent folder or show name for TMDb search
-    year = extract_year(parent_folder_name) or extract_year(show_name)
+    # Extract year from file first, then parent folder or show name for TMDb search
+    year = file_result.get('year') or extract_year(parent_folder_name) or extract_year(show_name)
 
     # Set initial show_folder for processing
     show_folder = show_name
