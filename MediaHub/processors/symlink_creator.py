@@ -31,8 +31,8 @@ from MediaHub.processors.process_db import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
+from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
 
-error_event = Event()
 log_imported_db = False
 db_initialized = False
 
@@ -131,8 +131,8 @@ class ProcessingManager:
             executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
             for src_file in unprocessed_files:
-                if error_event.is_set():
-                    log_message("Manager: Stopping due to error event", level="WARNING")
+                if is_shutdown_requested():
+                    log_message("Manager: Stopping due to shutdown request", level="WARNING")
                     break
 
                 future = executor.submit(self._process_unprocessed_file, src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index)
@@ -141,7 +141,7 @@ class ProcessingManager:
             completed_count = 0
             total_futures = len(active_futures)
 
-            while active_futures and not error_event.is_set():
+            while active_futures and not is_shutdown_requested():
                 try:
                     done_futures = []
                     for future in list(active_futures.keys()):
@@ -171,27 +171,34 @@ class ProcessingManager:
                     time.sleep(0.1)
 
                 except KeyboardInterrupt:
-                    error_event.set()
+                    set_shutdown()
                     break
 
         except KeyboardInterrupt:
-            error_event.set()
+            set_shutdown()
         except Exception as e:
-            error_event.set()
+            set_shutdown()
         finally:
             if executor:
                 log_message("Manager: Shutting down thread pool...", level="INFO")
                 try:
+                    # Cancel all pending futures
                     for future in active_futures.keys():
                         future.cancel()
 
-                    executor.shutdown(wait=False)
+                    # Try graceful shutdown first with a short timeout
+                    executor.shutdown(wait=True, timeout=2.0)
                     log_message("Manager: Thread pool shutdown complete", level="INFO")
                 except Exception as e:
                     log_message(f"Manager: Error during thread pool shutdown: {e}", level="WARNING")
+                    # Force shutdown if graceful shutdown fails
+                    try:
+                        executor.shutdown(wait=False)
+                    except:
+                        pass
 
-            if error_event.is_set():
-                log_message("Manager: Processing interrupted by user", level="INFO")
+            if is_shutdown_requested():
+                log_message("Manager: Processing interrupted by shutdown request", level="INFO")
                 return results
 
         log_message(f"Manager: Smart parallel processing complete. Processed {len(results)} files", level="INFO")
@@ -206,7 +213,7 @@ class ProcessingManager:
         total_skipped = 0
 
         for src_dir in src_dirs:
-            if error_event.is_set():
+            if is_shutdown_requested():
                 break
 
             if os.path.isfile(src_dir):
@@ -228,7 +235,7 @@ class ProcessingManager:
             else:
                 for root, _, files in os.walk(src_dir):
                     for file in files:
-                        if error_event.is_set():
+                        if is_shutdown_requested():
                             break
 
                         total_scanned += 1
@@ -259,7 +266,7 @@ class ProcessingManager:
         actual_dir = os.path.basename(root)
 
         # Check for early termination
-        if error_event.is_set():
+        if is_shutdown_requested():
             return None
 
         # Quick destination check for duplicate prevention
@@ -279,7 +286,7 @@ class ProcessingManager:
         file = os.path.basename(src_file)
         actual_dir = os.path.basename(root)
 
-        if error_event.is_set():
+        if is_shutdown_requested():
             return None
 
         if should_skip_processing(file):
@@ -309,8 +316,8 @@ class ProcessingManager:
 
         for root, _, files in os.walk(src_dir):
             for file in files:
-                if error_event.is_set():
-                    log_message(f"Worker: Stopping directory scan due to error event", level="DEBUG")
+                if is_shutdown_requested():
+                    log_message(f"Worker: Stopping directory scan due to shutdown request", level="DEBUG")
                     break
 
                 # Skip metadata and auxiliary files
@@ -403,7 +410,7 @@ def get_cached_selection():
 def process_file(args, force=False, batch_apply=False):
     src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set = args
 
-    if error_event.is_set():
+    if is_shutdown_requested():
         return
 
     log_message(f"Processing file: {file} (force={force}, rename_enabled={rename_enabled})", level="DEBUG")
@@ -880,7 +887,7 @@ def process_file(args, force=False, batch_apply=False):
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
     log_message("Received interrupt signal, stopping all processing...", level="WARNING")
-    error_event.set()
+    set_shutdown()
     # Don't call sys.exit(0) here - let the main thread handle cleanup
 
 def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False, manual_search=False):
@@ -955,8 +962,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                         update_single_file_index(dest_file, is_symlink, target_path)
 
             # Show completion message
-            if error_event.is_set():
-                log_message("Processing interrupted by user (Ctrl+C)", level="INFO")
+            if is_shutdown_requested():
+                log_message("Processing interrupted by shutdown request", level="INFO")
             else:
                 if is_single_file:
                     log_message("Single file processing completed.", level="INFO")
@@ -971,8 +978,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
         dest_index = None
 
         for src_dir in src_dirs:
-            if error_event.is_set():
-                log_message("Stopping further processing due to an earlier error.", level="WARNING")
+            if is_shutdown_requested():
+                log_message("Stopping further processing due to shutdown request.", level="WARNING")
                 return
 
             try:
@@ -1042,8 +1049,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
                     for root, _, files in os.walk(src_dir):
                         for file in files:
-                            if error_event.is_set():
-                                log_message("Stopping further processing due to an earlier error.", level="WARNING")
+                            if is_shutdown_requested():
+                                log_message("Stopping further processing due to shutdown request.", level="WARNING")
                                 return
 
                             # Skip metadata and auxiliary files

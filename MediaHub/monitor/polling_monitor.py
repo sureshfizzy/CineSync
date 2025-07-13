@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 import sys
+import signal
 from dotenv import load_dotenv, find_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event
@@ -16,6 +17,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.processors.symlink_utils import delete_broken_symlinks, delete_broken_symlinks_batch
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -27,8 +29,10 @@ else:
 # Add state variables for mount status tracking
 mount_state = None
 
-# Global error event for parallel processing
-error_event = Event()
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    log_message(f"Received signal {signum}, shutting down polling monitor...", level="INFO")
+    set_shutdown()
 
 def get_mount_point(path):
     """
@@ -220,14 +224,14 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_
                 mod_dir_tasks.append(task)
 
             for task in as_completed(mod_dir_tasks):
-                if error_event.is_set():
-                    log_message("Error detected during modified directory processing. Stopping tasks.", level="WARNING")
+                if is_shutdown_requested():
+                    log_message("Shutdown requested during modified directory processing. Stopping tasks.", level="WARNING")
                     break
                 try:
                     task.result()
                 except Exception as e:
                     log_message(f"Error in modified directory task: {str(e)}", level="ERROR")
-                    error_event.set()
+                    set_shutdown()
 
     # Process new/removed files with parallel processing
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -257,14 +261,14 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_
 
         # Process all file addition tasks
         for task in as_completed(file_tasks):
-            if error_event.is_set():
-                log_message("Error detected during file processing. Stopping tasks.", level="WARNING")
+            if is_shutdown_requested():
+                log_message("Shutdown requested during file processing. Stopping tasks.", level="WARNING")
                 break
             try:
                 task.result()
             except Exception as e:
                 log_message(f"Error in file processing task: {str(e)}", level="ERROR")
-                error_event.set()
+                set_shutdown()
 
         # Process all file removal tasks
         for task in as_completed(removal_tasks):
@@ -339,7 +343,7 @@ def process_file(file_path):
 
         except Exception as e:
             log_message(f"Failed to process file: {file_path}. Error: {e}", level="ERROR")
-            error_event.set()
+            set_shutdown()
     else:
         log_message(f"File already exists in the database, skipping processing: {file_path}", level="DEBUG")
 
@@ -366,7 +370,12 @@ def initial_scan(dirs_to_watch):
 
 def main():
     """Main function to monitor directories and process file changes in real-time."""
-    global mount_state, error_event
+    global mount_state
+
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     log_message("Starting MediaHub directory monitor service", level="INFO")
 
     # Load configuration values
@@ -391,9 +400,9 @@ def main():
 
     current_files = {}
     last_mod_times = {}
-    while True:
+    while not shutdown_event.is_set():
         try:
-            # Reset error event at the start of each cycle
+            # Reset error event at the start of each cycle (only reset error_event, not shutdown events)
             error_event.clear()
 
             # Check if rclone mount is available (if enabled)
@@ -414,22 +423,26 @@ def main():
             new_files, modified_dirs, last_mod_times = scan_directories(src_dirs, current_files, last_mod_times)
 
             # Process changes with parallel processing using loaded configuration
-            if not error_event.is_set():
+            if not is_shutdown_requested():
                 process_changes(current_files, new_files, dest_dir, modified_dirs,
                               max_processes, db_max_workers, db_batch_size)
                 current_files = new_files
             else:
-                log_message("Skipping file processing due to previous errors", level="WARNING")
+                log_message("Shutdown requested, stopping file processing", level="INFO")
+                break
 
             log_message(f"Sleeping for {sleep_time} seconds", level="DEBUG")
-            time.sleep(sleep_time)
+            for _ in range(int(sleep_time * 10)):
+                if shutdown_event.is_set():
+                    break
+                time.sleep(0.1)
 
         except KeyboardInterrupt:
             log_message("Received shutdown signal, exiting gracefully", level="INFO")
             break
         except Exception as e:
             log_message(f"Unexpected error in main loop: {str(e)}", level="ERROR")
-            error_event.set()
+            set_shutdown()
             time.sleep(sleep_time)
 
 if __name__ == "__main__":

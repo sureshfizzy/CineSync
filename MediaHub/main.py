@@ -10,6 +10,7 @@ import socket
 import threading
 import traceback
 import io
+import time
 from dotenv import load_dotenv, find_dotenv
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
@@ -31,6 +32,7 @@ from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.file_utils import resolve_symlink_to_source
 from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
 from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
+from MediaHub.utils.global_events import *
 
 db_initialized = False
 
@@ -41,7 +43,6 @@ LOCK_TIMEOUT = 3600
 
 # Set up global variables to track processes
 background_processes = []
-terminate_flag = threading.Event()
 
 # Ensure .env file exists before trying to load it
 if not ensure_env_file_exists():
@@ -256,9 +257,12 @@ def handle_exit(signum, frame):
     log_message("Received shutdown signal, exiting gracefully", level="INFO")
     log_message("Terminating process and cleaning up lock file.", level="INFO")
 
-    terminate_flag.set()
+    set_shutdown()
+    time.sleep(0.5)
+
     terminate_subprocesses()
     remove_lock_file()
+
     os._exit(0)
 
 def setup_process_priority():
@@ -319,15 +323,6 @@ def log_system_configuration():
         dashboard_timeout = get_dashboard_timeout()
         dashboard_check_interval = get_dashboard_check_interval()
 
-def setup_signal_handlers():
-    """Setup signal handlers for Linux and Windows."""
-    # Register handlers for both Windows and Unix signals
-    signal.signal(signal.SIGINT, handle_exit)
-    if platform.system() == 'Windows':
-        signal.signal(signal.SIGBREAK, handle_exit)
-    else:
-        signal.signal(signal.SIGTERM, handle_exit)
-
 def start_polling_monitor():
     """Start the polling monitor as a subprocess and track its PID."""
     global background_processes
@@ -363,7 +358,7 @@ def start_polling_monitor():
             if process.poll() is not None:
                 log_message(f"Polling monitor exited with code {process.returncode}", level="INFO")
                 break
-            time.sleep(1)
+            time.sleep(0.1)
 
     except Exception as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
@@ -637,12 +632,12 @@ def main(dest_dir):
 
             # Run missing files check in a separate thread
             missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
-            missing_files_thread.daemon = False
+            missing_files_thread.daemon = True
             missing_files_thread.start()
 
             #Symlink cleanup
             cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
-            cleanup_thread.daemon = False
+            cleanup_thread.daemon = True
             cleanup_thread.start()
         elif is_single_file_operation:
             log_message("Single file operation detected - skipping background processes and dashboard checks for faster startup", level="INFO")
@@ -670,18 +665,23 @@ def main(dest_dir):
             start_webdav_server()
             log_message("Starting RealTime-Monitoring...", level="INFO")
             monitor_thread = threading.Thread(target=start_polling_monitor)
-            monitor_thread.daemon = False
+            monitor_thread.daemon = True
             monitor_thread.start()
             time.sleep(2)
             create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
-            monitor_thread.join()
+
+            while monitor_thread.is_alive() and not terminate_flag.is_set():
+                time.sleep(0.1)
+
+            if terminate_flag.is_set():
+                log_message("Termination requested, stopping monitor thread", level="INFO")
         else:
             if is_single_file_operation:
                 log_message("Single file operation - skipping monitoring services for faster processing", level="INFO")
             create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
@@ -714,20 +714,20 @@ if __name__ == "__main__":
         main(dest_dir)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
     except BrokenPipeError:
         log_message("Broken pipe error detected, cleaning up and exiting...", level="INFO")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
     except Exception as e:
         log_message(f"Unhandled exception: {str(e)}", level="ERROR")
         log_message(traceback.format_exc(), level="DEBUG")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(1)
