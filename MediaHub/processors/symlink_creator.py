@@ -992,10 +992,12 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                             log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
+                            processed_files_set = set()
                         elif force:
                             log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
+                            processed_files_set = set()
                         else:
                             log_message("Loading destination index from database...", level="INFO")
                             if mode == 'monitor':
