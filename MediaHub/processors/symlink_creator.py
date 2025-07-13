@@ -180,22 +180,13 @@ class ProcessingManager:
             set_shutdown()
         finally:
             if executor:
-                log_message("Manager: Shutting down thread pool...", level="INFO")
                 try:
                     # Cancel all pending futures
                     for future in active_futures.keys():
                         future.cancel()
-
-                    # Try graceful shutdown first with a short timeout
-                    executor.shutdown(wait=True, timeout=2.0)
-                    log_message("Manager: Thread pool shutdown complete", level="INFO")
-                except Exception as e:
-                    log_message(f"Manager: Error during thread pool shutdown: {e}", level="WARNING")
-                    # Force shutdown if graceful shutdown fails
-                    try:
-                        executor.shutdown(wait=False)
-                    except:
-                        pass
+                    executor.shutdown(wait=False)
+                except Exception:
+                    pass
 
             if is_shutdown_requested():
                 log_message("Manager: Processing interrupted by shutdown request", level="INFO")
