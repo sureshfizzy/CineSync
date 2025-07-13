@@ -83,11 +83,35 @@ func NewManager() *Manager {
 		subscribers:   make(map[chan JobStatusUpdate]bool),
 	}
 
-	manager.initializeDefaultJobs()
+	// Initialize database table
+	if err := initJobsTable(); err != nil {
+		logger.Error("Failed to initialize jobs table: %v", err)
+	}
+
+	manager.loadOrInitializeJobs()
 	manager.startJobTimers()
 	manager.startBroadcaster()
 
 	return manager
+}
+
+// loadOrInitializeJobs loads jobs from database or creates defaults if none exist
+func (m *Manager) loadOrInitializeJobs() {
+	savedJobs, err := loadJobsFromDB()
+	if err != nil {
+		logger.Error("Failed to load jobs from database: %v", err)
+		m.initializeDefaultJobs()
+		return
+	}
+
+	if len(savedJobs) > 0 {
+		for _, job := range savedJobs {
+			m.jobs[job.ID] = job
+		}
+		logger.Info("Loaded %d jobs from database", len(savedJobs))
+	} else {
+		m.initializeDefaultJobs()
+	}
 }
 
 // initializeDefaultJobs creates the default CineSync jobs
@@ -158,7 +182,13 @@ func (m *Manager) initializeDefaultJobs() {
 
 	for _, job := range defaultJobs {
 		m.jobs[job.ID] = job
+		// Save to database
+		if err := saveJobToDB(job); err != nil {
+			logger.Error("Failed to save default job %s to database: %v", job.ID, err)
+		}
 	}
+
+	logger.Info("Initialized %d default jobs", len(defaultJobs))
 }
 
 // startJobTimers starts individual timers for each interval job
@@ -440,6 +470,94 @@ func (m *Manager) CancelJob(id string) error {
 	delete(m.running, id)
 
 	logger.Info("Job cancelled: %s (%s)", job.Name, id)
+	return nil
+}
+
+// UpdateJob updates an existing job configuration
+func (m *Manager) UpdateJob(id string, updateReq UpdateJobRequest) error {
+	m.mutex.Lock()
+
+	job, exists := m.jobs[id]
+	if !exists {
+		m.mutex.Unlock()
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	if job.IsRunning() {
+		m.mutex.Unlock()
+		return fmt.Errorf("cannot update running job: %s", id)
+	}
+
+	// Create a temporary job to validate the update
+	tempJob := &Job{
+		ID:              id,
+		Name:            updateReq.Name,
+		Description:     updateReq.Description,
+		Type:            updateReq.Type,
+		ScheduleType:    updateReq.ScheduleType,
+		IntervalSeconds: updateReq.IntervalSeconds,
+		CronExpression:  updateReq.CronExpression,
+		Command:         updateReq.Command,
+		Arguments:       updateReq.Arguments,
+		WorkingDir:      updateReq.WorkingDir,
+		Enabled:         updateReq.Enabled,
+		Category:        updateReq.Category,
+		Tags:            updateReq.Tags,
+		Dependencies:    updateReq.Dependencies,
+		Timeout:         updateReq.Timeout,
+		MaxRetries:      updateReq.MaxRetries,
+		LogOutput:       updateReq.LogOutput,
+		NotifyOnFailure: updateReq.NotifyOnFailure,
+	}
+
+	// Validate the updated job configuration
+	if err := tempJob.Validate(); err != nil {
+		m.mutex.Unlock()
+		return fmt.Errorf("invalid job configuration: %v", err)
+	}
+
+	// Update the existing job with new values
+	job.Name = updateReq.Name
+	job.Description = updateReq.Description
+	job.Type = updateReq.Type
+	job.ScheduleType = updateReq.ScheduleType
+	job.IntervalSeconds = updateReq.IntervalSeconds
+	job.CronExpression = updateReq.CronExpression
+	job.Command = updateReq.Command
+	job.Arguments = updateReq.Arguments
+	job.WorkingDir = updateReq.WorkingDir
+	job.Enabled = updateReq.Enabled
+	job.Category = updateReq.Category
+	job.Tags = updateReq.Tags
+	job.Dependencies = updateReq.Dependencies
+	job.Timeout = updateReq.Timeout
+	job.MaxRetries = updateReq.MaxRetries
+	job.LogOutput = updateReq.LogOutput
+	job.NotifyOnFailure = updateReq.NotifyOnFailure
+	job.UpdatedAt = time.Now()
+
+	// Reset the job timer if schedule changed
+	if timer, exists := m.timers[id]; exists {
+		timer.Stop()
+		delete(m.timers, id)
+	}
+
+	needsTimer := job.Enabled && (job.ScheduleType == ScheduleTypeInterval || job.ScheduleType == ScheduleTypeCron)
+
+	logger.Info("Job updated: %s (%s)", job.Name, id)
+	m.broadcastStatusUpdate(id, job.Status, fmt.Sprintf("Job %s configuration updated", job.Name))
+
+	if err := saveJobToDB(job); err != nil {
+		logger.Error("Failed to save updated job %s to database: %v", id, err)
+	}
+
+	// Release the mutex before calling resetJobTimer to avoid deadlock
+	m.mutex.Unlock()
+
+	if needsTimer {
+		m.resetJobTimer(id)
+	}
+
 	return nil
 }
 

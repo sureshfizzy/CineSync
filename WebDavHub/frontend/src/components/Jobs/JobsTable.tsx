@@ -3,6 +3,7 @@ import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead
 import { PlayArrow, Stop, Edit, Schedule, CheckCircle, Error as ErrorIcon, Cancel, Pause, Refresh } from '@mui/icons-material';
 import { Job, JobStatus, getJobStatusColor, getJobTypeColor } from '../../types/jobs';
 import CountdownTimer from './CountdownTimer';
+import JobEditDialog from './JobEditDialog';
 import axios from 'axios';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
@@ -17,6 +18,8 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
   const [error, setError] = useState<string | null>(null);
   const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set());
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const lastJobStatusRef = useRef<Map<string, JobStatus>>(new Map());
 
   const fetchJobs = useCallback(async (isInitialLoad = false) => {
@@ -66,6 +69,20 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to cancel job');
     }
+  };
+
+  const handleEditJob = (job: Job) => {
+    setSelectedJob(job);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditDialogClose = () => {
+    setEditDialogOpen(false);
+    setSelectedJob(null);
+  };
+
+  const handleJobUpdated = () => {
+    fetchJobs(false);
   };
 
   const getStatusIcon = (status: JobStatus) => {
@@ -291,12 +308,11 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
                 </TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                    {/* Hide edit button on mobile */}
-                    <Tooltip title="Edit Job">
+                    <Tooltip title="Edit Schedule">
                       <IconButton
                         size="small"
+                        onClick={() => handleEditJob(job)}
                         sx={{
-                          display: { xs: 'none', sm: 'inline-flex' },
                           bgcolor: alpha(theme.palette.warning.main, 0.1),
                           color: 'warning.main',
                           '&:hover': {
@@ -377,6 +393,13 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
           </Typography>
         </Box>
       )}
+
+      <JobEditDialog
+        open={editDialogOpen}
+        onClose={handleEditDialogClose}
+        job={selectedJob}
+        onJobUpdated={handleJobUpdated}
+      />
     </Box>
   );
 };

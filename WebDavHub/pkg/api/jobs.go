@@ -72,7 +72,7 @@ func HandleJobDetails(w http.ResponseWriter, r *http.Request) {
 	// Extract job ID from URL path
 	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	jobID := strings.Split(path, "/")[0]
-	
+
 	if jobID == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
@@ -91,6 +91,62 @@ func HandleJobDetails(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+// HandleJobUpdate handles PUT /api/jobs/{id} - update job configuration
+func HandleJobUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if jobManager == nil {
+		http.Error(w, "Job manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Extract job ID from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	jobID := strings.Split(path, "/")[0]
+
+	if jobID == "" {
+		http.Error(w, "Job ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var updateReq jobs.UpdateJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		logger.Error("Failed to decode job update request: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Update the job
+	err := jobManager.UpdateJob(jobID, updateReq)
+	if err != nil {
+		logger.Error("Failed to update job %s: %v", jobID, err)
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else if strings.Contains(err.Error(), "running job") {
+			http.Error(w, err.Error(), http.StatusConflict)
+		} else if strings.Contains(err.Error(), "invalid job configuration") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	logger.Info("Job %s updated successfully", jobID)
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Job %s updated successfully", jobID),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // HandleJobRun handles POST /api/jobs/{id}/run - run a job manually
@@ -254,7 +310,11 @@ func HandleJobsRouter(w http.ResponseWriter, r *http.Request) {
 
 	// Handle /api/jobs/{id}
 	if len(parts) == 1 {
-		HandleJobDetails(w, r)
+		if r.Method == http.MethodPut {
+			HandleJobUpdate(w, r)
+		} else {
+			HandleJobDetails(w, r)
+		}
 		return
 	}
 	
