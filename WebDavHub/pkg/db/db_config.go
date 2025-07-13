@@ -35,10 +35,10 @@ func GetDefaultDatabaseConfig() DatabaseConfig {
 		MaxOpenConns:    maxConnections,
 		MaxIdleConns:    maxConnections,
 		ConnMaxLifetime: time.Hour * 24,
-		BusyTimeout:     "30000",
+		BusyTimeout:     "60000",
 		JournalMode:     "WAL",
 		Synchronous:     "NORMAL",
-		CacheSize:       "50000",
+		CacheSize:       "100000",
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}

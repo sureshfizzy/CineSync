@@ -59,6 +59,9 @@ func GetSourceDatabaseConnection() (*sql.DB, error) {
 		// pragmas specific to source database
 		additionalPragmas := []string{
 			"PRAGMA auto_vacuum=INCREMENTAL",
+			"PRAGMA wal_autocheckpoint=1000",
+			"PRAGMA wal_checkpoint(TRUNCATE)",
+			"PRAGMA optimize",
 		}
 
 		for _, pragma := range additionalPragmas {
@@ -128,8 +131,8 @@ func executeReadOperation(operation func(*sql.DB) error) error {
 		return fmt.Errorf("failed to get source database connection: %w", err)
 	}
 
-	maxRetries := 5
-	baseDelay := 100 * time.Millisecond
+	maxRetries := 10
+	baseDelay := 50 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		err := operation(db)
@@ -140,6 +143,9 @@ func executeReadOperation(operation func(*sql.DB) error) error {
 		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt))
+				if delay > 2*time.Second {
+					delay = 2*time.Second
+				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
 				continue
@@ -162,8 +168,8 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 			return
 		}
 
-		maxRetries := 5
-		baseDelay := 100 * time.Millisecond
+		maxRetries := 10
+		baseDelay := 50 * time.Millisecond
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			err := operation(db)
@@ -175,6 +181,9 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 			if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 				if attempt < maxRetries-1 {
 					delay := baseDelay * time.Duration(1<<uint(attempt))
+					if delay > 2*time.Second {
+						delay = 2*time.Second
+					}
 					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 					time.Sleep(delay + jitter)
 					continue
@@ -456,42 +465,44 @@ func RemoveInactiveSourceFiles() (int, error) {
 
 // InsertSourceScan inserts a new source scan record
 func InsertSourceScan(scanType string) (int64, error) {
-	db, err := GetSourceDatabaseConnection()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get source database connection: %w", err)
-	}
+	var scanID int64
+	err := executeWriteOperationSync(func(db *sql.DB) error {
+		query := `INSERT INTO source_scans (scan_type, started_at, status) VALUES (?, ?, 'running')`
+		result, err := db.Exec(query, scanType, getCurrentTimestamp())
+		if err != nil {
+			return err
+		}
+		scanID, err = result.LastInsertId()
+		return err
+	})
 
-	query := `INSERT INTO source_scans (scan_type, started_at, status) VALUES (?, ?, 'running')`
-	result, err := db.Exec(query, scanType, getCurrentTimestamp())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to insert source scan record: %w", err)
 	}
-	return result.LastInsertId()
+	return scanID, nil
 }
 
 // UpdateSourceScan updates a source scan record with completion details
 func UpdateSourceScan(scanID int64, status string, totalFiles, discovered, updated, removed int, durationMs int64, scanError error) error {
-	db, err := GetSourceDatabaseConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get source database connection: %w", err)
-	}
+	return executeWriteOperationSync(func(db *sql.DB) error {
+		query := `UPDATE source_scans SET completed_at = ?, status = ?, files_discovered = ?,
+				  files_updated = ?, files_removed = ?, total_files = ?, scan_duration_ms = ?, error_message = ?
+				  WHERE id = ?`
 
-	query := `UPDATE source_scans SET completed_at = ?, status = ?, files_discovered = ?,
-			  files_updated = ?, files_removed = ?, total_files = ?, scan_duration_ms = ?, error_message = ?
-			  WHERE id = ?`
+		var errorMsg sql.NullString
+		if scanError != nil {
+			errorMsg.String = scanError.Error()
+			errorMsg.Valid = true
+		}
 
-	var errorMsg sql.NullString
-	if scanError != nil {
-		errorMsg.String = scanError.Error()
-		errorMsg.Valid = true
-	}
-
-	_, err = db.Exec(query, getCurrentTimestamp(), status, discovered, updated, removed,
-		totalFiles, durationMs, errorMsg, scanID)
-	if err != nil {
-		logger.Error("Failed to update source scan record: %v", err)
-	}
-	return err
+		_, err := db.Exec(query, getCurrentTimestamp(), status, discovered, updated, removed,
+			totalFiles, durationMs, errorMsg, scanID)
+		if err != nil {
+			logger.Error("Failed to update source scan record: %v", err)
+			return fmt.Errorf("failed to update source scan record: %w", err)
+		}
+		return nil
+	})
 }
 
 // getCurrentTimestamp returns the current Unix timestamp
@@ -501,8 +512,8 @@ func getCurrentTimestamp() int64 {
 
 // executeWithRetry executes a database operation with retry logic for SQLITE_BUSY errors
 func executeWithRetry(operation func() error) error {
-	maxRetries := 5
-	baseDelay := 100 * time.Millisecond
+	maxRetries := 10
+	baseDelay := 50 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		err := operation()
@@ -513,8 +524,10 @@ func executeWithRetry(operation func() error) error {
 		// Check if it's a SQLite busy error
 		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 			if attempt < maxRetries-1 {
-				// Exponential backoff with jitter
 				delay := baseDelay * time.Duration(1<<uint(attempt))
+				if delay > 2*time.Second {
+					delay = 2*time.Second
+				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
 				logger.Debug("Database busy, retrying operation (attempt %d/%d)", attempt+1, maxRetries)
@@ -525,6 +538,30 @@ func executeWithRetry(operation func() error) error {
 	}
 
 	return fmt.Errorf("operation failed after %d retries", maxRetries)
+}
+
+// WithSourceDatabaseTransaction executes a function within a database transaction with retry logic
+func WithSourceDatabaseTransaction(fn func(*sql.Tx) error) error {
+	return executeWriteOperationSync(func(db *sql.DB) error {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+
+		defer func() {
+			if p := recover(); p != nil {
+				tx.Rollback()
+				panic(p)
+			} else if err != nil {
+				tx.Rollback()
+			} else {
+				err = tx.Commit()
+			}
+		}()
+
+		err = fn(tx)
+		return err
+	})
 }
 
 // IsNewDatabase checks if this is a new database that needs initial scanning

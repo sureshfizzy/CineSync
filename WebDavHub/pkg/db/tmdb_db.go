@@ -628,8 +628,8 @@ type RecentMedia struct {
 // AddRecentMedia adds a new recent media item to the database, replacing duplicates
 func AddRecentMedia(media RecentMedia) error {
 	// Retry logic for database busy errors
-	maxRetries := 5
-	baseDelay := 100 * time.Millisecond
+	maxRetries := 10
+	baseDelay := 50 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		err := addRecentMediaWithoutRetry(media)
@@ -640,8 +640,10 @@ func AddRecentMedia(media RecentMedia) error {
 		// Check if it's a SQLite busy error
 		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 			if attempt < maxRetries-1 {
-				// Exponential backoff with jitter
 				delay := baseDelay * time.Duration(1<<uint(attempt))
+				if delay > 2*time.Second {
+					delay = 2*time.Second
+				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
 				continue
@@ -806,8 +808,8 @@ func GetRecentMedia(limit int) ([]RecentMedia, error) {
 	var err error
 
 	// Retry logic for database busy errors
-	maxRetries := 5
-	baseDelay := 100 * time.Millisecond
+	maxRetries := 10
+	baseDelay := 50 * time.Millisecond
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		results, err = getRecentMediaWithoutRetry()
@@ -818,8 +820,10 @@ func GetRecentMedia(limit int) ([]RecentMedia, error) {
 		// Check if it's a SQLite busy error
 		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 			if attempt < maxRetries-1 {
-				// Exponential backoff with jitter
 				delay := baseDelay * time.Duration(1<<uint(attempt))
+				if delay > 2*time.Second {
+					delay = 2*time.Second
+				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
 				continue
