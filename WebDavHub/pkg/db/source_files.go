@@ -71,14 +71,6 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSourceFiles retrieves source files with pagination and filtering
 func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
-	// Get database connection
-	sourceDB, err := GetSourceDatabaseConnection()
-	if err != nil {
-		logger.Error("Failed to get source database connection: %v", err)
-		http.Error(w, "Source database not available", http.StatusServiceUnavailable)
-		return
-	}
-
 	// Parse query parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
@@ -142,77 +134,85 @@ func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
 		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 
-	// Count total records
-	countQuery := "SELECT COUNT(*) FROM source_files " + whereClause
-
 	var total int
-	err = sourceDB.QueryRow(countQuery, args...).Scan(&total)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			total = 0
-		} else {
-			logger.Error("Failed to count source files: %v", err)
-			http.Error(w, "Failed to count source files", http.StatusInternalServerError)
-			return
+	var files []SourceFile
+
+	err := executeReadOperation(func(sourceDB *sql.DB) error {
+		// Count total records
+		countQuery := "SELECT COUNT(*) FROM source_files " + whereClause
+
+		err := sourceDB.QueryRow(countQuery, args...).Scan(&total)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				total = 0
+			} else {
+				return fmt.Errorf("failed to count source files: %w", err)
+			}
 		}
-	}
 
-	// Build main query
-	query := `SELECT id, file_path, file_name, file_size, file_size_formatted,
-			  modified_time, is_media_file, media_type, source_index, source_directory,
-			  relative_path, file_extension, discovered_at, last_seen_at, is_active,
-			  processing_status, last_processed_at, tmdb_id, season_number, episode_number
-			  FROM source_files ` + whereClause + " ORDER BY last_seen_at DESC, file_name ASC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+		// Build main query
+		query := `SELECT id, file_path, file_name, file_size, file_size_formatted,
+				  modified_time, is_media_file, media_type, source_index, source_directory,
+				  relative_path, file_extension, discovered_at, last_seen_at, is_active,
+				  processing_status, last_processed_at, tmdb_id, season_number, episode_number
+				  FROM source_files ` + whereClause + " ORDER BY last_seen_at DESC, file_name ASC LIMIT ? OFFSET ?"
+		queryArgs := append(args, limit, offset)
 
-	rows, err := sourceDB.Query(query, args...)
+		rows, err := sourceDB.Query(query, queryArgs...)
+		if err != nil {
+			return fmt.Errorf("failed to query source files: %w", err)
+		}
+		defer rows.Close()
+
+		// Initialize as empty slice instead of nil to ensure JSON encoding returns [] not null
+		files = make([]SourceFile, 0)
+		for rows.Next() {
+			var file SourceFile
+			var mediaType sql.NullString
+			var lastProcessedAt sql.NullInt64
+			var tmdbID sql.NullString
+			var seasonNumber sql.NullInt64
+			var episodeNumber sql.NullInt64
+
+			err := rows.Scan(
+				&file.ID, &file.FilePath, &file.FileName, &file.FileSize, &file.FileSizeFormatted,
+				&file.ModifiedTime, &file.IsMediaFile, &mediaType, &file.SourceIndex, &file.SourceDirectory,
+				&file.RelativePath, &file.FileExtension, &file.DiscoveredAt, &file.LastSeenAt, &file.IsActive,
+				&file.ProcessingStatus, &lastProcessedAt, &tmdbID, &seasonNumber, &episodeNumber,
+			)
+			if err != nil {
+				logger.Error("Failed to scan source file row: %v", err)
+				continue
+			}
+
+			if mediaType.Valid {
+				file.MediaType = mediaType.String
+			}
+			if lastProcessedAt.Valid {
+				file.LastProcessedAt = &lastProcessedAt.Int64
+			}
+			if tmdbID.Valid {
+				file.TmdbID = tmdbID.String
+			}
+			if seasonNumber.Valid {
+				seasonNum := int(seasonNumber.Int64)
+				file.SeasonNumber = &seasonNum
+			}
+			if episodeNumber.Valid {
+				episodeNum := int(episodeNumber.Int64)
+				file.EpisodeNumber = &episodeNum
+			}
+
+			files = append(files, file)
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		logger.Error("Failed to query source files: %v", err)
 		http.Error(w, "Failed to query source files", http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	// Initialize as empty slice instead of nil to ensure JSON encoding returns [] not null
-	files := make([]SourceFile, 0)
-	for rows.Next() {
-		var file SourceFile
-		var mediaType sql.NullString
-		var lastProcessedAt sql.NullInt64
-		var tmdbID sql.NullString
-		var seasonNumber sql.NullInt64
-		var episodeNumber sql.NullInt64
-
-		err := rows.Scan(
-			&file.ID, &file.FilePath, &file.FileName, &file.FileSize, &file.FileSizeFormatted,
-			&file.ModifiedTime, &file.IsMediaFile, &mediaType, &file.SourceIndex, &file.SourceDirectory,
-			&file.RelativePath, &file.FileExtension, &file.DiscoveredAt, &file.LastSeenAt, &file.IsActive,
-			&file.ProcessingStatus, &lastProcessedAt, &tmdbID, &seasonNumber, &episodeNumber,
-		)
-		if err != nil {
-			logger.Error("Failed to scan source file row: %v", err)
-			continue
-		}
-
-		if mediaType.Valid {
-			file.MediaType = mediaType.String
-		}
-		if lastProcessedAt.Valid {
-			file.LastProcessedAt = &lastProcessedAt.Int64
-		}
-		if tmdbID.Valid {
-			file.TmdbID = tmdbID.String
-		}
-		if seasonNumber.Valid {
-			seasonNum := int(seasonNumber.Int64)
-			file.SeasonNumber = &seasonNum
-		}
-		if episodeNumber.Valid {
-			episodeNum := int(episodeNumber.Int64)
-			file.EpisodeNumber = &episodeNum
-		}
-
-		files = append(files, file)
 	}
 
 	// Calculate pagination info
@@ -422,9 +422,24 @@ func ScanSourceDirectories(scanType string) error {
 	}
 
 	// Remove files that are no longer present
-	removed, err = RemoveInactiveSourceFiles()
-	if err != nil {
-		logger.Error("Failed to remove inactive files: %v", err)
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		removed, err = RemoveInactiveSourceFiles()
+		if err == nil {
+			break
+		}
+
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				delay := time.Duration(100*(1<<uint(attempt))) * time.Millisecond
+				time.Sleep(delay)
+				continue
+			}
+		}
+		logger.Error("Failed to remove inactive files (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		if attempt == maxRetries-1 {
+			logger.Error("Failed to remove inactive files after %d attempts", maxRetries)
+		}
 	}
 
 	// Update processing status based on MediaHub database
@@ -468,11 +483,37 @@ func getSourceDirectories() ([]string, error) {
 	return validDirs, nil
 }
 
-// These functions are now in source_db.go
-
 // scanSourceDirectory scans a single source directory
 func scanSourceDirectory(sourceDir string, sourceIndex int) (totalFiles, discovered, updated int, err error) {
-	logger.Debug("Scanning source directory: %s (index: %d)", sourceDir, sourceIndex)
+	var insertOperations []func(*sql.Tx) error
+	var updateOperations []func(*sql.Tx) error
+	var existingFiles []string
+	err = executeReadOperation(func(sourceDB *sql.DB) error {
+		query := `SELECT file_path FROM source_files WHERE source_index = ?`
+		rows, err := sourceDB.Query(query, sourceIndex)
+		if err != nil {
+			return fmt.Errorf("failed to query existing files: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var filePath string
+			if err := rows.Scan(&filePath); err != nil {
+				continue
+			}
+			existingFiles = append(existingFiles, filePath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to get existing files: %w", err)
+	}
+
+	existingFileMap := make(map[string]bool)
+	for _, filePath := range existingFiles {
+		existingFileMap[filePath] = true
+	}
 
 	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -503,19 +544,11 @@ func scanSourceDirectory(sourceDir string, sourceIndex int) (totalFiles, discove
 		// Format file size
 		sizeFormatted := formatFileSize(info.Size())
 
-		// Check if file exists in database
-		exists, err := SourceFileExists(path)
-		if err != nil {
-			logger.Error("Database error checking file %s: %v", path, err)
-			return nil
-		}
-
-		// Check processing status from MediaHub database
+		exists := existingFileMap[path]
 		processingStatus := "unprocessed"
 		var tmdbID string
 		var seasonNum *int
 
-		// Try to get MediaHub database connection
 		if mediaHubDB, err := GetDatabaseConnection(); err == nil {
 			status, tmdbIDVal, seasonNumber := checkFileInMediaHub(mediaHubDB, path)
 			processingStatus = status
@@ -524,59 +557,92 @@ func scanSourceDirectory(sourceDir string, sourceIndex int) (totalFiles, discove
 		}
 
 		if !exists {
-			// New file - insert
-			sourceFile := SourceFile{
-				FilePath:          path,
-				FileName:          info.Name(),
-				FileSize:          info.Size(),
-				FileSizeFormatted: sizeFormatted,
-				ModifiedTime:      info.ModTime().Unix(),
-				IsMediaFile:       isMedia,
-				MediaType:         mediaType,
-				SourceIndex:       sourceIndex,
-				SourceDirectory:   sourceDir,
-				RelativePath:      relPath,
-				FileExtension:     filepath.Ext(path),
-				DiscoveredAt:      time.Now().Unix(),
-				LastSeenAt:        time.Now().Unix(),
-				IsActive:          true,
-				ProcessingStatus:  processingStatus,
-			}
+			discovered++
+			filePath, fileName, fileSize, fileSizeFormatted := path, info.Name(), info.Size(), sizeFormatted
+			modTime, relativePathCopy, fileExt := info.ModTime().Unix(), relPath, filepath.Ext(path)
+			currentTime := time.Now().Unix()
 
-			err = InsertSourceFile(sourceFile)
-			if err != nil {
-				logger.Error("Failed to insert source file %s: %v", path, err)
-			} else {
-				discovered++
-				if tmdbID != "" {
-					UpdateSourceFileProcessingStatus(path, processingStatus, tmdbID, seasonNum)
-				}
+			insertOperations = append(insertOperations, func(tx *sql.Tx) error {
+				query := `INSERT INTO source_files
+					(file_path, file_name, file_size, file_size_formatted, modified_time,
+					 is_media_file, media_type, source_index, source_directory, relative_path,
+					 file_extension, discovered_at, last_seen_at, is_active, processing_status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+				_, err := tx.Exec(query,
+					filePath, fileName, fileSize, fileSizeFormatted, modTime,
+					isMedia, mediaType, sourceIndex, sourceDir, relativePathCopy,
+					fileExt, currentTime, currentTime, true, processingStatus)
+				return err
+			})
+
+			if tmdbID != "" {
+				tmdbIDCopy, seasonNumCopy := tmdbID, seasonNum
+				insertOperations = append(insertOperations, func(tx *sql.Tx) error {
+					query := `UPDATE source_files SET tmdb_id = ?, season_number = ? WHERE file_path = ?`
+					var seasonNumberVal sql.NullInt64
+					if seasonNumCopy != nil {
+						seasonNumberVal.Int64 = int64(*seasonNumCopy)
+						seasonNumberVal.Valid = true
+					}
+					_, err := tx.Exec(query, tmdbIDCopy, seasonNumberVal, filePath)
+					return err
+				})
 			}
 		} else {
-			sourceFile := SourceFile{
-				FilePath:          path,
-				FileSize:          info.Size(),
-				FileSizeFormatted: sizeFormatted,
-				ModifiedTime:      info.ModTime().Unix(),
-				IsMediaFile:       isMedia,
-				MediaType:         mediaType,
-				LastSeenAt:        time.Now().Unix(),
-				IsActive:          true,
-			}
+			updated++
+			filePath, fileSize, fileSizeFormatted := path, info.Size(), sizeFormatted
+			modTime, currentTime := info.ModTime().Unix(), time.Now().Unix()
 
-			err = UpdateSourceFile(sourceFile)
-			if err != nil {
-				logger.Error("Failed to update source file %s: %v", path, err)
-			} else {
-				updated++
-				UpdateSourceFileProcessingStatus(path, processingStatus, tmdbID, seasonNum)
+			updateOperations = append(updateOperations, func(tx *sql.Tx) error {
+				query := `UPDATE source_files SET
+					file_size = ?, file_size_formatted = ?, modified_time = ?,
+					is_media_file = ?, media_type = ?, last_seen_at = ?, is_active = ?
+					WHERE file_path = ?`
+
+				_, err := tx.Exec(query,
+					fileSize, fileSizeFormatted, modTime,
+					isMedia, mediaType, currentTime, true,
+					filePath)
+				return err
+			})
+
+			if tmdbID != "" && processingStatus != "unprocessed" {
+				tmdbIDCopy, seasonNumCopy := tmdbID, seasonNum
+				updateOperations = append(updateOperations, func(tx *sql.Tx) error {
+					query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
+							  WHERE file_path = ?`
+					var seasonNumberVal sql.NullInt64
+					if seasonNumCopy != nil {
+						seasonNumberVal.Int64 = int64(*seasonNumCopy)
+						seasonNumberVal.Valid = true
+					}
+					_, err := tx.Exec(query, processingStatus, currentTime, tmdbIDCopy, seasonNumberVal, filePath)
+					return err
+				})
 			}
 		}
 
 		return nil
 	})
 
-	return totalFiles, discovered, updated, err
+	if err != nil {
+		return totalFiles, discovered, updated, err
+	}
+
+	if len(insertOperations) > 0 {
+		if err := BatchUpdateSourceFiles(insertOperations); err != nil {
+			logger.Error("Failed to execute batch insert operations: %v", err)
+		}
+	}
+
+	if len(updateOperations) > 0 {
+		if err := BatchUpdateSourceFiles(updateOperations); err != nil {
+			logger.Error("Failed to execute batch update operations: %v", err)
+		}
+	}
+
+	return totalFiles, discovered, updated, nil
 }
 
 // isMediaFile checks if a file is a media file based on extension
@@ -629,12 +695,6 @@ func formatFileSize(size int64) string {
 
 // updateProcessingStatusFromMediaHub updates processing status based on MediaHub database
 func updateProcessingStatusFromMediaHub() error {
-	// Get source database connection
-	sourceDB, err := GetSourceDatabaseConnection()
-	if err != nil {
-		return fmt.Errorf("failed to get source database connection: %w", err)
-	}
-
 	// Get MediaHub database connection
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
@@ -642,21 +702,29 @@ func updateProcessingStatusFromMediaHub() error {
 		return nil // Don't fail the scan if MediaHub DB is not available
 	}
 
-	// Get all unprocessed files from source database
-	query := `SELECT file_path FROM source_files WHERE processing_status = 'unprocessed' AND is_active = TRUE`
-	rows, err := sourceDB.Query(query)
-	if err != nil {
-		return fmt.Errorf("failed to query unprocessed files: %w", err)
-	}
-	defer rows.Close()
-
 	var filePaths []string
-	for rows.Next() {
-		var filePath string
-		if err := rows.Scan(&filePath); err != nil {
-			continue
+
+	err = executeReadOperation(func(sourceDB *sql.DB) error {
+		// Get all unprocessed files from source database
+		query := `SELECT file_path FROM source_files WHERE processing_status = 'unprocessed' AND is_active = TRUE`
+		rows, err := sourceDB.Query(query)
+		if err != nil {
+			return fmt.Errorf("failed to query unprocessed files: %w", err)
 		}
-		filePaths = append(filePaths, filePath)
+		defer rows.Close()
+
+		for rows.Next() {
+			var filePath string
+			if err := rows.Scan(&filePath); err != nil {
+				continue
+			}
+			filePaths = append(filePaths, filePath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
 	}
 
 	// Check each file against MediaHub database and batch updates
@@ -780,14 +848,6 @@ func HandleSourceScans(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSourceScans retrieves source scan history
 func handleGetSourceScans(w http.ResponseWriter, r *http.Request) {
-	// Get database connection
-	sourceDB, err := GetSourceDatabaseConnection()
-	if err != nil {
-		logger.Error("Failed to get source database connection: %v", err)
-		http.Error(w, "Source database not available", http.StatusServiceUnavailable)
-		return
-	}
-
 	// Parse query parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
@@ -806,59 +866,67 @@ func handleGetSourceScans(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Query scans
-	query := `SELECT id, scan_type, started_at, completed_at, status, files_discovered,
-			  files_updated, files_removed, total_files, error_message, scan_duration_ms
-			  FROM source_scans ORDER BY started_at DESC LIMIT ? OFFSET ?`
+	var scans []SourceScan
+	var total int
 
-	rows, err := sourceDB.Query(query, limit, offset)
+	err := executeReadOperation(func(sourceDB *sql.DB) error {
+		// Query scans
+		query := `SELECT id, scan_type, started_at, completed_at, status, files_discovered,
+				  files_updated, files_removed, total_files, error_message, scan_duration_ms
+				  FROM source_scans ORDER BY started_at DESC LIMIT ? OFFSET ?`
+
+		rows, err := sourceDB.Query(query, limit, offset)
+		if err != nil {
+			return fmt.Errorf("failed to query source scans: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var scan SourceScan
+			var completedAt sql.NullInt64
+			var errorMessage sql.NullString
+			var scanDurationMs sql.NullInt64
+
+			err := rows.Scan(
+				&scan.ID, &scan.ScanType, &scan.StartedAt, &completedAt, &scan.Status,
+				&scan.FilesDiscovered, &scan.FilesUpdated, &scan.FilesRemoved, &scan.TotalFiles,
+				&errorMessage, &scanDurationMs,
+			)
+			if err != nil {
+				logger.Error("Failed to scan source scan row: %v", err)
+				continue
+			}
+
+			if completedAt.Valid {
+				scan.CompletedAt = &completedAt.Int64
+			}
+			if errorMessage.Valid {
+				scan.ErrorMessage = errorMessage.String
+			}
+			if scanDurationMs.Valid {
+				scan.ScanDurationMs = &scanDurationMs.Int64
+			}
+
+			scans = append(scans, scan)
+		}
+
+		// Count total records
+		err = sourceDB.QueryRow("SELECT COUNT(*) FROM source_scans").Scan(&total)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				total = 0
+			} else {
+				return fmt.Errorf("failed to count source scans: %w", err)
+			}
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		logger.Error("Failed to query source scans: %v", err)
 		http.Error(w, "Failed to query source scans", http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	var scans []SourceScan
-	for rows.Next() {
-		var scan SourceScan
-		var completedAt sql.NullInt64
-		var errorMessage sql.NullString
-		var scanDurationMs sql.NullInt64
-
-		err := rows.Scan(
-			&scan.ID, &scan.ScanType, &scan.StartedAt, &completedAt, &scan.Status,
-			&scan.FilesDiscovered, &scan.FilesUpdated, &scan.FilesRemoved, &scan.TotalFiles,
-			&errorMessage, &scanDurationMs,
-		)
-		if err != nil {
-			logger.Error("Failed to scan source scan row: %v", err)
-			continue
-		}
-
-		if completedAt.Valid {
-			scan.CompletedAt = &completedAt.Int64
-		}
-		if errorMessage.Valid {
-			scan.ErrorMessage = errorMessage.String
-		}
-		if scanDurationMs.Valid {
-			scan.ScanDurationMs = &scanDurationMs.Int64
-		}
-
-		scans = append(scans, scan)
-	}
-
-	// Count total records
-	var total int
-	err = sourceDB.QueryRow("SELECT COUNT(*) FROM source_scans").Scan(&total)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			total = 0
-		} else {
-			logger.Error("Failed to count source scans: %v", err)
-			total = len(scans)
-		}
 	}
 
 	response := map[string]interface{}{
@@ -877,28 +945,22 @@ func handleGetSourceScans(w http.ResponseWriter, r *http.Request) {
 func handleGetLatestScan(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("handleGetLatestScan: Called for URL: %s", r.URL.Path)
 
-	// Get database connection
-	sourceDB, err := GetSourceDatabaseConnection()
-	if err != nil {
-		logger.Error("Failed to get source database connection: %v", err)
-		http.Error(w, "Source database not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	query := `SELECT id, scan_type, started_at, completed_at, status, files_discovered,
-			  files_updated, files_removed, total_files, error_message, scan_duration_ms
-			  FROM source_scans ORDER BY started_at DESC LIMIT 1`
-
 	var scan SourceScan
 	var completedAt sql.NullInt64
 	var errorMessage sql.NullString
 	var scanDurationMs sql.NullInt64
 
-	err = sourceDB.QueryRow(query).Scan(
-		&scan.ID, &scan.ScanType, &scan.StartedAt, &completedAt, &scan.Status,
-		&scan.FilesDiscovered, &scan.FilesUpdated, &scan.FilesRemoved, &scan.TotalFiles,
-		&errorMessage, &scanDurationMs,
-	)
+	err := executeReadOperation(func(sourceDB *sql.DB) error {
+		query := `SELECT id, scan_type, started_at, completed_at, status, files_discovered,
+				  files_updated, files_removed, total_files, error_message, scan_duration_ms
+				  FROM source_scans ORDER BY started_at DESC LIMIT 1`
+
+		return sourceDB.QueryRow(query).Scan(
+			&scan.ID, &scan.ScanType, &scan.StartedAt, &completedAt, &scan.Status,
+			&scan.FilesDiscovered, &scan.FilesUpdated, &scan.FilesRemoved, &scan.TotalFiles,
+			&errorMessage, &scanDurationMs,
+		)
+	})
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "No scans found", http.StatusNotFound)

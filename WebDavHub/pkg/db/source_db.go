@@ -18,7 +18,8 @@ var (
 	sourceDBPool     *sql.DB
 	sourceDBPoolOnce sync.Once
 	sourceDBPoolMux  sync.RWMutex
-	sourceDBSemaphore chan struct{}
+	sourceDBReadSemaphore chan struct{}
+	sourceDBWriteSemaphore chan struct{}
 	sourceDBWriteQueue chan func()
 	sourceDBWriteQueueOnce sync.Once
 )
@@ -34,7 +35,12 @@ func GetSourceDatabaseConnection() (*sql.DB, error) {
 			maxWorkers = 1
 		}
 
-		sourceDBSemaphore = make(chan struct{}, maxWorkers)
+		maxReaders := maxWorkers * 2
+		if maxReaders > 20 {
+			maxReaders = 20
+		}
+		sourceDBReadSemaphore = make(chan struct{}, maxReaders)
+		sourceDBWriteSemaphore = make(chan struct{}, maxWorkers)
 
 		dbDir := filepath.Join("../db")
 
@@ -101,8 +107,8 @@ func executeWriteOperation(operation func()) {
 
 // executeWithSemaphore executes a database operation with semaphore control
 func executeWithSemaphore(operation func(*sql.DB) error) error {
-	sourceDBSemaphore <- struct{}{}
-	defer func() { <-sourceDBSemaphore }()
+	sourceDBWriteSemaphore <- struct{}{}
+	defer func() { <-sourceDBWriteSemaphore }()
 
 	db, err := GetSourceDatabaseConnection()
 	if err != nil {
@@ -112,17 +118,37 @@ func executeWithSemaphore(operation func(*sql.DB) error) error {
 	return operation(db)
 }
 
-// executeReadOperation executes a read operation with semaphore control (allows concurrent reads)
+// executeReadOperation executes a read operation with semaphore control and retry logic
 func executeReadOperation(operation func(*sql.DB) error) error {
-	sourceDBSemaphore <- struct{}{}
-	defer func() { <-sourceDBSemaphore }()
+	sourceDBReadSemaphore <- struct{}{}
+	defer func() { <-sourceDBReadSemaphore }()
 
 	db, err := GetSourceDatabaseConnection()
 	if err != nil {
 		return fmt.Errorf("failed to get source database connection: %w", err)
 	}
 
-	return operation(db)
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := operation(db)
+		if err == nil {
+			return nil
+		}
+
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				delay := baseDelay * time.Duration(1<<uint(attempt))
+				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+				time.Sleep(delay + jitter)
+				continue
+			}
+		}
+		return err
+	}
+
+	return fmt.Errorf("read operation failed after %d retries", maxRetries)
 }
 
 // executeWriteOperationSync executes a write operation through the write queue (serialized)
@@ -136,7 +162,6 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 			return
 		}
 
-		// Apply retry logic for SQLITE_BUSY errors
 		maxRetries := 5
 		baseDelay := 100 * time.Millisecond
 
@@ -147,7 +172,6 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 				return
 			}
 
-			// Check if it's a SQLite busy error
 			if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
 				if attempt < maxRetries-1 {
 					delay := baseDelay * time.Duration(1<<uint(attempt))
@@ -410,18 +434,23 @@ func BatchUpdateSourceFiles(operations []func(*sql.Tx) error) error {
 
 // RemoveInactiveSourceFiles removes source files that are no longer present
 func RemoveInactiveSourceFiles() (int, error) {
-	db, err := GetSourceDatabaseConnection()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get source database connection: %w", err)
-	}
+	var rowsAffected int64
 
-	query := `DELETE FROM source_files WHERE is_active = FALSE`
-	result, err := db.Exec(query)
+	err := executeWriteOperationSync(func(db *sql.DB) error {
+		query := `DELETE FROM source_files WHERE is_active = FALSE`
+		result, err := db.Exec(query)
+		if err != nil {
+			return err
+		}
+
+		rowsAffected, _ = result.RowsAffected()
+		return nil
+	})
+
 	if err != nil {
 		return 0, err
 	}
 
-	rowsAffected, _ := result.RowsAffected()
 	return int(rowsAffected), nil
 }
 
