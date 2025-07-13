@@ -200,6 +200,38 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the file paths that will be deleted for recent media cleanup
+	selectQuery := `
+		SELECT COALESCE(file_path, ''), COALESCE(destination_path, '')
+		FROM processed_files
+		WHERE reason IS NOT NULL AND reason != '' AND
+		(LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+		 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+		 LOWER(reason) LIKE '%adult content%')
+	`
+	rows, err := mediaHubDB.Query(selectQuery)
+	if err != nil {
+		logger.Warn("Failed to query skipped files for cleanup: %v", err)
+		http.Error(w, "Failed to query skipped files", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var pathsToCleanup []string
+	for rows.Next() {
+		var filePath, destPath string
+		if err := rows.Scan(&filePath, &destPath); err != nil {
+			logger.Warn("Failed to scan file paths: %v", err)
+			continue
+		}
+		if filePath != "" {
+			pathsToCleanup = append(pathsToCleanup, filePath)
+		}
+		if destPath != "" && destPath != filePath {
+			pathsToCleanup = append(pathsToCleanup, destPath)
+		}
+	}
+
 	// Delete all skipped files
 	deleteQuery := `
 		DELETE FROM processed_files
@@ -222,6 +254,13 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Bulk deleted %d skipped files from database", rowsAffected)
+
+	// Clean up recent media entries for deleted paths
+	for _, path := range pathsToCleanup {
+		if removeErr := RemoveRecentMediaByPath(path); removeErr != nil {
+			logger.Warn("Failed to remove recent media for path %s: %v", path, removeErr)
+		}
+	}
 
 	// Notify dashboard about stats change
 	NotifyDashboardStatsChanged()
@@ -291,6 +330,16 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Bulk deleted %d selected files from database", rowsAffected)
+
+	if len(req.FilePaths) > 0 {
+		go func() {
+			for _, filePath := range req.FilePaths {
+				if removeErr := RemoveRecentMediaByPath(filePath); removeErr != nil {
+					logger.Warn("Failed to remove recent media for path %s: %v", filePath, removeErr)
+				}
+			}
+		}()
+	}
 
 	// Notify dashboard about stats change
 	NotifyDashboardStatsChanged()
@@ -1059,7 +1108,7 @@ func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason
 		return fmt.Errorf("MediaHub database not found")
 	}
 
-	return WithDatabaseTransaction(func(tx *sql.Tx) error {
+	err := WithDatabaseTransaction(func(tx *sql.Tx) error {
 		err := createDeletionTrackingTableTx(tx)
 		if err != nil {
 			return fmt.Errorf("failed to create deletion tracking table: %w", err)
@@ -1076,6 +1125,28 @@ func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason
 
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	pathsToClean := make([]string, 0, 2)
+
+	if destinationPath != "" {
+		pathsToClean = append(pathsToClean, destinationPath)
+	}
+
+	if sourcePath != "" && sourcePath != destinationPath {
+		pathsToClean = append(pathsToClean, sourcePath)
+	}
+
+	for _, path := range pathsToClean {
+		if removeErr := RemoveRecentMediaByPath(path); removeErr != nil {
+			logger.Warn("Failed to remove recent media for path %s: %v", path, removeErr)
+		}
+	}
+
+	return nil
 }
 
 func TrackFileFailure(sourcePath, tmdbID, seasonNumber, reason, errorMessage string) error {

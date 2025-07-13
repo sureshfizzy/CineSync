@@ -680,7 +680,12 @@ func addRecentMediaWithoutRetry(media RecentMedia) error {
 		return fmt.Errorf("failed to add recent media: %w", err)
 	}
 
-	return cleanupRecentMedia()
+	// Clean up old entries based on count limits
+	if err := cleanupRecentMedia(); err != nil {
+		logger.Warn("Failed to cleanup recent media: %v", err)
+	}
+
+	return nil
 }
 
 // Uses efficient database queries on the processed_files table
@@ -932,4 +937,31 @@ func ClearRecentMedia() error {
 		return fmt.Errorf("failed to clear recent media: %w", err)
 	}
 	return nil
+}
+
+// RemoveRecentMediaByPath removes recent media entries that match the given file path
+func RemoveRecentMediaByPath(filePath string) error {
+	if filePath == "" {
+		return nil
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM recent_media").Scan(&count); err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return nil
+	}
+
+	normalizedPath := strings.ReplaceAll(filePath, "\\", "/")
+
+	query := `DELETE FROM recent_media WHERE
+		REPLACE(path, '\', '/') = ? OR
+		REPLACE(path, '\', '/') LIKE ? ESCAPE '\'`
+
+	pathPattern := normalizedPath + "/%"
+
+	_, err := db.Exec(query, normalizedPath, pathPattern)
+	return err
 }

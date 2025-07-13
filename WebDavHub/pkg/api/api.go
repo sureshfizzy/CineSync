@@ -1684,6 +1684,10 @@ func deleteFromDatabase(filePath string) {
 		return
 	}
 
+	if removeErr := db.RemoveRecentMediaByPath(filePath); removeErr != nil {
+		logger.Warn("Failed to remove recent media for path %s: %v", filePath, removeErr)
+	}
+
 	if rowsAffected > 0 {
 		// Notify about the database change
 		db.NotifyDashboardStatsChanged()

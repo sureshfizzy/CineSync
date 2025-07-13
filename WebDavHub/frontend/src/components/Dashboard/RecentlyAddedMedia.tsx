@@ -5,8 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
 import axios from 'axios';
 import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
+import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
 const MotionCard = motion(Card);
+
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+  let timeout: NodeJS.Timeout;
+  return ((...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  }) as T;
+}
 
 // Memoized media card component to prevent unnecessary re-renders
 const MediaCard = React.memo(({
@@ -315,6 +324,38 @@ const RecentlyAddedMedia: React.FC = () => {
     // Refresh the recent media list when a new symlink is created
     fetchRecentMedia();
   }, [fetchRecentMedia]);
+
+  // Debounced refresh to avoid excessive API calls
+  const debouncedFetchRecentMedia = useCallback(
+    debounce(() => {
+      fetchRecentMedia();
+    }, 500),
+    [fetchRecentMedia]
+  );
+
+  // Listen for dashboard stats changes
+  useSSEEventListener(
+    ['stats_changed'],
+    () => {
+      debouncedFetchRecentMedia();
+    },
+    {
+      source: 'dashboard',
+      dependencies: [debouncedFetchRecentMedia]
+    }
+  );
+
+  // Listen for file operation changes as additional safety net
+  useSSEEventListener(
+    ['file_operation_update'],
+    () => {
+      debouncedFetchRecentMedia();
+    },
+    {
+      source: 'file-operations',
+      dependencies: [debouncedFetchRecentMedia]
+    }
+  );
 
   // Optimized TMDB data fetching with debouncing and better batching
   useEffect(() => {
@@ -841,8 +882,8 @@ const RecentlyAddedMedia: React.FC = () => {
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
-        PaperProps={{
-          sx: {
+        sx={{
+          '& .MuiDialog-paper': {
             borderRadius: 3,
             bgcolor: 'background.paper',
             backgroundImage: 'none',
