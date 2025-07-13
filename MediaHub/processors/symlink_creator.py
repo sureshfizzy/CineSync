@@ -887,10 +887,16 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     """Create symlinks for media files from source directories to destination directory."""
     global log_imported_db
 
-    # Set up signal handler for Ctrl+C
-    signal.signal(signal.SIGINT, signal_handler)
-    if hasattr(signal, 'SIGTERM'):
-        signal.signal(signal.SIGTERM, signal_handler)
+    # Only set up signal handlers if we're in the main thread
+    # This prevents "signal only works in main thread" errors when called from worker threads
+    try:
+        import threading
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, signal_handler)
+            if hasattr(signal, 'SIGTERM'):
+                signal.signal(signal.SIGTERM, signal_handler)
+    except Exception as e:
+        log_message(f"Could not set up signal handlers in create_symlinks: {e}", level="DEBUG")
 
     if batch_apply:
         reset_first_selection_cache()
