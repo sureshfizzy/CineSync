@@ -1,54 +1,113 @@
 import os
 import sys
+import re
 import requests
+import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 
+# Beta features that are currently disabled (HARDCODED)
+BETA_DISABLED_FEATURES = {
+    'MEDIAINFO_PARSER': 'MediaInfo Parser is a beta feature currently disabled for usage.',
+    'MEDIAINFO_TAGS': 'MediaInfo Tags is a beta feature currently disabled for usage.'
+}
+
+# Client locked settings - loaded from JSON file if available
+def load_client_locked_settings():
+    """Load client locked settings from MediaHub/utils folder if available"""
+
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'utils', 'client_locked_settings.json')
+
+    try:
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+                return data.get('locked_settings', {})
+    except (json.JSONDecodeError, IOError):
+        pass
+
+    # No JSON file found or readable, return empty dict
+    return {}
+
+def is_beta_feature_disabled(feature_name):
+    """Check if a beta feature is disabled and log warning if attempted to use"""
+    if feature_name in BETA_DISABLED_FEATURES:
+        log_message(f"{BETA_DISABLED_FEATURES[feature_name]} This setting will be ignored.", level="WARNING")
+        return True
+    return False
+
+def get_setting_with_client_lock(setting_name, default_value, value_type='string'):
+    """
+    Get a setting value with client lock support.
+    Client locks are loaded from MediaHub/utils/client_locked_settings.json if available.
+    """
+    # Load client locked settings from JSON file
+    client_locked_settings = load_client_locked_settings()
+
+    # Check if setting is locked by client (from JSON file)
+    if setting_name in client_locked_settings and client_locked_settings[setting_name].get('locked', False):
+        locked_value = client_locked_settings[setting_name]['value']
+        env_value = os.getenv(setting_name)
+
+        # Log warning if user tries to override locked setting
+        if env_value and str(env_value) != str(locked_value):
+            log_message(f"{setting_name} is locked by System Administrator. Environment value '{env_value}' ignored, using '{locked_value}'.", level="DEBUG")
+
+        # Convert type if needed
+        if value_type == 'int':
+            return int(locked_value)
+        elif value_type == 'bool':
+            if isinstance(locked_value, bool):
+                return locked_value
+            elif isinstance(locked_value, str):
+                return locked_value.lower() in ['true', '1', 'yes']
+            else:
+                return str(locked_value).lower() in ['true', '1', 'yes']
+        else:
+            return locked_value
+
+    env_value = os.getenv(setting_name)
+    if env_value:
+        if value_type == 'int':
+            try:
+                return int(env_value)
+            except ValueError:
+                log_message(f"Invalid integer value for {setting_name}: '{env_value}'. Using default.", level="WARNING")
+                return default_value
+        elif value_type == 'bool':
+            return env_value.lower() in ['true', '1', 'yes']
+        else:
+            return env_value
+
+    # No environment variable, use default
+    return default_value
+
 api_key = None
 api_warning_logged = False
-offline_mode = False
+
+def get_env_int(key, default):
+    """Safely get an integer environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def get_env_float(key, default):
+    """Safely get a float environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
 # Load .env file
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path)
-
-def get_api_key():
-    global api_key, api_warning_logged, offline_mode
-
-    if api_key is not None:
-        return api_key
-
-    api_key = os.getenv('TMDB_API_KEY')
-
-    if not api_key or api_key == 'your_tmdb_api_key_here':
-        if not api_warning_logged:
-            log_message("TMDb API key not found or is a placeholder. TMDb functionality is not enabled. Running in offline mode.", level="WARNING")
-            offline_mode = True
-            api_warning_logged = True
-        return None
-
-    # Validate API key
-    if not is_valid_api_key(api_key):
-        if not api_warning_logged:
-            log_message("Invalid TMDb API key. TMDb functionality may not work as expected. Running in offline mode.", level="WARNING")
-            offline_mode = True
-            api_warning_logged = True
-        return None
-
-    return api_key
-
-def is_valid_api_key(api_key):
-    test_url = 'https://api.themoviedb.org/3/configuration?api_key=' + api_key
-    try:
-        response = requests.get(test_url)
-        if response.status_code == 200:
-            return True
-        else:
-            log_message(f"API key validation failed with status code: {response.status_code}", level="WARNING")
-            return False
-    except requests.RequestException as e:
-        log_message(f"API key validation error: {str(e)}", level="WARNING")
-        return False
 
 def get_directories():
     src_dirs = os.getenv('SOURCE_DIR')
@@ -77,7 +136,7 @@ def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
 
 def get_junk_max_size_mb():
-     return int(os.getenv('JUNK_MAX_SIZE_MB', '5'))
+     return get_env_int('JUNK_MAX_SIZE_MB', 5)
 
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
@@ -89,7 +148,7 @@ def is_rclone_mount_enabled():
     return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
 
 def is_mount_check_interval():
-    return int(os.getenv('MOUNT_CHECK_INTERVAL', '30'))
+    return get_env_int('MOUNT_CHECK_INTERVAL', 30)
 
 def is_anime_scan():
     return os.getenv('ANIME_SCAN', 'false').lower() == 'true'
@@ -121,15 +180,48 @@ def custom_anime_show_layout():
     token = os.getenv('CUSTOM_ANIME_SHOW_FOLDER', None)
     return token
 
+def custom_kids_movie_layout():
+    token = os.getenv('CUSTOM_KIDS_MOVIE_FOLDER', None)
+    return token
+
+def custom_kids_show_layout():
+    token = os.getenv('CUSTOM_KIDS_SHOW_FOLDER', None)
+    return token
+
+def get_mediainfo_tags():
+    """Get mediainfo tags from environment variable and properly clean them"""
+    # Check if this beta feature is disabled
+    if is_beta_feature_disabled('MEDIAINFO_TAGS'):
+        return []
+
+    tags_env = os.getenv('MEDIAINFO_TAGS', '')
+    if not tags_env:
+        return []
+
+    tags = re.findall(r'\{([^{}]+)\}', tags_env)
+    return [tag.strip() for tag in tags]
+
 def get_rename_tags():
-    tags = os.getenv('RENAME_TAGS', '').split(',')
-    return [tag.strip() for tag in tags if tag.strip()]
+    """Get rename tags from environment variable and properly clean them"""
+    tags_env = os.getenv('RENAME_TAGS', '')
+    if not tags_env:
+        return []
+
+    tags = []
+    for tag in tags_env.split(','):
+        tag = tag.strip()
+        if (tag.startswith('`') and tag.endswith('`')) or \
+           (tag.startswith('"') and tag.endswith('"')) or \
+           (tag.startswith("'") and tag.endswith("'")):
+            tag = tag[1:-1]
+        tag = tag.replace('[', '').replace(']', '')
+        if tag:
+            tags.append(tag)
+
+    return tags
 
 def plex_update():
     return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
-
-def cinesync_webdav():
-    return os.getenv('CINESYNC_WEBDAV', 'false').lower() == 'true'
 
 def plex_token():
     token = os.getenv('PLEX_TOKEN', None)
@@ -140,7 +232,7 @@ def plex_url():
     return token
 
 def get_known_types(filename=None):
-    known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4').split(','))
+    known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4,.srt,.strm').split(','))
     if filename is not None:
         if not filename:
             return False
@@ -159,6 +251,59 @@ def is_movie_resolution_structure_enabled():
 def is_anime_separation_enabled():
     """Check if anime content should be separated into different folders"""
     return os.getenv('ANIME_SEPARATION', 'false').lower() == 'true'
+
+def is_4k_separation_enabled():
+    """Check if 4K content separation should be enabled"""
+    return os.getenv('4K_SEPARATION', 'true').lower() == 'true'
+
+def is_kids_separation_enabled():
+    """Check if kids content separation should be enabled"""
+    return get_setting_with_client_lock('KIDS_SEPARATION', False, 'bool')
+
+def tmdb_api_language():
+    return os.getenv('LANGUAGE', 'ENGLISH').lower()
+
+def mediainfo_parser():
+    """Check if MEDIA PARSER is enabled in configuration"""
+    # Check if this beta feature is disabled
+    if is_beta_feature_disabled('MEDIAINFO_PARSER'):
+        return False
+
+    return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
+
+def get_max_cores():
+    """Get the maximum number of CPU cores for CPU-bound operations"""
+    try:
+        # Use hardcoded client lock system
+        max_cores = get_setting_with_client_lock('MAX_CORES', 0, 'int')
+        from multiprocessing import cpu_count
+
+        cpu_cores = cpu_count()
+
+        if max_cores <= 0:
+            max_cores = cpu_cores
+        else:
+            max_cores = min(max_cores, cpu_cores)
+
+        return max_cores
+    except (ValueError, TypeError):
+        from multiprocessing import cpu_count
+        return cpu_count()
+
+def get_max_processes():
+    """Get the maximum number of processes for I/O-bound parallel processing (API calls, file operations)"""
+    try:
+        # Use hardcoded client lock system
+        max_processes = get_setting_with_client_lock('MAX_PROCESSES', 8, 'int')
+        from multiprocessing import cpu_count
+
+        # Respect user's MAX_PROCESSES setting, but ensure it's reasonable
+        cpu_cores = cpu_count()
+        max_processes = max(1, min(max_processes, 32))
+
+        return max_processes
+    except (ValueError, TypeError):
+        return 8
 
 def get_movie_resolution_folder(file, resolution):
     """Get movie resolution folder mappings from environment variables and determine the movie resolution folder."""
@@ -255,3 +400,88 @@ def get_show_resolution_folder(file, resolution):
             return mappings.get('dvd', 'RetroDVD')
         else:
             return mappings.get('default', 'Shows')
+
+def get_cinesync_ip():
+    """Get CineSync IP from environment variable for client connections"""
+    ip = os.getenv('CINESYNC_IP', 'localhost')
+    # Convert 0.0.0.0 (server bind address) to localhost for client connections
+    if ip == '0.0.0.0':
+        return 'localhost'
+    return ip
+
+def get_cinesync_api_port():
+    """Get CineSync API port from environment variable"""
+    return os.getenv('CINESYNC_API_PORT', '8082')
+
+def get_tmdb_api_key():
+    """
+    Get TMDB API key with fallback mechanism.
+    First tries to get from environment variable, then falls back to default key
+    if the environment key is missing, placeholder, or invalid.
+    """
+    env_key = os.getenv('TMDB_API_KEY', '').strip()
+
+    # Check if the environment key is missing, empty, or a placeholder
+    placeholder_values = [
+        '',
+        'your_tmdb_api_key_here',
+        'your-tmdb-api-key',
+        'placeholder',
+        'none',
+        'null'
+    ]
+
+    if not env_key or env_key.lower() in placeholder_values:
+        return 'a4f28c50ae81b7529a05b61910d64398'
+
+    return env_key
+
+# Database Configuration Functions
+def get_db_throttle_rate():
+    """Get database throttle rate for operations per second"""
+    return get_env_float('DB_THROTTLE_RATE', 10.0)
+
+def get_db_max_retries():
+    """Get maximum number of database operation retries"""
+    return get_env_int('DB_MAX_RETRIES', 3)
+
+def get_db_retry_delay():
+    """Get delay between database operation retries in seconds"""
+    return get_env_float('DB_RETRY_DELAY', 1.0)
+
+def get_db_batch_size():
+    """Get database batch size for bulk operations"""
+    return get_env_int('DB_BATCH_SIZE', 1000)
+
+def get_db_max_workers():
+    """Get maximum number of database workers for parallel operations"""
+    return get_env_int('DB_MAX_WORKERS', 4)
+
+def get_db_max_records():
+    """Get maximum number of records before archiving"""
+    return get_env_int('DB_MAX_RECORDS', 100000)
+
+def get_db_connection_timeout():
+    """Get database connection timeout in seconds"""
+    return get_env_float('DB_CONNECTION_TIMEOUT', 20.0)
+
+def get_db_cache_size():
+    """Get database cache size"""
+    return get_env_int('DB_CACHE_SIZE', 10000)
+
+# Dashboard Configuration Functions
+def is_dashboard_notifications_enabled():
+    """Check if dashboard notifications should be sent"""
+    return os.getenv('ENABLE_DASHBOARD_NOTIFICATIONS', 'true').lower() in ['true', '1', 'yes']
+
+def get_dashboard_check_interval():
+    """Get interval in seconds for checking dashboard availability"""
+    return get_env_int('DASHBOARD_CHECK_INTERVAL', 300)  # 5 minutes default
+
+def get_dashboard_timeout():
+    """Get timeout in seconds for dashboard requests"""
+    return get_env_float('DASHBOARD_TIMEOUT', 2.0)
+
+def get_dashboard_retry_count():
+    """Get number of retries for dashboard requests"""
+    return get_env_int('DASHBOARD_RETRY_COUNT', 1)

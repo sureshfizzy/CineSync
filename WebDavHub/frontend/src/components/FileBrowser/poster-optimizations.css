@@ -1,0 +1,56 @@
+/* Essential performance optimizations for PosterView to prevent flickering */
+
+/* Enable hardware acceleration and prevent flickering */
+.poster-card {
+  contain: layout style paint;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Optimize image rendering to prevent flickering */
+.poster-image {
+  image-rendering: -webkit-optimize-contrast;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Enhanced smooth scrolling - iOS optimized */
+.poster-grid {
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  /* iOS specific optimizations */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Global smooth scrolling enhancement */
+* {
+  scroll-behavior: smooth;
+}
+
+/* iOS Safari specific smooth scrolling */
+@supports (-webkit-overflow-scrolling: touch) {
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Remove body transforms that can interfere with fixed positioning */
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Smooth scrolling for all scrollable containers */
+*::-webkit-scrollbar {
+  scroll-behavior: smooth;
+}
+
+/* Prevent layout shifts during image loading */
+.poster-image-container {
+  contain: layout;
+}

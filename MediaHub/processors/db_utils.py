@@ -6,32 +6,72 @@ import sys
 import concurrent.futures
 import csv
 import sqlite3
+import platform
+import traceback
+import requests
+import re
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import (
+    get_db_throttle_rate, get_db_max_retries, get_db_retry_delay,
+    get_db_batch_size, get_db_max_workers, get_db_max_records,
+    get_db_connection_timeout, get_db_cache_size,
+    get_cinesync_ip, get_cinesync_api_port
+)
+from MediaHub.utils.dashboard_utils import send_dashboard_notification
 
 # Load environment variables
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
-    exit(1)
+    print("Warning: .env file not found. Using environment variables only.")
+else:
+    load_dotenv(dotenv_path)
 
-load_dotenv(dotenv_path)
-
-DB_DIR = "db"
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DB_DIR = os.path.join(BASE_DIR, "db")
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
-MAX_RECORDS = 100000
 LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
 
-# Get configuration from environment variables
-THROTTLE_RATE = float(os.getenv('DB_THROTTLE_RATE', 10))
-MAX_RETRIES = int(os.getenv('DB_MAX_RETRIES', 3))
-RETRY_DELAY = float(os.getenv('DB_RETRY_DELAY', 1.0))
-BATCH_SIZE = int(os.getenv('DB_BATCH_SIZE', 1000))
-MAX_WORKERS = int(os.getenv('DB_MAX_WORKERS', 4))
+# Ensure database directory exists
+os.makedirs(DB_DIR, exist_ok=True)
+
+# Helper functions for safe environment variable conversion
+def get_env_int(key, default):
+    """Safely get an integer environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def get_env_float(key, default):
+    """Safely get a float environment variable with a default value."""
+    try:
+        value = os.getenv(key)
+        if value is None or value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+# Get configuration from config.py functions
+THROTTLE_RATE = get_db_throttle_rate()
+MAX_RETRIES = get_db_max_retries()
+RETRY_DELAY = get_db_retry_delay()
+BATCH_SIZE = get_db_batch_size()
+MAX_WORKERS = get_db_max_workers()
+MAX_RECORDS = get_db_max_records()
+CONNECTION_TIMEOUT = get_db_connection_timeout()
+CACHE_SIZE = get_db_cache_size()
+
+# Add this near the top with other global variables
+_db_initialized = False
 
 class DatabaseError(Exception):
     pass
@@ -46,8 +86,9 @@ class ConnectionPool:
     def get_connection(self):
         with self.lock:
             if not os.path.exists(self.db_file):
-                print(f"[ERROR] Database file {self.db_file} not found, creating a new one...")
-                os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+                print(f"[INFO] Database file {self.db_file} not found, creating a new one...")
+                db_dir = os.path.dirname(self.db_file)
+                os.makedirs(db_dir, exist_ok=True)
                 open(self.db_file, 'a').close()  # Create an empty file
                 os.chmod(self.db_file, 0o666)  # Ensure proper permissions
 
@@ -55,13 +96,14 @@ class ConnectionPool:
                 return self.connections.pop()
             else:
                 try:
-                    conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=20.0)
+                    conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=CONNECTION_TIMEOUT)
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
-                    conn.execute("PRAGMA cache_size=10000")
+                    conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
                     return conn
                 except sqlite3.OperationalError as e:
-                    print(f"[ERROR] Failed to open database file: {e}")
+                    print(f"[ERROR] Failed to open database file: {self.db_file}")
+                    print(f"[ERROR] Database error: {e}")
                     raise
 
 
@@ -72,9 +114,9 @@ class ConnectionPool:
             else:
                 conn.close()
 
-# Create connection pools
-main_pool = ConnectionPool(DB_FILE)
-archive_pool = ConnectionPool(ARCHIVE_DB_FILE)
+# Create connection pools using database configuration
+main_pool = ConnectionPool(DB_FILE, max_connections=max(1, MAX_WORKERS // 2))
+archive_pool = ConnectionPool(ARCHIVE_DB_FILE, max_connections=1)
 
 def with_connection(pool):
     def decorator(func):
@@ -91,7 +133,9 @@ def with_connection(pool):
 def throttle(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        time.sleep(1 / THROTTLE_RATE)
+        # Only throttle if THROTTLE_RATE > 0
+        if THROTTLE_RATE > 0:
+            time.sleep(1 / THROTTLE_RATE)
         return func(*args, **kwargs)
     return wrapper
 
@@ -111,16 +155,19 @@ def retry_on_db_lock(func):
 
 @throttle
 @retry_on_db_lock
-def initialize_db():
-    global db_initialized
+@with_connection(main_pool)
+def initialize_db(conn):
+    global _db_initialized
     """Initialize the SQLite database and create the necessary tables."""
+    if _db_initialized:
+        return
+
     if os.path.exists(LOCK_FILE):
         log_message("Database already initialized. Checking for updates.", level="INFO")
     else:
         log_message("Initializing database...", level="INFO")
         os.makedirs(DB_DIR, exist_ok=True)
 
-    conn = sqlite3.connect(DB_FILE)
     try:
         cursor = conn.cursor()
 
@@ -129,50 +176,99 @@ def initialize_db():
             CREATE TABLE IF NOT EXISTS processed_files (
                 file_path TEXT PRIMARY KEY,
                 destination_path TEXT,
+                base_path TEXT,
                 tmdb_id TEXT,
-                season_number TEXT
+                season_number TEXT,
+                reason TEXT,
+                media_type TEXT,
+                proper_name TEXT,
+                year TEXT,
+                episode_number TEXT,
+                imdb_id TEXT,
+                is_anime_genre INTEGER
             )
         """)
 
-        # Check if the destination_path column exists
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
 
-        if "destination_path" not in columns:
-            # Add the destination_path column
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
-            log_message("Added destination_path column to processed_files table.", level="INFO")
+        # Define all required columns with their types
+        required_columns = {
+            "destination_path": "TEXT",
+            "base_path": "TEXT",
+            "tmdb_id": "TEXT",
+            "season_number": "TEXT",
+            "reason": "TEXT",
+            "file_size": "INTEGER",
+            "error_message": "TEXT",
+            "processed_at": "TIMESTAMP",
+            "media_type": "TEXT",
+            "proper_name": "TEXT",
+            "year": "TEXT",
+            "episode_number": "TEXT",
+            "imdb_id": "TEXT",
+            "is_anime_genre": "INTEGER"
+        }
 
-        # Check if the tmdb_id column exists
-        if "tmdb_id" not in columns:
-            # Add the tmdb_id column
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
-            log_message("Added tmdb_id column to processed_files table.", level="INFO")
+        # Add missing columns
+        for column_name, column_type in required_columns.items():
+            if column_name not in columns:
+                cursor.execute(f"ALTER TABLE processed_files ADD COLUMN {column_name} {column_type}")
+                log_message(f"Added {column_name} column to processed_files table.", level="INFO")
 
-        # Check if the season_number column exists
-        if "season_number" not in columns:
-            # Add the tmdb_id column
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN season_number TEXT")
-            log_message("Added season column to processed_files table.", level="INFO")
+                # Special handling for processed_at column
+                if column_name == "processed_at":
+                    cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
 
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_message ON processed_files(error_message)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_files(processed_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proper_name ON processed_files(proper_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_year ON processed_files(year)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proper_name ON processed_files(proper_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_year ON processed_files(year)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episode_number ON processed_files(episode_number)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
 
         conn.commit()
+
+        # Verify all required columns exist before marking as initialized
+        cursor.execute("PRAGMA table_info(processed_files)")
+        final_columns = [column[1] for column in cursor.fetchall()]
+
+        expected_columns = {"file_path", "destination_path", "base_path", "tmdb_id", "season_number",
+                          "reason", "file_size", "error_message", "processed_at", "media_type",
+                          "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"}
+
+        missing_columns = expected_columns - set(final_columns)
+        if missing_columns:
+            log_message(f"Database initialization incomplete. Missing columns: {missing_columns}", level="ERROR")
+            return
+
         log_message("Database schema is up to date.", level="INFO")
 
-        # Create or update the lock file
+        # Create or update the lock file only if all columns exist
         with open(LOCK_FILE, 'w') as lock_file:
             lock_file.write("Database initialized and up to date.")
+
+        _db_initialized = True
 
     except sqlite3.Error as e:
         log_message(f"Failed to initialize or update database: {e}", level="ERROR")
         conn.rollback()
-    finally:
-        conn.close()
 
 @throttle
 @retry_on_db_lock
@@ -220,16 +316,152 @@ def load_processed_files(conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path, tmdb_id=None, season_number=None):
-    source_path = normalize_file_path(source_path)
-    dest_path = normalize_file_path(dest_path)
+def is_file_processed(conn, file_path):
+    """Fast check if a single file is already processed without loading all files."""
+    file_path = normalize_file_path(file_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number)
-            VALUES (?, ?, ?, ?)
-        """, (source_path, dest_path, tmdb_id, season_number))
+        cursor.execute("SELECT 1 FROM processed_files WHERE file_path = ? LIMIT 1", (file_path,))
+        return cursor.fetchone() is not None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in is_file_processed: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+def extract_base_path_from_destination_path(dest_path, proper_name=None):
+    """Extract base path - everything between DESTINATION_DIR and the title folder
+
+    Args:
+        dest_path: Full destination path
+        proper_name: The proper name from database (e.g., "Movie Title (2023)")
+                    If provided, will be used to identify the title folder precisely
+    """
+    if not dest_path:
+        return None
+
+    # Get the destination directory from environment
+    dest_dir = os.getenv("DESTINATION_DIR", "")
+    if not dest_dir:
+        return None
+
+    # Normalize paths
+    dest_dir = os.path.normpath(dest_dir)
+    dest_path = os.path.normpath(dest_path)
+
+    # Remove destination directory prefix to get relative path
+    if dest_path.startswith(dest_dir):
+        relative_path = dest_path[len(dest_dir):].lstrip(os.sep)
+        parts = relative_path.split(os.sep)
+
+        if proper_name:
+            for i, part in enumerate(parts[:-1]):
+                if part == proper_name or part.startswith(proper_name):
+                    if i > 0:
+                        return os.sep.join(parts[:i])
+                    else:
+                        return None
+
+        if len(parts) >= 4:
+            extras_keywords = ['extras', 'specials']
+            for i, part in enumerate(parts[:-1]):
+                if part.lower() in extras_keywords:
+                    return parts[0]
+            return os.sep.join(parts[:-2])
+        elif len(parts) >= 3:
+            return os.sep.join(parts[:-2])
+        elif len(parts) >= 2:
+            return parts[0]
+        elif len(parts) >= 1:
+            return parts[0]
+
+    return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
+    source_path = normalize_file_path(source_path)
+    if dest_path:
+        dest_path = normalize_file_path(dest_path)
+
+    # Extract base path from destination path using proper_name if available
+    base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+
+    # Get file size if not provided and source file exists
+    if file_size is None and source_path and os.path.exists(source_path):
+        try:
+            file_size = os.path.getsize(source_path)
+        except (OSError, IOError) as e:
+            log_message(f"Could not get file size for {source_path}: {e}", level="WARNING")
+            file_size = None
+
+    try:
+        cursor = conn.cursor()
+
+        # Check if this is a new file (not an update)
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (source_path,))
+        is_new_file = cursor.fetchone()[0] == 0
+
+        # Check if columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_processed_at = "processed_at" in columns
+        has_error_message = "error_message" in columns
+        has_base_path = "base_path" in columns
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+
+        if has_processed_at and has_error_message and has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_processed_at and has_error_message and has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_error_message and has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_error_message and has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_new_columns and has_base_path:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_new_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre))
+        elif has_processed_at and has_error_message:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message, processed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message))
+        elif has_error_message:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size, error_message))
+        else:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, tmdb_id, season_number, reason, file_size)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, tmdb_id, season_number, reason, file_size))
+
         conn.commit()
+
+        # Notify WebDavHub about the file addition if it's a new file and not skipped
+        if is_new_file and not reason and dest_path:
+            track_file_addition(source_path, dest_path, tmdb_id, season_number)
+
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error in save_processed_file: {e}", level="ERROR")
         conn.rollback()
@@ -254,8 +486,40 @@ def check_file_in_db(conn, file_path):
         conn.rollback()
         return False
 
-def normalize_file_path(file_path):
-    return os.path.normpath(file_path)
+def normalize_file_path(file_path, resolve_symlinks=False):
+    """
+    Normalizes a file path to ensure consistent formatting for comparison.
+    Applies platform-specific normalization for better cross-platform compatibility.
+
+    Args:
+        file_path: The file path to normalize
+        resolve_symlinks: Whether to resolve symlinks to their source paths
+    """
+    if not file_path:
+        return file_path
+
+    # Resolve symlinks if requested
+    if resolve_symlinks:
+        try:
+            if os.path.islink(file_path):
+                file_path = os.path.realpath(file_path)
+        except (OSError, IOError):
+            # If symlink resolution fails, continue with original path
+            pass
+
+    # Basic normalization
+    normalized = os.path.normpath(file_path)
+
+    # Windows-specific normalization for better path comparison
+    if platform.system() == "Windows":
+        # Remove \\?\ prefix if present
+        if normalized.startswith("\\\\?\\"):
+            normalized = normalized[4:]
+        normalized = os.path.abspath(normalized)
+        if len(normalized) >= 2 and normalized[1] == ':':
+            normalized = normalized[0].upper() + normalized[1:]
+
+    return normalized
 
 def find_file_in_directory(file_name, directory):
     for root, dirs, files in os.walk(directory):
@@ -289,37 +553,86 @@ def display_missing_files(conn, destination_folder):
     destination_folder = os.path.normpath(destination_folder)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT file_path, destination_path FROM processed_files")
+        # Only select files that aren't marked as skipped (don't have a reason)
+        cursor.execute("""
+            SELECT file_path, destination_path, reason
+            FROM processed_files
+            WHERE reason IS NULL
+        """)
         missing_files = []
 
-        for source_path, dest_path in cursor.fetchall():
-            if not os.path.exists(dest_path):
-                # Check if the file has been renamed
-                dir_path = os.path.dirname(dest_path)
-                renamed = False
+        for source_path, dest_path, reason in cursor.fetchall():
+            if source_path is None:
+                log_message("Skipping entry with null source path", level="WARNING")
+                continue
 
-                if os.path.exists(dir_path):
-                    for filename in os.listdir(dir_path):
-                        potential_new_path = os.path.join(dir_path, filename)
+            if dest_path is None:
+                log_message(f"Entry missing destination path: {source_path}", level="WARNING")
+                continue
 
-                        # Only process if it's a different path than the original
-                        if potential_new_path != dest_path and os.path.islink(potential_new_path):
-                            try:
-                                # Check if the symlink points to the same source
-                                link_target = os.readlink(potential_new_path)
-                                if link_target == source_path:
-                                    # Found the renamed file
-                                    log_message(f"Detected renamed file: {dest_path} -> {potential_new_path}", level="INFO")
-                                    update_renamed_file(dest_path, potential_new_path)
-                                    renamed = True
-                                    break
-                            except (OSError, IOError) as e:
-                                log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+            try:
+                source_path = normalize_file_path(source_path)
+                dest_path = normalize_file_path(dest_path)
+
+                if not os.path.exists(dest_path):
+                    # Get the original filename
+                    original_filename = os.path.basename(source_path)
+                    renamed = False
+
+                    # First check if the original source file still exists
+                    if not os.path.exists(source_path):
+                        log_message(f"Source file no longer exists: {source_path}", level="WARNING")
+                        try:
+                            from MediaHub.processors.symlink_utils import delete_broken_symlinks
+                            log_message(f"Triggering broken symlinks cleanup for missing source: {source_path}", level="INFO")
+                            delete_broken_symlinks(destination_folder, source_path)
+                        except Exception as cleanup_error:
+                            log_message(f"Error during broken symlinks cleanup: {cleanup_error}", level="ERROR")
+                        continue
+
+                    # Recursively search the entire destination directory for the file
+                    for root, dirs, files in os.walk(destination_folder):
+                        for filename in files:
+                            potential_new_path = os.path.join(root, filename)
+
+                            # Skip if it's the same path we already checked
+                            if normalize_file_path(potential_new_path) == dest_path:
                                 continue
 
-                if not renamed:
-                    missing_files.append((source_path, dest_path))
-                    log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+                            # Check if this is a symlink
+                            if os.path.islink(potential_new_path):
+                                try:
+                                    # Check if the symlink points to our source file
+                                    link_target = os.readlink(potential_new_path)
+                                    # Use improved normalization for both paths
+                                    normalized_link_target = normalize_file_path(link_target)
+                                    normalized_source_path = normalize_file_path(source_path)
+
+                                    if normalized_link_target == normalized_source_path:
+                                        # Found the moved/renamed file
+                                        log_message(f"Found file moved to: {potential_new_path}", level="INFO")
+                                        update_renamed_file(dest_path, potential_new_path)
+                                        renamed = True
+                                        break
+                                except (OSError, IOError) as e:
+                                    log_message(f"Error reading symlink {potential_new_path}: {e}", level="WARNING")
+                                    continue
+                            # If not a symlink, check if the filename matches our source
+                            elif filename == original_filename:
+                                log_message(f"Found matching file but not a symlink: {potential_new_path}", level="WARNING")
+
+                        if renamed:
+                            break
+
+                    if not renamed:
+                        missing_files.append((source_path, dest_path))
+                        log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+            except (OSError, IOError) as e:
+                log_message(f"Error accessing file or directory: {e}", level="WARNING")
+                continue
+            except Exception as e:
+                log_message(f"Unexpected error processing paths - Source: {source_path}, Dest: {dest_path} - Error: {str(e)}", level="ERROR")
+                continue
 
         total_duration = time.time() - start_time
         log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
@@ -329,13 +642,16 @@ def display_missing_files(conn, destination_folder):
         log_message(f"Error in display_missing_files: {e}", level="ERROR")
         conn.rollback()
         return []
+    except Exception as e:
+        log_message(f"Unexpected error in display_missing_files: {str(e)}", level="ERROR")
+        log_message(traceback.format_exc(), level="DEBUG")
+        return []
 
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def update_db_schema():
+def update_db_schema(conn):
     try:
-        conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
         # Check if the destination_path column exists
@@ -356,8 +672,7 @@ def update_db_schema():
         conn.commit()
     except sqlite3.Error as e:
         log_message(f"Error updating database schema: {e}", level="ERROR")
-    finally:
-        conn.close()
+        conn.rollback()
 
 @throttle
 @retry_on_db_lock
@@ -396,6 +711,88 @@ def get_destination_path(conn, source_path):
         conn.rollback()
         return None
 
+def _check_path_exists_batch(paths_batch):
+    """Check existence of a batch of paths and build reverse index - used for parallel processing"""
+    existing_paths = []
+    reverse_index = {}
+
+    for path in paths_batch:
+        if os.path.exists(path):
+            existing_paths.append(path)
+            if os.path.islink(path):
+                try:
+                    link_target = normalize_file_path(os.readlink(path))
+                    reverse_index[link_target] = path
+                except (OSError, IOError):
+                    pass
+
+    return existing_paths, reverse_index
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_dest_index_from_processed_files(conn):
+    """Get destination index from processed_files table, filtered by actual filesystem existence using parallel workers
+    Returns destination paths set, reverse index for symlinks, and processed files set for skip checking"""
+    start_time = time.time()
+    try:
+        cursor = conn.cursor()
+
+        # Get destination paths for symlink checking
+        cursor.execute("SELECT destination_path FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''")
+        all_dest_paths = []
+        while True:
+            batch = cursor.fetchmany(BATCH_SIZE)
+            if not batch:
+                break
+            all_dest_paths.extend([row[0] for row in batch if row[0]])
+
+        # Get ALL processed files (including failed/skipped) for duplicate checking
+        cursor.execute("SELECT file_path FROM processed_files WHERE file_path IS NOT NULL")
+        all_processed_files = set()
+        while True:
+            batch = cursor.fetchmany(BATCH_SIZE)
+            if not batch:
+                break
+            all_processed_files.update(normalize_file_path(row[0]) for row in batch if row[0])
+
+        total_dest_count = len(all_dest_paths)
+        total_processed_count = len(all_processed_files)
+        log_message(f"Checking existence of {total_dest_count} destination paths using {get_db_max_workers()} workers...", level="INFO")
+
+        # Use parallel workers to check file existence and build reverse index
+        dest_paths = set()
+        reverse_index = {}
+        max_workers = get_db_max_workers()
+        batch_size = max(1, total_dest_count // max_workers) if max_workers > 0 else BATCH_SIZE
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            path_batches = [all_dest_paths[i:i + batch_size] for i in range(0, total_dest_count, batch_size)]
+            future_to_batch = {executor.submit(_check_path_exists_batch, batch): batch for batch in path_batches}
+
+            # Collect results
+            for future in concurrent.futures.as_completed(future_to_batch):
+                try:
+                    existing_paths, batch_reverse_index = future.result()
+                    dest_paths.update(existing_paths)
+                    reverse_index.update(batch_reverse_index)
+                except Exception as e:
+                    log_message(f"Error checking path batch: {e}", level="WARNING")
+
+        existing_count = len(dest_paths)
+        reverse_count = len(reverse_index)
+        elapsed_time = time.time() - start_time
+        log_message(f"Database destination index loaded: {existing_count}/{total_dest_count} existing paths, {reverse_count} symlinks indexed in {elapsed_time:.2f}s using {max_workers} workers", level="INFO")
+
+        if reverse_index:
+            sample_entries = list(reverse_index.items())[:3]
+
+        return dest_paths, reverse_index, all_processed_files
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_dest_index_from_processed_files: {e}", level="ERROR")
+        conn.rollback()
+        return set(), {}, set()
+
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
@@ -410,7 +807,17 @@ def reset_database(conn):
         cursor.execute("""
             CREATE TABLE processed_files (
                 file_path TEXT PRIMARY KEY,
-                destination_path TEXT
+                destination_path TEXT,
+                base_path TEXT,
+                tmdb_id TEXT,
+                season_number TEXT,
+                reason TEXT,
+                media_type TEXT,
+                proper_name TEXT,
+                year TEXT,
+                episode_number TEXT,
+                imdb_id TEXT,
+                is_anime_genre INTEGER
             )
         """)
 
@@ -448,6 +855,7 @@ def cleanup_database(conn):
         deleted_count = 0
         for file_path, dest_path in rows:
             if not os.path.exists(file_path) and not os.path.exists(dest_path):
+                track_file_deletion(file_path, dest_path, reason="Both source and destination files missing")
                 cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                 deleted_count += 1
 
@@ -481,6 +889,302 @@ def vacuum_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error during database vacuum: {e}", level="ERROR")
         return False
+
+def populate_missing_file_sizes(cursor, conn):
+    """Populate file_size column for existing records that don't have it - called during initialization"""
+    try:
+        # Check if we need to populate file sizes
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NULL AND file_path IS NOT NULL")
+        missing_count = cursor.fetchone()[0]
+
+        if missing_count == 0:
+            log_message("All records already have file sizes populated.", level="INFO")
+            return
+
+        # Get records without file sizes in batches
+        cursor.execute("""
+            SELECT file_path, destination_path
+            FROM processed_files
+            WHERE file_size IS NULL AND file_path IS NOT NULL
+            LIMIT 1000
+        """)
+
+        records = cursor.fetchall()
+        updated_count = 0
+
+        for file_path, dest_path in records:
+            file_size = None
+
+            # Try to get size from source file first
+            if file_path and os.path.exists(file_path):
+                try:
+                    file_size = os.path.getsize(file_path)
+                except (OSError, IOError):
+                    pass
+
+            # If source doesn't exist, try destination
+            if file_size is None and dest_path and os.path.exists(dest_path):
+                try:
+                    # For symlinks, get the size of the target file
+                    if os.path.islink(dest_path):
+                        target = os.readlink(dest_path)
+                        if os.path.exists(target):
+                            file_size = os.path.getsize(target)
+                    else:
+                        file_size = os.path.getsize(dest_path)
+                except (OSError, IOError):
+                    pass
+
+            # Update the record if we got a file size
+            if file_size is not None:
+                cursor.execute("UPDATE processed_files SET file_size = ? WHERE file_path = ?", (file_size, file_path))
+                updated_count += 1
+
+        if updated_count > 0:
+            conn.commit()
+
+    except Exception as e:
+        log_message(f"Error populating file sizes during initialization: {e}", level="WARNING")
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def populate_all_file_sizes(conn):
+    """Populate file_size column for ALL records - command line option"""
+    try:
+        # Get all records
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path IS NOT NULL")
+        total_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NOT NULL")
+        existing_count = cursor.fetchone()[0]
+
+        # Process all records in batches
+        batch_size = 500
+        updated_count = 0
+        error_count = 0
+
+        for offset in range(0, total_count, batch_size):
+            cursor.execute("""
+                SELECT file_path, destination_path
+                FROM processed_files
+                WHERE file_path IS NOT NULL
+                LIMIT ? OFFSET ?
+            """, (batch_size, offset))
+
+            records = cursor.fetchall()
+            log_message(f"Processing batch {offset//batch_size + 1}/{(total_count + batch_size - 1)//batch_size} ({len(records)} records)", level="INFO")
+
+            for file_path, dest_path in records:
+                file_size = None
+
+                # Try to get size from source file first
+                if file_path and os.path.exists(file_path):
+                    try:
+                        file_size = os.path.getsize(file_path)
+                    except (OSError, IOError):
+                        pass
+
+                # If source doesn't exist, try destination
+                if file_size is None and dest_path and os.path.exists(dest_path):
+                    try:
+                        # For symlinks, get the size of the target file
+                        if os.path.islink(dest_path):
+                            target = os.readlink(dest_path)
+                            if os.path.exists(target):
+                                file_size = os.path.getsize(target)
+                        else:
+                            file_size = os.path.getsize(dest_path)
+                    except (OSError, IOError):
+                        pass
+
+                # Update the record
+                if file_size is not None:
+                    cursor.execute("UPDATE processed_files SET file_size = ? WHERE file_path = ?", (file_size, file_path))
+                    updated_count += 1
+
+                    if updated_count <= 5:  # Log first few for verification
+                        log_message(f"Updated {os.path.basename(file_path)}: {file_size} bytes ({file_size/(1024*1024):.2f} MB)", level="INFO")
+                else:
+                    error_count += 1
+
+            # Commit batch
+            conn.commit()
+
+        log_message(f"File size population completed:", level="INFO")
+        log_message(f"  - Total records processed: {total_count}", level="INFO")
+        log_message(f"  - Successfully updated: {updated_count}", level="INFO")
+        log_message(f"  - Errors/missing files: {error_count}", level="INFO")
+        log_message(f"  - Success rate: {(updated_count/total_count)*100:.1f}%", level="INFO")
+
+        # Show storage summary
+        cursor.execute("SELECT SUM(file_size) FROM processed_files WHERE file_size IS NOT NULL")
+        total_size = cursor.fetchone()[0] or 0
+        log_message(f"Total storage calculated: {total_size} bytes ({total_size/(1024*1024*1024):.2f} GB)", level="INFO")
+
+    except Exception as e:
+        log_message(f"Error in populate_all_file_sizes: {e}", level="ERROR")
+        conn.rollback()
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_total_storage_size(conn):
+    """Get total storage size from file_size column in database - fast and accurate"""
+    try:
+        cursor = conn.cursor()
+
+        # Get total size from stored file sizes
+        cursor.execute("SELECT SUM(file_size) FROM processed_files WHERE file_size IS NOT NULL")
+        result = cursor.fetchone()
+        total_size = result[0] if result and result[0] is not None else 0
+
+        # Get count of files with stored sizes
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_size IS NOT NULL")
+        files_with_size = cursor.fetchone()[0]
+
+        # Get total file count
+        cursor.execute("SELECT COUNT(*) FROM processed_files WHERE destination_path IS NOT NULL AND destination_path != ''")
+        total_files = cursor.fetchone()[0]
+
+        log_message(f"Storage calculation: {files_with_size}/{total_files} files have stored sizes, total: {total_size} bytes ({total_size/(1024*1024*1024):.2f} GB)", level="INFO")
+
+        return total_size, files_with_size, total_files
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_total_storage_size: {e}", level="ERROR")
+        return 0, 0, 0
+
+
+def track_file_addition(source_path, dest_path, tmdb_id=None, season_number=None):
+    """Track file addition in WebDavHub with availability checking"""
+    try:
+        payload = {
+            'operation': 'add',
+            'sourcePath': source_path,
+            'destinationPath': dest_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else ''
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        send_dashboard_notification(url, payload, "file addition")
+
+    except Exception as e:
+        log_message(f"Error tracking file addition: {e}", level="DEBUG")
+
+def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
+    """Track file deletion in WebDavHub with availability checking"""
+    try:
+        payload = {
+            'operation': 'delete',
+            'sourcePath': source_path,
+            'destinationPath': dest_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else '',
+            'reason': reason
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        send_dashboard_notification(url, payload, "file deletion")
+
+    except Exception as e:
+        log_message(f"Error tracking file deletion: {e}", level="DEBUG")
+
+def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
+    """Save file processing failure directly to database"""
+    try:
+        save_processed_file(
+            source_path=source_path,
+            dest_path=None,
+            tmdb_id=tmdb_id,
+            season_number=season_number,
+            reason=reason,
+            error_message=error_message,
+            media_type=media_type,
+            proper_name=proper_name,
+            year=year,
+            episode_number=episode_number,
+            imdb_id=imdb_id,
+            is_anime_genre=is_anime_genre
+        )
+        log_message(f"Saved failure to database: {source_path} - {reason}", level="DEBUG")
+    except Exception as e:
+        log_message(f"Failed to save failure to database: {e}", level="DEBUG")
+
+def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
+    """Track file processing failure in both database and WebDavHub"""
+    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre)
+
+    try:
+        payload = {
+            'operation': 'failed',
+            'sourcePath': source_path,
+            'tmdbId': str(tmdb_id) if tmdb_id else '',
+            'seasonNumber': str(season_number) if season_number else '',
+            'reason': reason,
+            'error': error_message
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        send_dashboard_notification(url, payload, "file failure")
+
+    except Exception as e:
+        log_message(f"Error tracking file failure: {e}", level="DEBUG")
+
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def track_and_remove_file_record(conn, file_path, dest_path=None, reason="File no longer exists"):
+    """Track file deletion and then remove from processed_files table"""
+    try:
+        cursor = conn.cursor()
+
+        # If dest_path not provided, try to get it from database
+        if not dest_path:
+            cursor.execute("SELECT destination_path, tmdb_id, season_number FROM processed_files WHERE file_path = ?", (file_path,))
+            result = cursor.fetchone()
+            if result:
+                dest_path, tmdb_id, season_number = result
+            else:
+                tmdb_id, season_number = None, None
+        else:
+            # Get additional metadata if available
+            cursor.execute("SELECT tmdb_id, season_number FROM processed_files WHERE file_path = ? OR destination_path = ?", (file_path, dest_path))
+            result = cursor.fetchone()
+            if result:
+                tmdb_id, season_number = result
+            else:
+                tmdb_id, season_number = None, None
+
+        # Track the deletion before removing from database
+        if dest_path:
+            track_file_deletion(file_path, dest_path, tmdb_id, season_number, reason)
+
+        # Now remove from database
+        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+        affected_rows = cursor.rowcount
+
+        if affected_rows > 0:
+            conn.commit()
+
+        return affected_rows
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in track_and_remove_file_record: {e}", level="ERROR")
+        conn.rollback()
+        return 0
 
 @throttle
 @retry_on_db_lock
@@ -555,6 +1259,7 @@ def get_database_stats(conn):
                 log_message(f"Both paths missing for entry - Source: {file_path}, Dest: {dest_path}", level="DEBUG")
 
             if should_delete:
+                track_file_deletion(file_path, dest_path, reason="Both source and destination paths missing")
                 cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
                 deleted_count += 1
 
@@ -656,25 +1361,119 @@ def search_database(conn, pattern):
     try:
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
-        cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number
-            FROM processed_files
-            WHERE file_path LIKE ?
-            OR destination_path LIKE ?
-            OR tmdb_id LIKE ?
-        """, (search_pattern, search_pattern, search_pattern))
+
+        # Check which columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
+
+        if has_new_columns and has_base_path:
+            cursor.execute("""
+                SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR base_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        elif has_new_columns:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern))
+
         results = cursor.fetchall()
         if results:
             log_message("-" * 50, level="INFO")
             log_message(f"Found {len(results)} matches for pattern '{pattern}':", level="INFO")
             log_message("-" * 50, level="INFO")
             for row in results:
-                file_path, dest_path, tmdb_id, season_number = row
-                log_message(f"TMDB ID: {tmdb_id}", level="INFO")
-                if season_number is not None:
-                    log_message(f"Season Number: {season_number}", level="INFO")
+                if has_new_columns and has_base_path:
+                    (file_path, dest_path, base_path, tmdb_id, season_number, reason, file_size,
+                     media_type, proper_name, year, episode_number, imdb_id,
+                     is_anime_genre, error_message, processed_at) = row
+
+                    if media_type:
+                        log_message(f"Media Type: {media_type}", level="INFO")
+                    if proper_name:
+                        log_message(f"Title: {proper_name}", level="INFO")
+                    if year:
+                        log_message(f"Year: {year}", level="INFO")
+                    if base_path:
+                        log_message(f"Base Path: {base_path}", level="INFO")
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if imdb_id:
+                        log_message(f"IMDB ID: {imdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+                    if episode_number is not None:
+                        log_message(f"Episode Number: {episode_number}", level="INFO")
+                    if is_anime_genre is not None:
+                        log_message(f"Anime Genre: {'Yes' if is_anime_genre else 'No'}", level="INFO")
+                elif has_new_columns:
+                    (file_path, dest_path, tmdb_id, season_number, reason, file_size,
+                     media_type, proper_name, year, episode_number, imdb_id,
+                     is_anime_genre, error_message, processed_at) = row
+
+                    if media_type:
+                        log_message(f"Media Type: {media_type}", level="INFO")
+                    if proper_name:
+                        log_message(f"Title: {proper_name}", level="INFO")
+                    if year:
+                        log_message(f"Year: {year}", level="INFO")
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if imdb_id:
+                        log_message(f"IMDB ID: {imdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+                    if episode_number is not None:
+                        log_message(f"Episode Number: {episode_number}", level="INFO")
+                    if is_anime_genre is not None:
+                        log_message(f"Anime Genre: {'Yes' if is_anime_genre else 'No'}", level="INFO")
+                else:
+                    # Old format
+                    file_path, dest_path, tmdb_id, season_number, reason, file_size = row
+                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    if season_number is not None:
+                        log_message(f"Season Number: {season_number}", level="INFO")
+
                 log_message(f"Source: {file_path}", level="INFO")
-                log_message(f"Destination: {dest_path}", level="INFO")
+                log_message(f"Destination: {dest_path if dest_path else 'None'}", level="INFO")
+                if file_size is not None:
+                    # Format file size in human-readable format
+                    if file_size >= 1024*1024*1024:  # GB
+                        size_str = f"{file_size/(1024*1024*1024):.2f} GB"
+                    elif file_size >= 1024*1024:  # MB
+                        size_str = f"{file_size/(1024*1024):.2f} MB"
+                    elif file_size >= 1024:  # KB
+                        size_str = f"{file_size/1024:.2f} KB"
+                    else:  # Bytes
+                        size_str = f"{file_size} bytes"
+                    log_message(f"File Size: {size_str}", level="INFO")
+                else:
+                    log_message(f"File Size: Not available", level="INFO")
+                if reason:
+                    log_message(f"Skip Reason: {reason}", level="INFO")
                 log_message("-" * 50, level="INFO")
         else:
             log_message(f"No matches found for pattern '{pattern}'", level="INFO")
@@ -691,16 +1490,83 @@ def search_database_silent(conn, pattern):
     try:
         cursor = conn.cursor()
         search_pattern = f"%{pattern}%"
-        cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number
-            FROM processed_files
-            WHERE file_path LIKE ?
-            OR destination_path LIKE ?
-            OR tmdb_id LIKE ?
-        """, (search_pattern, search_pattern, search_pattern))
+
+        # Check which columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
+
+        if has_new_columns and has_base_path:
+            cursor.execute("""
+                SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR base_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        elif has_new_columns:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number, reason, file_size
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR tmdb_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern))
+
         return cursor.fetchall()
     except (sqlite3.Error, DatabaseError):
         return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_skip_reason(conn, source_path):
+    source_path = normalize_file_path(source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT reason FROM processed_files WHERE file_path = ?", (source_path,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_skip_reason: {e}", level="ERROR")
+        conn.rollback()
+        return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def remove_processed_file(conn, source_path):
+    """Remove a processed file entry from the database."""
+    source_path = normalize_file_path(source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (source_path,))
+        conn.commit()
+        if cursor.rowcount > 0:
+            log_message(f"Removed existing database entry for: {source_path}", level="INFO")
+        return cursor.rowcount > 0
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in remove_processed_file: {e}", level="ERROR")
+        conn.rollback()
+        return False
 
 @throttle
 @retry_on_db_lock
@@ -717,5 +1583,398 @@ def optimize_database(conn):
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error optimizing database: {e}", level="ERROR")
         return False
-# Ensure the database is initialized on import
-initialize_db()
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def update_database_to_new_format(conn):
+    """Update database entries using TMDB API calls with optimized parallel processing."""
+    try:
+        cursor = conn.cursor()
+
+        # Check if new columns exist
+        cursor.execute("PRAGMA table_info(processed_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
+        has_base_path = "base_path" in columns
+
+        if not has_new_columns or not has_base_path:
+            log_message("Database schema is missing new columns. Creating them now...", level="INFO")
+
+            # Add missing columns including reason column
+            missing_columns = {
+                "reason": "TEXT",
+                "base_path": "TEXT",
+                "media_type": "TEXT",
+                "proper_name": "TEXT",
+                "year": "TEXT",
+                "episode_number": "TEXT",
+                "imdb_id": "TEXT",
+                "is_anime_genre": "INTEGER",
+                "file_size": "INTEGER",
+                "error_message": "TEXT",
+                "processed_at": "TIMESTAMP"
+            }
+
+            for column_name, column_type in missing_columns.items():
+                if column_name not in columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE processed_files ADD COLUMN {column_name} {column_type}")
+                        log_message(f"Added {column_name} column to processed_files table.", level="INFO")
+                    except sqlite3.Error as e:
+                        log_message(f"Error adding column {column_name}: {e}", level="ERROR")
+                        return False
+
+            # Create indexes for new columns
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_message ON processed_files(error_message)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_files(processed_at)")
+
+            conn.commit()
+            log_message("Database schema updated successfully.", level="INFO")
+
+        # Update base_path field for existing entries that have destination_path but no base_path
+        cursor.execute("""
+            SELECT file_path, destination_path
+            FROM processed_files
+            WHERE base_path IS NULL AND destination_path IS NOT NULL AND destination_path != ''
+        """)
+
+        entries_to_update_base_path = cursor.fetchall()
+        updated_base_paths = 0
+
+        for file_path, dest_path in entries_to_update_base_path:
+            # Get proper_name for this entry to help with base_path extraction
+            cursor.execute("SELECT proper_name FROM processed_files WHERE file_path = ?", (file_path,))
+            result = cursor.fetchone()
+            proper_name = result[0] if result and result[0] else None
+
+            base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+            if base_path:
+                cursor.execute("""
+                    UPDATE processed_files
+                    SET base_path = ?
+                    WHERE file_path = ?
+                """, (base_path, file_path))
+                updated_base_paths += 1
+
+        if updated_base_paths > 0:
+            log_message(f"Updated base_path field for {updated_base_paths} existing entries.", level="INFO")
+
+        conn.commit()
+
+        # Check if reason column exists after adding missing columns
+        cursor.execute("PRAGMA table_info(processed_files)")
+        updated_columns = [column[1] for column in cursor.fetchall()]
+        has_reason_column = "reason" in updated_columns
+
+        # Find entries that need migration (missing new metadata)
+        if has_reason_column:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number
+                FROM processed_files
+                WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
+                AND reason IS NULL
+                AND file_path IS NOT NULL
+            """)
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number
+                FROM processed_files
+                WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
+                AND file_path IS NOT NULL
+            """)
+
+        entries_to_migrate = cursor.fetchall()
+        total_entries = len(entries_to_migrate)
+
+        def cleanup_tmdb_files():
+            """Helper function to clean up .tmdb files."""
+            tmdb_files_removed = 0
+            cursor.execute("""
+                SELECT DISTINCT destination_path
+                FROM processed_files
+                WHERE destination_path IS NOT NULL
+                AND destination_path != ''
+            """)
+
+            destination_paths = cursor.fetchall()
+            processed_dirs = set()
+
+            for (dest_path,) in destination_paths:
+                if not dest_path or not os.path.exists(dest_path):
+                    continue
+
+                dest_dir = os.path.dirname(dest_path)
+                if not os.path.exists(dest_dir):
+                    continue
+
+                dirs_to_check = [dest_dir]
+
+                parent_dir = os.path.dirname(dest_dir)
+                if parent_dir and os.path.exists(parent_dir):
+                    dir_name = os.path.basename(dest_dir).lower()
+                    if ('season' in dir_name or 'series' in dir_name or
+                        dir_name.startswith('s') and dir_name[1:].isdigit()):
+                        dirs_to_check.append(parent_dir)
+
+                for check_dir in dirs_to_check:
+                    if check_dir in processed_dirs:
+                        continue
+                    processed_dirs.add(check_dir)
+
+                    try:
+                        for item in os.listdir(check_dir):
+                            if item.endswith('.tmdb'):
+                                tmdb_file_path = os.path.join(check_dir, item)
+                                try:
+                                    os.remove(tmdb_file_path)
+                                    tmdb_files_removed += 1
+                                except (OSError, IOError):
+                                    pass
+                    except (OSError, IOError):
+                        continue
+
+            return tmdb_files_removed
+
+        if total_entries == 0:
+            log_message("No entries found that need migration.", level="INFO")
+            cleanup_tmdb_files()
+            return True
+
+        log_message(f"Found {total_entries} entries that need migration.", level="INFO")
+        # Get performance configuration
+        from MediaHub.config.config import get_max_processes, get_db_batch_size, get_db_max_workers
+        max_workers = min(get_max_processes(), get_db_max_workers(), 32)
+        batch_size = get_db_batch_size()
+
+        # Import TMDB functions here to avoid circular imports
+        from MediaHub.api.tmdb_api import search_movie, search_tv_show, get_external_ids, get_movie_genres, get_show_genres
+        from MediaHub.utils.file_utils import clean_query, extract_year
+        from MediaHub.processors.anime_processor import is_anime_file
+
+        def process_single_entry(entry_data):
+            """Process a single database entry for migration."""
+            file_path, dest_path, existing_tmdb_id, season_number = entry_data
+            try:
+                # Parse the filename using the existing parser
+                filename = os.path.basename(file_path)
+                file_metadata = clean_query(filename)
+
+                # Extract folder name for fallback title extraction
+                if dest_path and os.path.exists(dest_path):
+                    folder_name = os.path.basename(os.path.dirname(dest_path))
+                else:
+                    folder_name = os.path.basename(os.path.dirname(file_path))
+
+                # Extract basic info from parser
+                title = file_metadata.get('title', '')
+                year = file_metadata.get('year') or extract_year(folder_name)
+                season_num = file_metadata.get('season')
+                ep_num = file_metadata.get('episode')
+
+                # If no title from filename, try folder name
+                if not title:
+                    folder_metadata = clean_query(folder_name)
+                    title = folder_metadata.get('title', '')
+                    if not year:
+                        year = folder_metadata.get('year')
+
+                if not title:
+                    return {
+                        'success': False,
+                        'file_path': file_path,
+                        'error': f"Could not extract title from: {filename} or {folder_name}"
+                    }
+
+                # Check if it's anime
+                is_anime = is_anime_file(file_path)
+
+                # Perform TMDB search
+                tmdb_result = None
+                media_type = None
+                proper_name = title
+                extracted_year = year
+                episode_number = None
+                imdb_id = None
+                tmdb_id = None
+                is_anime_genre = 1 if is_anime else 0
+
+                # Try TV show search first if we have season/episode info, otherwise try movie
+                if season_num or ep_num:
+                    # Search as TV show
+                    tmdb_result = search_tv_show(
+                        title,
+                        year=year,
+                        auto_select=True,
+                        tmdb_id=existing_tmdb_id if existing_tmdb_id else None,
+                        season_number=season_num,
+                        episode_number=ep_num
+                    )
+
+                    if tmdb_result and isinstance(tmdb_result, tuple) and len(tmdb_result) >= 6:
+                        proper_name, _, is_anime_genre, season_num, ep_num, tmdb_id = tmdb_result[:6]
+
+                        media_type = "TV"
+                        episode_number = str(ep_num) if ep_num else None
+
+                        # Extract year from proper_name if available
+                        year_match = re.search(r'\((\d{4})\)', proper_name)
+                        if year_match:
+                            extracted_year = year_match.group(1)
+                            proper_name = re.sub(r'\s*\(\d{4}\)', '', proper_name).strip()
+
+                        # Remove TMDB/IMDB IDs from proper_name
+                        proper_name = re.sub(r'\s*\{[^}]+\}', '', proper_name).strip()
+
+                if not tmdb_result:
+                    # Search as movie
+                    tmdb_result = search_movie(
+                        title,
+                        year=year,
+                        auto_select=True,
+                        tmdb_id=existing_tmdb_id if existing_tmdb_id else None
+                    )
+
+                    if tmdb_result and isinstance(tmdb_result, tuple) and len(tmdb_result) >= 5:
+                        tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = tmdb_result[:5]
+
+                        media_type = "Movie"
+                        extracted_year = str(movie_year) if movie_year else extracted_year
+
+                        # Remove TMDB/IMDB IDs from proper_name
+                        proper_name = re.sub(r'\s*\{[^}]+\}', '', proper_name).strip()
+                        proper_name = re.sub(r'\s*\(\d{4}\)', '', proper_name).strip()
+
+                # Return result for batch processing
+                if tmdb_result:
+                    return {
+                        'success': True,
+                        'file_path': file_path,
+                        'tmdb_id': str(tmdb_id) if tmdb_id else None,
+                        'media_type': media_type,
+                        'proper_name': proper_name,
+                        'year': extracted_year,
+                        'season_number': str(season_num) if season_num else None,
+                        'episode_number': episode_number,
+                        'imdb_id': imdb_id,
+                        'is_anime_genre': is_anime_genre
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'file_path': file_path,
+                        'error': f"TMDB search failed for: {title}"
+                    }
+
+            except Exception as e:
+                return {
+                    'success': False,
+                    'file_path': file_path,
+                    'error': f"Error processing entry: {str(e)}"
+                }
+
+        # Process entries in parallel batches
+        migrated_count = 0
+        failed_count = 0
+
+        # Split entries into batches for processing
+        def batch_entries(entries, batch_size):
+            for i in range(0, len(entries), batch_size):
+                yield entries[i:i + batch_size]
+
+        def update_batch_in_db(results):
+            """Update a batch of results in the database."""
+            batch_migrated = 0
+            batch_failed = 0
+
+            for result in results:
+                if result['success']:
+                    try:
+                        # Extract base_path from destination path if not already set
+                        cursor.execute("SELECT destination_path, base_path FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                        row = cursor.fetchone()
+                        current_base_path = row[1] if row else None
+                        dest_path = row[0] if row else None
+
+                        if not current_base_path and dest_path:
+                            # Get proper_name for more accurate base_path extraction
+                            cursor.execute("SELECT proper_name FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                            proper_name_row = cursor.fetchone()
+                            proper_name = proper_name_row[0] if proper_name_row and proper_name_row[0] else None
+                            current_base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+
+                        # Calculate file size if not already set
+                        cursor.execute("SELECT file_size FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                        current_file_size = cursor.fetchone()
+                        file_size = current_file_size[0] if current_file_size and current_file_size[0] else None
+
+                        if file_size is None:
+                            # Try to get file size from the source file
+                            try:
+                                if os.path.exists(result['file_path']):
+                                    file_size = os.path.getsize(result['file_path'])
+                                elif dest_path and os.path.exists(dest_path):
+                                    file_size = os.path.getsize(dest_path)
+                            except (OSError, IOError):
+                                file_size = None
+
+                        cursor.execute("""
+                            UPDATE processed_files
+                            SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
+                                imdb_id = ?, is_anime_genre = ?, base_path = ?, file_size = ?
+                            WHERE file_path = ?
+                        """, (result['tmdb_id'], result['media_type'], result['proper_name'], result['year'],
+                              result['season_number'], result['episode_number'], result['imdb_id'],
+                              result['is_anime_genre'], current_base_path, file_size, result['file_path']))
+                        batch_migrated += 1
+                    except sqlite3.Error as e:
+                        log_message(f"Database error updating {result['file_path']}: {e}", level="ERROR")
+                        batch_failed += 1
+                else:
+                    log_message(result['error'], level="WARNING")
+                    batch_failed += 1
+
+            conn.commit()
+            return batch_migrated, batch_failed
+
+        # Process entries in batches with parallel TMDB API calls
+        batch_num = 0
+        for batch in batch_entries(entries_to_migrate, batch_size):
+            batch_num += 1
+            batch_start_time = time.time()
+
+            log_message(f"Processing batch {batch_num}/{(total_entries + batch_size - 1) // batch_size} "
+                       f"({len(batch)} entries)...", level="INFO")
+
+            # Process batch in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                batch_results = list(executor.map(process_single_entry, batch))
+
+            # Update database with batch results
+            batch_migrated, batch_failed = update_batch_in_db(batch_results)
+            migrated_count += batch_migrated
+            failed_count += batch_failed
+
+            batch_time = time.time() - batch_start_time
+            processed_so_far = min(batch_num * batch_size, total_entries)
+
+            log_message(f"Batch {batch_num} completed in {batch_time:.1f}s: "
+                       f"{batch_migrated} migrated, {batch_failed} failed", level="INFO")
+            log_message(f"Overall progress: {processed_so_far}/{total_entries} "
+                       f"({migrated_count} migrated, {failed_count} failed)", level="INFO")
+
+        cleanup_tmdb_files()
+
+        log_message(f"Database migration completed!", level="INFO")
+        log_message(f"Total entries processed: {total_entries}", level="INFO")
+        log_message(f"Successfully migrated: {migrated_count}", level="INFO")
+        log_message(f"Failed migrations: {failed_count}", level="INFO")
+
+        return True
+
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during database migration: {e}", level="ERROR")
+        conn.rollback()
+        return False

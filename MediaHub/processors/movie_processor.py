@@ -4,106 +4,117 @@ import json
 import requests
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import *
-from MediaHub.api.tmdb_api import search_movie
+from MediaHub.api.tmdb_api import search_movie, determine_tmdb_media_type
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_movie_collection
-
-# Global variables to track API key state
-global api_key
-global api_warning_logged
-global offline_mode
+from MediaHub.api.tmdb_api_helpers import get_movie_data
+from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
+from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
+from MediaHub.processors.db_utils import track_file_failure
 
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
-def load_skip_patterns():
-    """Load skip patterns from keywords.json in utils folder"""
-    try:
-        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        keywords_path = os.path.join(current_dir, 'utils', 'keywords.json')
-
-        with open(keywords_path, 'r') as f:
-            data = json.load(f)
-            return data.get('skip_patterns', [])
-    except Exception as e:
-        log_message(f"Error loading skip patterns from keywords.json: {str(e)}", level="ERROR")
-        return []
-
-SKIP_PATTERNS = load_skip_patterns()
-
-def should_skip_file(filename):
-    """
-    Check if the file should be skipped based on patterns from keywords.json
-    """
-    if not is_skip_patterns_enabled():
-        return False
-
-    for pattern in SKIP_PATTERNS:
-        try:
-            if re.match(pattern, filename, re.IGNORECASE):
-                log_message(f"Skipping file due to pattern match in Adult Content {filename}", level="INFO")
-                return True
-        except re.error as e:
-            log_message(f"Invalid regex pattern '{pattern}': {str(e)}", level="ERROR")
-            continue
-    return False
-
-def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None):
-    global offline_mode
+def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None, manual_search=False):
 
     source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
 
-    # Check if folder should be skipped
     if should_skip_file(parent_folder_name):
-        return None
+        track_file_failure(src_file, None, None, "File skipped", f"File skipped based on skip patterns: {parent_folder_name}")
+        return None, None
 
-    movie_name, year = extract_movie_name_and_year(parent_folder_name)
+    # Use passed metadata if available, otherwise parse (avoid redundant parsing)
+    if file_metadata:
+        movie_result = file_metadata
+    else:
+        movie_result = clean_query(parent_folder_name)
+
+    # Extract movie information
+    movie_name = movie_result.get('title', '')
+    year = movie_result.get('year') or extract_year(parent_folder_name)
+    episode_info = movie_result.get('episode_identifier')
+
+    # If episode_info is found, this might be a TV show misclassified as movie
+    if episode_info:
+        print(f"DEBUG: WARNING - Movie processor detected episode info: {episode_info}. This might be a TV show!")
+
     if not movie_name:
-        log_message(f"Attempting secondary extraction: {parent_folder_name}", level="DEBUG")
-        movie_name, year = clean_query_movie(parent_folder_name)
-        if not movie_name:
-            log_message(f"Unable to extract movie name and year from: {parent_folder_name}", level="ERROR")
-            return
+        log_message(f"Unable to extract movie name from: {parent_folder_name}", level="ERROR")
+        track_file_failure(src_file, None, None, "Name extraction failed", f"Unable to extract movie name from: {parent_folder_name}")
+        return None, None
 
     movie_name = standardize_title(movie_name)
     log_message(f"Searching for movie: {movie_name} ({year})", level="DEBUG")
-    movie_name, none = clean_query(movie_name)
 
     collection_info = None
-    api_key = get_api_key()
     proper_name = movie_name
     is_anime_genre = False
 
-    if api_key and is_movie_collection_enabled():
-        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id)
+    # If movie_data is provided from manual search, use it directly
+    if movie_data:
+        log_message(f"Using pre-selected movie data from manual search: {movie_data.get('title', 'Unknown')}", level="INFO")
+        proper_name = movie_data.get('title', movie_name)
+        release_date = movie_data.get('release_date', '')
+        year = release_date.split('-')[0] if release_date else year
+        tmdb_id = movie_data.get('id')
+
+        # Format the proper movie name
+        proper_movie_name = f"{proper_name} ({year})"
+        if is_tmdb_folder_id_enabled() and tmdb_id:
+            proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+
+        # Get collection info if enabled
+        if is_movie_collection_enabled() and tmdb_id:
+            movie_data = get_movie_data(tmdb_id)
+            collection_name = movie_data.get('collection_name')
+            collection_info = (collection_name, tmdb_id) if collection_name else None
+
+    elif is_movie_collection_enabled():
+
+
+        result = search_movie(movie_name, year, auto_select=auto_select, actual_dir=actual_dir, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, manual_search=manual_search)
+        if result is None or isinstance(result, str):
+            log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
+            return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result[:5]
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
                 tmdb_id = result['id']
+                is_kids_content = False
 
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
 
-            tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_movie_name)
-            if tmdb_id_match:
-                movie_id = tmdb_id_match.group(1)
-                collection_info = get_movie_collection(movie_id=movie_id)
+            # Get collection info from optimized movie data
+            if tmdb_id:
+                movie_data = get_movie_data(tmdb_id)
+                collection_name = movie_data.get('collection_name')
+                collection_info = (collection_name, tmdb_id) if collection_name else None
             else:
-                collection_info = get_movie_collection(movie_title=movie_name, year=year)
+                collection_info = None
         else:
-            proper_movie_name = f"{movie_name} ({year})"
-    elif api_key:
-        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root)
-        year = result[3] if result[3] is not None else year
-        if isinstance(result, tuple) and len(result) == 5:
-            tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result
+            log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
+            return None, None
+    else:
+
+
+        result = search_movie(movie_name, year, auto_select=auto_select, file=file, tmdb_id=tmdb_id, imdb_id=imdb_id, actual_dir=actual_dir, root=root, manual_search=manual_search)
+        if result is None or isinstance(result, str):
+            log_message(f"TMDB search failed for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
+            return None, None
+
+        elif isinstance(result, tuple) and len(result) >= 6:
+            tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
+            year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
@@ -116,21 +127,27 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
         else:
-            proper_movie_name = f"{proper_name} ({year})"
-    else:
-        proper_movie_name = f"{movie_name} ({year})"
+            log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
+            track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
+            return None, None
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
     movie_folder = proper_movie_name.replace('/', '-')
 
-    # Determine resolution-specific folder
-    resolution = extract_resolution_from_filename(file)
+
+
+    # Extract resolution from filename and parent folder
+    file_resolution = extract_resolution_from_filename(file)
+    folder_resolution = extract_resolution_from_folder(root)
+    resolution = file_resolution or folder_resolution
 
     # Resolution folder determination logic
     resolution_folder = get_movie_resolution_folder(file, resolution)
 
     # Check if file is 4K/2160p for custom layout selection
     is_4k = '2160' in file or '4k' in file.lower() or 'uhd' in file.lower()
+
+
 
     # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():
@@ -148,25 +165,35 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, resolution_folder, movie_folder)
                         else:
-                            dest_path = os.path.join(dest_dir, custom_movie_layout(), resolution_folder, movie_folder)
+                            movie_base = custom_movie_layout() if custom_movie_layout() else os.path.join('CineSync', 'Movies')
+                            dest_path = os.path.join(dest_dir, movie_base, resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            kids_base = custom_kids_movie_layout() if custom_kids_movie_layout() else os.path.join('CineSync', 'KidsMovies')
+                            dest_path = os.path.join(dest_dir, kids_base, movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             anime_base = custom_anime_movie_layout() if custom_anime_movie_layout() else os.path.join('CineSync', 'AnimeMovies')
                             dest_path = os.path.join(dest_dir, anime_base, movie_folder)
-                        elif is_4k:
-                            dest_path = os.path.join(dest_dir, custom_4kmovie_layout(), movie_folder)
+                        elif is_4k and is_4k_separation_enabled():
+                            movie_4k_base = custom_4kmovie_layout() if custom_4kmovie_layout() else os.path.join('CineSync', '4KMovies')
+                            dest_path = os.path.join(dest_dir, movie_4k_base, movie_folder)
                         else:
-                            dest_path = os.path.join(dest_dir, custom_movie_layout(), movie_folder)
+                            movie_base = custom_movie_layout() if custom_movie_layout() else os.path.join('CineSync', 'Movies')
+                            dest_path = os.path.join(dest_dir, movie_base, movie_folder)
                 else:
                     if is_movie_resolution_structure_enabled():
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', resolution_folder, movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
                     else:
-                        if is_anime_genre and is_anime_separation_enabled():
+                        if is_kids_content and is_kids_separation_enabled():
+                            dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                        elif is_anime_genre and is_anime_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
-                        elif is_4k:
+                        elif is_4k and is_4k_separation_enabled():
                             dest_path = os.path.join(dest_dir, 'CineSync', '4KMovies', movie_folder)
                         else:
                             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
@@ -195,17 +222,23 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             # Set destination path for non-collection movies
             if is_cinesync_layout_enabled():
                 if is_movie_resolution_structure_enabled():
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', resolution_folder, movie_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', resolution_folder, movie_folder)
                     else:
                         dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, movie_folder)
                 else:
-                    if is_anime_genre and is_anime_separation_enabled():
+                    if is_kids_content and is_kids_separation_enabled():
+                        dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                    elif is_anime_genre and is_anime_separation_enabled():
                         dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                     else:
                         dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
             else:
-                if is_anime_genre and is_anime_separation_enabled():
+                if is_kids_content and is_kids_separation_enabled():
+                    dest_path = os.path.join(dest_dir, 'CineSync', 'KidsMovies', movie_folder)
+                elif is_anime_genre and is_anime_separation_enabled():
                     dest_path = os.path.join(dest_dir, 'CineSync', 'AnimeMovies', movie_folder)
                 else:
                     dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', movie_folder)
@@ -250,49 +283,157 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     enhanced_movie_folder = f"{proper_movie_name} [{' '.join(details)}]".strip()
 
-    if is_rename_enabled() and get_rename_tags():
-        media_info = extract_media_info(file, keywords)
-        details = []
+    if is_rename_enabled():
+        use_media_parser = mediainfo_parser()
+
+        # Get media info
+        if use_media_parser:
+            media_info = get_ffprobe_media_info(os.path.join(root, file))
+            tags_to_use = get_mediainfo_tags()
+        else:
+            # Fall back to filename-based media info extraction
+            media_info = extract_media_info(file, keywords)
+            # Include folder-based resolution if not already present
+            if resolution and 'Resolution' not in media_info:
+                media_info['Resolution'] = resolution
+            tags_to_use = get_rename_tags()
+
+        # Remove ID tag from the movie name and extract ID tag if needed
+        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
         id_tag = ''
 
-        # Extract ID tag only if TMDB or IMDB is in RENAME_TAGS
-        rename_tags = get_rename_tags()
-        if 'TMDB' in rename_tags:
-            id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
-            id_tag = id_tag_match.group(0) if id_tag_match else ''
-        elif 'IMDB' in rename_tags:
-            id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
-            id_tag = id_tag_match.group(0) if id_tag_match else ''
+        # Handle ID tags with RENAME_TAGS only (not for MEDIAINFO_TAGS)
+        if not use_media_parser:
+            if 'TMDB' in tags_to_use:
+                id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
+                id_tag = id_tag_match.group(0) if id_tag_match else ''
+            elif 'IMDB' in tags_to_use:
+                id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
+                id_tag = id_tag_match.group(0) if id_tag_match else ''
 
-        # Remove ID tag from the movie name
-        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+        # Extract media details with appropriate format based on which tags we're using
+        details_str = ''
 
-        # Extract media details
-        details = []
-        for tag in rename_tags:
-            tag = tag.strip()
-            if tag not in ['TMDB', 'IMDB'] and tag in media_info:
-                value = media_info[tag]
-                if isinstance(value, list):
-                    formatted_value = '+'.join([str(language).upper() for language in value])
-                    details.append(f"[{formatted_value}]")
+        if use_media_parser:
+            tag_strings = []
+            quality_info = ""
+            custom_formats = media_info.get('Custom Formats', '')
+            other_tags = []
+
+            # First, extract specific categories we want to handle separately
+            for tag in tags_to_use:
+                tag = tag.strip()
+                clean_tag = tag.replace('{', '').replace('}', '').strip()
+
+                if clean_tag == 'Quality Full' and 'Quality Full' in media_info:
+                    quality_info = media_info['Quality Full']
+                elif clean_tag == 'Quality Title' and 'Quality Title' in media_info:
+                    quality_info = media_info['Quality Title']
+                elif clean_tag == 'Custom Formats' and 'Custom Formats' in media_info:
+                    custom_formats = media_info['Custom Formats']
+                elif clean_tag in media_info:
+                    value = media_info[clean_tag]
+                    if isinstance(value, list):
+                        formatted_value = '+'.join([str(item).upper() for item in value])
+                        other_tags.append(formatted_value)
+                    else:
+                        other_tags.append(value)
                 else:
-                    details.append(f"[{value}]")
+                    parts = clean_tag.split()
+                    if len(parts) > 1 and parts[0] in media_info:
+                        compound_key = clean_tag
+                        value = media_info.get(compound_key, '')
+                        if value:
+                            other_tags.append(value)
 
-        details_str = ''.join(details)
+            # Build the details string with proper ordering - other tags first, then custom formats, then quality
+            details_parts = []
 
-        # Construct new filename only if there are details or an ID tag
-        if id_tag or details_str:
+            # Add regular media info
+            if other_tags:
+                details_parts.extend(other_tags)
+
+            combined_info = []
+
+            # Normalize and filter custom formats
+            if custom_formats:
+                if isinstance(custom_formats, str):
+                    formats = custom_formats.split()
+                elif isinstance(custom_formats, list):
+                    formats = []
+                    for fmt in custom_formats:
+                        formats.extend(fmt.split())
+            else:
+                formats = []
+
+            if len(formats) > 1:
+                formats = [fmt for fmt in formats if fmt.lower() != 'bluray']
+
+            combined_info.extend(formats)
+
+            if quality_info:
+                combined_info.append(quality_info)
+
+            if combined_info:
+                combined_str = '-'.join(combined_info)
+                details_parts.append(combined_str)
+
+            details_str = ' '.join(details_parts)
+            enhanced_movie_folder = f"{clean_movie_name} {details_str}".strip()
+
+        else:
+            tag_strings = []
+            release_group = ""
+
+            for tag in tags_to_use:
+                tag = tag.strip()
+                if tag not in ['TMDB', 'IMDB'] and tag in media_info:
+                    value = media_info[tag]
+
+                    if tag.lower() in ['releasegroup', 'release group']:
+                        release_group = str(value)
+                    else:
+                        if isinstance(value, list):
+                            formatted_value = '+'.join([str(language).upper() for language in value])
+                            tag_strings.append(f"[{formatted_value}]")
+                        else:
+                            tag_strings.append(f"[{value}]")
+            if release_group:
+                tag_strings.append(f"-{release_group}")
+
+            details_str = ''.join(tag_strings)
+
+            # Construct new filename only if there are details or an ID tag
             if id_tag and details_str:
                 enhanced_movie_folder = f"{clean_movie_name} {id_tag} - {details_str}".strip()
             elif id_tag:
                 enhanced_movie_folder = f"{clean_movie_name} {id_tag}".strip()
-            else:
+            elif details_str:
                 enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
+            else:
+                enhanced_movie_folder = clean_movie_name
 
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:
         new_name = file
 
     dest_file = os.path.join(dest_path, new_name)
-    return dest_file, tmdb_id
+
+    # Extract clean name from proper_name which may include TMDB/IMDB IDs
+    clean_name = proper_name
+    extracted_year = movie_year or year
+
+    # Parse proper_name to extract clean name and year
+    if proper_name:
+        clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_name)
+
+        if not extracted_year:
+            year_match = re.search(r'\((\d{4})\)', clean_name)
+            if year_match:
+                extracted_year = year_match.group(1)
+
+        clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
+
+    # Return all fields
+    return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
+            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content)

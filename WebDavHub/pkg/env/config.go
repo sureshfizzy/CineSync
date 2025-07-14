@@ -2,9 +2,8 @@ package env
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
-	"strings"
-        "path/filepath"
 
 	"github.com/joho/godotenv"
 	"cinesync/pkg/logger"
@@ -29,28 +28,39 @@ func LoadEnv() {
     }
 }
 
-// IsWebDAVEnabled checks if WebDAV is enabled in the environment
-func IsWebDAVEnabled() bool {
-	value, exists := os.LookupEnv("CINESYNC_WEBDAV")
-	if !exists {
-		logger.Debug("WEBDAV environment variable not set, defaulting to false")
-		return false
-	}
 
-	enabled := strings.ToLower(value) == "true"
-	logger.Debug("WEBDAV environment variable set to %s", value)
-	return enabled
+
+// ReloadEnv reloads environment variables from .env file at runtime
+func ReloadEnv() error {
+    cwd, err := os.Getwd()
+    if err != nil {
+        logger.Warn("Could not determine current working directory.")
+        return err
+    }
+
+    parentDir := filepath.Dir(cwd)
+    envPath := filepath.Join(parentDir, ".env")
+
+    // Load new environment variables - use Overload to override existing values
+    err = godotenv.Overload(envPath)
+    if err != nil {
+        logger.Warn("Could not reload .env from %s", envPath)
+        return err
+    }
+
+    logger.Info("Environment variables reloaded successfully from %s", envPath)
+    return nil
 }
+
+
 
 // GetString returns the environment variable value or a default if not set
 func GetString(key string, defaultValue string) string {
 	value, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %s", key, defaultValue)
 		return defaultValue
 	}
 
-	logger.Debug("Using environment variable %s=%s", key, value)
 	return value
 }
 
@@ -58,7 +68,6 @@ func GetString(key string, defaultValue string) string {
 func GetInt(key string, defaultValue int) int {
 	valueStr, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %d", key, defaultValue)
 		return defaultValue
 	}
 
@@ -68,7 +77,6 @@ func GetInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 
-	logger.Debug("Using environment variable %s=%d", key, value)
 	return value
 }
 
@@ -76,11 +84,14 @@ func GetInt(key string, defaultValue int) int {
 func IsBool(key string, defaultValue bool) bool {
 	value, exists := os.LookupEnv(key)
 	if !exists {
-		logger.Debug("Environment variable %s not set, using default value: %t", key, defaultValue)
 		return defaultValue
 	}
 
 	enabled := value == "1" || value == "true" || value == "yes" || value == "y"
-	logger.Debug("Using environment variable %s=%s (parsed as %t)", key, value, enabled)
 	return enabled
+}
+
+// SetEnvVar sets an environment variable
+func SetEnvVar(key, value string) {
+	os.Setenv(key, value)
 }

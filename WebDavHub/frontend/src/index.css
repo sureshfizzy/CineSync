@@ -1,0 +1,62 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Video Player Styles */
+.video-player-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+
+/* Ensure the video player fills its container */
+.video-player-container > div {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Style video controls */
+.video-player-container video::-webkit-media-controls-panel {
+  background-image: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+}
+
+.video-player-container video::-webkit-media-controls-play-button,
+.video-player-container video::-webkit-media-controls-volume-slider,
+.video-player-container video::-webkit-media-controls-timeline {
+  filter: brightness(1.2);
+}
+
+/* Ensure video fills container while maintaining aspect ratio */
+.video-player-container video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+} 

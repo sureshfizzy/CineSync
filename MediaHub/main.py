@@ -7,7 +7,17 @@ import time
 import psutil
 import signal
 import socket
-import psutil
+import threading
+import traceback
+import io
+import time
+from dotenv import load_dotenv, find_dotenv
+
+# Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Append the parent directory to the system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,6 +29,10 @@ from MediaHub.processors.db_utils import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
+from MediaHub.utils.file_utils import resolve_symlink_to_source
+from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
+from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
+from MediaHub.utils.global_events import *
 
 db_initialized = False
 
@@ -29,12 +43,15 @@ LOCK_TIMEOUT = 3600
 
 # Set up global variables to track processes
 background_processes = []
-terminate_flag = threading.Event()
+
+# Ensure .env file exists before trying to load it
+if not ensure_env_file_exists():
+    print("Failed to create .env file. Continuing with environment variables only.")
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
 if not dotenv_path:
-    print(RED_COLOR + "Error: .env file not found in the parent directory." + RESET_COLOR)
+    print("Error: .env file not found in the parent directory.")
     exit(1)
 
 load_dotenv(dotenv_path)
@@ -54,25 +71,54 @@ def wait_for_mount():
 
         time.sleep(is_mount_check_interval())
 
-def initialize_db_with_mount_check():
-    """Initialize database after ensuring mount is available."""
-    global db_initialized
-
-    if not db_initialized:
-
+def check_mount_points():
+    """Check if all configured mount points are accessible."""
+    try:
         if is_rclone_mount_enabled():
-            wait_for_mount()
+            return check_rclone_mount()
+        return True
+    except Exception as e:
+        log_message(f"Error checking mount points: {e}", level="ERROR")
+        return False
 
+def initialize_db_with_mount_check():
+    """Initialize database with mount point verification."""
+    try:
+        # Only initialize if not already initialized
         initialize_db()
-        db_initialized = True
+
+        # Check if mount points are accessible
+        if is_rclone_mount_enabled() and not check_mount_points():
+            log_message("Mount points are not accessible. Please check your configuration.", level="ERROR")
+            return False
+        return True
+    except Exception as e:
+        log_message(f"Error during database initialization: {e}", level="ERROR")
+        return False
 
 def display_missing_files_with_mount_check(dest_dir):
     """Display missing files after ensuring mount is available."""
+    try:
+        if not dest_dir:
+            log_message("Destination directory not provided", level="ERROR")
+            return []
 
-    if is_rclone_mount_enabled():
-        wait_for_mount()
+        if is_rclone_mount_enabled():
+            try:
+                wait_for_mount()
+            except Exception as e:
+                log_message(f"Error waiting for mount: {str(e)}", level="ERROR")
+                return []
 
-    display_missing_files(dest_dir)
+        if not os.path.exists(dest_dir):
+            log_message(f"Destination directory does not exist: {dest_dir}", level="ERROR")
+            return []
+
+        return display_missing_files(dest_dir)
+    except Exception as e:
+        log_message(f"Error in display_missing_files_with_mount_check: {str(e)}", level="ERROR")
+        log_message(traceback.format_exc(), level="DEBUG")
+        return []
 
 def ensure_windows_temp_directory():
     """Create the C:\\temp directory if it does not exist on Windows."""
@@ -211,19 +257,71 @@ def handle_exit(signum, frame):
     log_message("Received shutdown signal, exiting gracefully", level="INFO")
     log_message("Terminating process and cleaning up lock file.", level="INFO")
 
-    terminate_flag.set()
+    set_shutdown()
+    time.sleep(0.5)
+
     terminate_subprocesses()
     remove_lock_file()
+
     os._exit(0)
 
-def setup_signal_handlers():
-    """Setup signal handlers for Linux and Windows."""
-    # Register handlers for both Windows and Unix signals
-    signal.signal(signal.SIGINT, handle_exit)
-    if platform.system() == 'Windows':
-        signal.signal(signal.SIGBREAK, handle_exit)
-    else:
-        signal.signal(signal.SIGTERM, handle_exit)
+def setup_process_priority():
+    """Set process priority to prevent overwhelming the system."""
+    try:
+        current_process = psutil.Process()
+        if platform.system() == 'Windows':
+            # Set to below normal priority on Windows
+            current_process.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+            log_message("Set process priority to BELOW_NORMAL", level="DEBUG")
+        else:
+            # Set to nice value 10 on Unix (lower priority)
+            current_process.nice(10)
+            log_message("Set process nice value to 10", level="DEBUG")
+    except Exception as e:
+        log_message(f"Could not set process priority: {e}", level="WARNING")
+
+def setup_cpu_affinity():
+    """Set CPU affinity to limit MediaHub to specific CPU cores."""
+    try:
+        from MediaHub.config.config import get_max_cores
+        max_cores = get_max_cores()
+        total_cores = psutil.cpu_count()
+
+        if max_cores < total_cores:
+            allowed_cores = list(range(max_cores))
+            current_process = psutil.Process()
+            current_process.cpu_affinity(allowed_cores)
+
+            log_message(f"CPU affinity set to cores {allowed_cores} (using {max_cores} of {total_cores} cores)", level="INFO")
+
+            for child in current_process.children(recursive=True):
+                try:
+                    child.cpu_affinity(allowed_cores)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        else:
+            log_message(f"Using all {total_cores} CPU cores (MAX_CORES={max_cores})", level="INFO")
+
+    except Exception as e:
+        log_message(f"Could not set CPU affinity: {e}", level="WARNING")
+
+def log_system_configuration():
+    """Log system configuration at startup."""
+
+    max_processes = get_max_processes()
+    log_message(f"MAX_PROCESSES configured to use {max_processes} workers for I/O operations", level="INFO")
+    log_message(f"Using {max_processes} worker threads for parallel processing", level="INFO")
+
+    max_cores = get_max_cores()
+    cpu_cores = psutil.cpu_count()
+    log_message(f"MAX_CORES configured to use {max_cores} cores (CPU cores available: {cpu_cores})", level="INFO")
+
+    # Log dashboard configuration
+    dashboard_enabled = is_dashboard_notifications_enabled()
+
+    if dashboard_enabled:
+        dashboard_timeout = get_dashboard_timeout()
+        dashboard_check_interval = get_dashboard_check_interval()
 
 def start_polling_monitor():
     """Start the polling monitor as a subprocess and track its PID."""
@@ -239,6 +337,16 @@ def start_polling_monitor():
     try:
         python_command = 'python' if platform.system() == 'Windows' else 'python3'
         process = subprocess.Popen([python_command, POLLING_MONITOR_PATH])
+
+        try:
+            current_process = psutil.Process()
+            affinity = current_process.cpu_affinity()
+            child_process = psutil.Process(process.pid)
+            child_process.cpu_affinity(affinity)
+            log_message(f"Set CPU affinity for polling monitor to cores {affinity}", level="DEBUG")
+        except Exception as e:
+            log_message(f"Could not set CPU affinity for polling monitor: {e}", level="DEBUG")
+
         background_processes.append(process)
 
         with open(MONITOR_PID_FILE, 'w') as f:
@@ -250,7 +358,7 @@ def start_polling_monitor():
             if process.poll() is not None:
                 log_message(f"Polling monitor exited with code {process.returncode}", level="INFO")
                 break
-            time.sleep(1)
+            time.sleep(0.1)
 
     except Exception as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
@@ -296,39 +404,70 @@ def is_port_in_use(port):
 
     return False
 
+def check_dashboard_availability():
+    """Check dashboard availability and log status."""
+    try:
+
+        if not is_dashboard_notifications_enabled():
+            log_message("Dashboard notifications are disabled", level="INFO")
+            return False
+
+        # Force a fresh check at startup
+        force_dashboard_recheck()
+
+        if is_dashboard_available():
+            log_message("Dashboard is available for notifications", level="INFO")
+            return True
+        else:
+            log_message("Dashboard is not available - notifications will be cached to avoid delays", level="WARNING")
+            return False
+
+    except Exception as e:
+        log_message(f"Error checking dashboard availability: {e}", level="ERROR")
+        return False
+
 def start_webdav_server():
     """Start WebDavHub server if enabled."""
     global background_processes
 
-    if cinesync_webdav():
-        webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
-        if platform.system() == 'Windows':
-            webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
-        else:
-            webdav_script = os.path.join(webdav_dir, 'cinesync')
-        webdav_port = int(os.getenv('WEBDAV_PORT'))
+    # Always start CineSync server
+    webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
+    if platform.system() == 'Windows':
+        webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
+    else:
+        webdav_script = os.path.join(webdav_dir, 'cinesync')
+    webdav_port = int(os.getenv('CINESYNC_API_PORT'))
 
-        # Check if the WebDAV server is already running on the specified port
-        if is_port_in_use(webdav_port):
-            log_message(f"WebDavHub server is already running on port {webdav_port}", level="INFO")
-            return
+    # Check if the CineSync server is already running on the specified port
+    if is_port_in_use(webdav_port):
+        log_message(f"CineSync server is already running on port {webdav_port}", level="INFO")
+        # Check dashboard availability after confirming server is running
+        check_dashboard_availability()
+        return
 
-        if os.path.exists(webdav_script):
-            log_message("Starting WebDavHub server...", level="INFO")
+    if os.path.exists(webdav_script):
+        log_message("Starting CineSync server...", level="INFO")
 
-            try:
-                # Change to the WebDavHub directory and execute the script
-                current_dir = os.getcwd()
-                os.chdir(webdav_dir)
-                webdav_process = subprocess.Popen(["./" + os.path.basename(webdav_script)])
-                background_processes.append(webdav_process)
-                os.chdir(current_dir)
+        try:
+            # Change to the WebDavHub directory and execute the script
+            current_dir = os.getcwd()
+            os.chdir(webdav_dir)
+            webdav_process = subprocess.Popen(["./" + os.path.basename(webdav_script)])
+            background_processes.append(webdav_process)
+            os.chdir(current_dir)
 
-                log_message(f"WebDavHub server started with PID: {webdav_process.pid}", level="INFO")
-            except Exception as e:
-                log_message(f"Failed to start WebDavHub server: {e}", level="ERROR")
-        else:
-            log_message(f"WebDavHub executable not found at: {webdav_script}", level="ERROR")
+            log_message(f"CineSync server started with PID: {webdav_process.pid}", level="INFO")
+
+            # Wait a moment for server to start, then check availability
+            time.sleep(2)
+            check_dashboard_availability()
+
+        except Exception as e:
+            log_message(f"Failed to start CineSync server: {e}", level="ERROR")
+    else:
+        log_message(f"CineSync executable not found at: {webdav_script}", level="ERROR")
+        # Check if dashboard is available anyway (might be running externally)
+        check_dashboard_availability()
 
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
@@ -339,10 +478,14 @@ def main(dest_dir):
     parser.add_argument("--force-movie", action="store_true", help="Force process file as a movie regardless of naming pattern")
     parser.add_argument("--force-extra", action="store_true", help="Force an extra file to be considered as a Movie/Show")
     parser.add_argument("--disable-monitor", action="store_true", help="Disable polling monitor and symlink cleanup processes")
+    parser.add_argument("--monitor-only", action="store_true", help="Start only the polling monitor without processing existing files")
     parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
     parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
     parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
     parser.add_argument("--season-episode", type=str, help="Specify season and episode numbers in format SxxExx (e.g., S03E15)")
+    parser.add_argument("--skip", action="store_true", help="Skip processing the file and mark it as 'Skipped by user' in the database")
+    parser.add_argument("--batch-apply", action="store_true", help="Apply the first manual selection to all subsequent files in the batch")
+    parser.add_argument("--manual-search", action="store_true", help="Allow manual TMDB search when automatic search fails")
 
     db_group = parser.add_argument_group('Database Management')
     db_group.add_argument("--reset", action="store_true",
@@ -361,12 +504,21 @@ def main(dest_dir):
                          help="Search for files in database matching the given pattern")
     db_group.add_argument("--optimize", action="store_true",
                          help="Optimize database indexes and analyze tables")
+    db_group.add_argument("--update-database", action="store_true",
+                         help="Update database entries using TMDB API calls")
 
     args = parser.parse_args()
 
     # Parse season and episode numbers if provided
     season_number, episode_number = parse_season_episode(args.season_episode)
 
+    # Resolve symlink if single_path is provided
+    if args.single_path:
+        original_path = args.single_path
+        resolved_path = resolve_symlink_to_source(args.single_path)
+        if resolved_path != original_path:
+            log_message(f"Resolved symlink path: {original_path} -> {resolved_path}", level="INFO")
+            args.single_path = resolved_path
 
     # Ensure --force-show and --force-movie aren't used together
     if args.force_show and args.force_movie:
@@ -397,6 +549,10 @@ def main(dest_dir):
         optimize_database()
         return
 
+    if args.update_database:
+        update_database_to_new_format()
+        return
+
     if args.reset:
         if input("Are you sure you want to reset the database? This will delete all entries. (Y/N): ").lower() == 'y':
             reset_database()
@@ -412,11 +568,29 @@ def main(dest_dir):
             log_message(f"Archive DB Size: {stats['archive_db_size']:.2f} MB", level="INFO")
         return
 
+    # Handle monitor-only mode
+    if args.monitor_only:
+        log_message("Starting in monitor-only mode", level="INFO")
+        # Check dashboard availability even in monitor-only mode
+        check_dashboard_availability()
+        # Initialize database
+        if not initialize_db_with_mount_check():
+            log_message("Failed to initialize database. Exiting.", level="ERROR")
+            return
+        # Start only the polling monitor
+        start_polling_monitor()
+        return
+
     if not os.path.exists(LOCK_FILE):
         # Wait for mount if needed and initialize database
-        initialize_db_with_mount_check()
+        if not initialize_db_with_mount_check():
+            log_message("Failed to initialize database. Exiting.", level="ERROR")
+            return
 
-        if not args.disable_monitor:
+        # Skip heavy background processes for single file operations
+        is_single_file_operation = args.single_path and os.path.isfile(args.single_path) if args.single_path else False
+
+        if not args.disable_monitor and not is_single_file_operation:
             log_message("Starting background processes...", level="INFO")
             log_message("RealTime-Monitoring is enabled", level="INFO")
 
@@ -426,45 +600,88 @@ def main(dest_dir):
 
             # Function to run the missing files check and call the callback when done
             def display_missing_files_with_callback(dest_dir, callback):
-                display_missing_files_with_mount_check(dest_dir)
-                callback()
+                try:
+                    if not dest_dir or not os.path.exists(dest_dir):
+                        log_message(f"Invalid or non-existent destination directory: {dest_dir}", level="ERROR")
+                        return
+                    missing_files_list = display_missing_files_with_mount_check(dest_dir)
+
+                    if missing_files_list:
+                        log_message(f"Found {len(missing_files_list)} missing files. Attempting to recreate symlinks.", level="INFO")
+                        # Get source directories for create_symlinks
+                        src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+                        if not src_dirs_str:
+                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
+                            return
+                        src_dirs = src_dirs_str.split(',')
+                        if not src_dirs:
+                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
+                            return
+
+                        for source_file_path, expected_dest_path in missing_files_list:
+                            log_message(f"Attempting to recreate symlink for missing file: {source_file_path}", level="INFO")
+                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, single_path=source_file_path, force=True, mode='create', auto_select=True
+                            )
+                    else:
+                        log_message("No missing files found.", level="INFO")
+
+                    callback()
+                except Exception as e:
+                    log_message(f"Error in display_missing_files_with_callback: {str(e)}", level="ERROR")
+                    log_message(traceback.format_exc(), level="DEBUG")
 
             # Run missing files check in a separate thread
-            missing_files_thread = threading.Thread(target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
-            missing_files_thread.daemon = False
+            missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
+            missing_files_thread.daemon = True
             missing_files_thread.start()
 
             #Symlink cleanup
             cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
-            cleanup_thread.daemon = False
+            cleanup_thread.daemon = True
             cleanup_thread.start()
+        elif is_single_file_operation:
+            log_message("Single file operation detected - skipping background processes and dashboard checks for faster startup", level="INFO")
         else:
             log_message("RealTime-Monitoring is disabled", level="INFO")
+            # Check dashboard availability even when monitoring is disabled
+            check_dashboard_availability()
 
-    src_dirs, dest_dir = get_directories()
-    if not src_dirs or not dest_dir:
+    src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+    dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
+    if not src_dirs_str or not dest_dir:
         log_message("Source or destination directory not set in environment variables.", level="ERROR")
         exit(1)
+    src_dirs = src_dirs_str.split(',')
 
     # Wait for mount before creating symlinks if needed
     if is_rclone_mount_enabled() and not check_rclone_mount():
         wait_for_mount()
     try:
-        # Start RealTime-Monitoring in main thread if not disabled
-        if not args.disable_monitor:
+        # Check if this is a single file operation for optimization
+        is_single_file_operation = args.single_path and os.path.isfile(args.single_path) if args.single_path else False
+
+        # Start RealTime-Monitoring in main thread if not disabled and not single file operation
+        if not args.disable_monitor and not is_single_file_operation:
             start_webdav_server()
             log_message("Starting RealTime-Monitoring...", level="INFO")
             monitor_thread = threading.Thread(target=start_polling_monitor)
-            monitor_thread.daemon = False
+            monitor_thread.daemon = True
             monitor_thread.start()
             time.sleep(2)
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
-            monitor_thread.join()
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
+
+            while monitor_thread.is_alive() and not terminate_flag.is_set():
+                time.sleep(0.1)
+
+            if terminate_flag.is_set():
+                log_message("Termination requested, stopping monitor thread", level="INFO")
         else:
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra)
+            if is_single_file_operation:
+                log_message("Single file operation - skipping monitoring services for faster processing", level="INFO")
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
@@ -476,21 +693,41 @@ if __name__ == "__main__":
     # Set up signal handlers before anything else
     setup_signal_handlers()
 
+    # Set process priority to be system-friendly
+    setup_process_priority()
+
+    # Set CPU affinity to limit core usage
+    setup_cpu_affinity()
+
+    # Log system configuration at startup
+    log_system_configuration()
+
     # Get directories and start main process
-    src_dirs, dest_dir = get_directories()
+    src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
+    dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
+    if not src_dirs_str or not dest_dir:
+        log_message("Source or destination directory not set.", level="ERROR")
+        exit(1)
+    src_dirs = src_dirs_str.split(',')
 
     try:
         main(dest_dir)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
-        terminate_flag.set()
+        set_shutdown()
+        terminate_subprocesses()
+        remove_lock_file()
+        sys.exit(0)
+    except BrokenPipeError:
+        log_message("Broken pipe error detected, cleaning up and exiting...", level="INFO")
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(0)
     except Exception as e:
         log_message(f"Unhandled exception: {str(e)}", level="ERROR")
         log_message(traceback.format_exc(), level="DEBUG")
-        terminate_flag.set()
+        set_shutdown()
         terminate_subprocesses()
         remove_lock_file()
         sys.exit(1)

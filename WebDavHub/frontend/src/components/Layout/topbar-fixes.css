@@ -1,0 +1,30 @@
+/* Fixed header CSS fixes for mobile */
+
+/* Ensure the AppBar stays fixed on mobile devices */
+.MuiAppBar-positionFixed {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1100 !important;
+  transform: none !important;
+  -webkit-transform: none !important;
+  will-change: auto !important;
+}
+
+/* Prevent any parent transforms from affecting fixed positioning */
+.MuiAppBar-root {
+  transform: none !important;
+  -webkit-transform: none !important;
+}
+
+/* Ensure proper stacking context for mobile */
+@media (max-width: 600px) {
+  .MuiAppBar-positionFixed {
+    position: fixed !important;
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+}

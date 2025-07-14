@@ -5,6 +5,13 @@ __pycache__/
 
 # Ignore other potential bytecode files
 *.pyd
-db
+/db
+cache/
 logs
 Screenshots
+WebDavHub/frontend/node_modules/
+WebDavHub/data/
+WebDavHub/cinesync
+WebDavHub/cinesync.exe
+WebDavHub/frontend/dist/
+

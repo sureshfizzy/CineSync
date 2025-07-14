@@ -6,11 +6,15 @@ import urllib.parse
 import logging
 import unicodedata
 import difflib
+import time
+from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import get_api_key, is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, clean_query_movie, advanced_clean_query
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
+from MediaHub.api.api_key_manager import get_api_key, check_api_key
+from MediaHub.api.language_iso_codes import get_iso_code
 
 _api_cache = {}
 
@@ -21,129 +25,200 @@ api_warning_logged = False
 # Disable urllib3 debug logging
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-def check_api_key():
-    global api_key, api_warning_logged
+# Get API Language
+preferred_language = tmdb_api_language()
+language_iso = get_iso_code(preferred_language)
+
+# Create a session for connection pooling and better performance
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'MediaHub/1.0',
+    'Accept': 'application/json'
+})
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+adapter = HTTPAdapter(
+    pool_connections=50,
+    pool_maxsize=50,
+    max_retries=Retry(
+        total=3,
+        backoff_factor=0.1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+)
+
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
+# ============================================================================
+# TMDB DATA FETCHING FUNCTIONS
+# ============================================================================
+
+def get_movie_data(tmdb_id):
+    """Get all movie data (external IDs, genres, keywords, ratings) in one optimized API call."""
+    global api_key
     if not api_key:
-        return False
-    url = "https://api.themoviedb.org/3/configuration"
-    params = {'api_key': api_key}
+        api_key = get_api_key()
+
+    if not api_key:
+        log_message("API key is missing. Cannot fetch movie data.", level="ERROR")
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
+
+    params = {
+        'api_key': api_key,
+        'language': language_iso,
+        'append_to_response': 'external_ids,keywords,release_dates,belongs_to_collection'
+    }
+
     try:
-        response = requests.get(url, params=params)
+        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
+        data = response.json()
+
+        # Extract external IDs
+        external_ids = data.get('external_ids', {})
+        imdb_id = external_ids.get('imdb_id', '')
+
+        # Extract collection information
+        collection_data = data.get('belongs_to_collection')
+        collection_name = collection_data.get('name') if collection_data else None
+
+        # Extract and check genres for anime
+        genres = data.get('genres', [])
+        language = data.get('original_language', '')
+        is_anime_genre = check_anime_genre(genres, language)
+
+        # Extract keywords for family content detection
+        keywords_data = data.get('keywords', {})
+
+        # Extract release dates for content rating
+        release_dates_data = data.get('release_dates', {})
+
+        # Check for family-friendly content
+        has_family_indicators = has_family_content_indicators(data, keywords_data, 'movie')
+
+        # Get content rating from release dates
+        us_rating = None
+        other_rating = None
+
+        for result in release_dates_data.get('results', []):
+            country = result.get('iso_3166_1', '')
+            for release in result.get('release_dates', []):
+                certification = release.get('certification', '').strip()
+                if certification:
+                    if country == 'US':
+                        us_rating = certification
+                        break
+                    elif not other_rating:
+                        other_rating = certification
+
+            if us_rating:
+                break
+
+        rating = us_rating or other_rating
+        has_appropriate_rating = is_family_friendly_rating(rating)
+        is_kids_content = has_appropriate_rating and has_family_indicators
+
+        return {
+            'imdb_id': imdb_id,
+            'collection_name': collection_name,
+            'is_anime_genre': is_anime_genre,
+            'is_kids_content': is_kids_content
+        }
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"TMDB movie data fetch failed for movie ID {tmdb_id} - Network error: {e}", level="ERROR")
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
+
+def get_show_data(tmdb_id):
+    """Get all TV show data (external IDs, genres, keywords, ratings) in one optimized API call."""
+    global api_key
+    if not api_key:
+        api_key = get_api_key()
+
+    if not api_key:
+        log_message("API key is missing. Cannot fetch TV data.", level="ERROR")
+        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False}
+
+    params = {
+        'api_key': api_key,
+        'language': language_iso,
+        'append_to_response': 'external_ids,keywords,content_ratings'
+    }
+
+    try:
+        url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+        response = session.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract external IDs
+        external_ids = data.get('external_ids', {})
+
+        # Extract and check genres for anime
+        genres = data.get('genres', [])
+        language = data.get('original_language', '')
+        is_anime_genre = check_anime_genre(genres, language)
+
+        # Extract keywords for family content detection
+        keywords_data = data.get('keywords', {})
+
+        # Extract content ratings
+        content_ratings_data = data.get('content_ratings', {})
+
+        # Check for family-friendly content
+        has_family_indicators = has_family_content_indicators(data, keywords_data, 'tv')
+
+        # Get content rating from content ratings
+        us_rating = None
+        other_rating = None
+
+        for result in content_ratings_data.get('results', []):
+            country = result.get('iso_3166_1', '')
+            certification = result.get('rating', '').strip()
+            if certification:
+                if country == 'US':
+                    us_rating = certification
+                    break
+                elif not other_rating:
+                    other_rating = certification
+
+        rating = us_rating or other_rating
+        has_appropriate_rating = is_family_friendly_rating(rating)
+        is_kids_content = has_appropriate_rating and has_family_indicators
+
+        return {
+            'external_ids': external_ids,
+            'is_anime_genre': is_anime_genre,
+            'is_kids_content': is_kids_content
+        }
+
+    except requests.exceptions.RequestException as e:
+        log_message(f"TMDB TV data fetch failed for TV ID {tmdb_id} - Network error: {e}", level="ERROR")
+        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False}
+
+def check_anime_genre(genres, language):
+    """Check if content is anime based on genres and language."""
+    # Primary anime detection: Animation genre + Japanese language
+    is_animation = any(genre.get('id') == 16 for genre in genres)
+    is_japanese = language == 'ja'
+
+    if is_animation and is_japanese:
         return True
-    except requests.exceptions.RequestException as e:
-        if not api_warning_logged:
-            log_message(f"API key validation failed: {e}", level="ERROR")
-            api_warning_logged = True
-        return False
 
-def get_external_ids(item_id, media_type):
-    url = f"https://api.themoviedb.org/3/{media_type}/{item_id}/external_ids"
-    params = {'api_key': api_key}
+    # Secondary check: explicit "anime" keyword in genre names (not "animation")
+    has_anime_keyword = any(
+        'anime' in genre.get('name', '').lower() for genre in genres
+    )
 
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching external IDs: {e}", level="ERROR")
-        return {}
+    return has_anime_keyword
 
-def get_movie_genres(movie_id):
-    """
-    Fetch genre information and other metadata for a movie from TMDb API.
-    Parameters:
-    movie_id (int): TMDb movie ID
-    Returns:
-    dict: Dictionary containing genres, language, and anime status
-    """
-    api_key = get_api_key()
-    if not api_key:
-        log_message("TMDb API key not found.", level="ERROR")
-        return None
-
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {'api_key': api_key}
-
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        movie_details = response.json()
-
-        genres = [genre['name'] for genre in movie_details.get('genres', [])]
-        language = movie_details.get('original_language', '')
-
-        keywords_url = f"https://api.themoviedb.org/3/movie/{movie_id}/keywords"
-        keywords_response = requests.get(keywords_url, params=params)
-        keywords_response.raise_for_status()
-        keywords = [kw['name'].lower() for kw in keywords_response.json().get('keywords', [])]
-
-        is_anime = any([
-            'anime' in movie_details.get('title', '').lower(),
-            'animation' in genres and language == 'ja',
-            'anime' in keywords,
-            'japanese animation' in keywords
-        ])
-
-        return {
-            'genres': genres,
-            'language': language,
-            'is_anime_genre': is_anime
-        }
-
-    except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching movie genres: {e}", level="ERROR")
-        return None
-
-def get_show_genres(show_id):
-    """
-    Fetch genre information and other metadata for a TV show from TMDb API.
-    Parameters:
-    show_id (int): TMDb show ID
-    Returns:
-    dict: Dictionary containing genres, language, and anime status
-    """
-    api_key = get_api_key()
-    if not api_key:
-        log_message("TMDb API key not found.", level="ERROR")
-        return None
-
-    url = f"https://api.themoviedb.org/3/tv/{show_id}"
-    params = {'api_key': api_key}
-
-    try:
-        # Get show details including genres
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        show_details = response.json()
-
-        genres = [genre['name'] for genre in show_details.get('genres', [])]
-        language = show_details.get('original_language', '')
-
-        # Get keywords for the show
-        keywords_url = f"https://api.themoviedb.org/3/tv/{show_id}/keywords"
-        keywords_response = requests.get(keywords_url, params=params)
-        keywords_response.raise_for_status()
-        keywords = [kw['name'].lower() for kw in keywords_response.json().get('results', [])]
-
-        # Check if it's an anime based on multiple criteria
-        is_anime = any([
-            'anime' in show_details.get('name', '').lower(),
-            'animation' in genres and language == 'ja',
-            'anime' in keywords,
-            'japanese animation' in keywords,
-            any('anime' in keyword for keyword in keywords)
-        ])
-
-        return {
-            'genres': genres,
-            'language': language,
-            'is_anime_genre': is_anime
-        }
-
-    except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching TV show genres: {e}", level="ERROR")
-        return None
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False):
     """
@@ -175,8 +250,8 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
     try:
         # First try direct episode lookup
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
-        params = {'api_key': api_key}
-        response = requests.get(url, params=params)
+        params = {'api_key': api_key, 'language': language_iso}
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
@@ -185,20 +260,24 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         if len(episode_name) > max_length:
             episode_name = episode_name[:max_length].rsplit(' ', 1)[0] + '...'
 
+        # Sanitize episode name for Windows compatibility
+        if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
+            episode_name = sanitize_windows_filename(episode_name)
+
         formatted_name = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
         log_message(f"Direct episode lookup successful: {formatted_name}", level="DEBUG")
         return formatted_name, season_number, episode_number
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
-            log_message(f"Episode {episode_number} not found for season {season_number}. Using AniDB-style mapping.", level="INFO")
+            log_message(f"Episode S{season_number}E{episode_number} not found in TMDB, using AniDB-style mapping", level="INFO")
             return map_absolute_episode(show_id, episode_number, api_key, max_length)
         else:
-            log_message(f"HTTP error occurred: {e}", level="ERROR")
+            log_message(f"TMDB episode fetch failed - HTTP {response.status_code}: {e}", level="ERROR")
             return None, None, None
 
     except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching episode data: {e}", level="ERROR")
+        log_message(f"TMDB episode fetch failed - Network error: {e}", level="ERROR")
         return None, None, None
 
 def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
@@ -222,7 +301,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
     show_params = {'api_key': api_key}
 
     try:
-        show_response = requests.get(show_url, params=show_params)
+        show_response = session.get(show_url, params=show_params, timeout=10)
         show_response.raise_for_status()
         show_data = show_response.json()
 
@@ -237,7 +316,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         for season in range(1, total_seasons + 1):
             try:
                 season_detail_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}"
-                season_detail_response = requests.get(season_detail_url, params={'api_key': api_key})
+                season_detail_response = session.get(season_detail_url, params={'api_key': api_key}, timeout=10)
                 season_detail_response.raise_for_status()
                 season_detail = season_detail_response.json()
 
@@ -262,7 +341,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 try:
                     # Try to get episode with the exact absolute number
                     direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{absolute_episode}"
-                    direct_response = requests.get(direct_url, params={'api_key': api_key})
+                    direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
                     # If successful, we found our episode!
                     if direct_response.status_code == 200:
@@ -271,6 +350,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                         if direct_episode_name and len(direct_episode_name) > max_length:
                             direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+                        # Sanitize episode name for Windows compatibility
+                        if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                            direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
                         formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                         log_message(f"Found direct episode match! Episode {absolute_episode} exists in season {season}", level="DEBUG")
@@ -303,7 +386,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 # Get the episode name
                 try:
                     mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{current_episode}"
-                    mapped_response = requests.get(mapped_url, params={'api_key': api_key})
+                    mapped_response = session.get(mapped_url, params={'api_key': api_key}, timeout=10)
                     mapped_response.raise_for_status()
                     mapped_episode_data = mapped_response.json()
                     mapped_episode_name = mapped_episode_data.get('name')
@@ -311,6 +394,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     # Trim long episode names
                     if mapped_episode_name and len(mapped_episode_name) > max_length:
                         mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+                    # Sanitize episode name for Windows compatibility
+                    if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                        mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
 
                     formatted_name = f"S{season:02d}E{current_episode:02d} - {mapped_episode_name}"
                     log_message(f"Mapped to: {formatted_name}", level="DEBUG")
@@ -329,7 +416,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         for season in range(total_seasons, 0, -1):
             try:
                 direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season}/episode/{absolute_episode}"
-                direct_response = requests.get(direct_url, params={'api_key': api_key})
+                direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
                 if direct_response.status_code == 200:
                     direct_episode_data = direct_response.json()
@@ -337,6 +424,10 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                     if direct_episode_name and len(direct_episode_name) > max_length:
                         direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+                    # Sanitize episode name for Windows compatibility
+                    if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                        direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
                     formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                     log_message(f"Second attempt found direct episode match! S{season}E{absolute_episode}", level="DEBUG")
@@ -364,13 +455,17 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         # Try to get episode name for final fallback
         try:
             mapped_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{last_season}/episode/{fallback_episode}"
-            mapped_response = requests.get(mapped_url, params={'api_key': api_key})
+            mapped_response = session.get(mapped_url, params={'api_key': api_key}, timeout=10)
             mapped_response.raise_for_status()
             mapped_episode_data = mapped_response.json()
             mapped_episode_name = mapped_episode_data.get('name', 'Unknown Episode')
 
             if mapped_episode_name and len(mapped_episode_name) > max_length:
                 mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
+
+            # Sanitize episode name for Windows compatibility
+            if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
 
             formatted_name = f"S{last_season:02d}E{fallback_episode:02d} - {mapped_episode_name}"
             return formatted_name, last_season, fallback_episode
@@ -387,11 +482,16 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         try:
             # Try with season 1 as default
             direct_url = f"https://api.themoviedb.org/3/tv/{show_id}/season/1/episode/{absolute_episode}"
-            direct_response = requests.get(direct_url, params={'api_key': api_key})
+            direct_response = session.get(direct_url, params={'api_key': api_key}, timeout=10)
 
             if direct_response.status_code == 200:
                 direct_episode_data = direct_response.json()
                 direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
+
+                # Sanitize episode name for Windows compatibility
+                if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
+                    direct_episode_name = sanitize_windows_filename(direct_episode_name)
+
                 formatted_name = f"S01E{absolute_episode:02d} - {direct_episode_name}"
                 log_message(f"Final attempt found match at S01E{absolute_episode}", level="INFO")
                 return formatted_name, 1, int(absolute_episode)
@@ -402,50 +502,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         log_message(f"All approaches failed. Using S01E{absolute_episode} as last resort", level="WARNING")
         return f"S01E{absolute_episode:02d}", 1, int(absolute_episode)
 
-def get_movie_collection(movie_id=None, movie_title=None, year=None):
-    api_key = get_api_key()
-    if not api_key:
-        return None
 
-    if movie_id:
-        url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-        params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
-    elif movie_title and year:
-        search_url = "https://api.themoviedb.org/3/search/movie"
-        search_params = {
-            'api_key': api_key,
-            'query': movie_title,
-            'primary_release_year': year
-        }
-        try:
-            search_response = requests.get(search_url, params=search_params)
-            search_response.raise_for_status()
-            search_results = search_response.json().get('results', [])
-
-            if search_results:
-                movie_id = search_results[0]['id']
-                url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-                params = {'api_key': api_key, 'append_to_response': 'belongs_to_collection'}
-            else:
-                log_message(f"No movie found for {movie_title} ({year})", level="WARNING")
-                return None
-        except requests.exceptions.RequestException as e:
-            log_message(f"Error searching for movie: {e}", level="ERROR")
-            return None
-    else:
-        log_message("Either movie_id or (movie_title and year) must be provided", level="ERROR")
-        return None
-
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        movie_data = response.json()
-        collection = movie_data.get('belongs_to_collection')
-        if collection:
-            return collection['name'], collection['id']
-    except requests.exceptions.RequestException as e:
-        log_message(f"Error fetching movie collection data: {e}", level="ERROR")
-    return None
 
 def calculate_score(result, query, year=None):
     """
@@ -458,7 +515,7 @@ def calculate_score(result, query, year=None):
     year (str): Optional year to match against
 
     Returns:
-    float: Match score between 0 and 100
+    float: Match score between 0 and 150 (increased to accommodate better exact match bonuses)
     """
     score = 0
     query = query.lower().strip()
@@ -475,46 +532,60 @@ def calculate_score(result, query, year=None):
         first_air_date = result.get('first_air_date', '')
         result_year = first_air_date.split('-')[0] if first_air_date else None
 
+    # Title matching
+    exact_match_bonus = 0
     if query == title:
-        score += 50
+        score += 60
+        exact_match_bonus = 25
     elif query == original_title:
-        score += 50
+        score += 45
+        exact_match_bonus = 15
     elif query in title or title in query:
-        score += 20
+        score += 25
     elif query in original_title or original_title in query:
-        score += 20
+        score += 30
 
-    # Title similarity calculation
-    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 25
-    score += title_similarity
+    # Title similarity calculation (20 points)
+    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 20
+    original_title_similarity = difflib.SequenceMatcher(None, query, original_title).ratio() * 20
+    score += max(title_similarity, original_title_similarity)
 
-    # Year match scoring
+    # Year match scoring (20 points)
     if year and result_year:
         if result_year == str(year):
-            score += 30
+            score += 20
         elif abs(int(result_year) - int(year)) <= 1:
-            score += 15
+            score += 10
 
-    # Language and country bonus (15 points)
-    if result.get('original_language') == 'en':
-        score += 10
+    # Language and country bonus
+    popular_languages = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'hi', 'pt', 'it', 'ru']
+    if result.get('original_language') in popular_languages:
+        score += 2
 
-    if result.get('origin_country') and any(country in ['GB', 'US', 'CA', 'AU', 'NZ'] for country in result.get('origin_country')):
-        score += 5
-
-    # Popularity bonus (up to 15 points)
+    # Popularity bonus
     popularity = result.get('popularity', 0)
-    if popularity > 0:
-        # Normalize popularity score (0-15 points)
-        popularity_score = min(15, (popularity / 100) * 15)
-        score += popularity_score
+    if popularity > 100:
+        score += 30 + min((popularity - 100) * 0.1, 20)
+    elif popularity > 50:
+        score += 25 + (popularity - 50) * 0.2
+    elif popularity > 25:
+        score += 20 + (popularity - 25) * 0.2
+    elif popularity > 15:
+        score += 15 + (popularity - 15) * 0.3
+    elif popularity > 10:
+        score += 10 + (popularity - 10) * 0.6
+    elif popularity > 5:
+        score += 5 + (popularity - 5) * 0.8
+    elif popularity > 1:
+        score += popularity * 1.0
 
-    query_words = set(query.split())
-    title_words = set(title.split())
-    matching_words = query_words.intersection(title_words)
-    if matching_words:
-        word_match_score = min(10, (len(matching_words) / len(query_words)) * 10)
-        score += word_match_score
+    # Penalize shows with 0 votes (suspicious data quality)
+    vote_count = result.get('vote_count', 0)
+    if vote_count == 0:
+        score -= 5
+
+    # Apply exact match bonus
+    score += exact_match_bonus
 
     return score
 
@@ -529,7 +600,7 @@ def get_show_seasons(tmdb_id):
     params = {'api_key': api_key}
 
     try:
-        response = requests.get(url, params=params)
+        response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         show_data = response.json()
         return show_data.get('seasons', [])
@@ -620,7 +691,7 @@ def get_available_episodes(tmdb_id, season_number, api_key):
     episodes_params = {'api_key': api_key}
 
     try:
-        episodes_response = requests.get(episodes_url, params=episodes_params)
+        episodes_response = session.get(episodes_url, params=episodes_params, timeout=10)
         episodes_response.raise_for_status()
         season_data = episodes_response.json()
         return season_data.get('episodes', [])
@@ -731,7 +802,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
 
     # Helper function to format show name for the OS
     if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
-        show_name = original_show_name.replace(':', ' -')
+        show_name = sanitize_windows_filename(original_show_name)
     else:
         show_name = original_show_name
 
@@ -739,10 +810,11 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
     tmdb_id = chosen_show.get('id') if not tmdb_id else tmdb_id
 
-    # Get external IDs and genre information
-    external_ids = get_external_ids(tmdb_id, 'tv')
-    genre_info = get_show_genres(tmdb_id)
-    is_anime_genre = genre_info.get('is_anime_genre', False)
+    # Get all TV show data in one optimized API call
+    tv_data = get_show_data(tmdb_id)
+    external_ids = tv_data.get('external_ids', {})
+    is_anime_genre = tv_data.get('is_anime_genre', False)
+    is_kids_content = tv_data.get('is_kids_content', False)
 
     # Handle season and episode selection
     new_season_number = None
@@ -762,7 +834,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Invalid season number provided: {season_number}", level="ERROR")
             new_season_number = None
 
-    if episode_number is not None:
+    if episode_number is not None and not is_extra:
         try:
             new_episode_number = int(episode_number)
             log_message(f"Using identified episode number: {new_episode_number}", level="DEBUG")
@@ -814,4 +886,85 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     else:
         proper_name = f"{show_name} ({show_year}) {{tmdb-{tmdb_id}}}"
 
-    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id
+    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content
+
+def has_family_content_indicators(details_data, keywords_data, media_type):
+    """Check if content has family-related genres, keywords, or other indicators."""
+
+    # Family-related genre IDs from TMDB
+    family_genre_ids = [
+        10751,  # Family
+        16,     # Animation
+    ]
+
+    # Check genres
+    genres = details_data.get('genres', [])
+
+    # Check if it has explicit Family genre (10751)
+    has_family_genre = any(genre.get('id') == 10751 for genre in genres)
+    if has_family_genre:
+        return True
+
+    # For Animation genre, check if it's anime - if so, don't auto-classify as family
+    has_animation_genre = any(genre.get('id') == 16 for genre in genres)
+    if has_animation_genre:
+        language = details_data.get('original_language', '')
+        is_anime = check_anime_genre(genres, language)
+        if not is_anime:  # Only non-anime animation gets family treatment
+            return True
+
+    # Kids-specific keywords
+    kids_keywords = [
+        'children', 'kids', 'child', 'children\'s film', 'children\'s movie',
+        'children\'s television', 'kids show', 'preschool', 'educational',
+        'disney', 'pixar', 'dreamworks', 'nickelodeon', 'cartoon network',
+        'talking animals', 'fairy tale', 'bedtime story', 'nursery rhyme'
+    ]
+
+    # Check keywords
+    if media_type == 'movie':
+        keywords_list = keywords_data.get('keywords', [])
+    else:
+        keywords_list = keywords_data.get('results', [])
+
+    for keyword in keywords_list:
+        keyword_name = keyword.get('name', '').lower()
+        for kids_keyword in kids_keywords:
+            if kids_keyword in keyword_name:
+                return True
+
+    # Check if it's an animated movie/show
+    for genre in genres:
+        if genre.get('id') == 16:
+            title = details_data.get('title' if media_type == 'movie' else 'name', '').lower()
+            overview = details_data.get('overview', '').lower()
+
+            family_title_indicators = ['kids', 'children', 'family', 'junior', 'little', 'baby']
+            for indicator in family_title_indicators:
+                if indicator in title or indicator in overview:
+                    return True
+
+    return False
+
+def is_family_friendly_rating(rating):
+    """Determine if a content rating is suitable for kids/family viewing."""
+    if not rating:
+        return False
+
+    rating = rating.upper().strip()
+
+    # US Movie ratings that could be family-friendly
+    family_movie_ratings = ['G', 'PG']
+
+    # US TV ratings that are reliable for kids content
+    family_tv_ratings = ['TV-Y', 'TV-Y7', 'TV-Y7-FV', 'TV-G', 'TV-PG']
+
+    # UK ratings that could be family-friendly
+    uk_family_ratings = ['U', 'PG']
+
+    # Other international family-friendly ratings
+    other_family_ratings = ['0+', '6+', 'ALL', 'GENERAL', 'FAMILY']
+
+    all_family_ratings = family_movie_ratings + family_tv_ratings + uk_family_ratings + other_family_ratings
+
+    return rating in all_family_ratings

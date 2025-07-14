@@ -49,7 +49,8 @@ def refresh_plex_for_file(file_path: str) -> None:
     file_dir = os.path.dirname(file_path)
     tasks = []
 
-    with ThreadPoolExecutor() as executor:
+    max_workers = get_max_processes()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for section in relevant_sections:
             tasks.append(executor.submit(refresh_section, section['key'], file_path, headers))
             tasks.append(executor.submit(refresh_section, section['key'], file_dir, headers))
@@ -63,9 +64,6 @@ def refresh_plex_for_file(file_path: str) -> None:
 def update_plex_after_symlink(dest_file: str) -> None:
     """Wrapper function to trigger Plex refresh after symlink creation."""
     try:
-        if not logging.getLogger().handlers:
-            setup_logging()
-
         if os.path.exists(dest_file):
             refresh_plex_for_file(dest_file)
         else:

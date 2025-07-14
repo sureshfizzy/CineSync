@@ -6,7 +6,7 @@
     "Resolutions": ["2160p", "1080p", "720p", "480p"],
     "MovieVersions": ["4K Remaster", "IMAX", "Criterion Collection", "IMAX Enhanced", "Special Edition", "Theatrical Cut", "Director's Cut", "Open Matte", "Theatrical"],
     "StreamingServices": ["Amazon", "AMZN", "Apple TV+", "ATVP", "CRiT", "Disney+", "DSNP", "HBO Max", "HBO", "HMAX", "Hulu", "Paramount+", "PMTP", "Netflix", "NF", "Peacock", "PCOK", "Stan", "STAN"],
-    "Sources": ["BluRay", "WEBDL", "WEBRip", "HDTV", "SDTV", "DVDRip", "BluRay Remux", "Remux", "BR-DISK", "DVD", "CAM", "TELESYNC", "DVD-R", "WORKPRINT"],
+    "Sources": ["Bluray", "WEBDL", "WEBRip", "HDTV", "SDTV", "DVD", "CAM"],
     "ValidLanguages": [
         "ENGLISH", "EN", "ENG", "HINDI", "HI", "HIN", "SPANISH", "ES", "SPA", "FRENCH", "FR", "FRE", "GERMAN", "DE", "DEU",
         "JAPANESE", "JA", "JPN", "KOREAN", "KO", "KOR", "CHINESE", "ZH", "CHI", "RUSSIAN", "RU", "RUS", "ITALIAN", "IT", "ITA",

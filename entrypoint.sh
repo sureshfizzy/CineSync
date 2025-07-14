@@ -1,33 +1,48 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-# Function to create or modify group
-create_or_modify_group() {
-    if getent group appuser > /dev/null 2>&1; then
-        groupmod -o -g "$PGID" appuser > /dev/null 2>&1
-    else
-        groupadd -o -g "$PGID" appuser > /dev/null 2>&1
+# Default values
+PUID=${PUID:-1000}
+PGID=${PGID:-1000}
+
+# Update user/group IDs if they differ from current values
+current_uid=$(id -u appuser)
+current_gid=$(id -g appuser)
+
+if [ "$PUID" != "$current_uid" ] || [ "$PGID" != "$current_gid" ]; then
+    # Update group ID
+    groupmod -o -g "$PGID" appuser
+
+    # Update user ID
+    usermod -o -u "$PUID" appuser
+fi
+
+# Ensure critical directories exist and have proper ownership
+mkdir -p /app/db /app/logs /app/cache 2>/dev/null || true
+chown -R appuser:appuser /app/db 2>/dev/null || true
+chown -R appuser:appuser /app/logs 2>/dev/null || true
+chown -R appuser:appuser /app/cache 2>/dev/null || true
+
+# Ensure .env file can be created by appuser
+touch /app/.env 2>/dev/null || true
+chown appuser:appuser /app/.env 2>/dev/null || true
+chmod 644 /app/.env 2>/dev/null || true
+
+# Frontend directory 
+if [ -d "/app/WebDavHub/frontend" ]; then
+    find /app/WebDavHub/frontend -name "node_modules" -prune -o -type f -exec chown appuser:appuser {} \; 2>/dev/null || true
+    find /app/WebDavHub/frontend -name "node_modules" -prune -o -type d -exec chown appuser:appuser {} \; 2>/dev/null || true
+
+    # Ensure the frontend directory itself is owned by appuser
+    chown appuser:appuser /app/WebDavHub/frontend 2>/dev/null || true
+
+    # Create only the specific vite temp directory that's needed
+    if [ -d "/app/WebDavHub/frontend/node_modules" ]; then
+        mkdir -p /app/WebDavHub/frontend/node_modules/.vite-temp 2>/dev/null || true
+        chown -R appuser:appuser /app/WebDavHub/frontend/node_modules/.vite-temp 2>/dev/null || true
+        chmod 755 /app/WebDavHub/frontend/node_modules/.vite-temp 2>/dev/null || true
     fi
-}
+fi
 
-# Function to create or modify user
-create_or_modify_user() {
-    if id appuser > /dev/null 2>&1; then
-        usermod -o -u "$PUID" -g appuser appuser > /dev/null 2>&1
-    else
-        useradd -o -u "$PUID" -g appuser appuser > /dev/null 2>&1
-    fi
-}
-
-# Create or modify group and user
-create_or_modify_group
-create_or_modify_user
-
-# Ensure the app directory and its contents are owned by the appuser
-chown -R appuser:appuser /app
-
-# Change to the app directory
-cd /app
-
-# Run the command as the appuser
+# Execute command as appuser
 exec gosu appuser "$@"

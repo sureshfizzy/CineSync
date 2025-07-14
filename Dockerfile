@@ -1,15 +1,16 @@
-# ---- STAGE 1: Build Go Binary ----
+# ---- STAGE 1: Build WebDavHub ----
 FROM python:3.11-slim AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install required system packages
+# Install build dependencies
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu curl git gcc g++ make && \
+    apt-get install -y inotify-tools bash curl git gcc g++ make && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Go
 # Install Go (Dynamic architecture detection)
 ENV GO_VERSION=1.21.0
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -20,45 +21,56 @@ RUN ARCH=$(dpkg --print-architecture) && \
       *) echo "Unsupported architecture: $ARCH"; exit 1;; \
     esac && \
     curl -fsSL https://go.dev/dl/go${GO_VERSION}.${GOARCH}.tar.gz | tar -C /usr/local -xz
-ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Set up Go workspace
+ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH=/go
 ENV PATH="${GOPATH}/bin:${PATH}"
 
-# Copy Go project files and build
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Copy WebDavHub and build
 COPY WebDavHub /app/WebDavHub
 WORKDIR /app/WebDavHub
-RUN go mod tidy && go build -o /app/WebDavHub/cinesync
 
-# ---- STAGE 2: Final Lightweight Image ----
+# Build using the production build script
+RUN python3 scripts/build-prod.py
+
+# ---- STAGE 2: Final Runtime Image ----
 FROM python:3.11-slim
-
-# Set the working directory inside the container
-WORKDIR /app
 
 # Install required system packages
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu && \
+    apt-get install -y inotify-tools bash gosu curl psmisc && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file and install dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install pnpm globally
+RUN npm install -g pnpm
 
-# Copy the entire Python project
-COPY MediaHub /app/MediaHub
-COPY --from=builder /app/WebDavHub /app/WebDavHub
+# Copy Python dependencies and install
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-# Set environment variables for PUID and PGID
+# Set default PUID and PGID
 ENV PUID=1000
 ENV PGID=1000
 
-# Add entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Create default user and group
+RUN groupadd -g ${PGID} appuser && \
+    useradd -u ${PUID} -g appuser -d /app -s /bin/bash appuser
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Copy application files
+COPY MediaHub /app/MediaHub
+COPY --from=builder /app/WebDavHub /app/WebDavHub
 
-# Run the application
-CMD ["python3", "MediaHub/main.py", "--auto-select"]
+# Add the entrypoint script
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Set working directory
+WORKDIR /app
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["python3", "WebDavHub/scripts/start-prod.py"]

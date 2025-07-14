@@ -2,14 +2,17 @@ import re
 import os
 import json
 
-def load_keywords(filepath: str) -> dict:
-    """
-    Loads codec and pattern keywords from a JSON file.
-    """
-    with open(filepath, 'r') as file:
-        return json.load(file)
+def load_keywords(file_name: str, key: str = None) -> dict:
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
+    with open(file_path, 'r') as file:
+        data = json.load(file)
 
-keywords = load_keywords(os.path.join(os.getcwd(), 'MediaHub', 'utils', 'mediainfo.json'))
+    if key:
+        return data.get(key, {})
+    return data
+
+keywords_file = 'mediainfo.json'
+keywords = load_keywords(keywords_file)
 
 def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
     """
@@ -119,15 +122,47 @@ def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
         for source in sources:
             for resolution in keywords.get("Resolution", keywords.get("Resolutions", [])):
                 if re.search(resolution, source, re.IGNORECASE):
-                    resolution_value = resolution.lower()
-                    for source_type in keywords.get("Source", keywords.get("Sources", [])):
-                        normalized_source_type = normalize_source_name(source_type)
-                        if normalized_source_type in normalize_source_name(source):
-                            resolution_value = f"{source_type}-{resolution_value}"
+                    resolution_value = resolution
+
+                    detected_source = None
+                    source_mappings = {
+                        r'\b(?:blu-?ray|bd|bdrip|brrip|bdremux|remux)\b': 'Bluray',
+                        r'\bweb-?dl\b': 'WEBDL',
+                        r'\bweb-?rip\b': 'WEBRip',
+                        r'\bhdtv\b': 'HDTV',
+                        r'\bsdtv\b': 'SDTV',
+                        r'\b(?:dvd|dvdrip|dvdr)\b': 'DVD',
+                        r'\b(?:cam|ts|tc|hdcam|telesync)\b': 'CAM',
+                    }
+
+                    for pattern, arr_source in source_mappings.items():
+                        if re.search(pattern, source, re.IGNORECASE):
+                            detected_source = arr_source
                             break
+
+                    if detected_source:
+                        resolution_value = f"{detected_source}-{resolution_value}"
+
                     store_value("Resolution", resolution_value)
                     break
             if 'Resolution' in info:
+                break
+
+        for source in sources:
+            patterns = [
+                r'-([A-Z0-9]+)(?:\.[a-z0-9]+)?$',
+                r'\[([A-Z0-9]+)\](?:\.[a-z0-9]+)?$',
+                r'\.([A-Z0-9]+)(?:\.[a-z0-9]+)?$',
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, source, re.IGNORECASE)
+                if match:
+                    group = match.group(1)
+                    if len(group) >= 3 and group.upper() not in ['MKV', 'MP4', 'AVI', 'WMV']:
+                        store_value("ReleaseGroup", group)
+                        break
+            if 'ReleaseGroup' in info:
                 break
 
         return info
