@@ -552,7 +552,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	// First, add folders from database
 	if len(dbFolders) > 0 {
-		logger.Debug("Processing %d database folders", len(dbFolders), searchQuery)
+		logger.Debug("Processing %d database folders (search: '%s')", len(dbFolders), searchQuery)
 		for _, dbFolder := range dbFolders {
 			fileInfo := FileInfo{
 				Name:     dbFolder.FolderName,
@@ -679,7 +679,12 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		filePath := filepath.Join(path, entry.Name())
+		filePath := path
+		if !strings.HasSuffix(filePath, "/") {
+			filePath += "/"
+		}
+		filePath += entry.Name()
+
 		fileInfo := FileInfo{
 			Name:     entry.Name(),
 			Type:     "file",

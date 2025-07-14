@@ -1022,8 +1022,14 @@ func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit 
 		return nil, 0, err
 	}
 
-	// For search operations, always search across all categories for better user experience
-	return searchRootFolders(mediaHubDB, searchQuery, page, limit)
+	// Clean the base path
+	cleanBasePath := strings.Trim(basePath, "/\\")
+
+	if cleanBasePath == "" {
+		return searchRootFolders(mediaHubDB, searchQuery, page, limit)
+	}
+
+	return searchCategoryFolders(mediaHubDB, cleanBasePath, searchQuery, page, limit)
 }
 
 // searchRootFolders searches across all categories
@@ -1106,17 +1112,14 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 
 // searchCategoryFolders searches within a specific category
 func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
-	destDir := env.GetString("DESTINATION_DIR", "")
-	if destDir == "" {
-		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
+	if !checkBasePathColumnExists() {
+		return nil, 0, fmt.Errorf("base_path column not available")
 	}
-	destDir = filepath.Clean(destDir)
+
+	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
 
 	searchPattern := "%" + searchQuery + "%"
-	categoryPathPattern := destDir + string(filepath.Separator) + category + string(filepath.Separator) + "%"
 	offset := (page - 1) * limit
-
-	// Optimized direct query for category search
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -1127,9 +1130,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 			COUNT(*) as file_count,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
-		WHERE destination_path IS NOT NULL
-		AND destination_path != ''
-		AND destination_path LIKE ?
+		WHERE base_path = ?
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		AND (proper_name LIKE ? OR year LIKE ?)
@@ -1137,7 +1138,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, categoryPathPattern, searchPattern, searchPattern, limit, offset)
+	rows, err := db.Query(query, normalizedCategory, searchPattern, searchPattern, limit, offset)
 	if err != nil {
 		logger.Debug("Failed to search category folders: %v", err)
 		return nil, 0, err
