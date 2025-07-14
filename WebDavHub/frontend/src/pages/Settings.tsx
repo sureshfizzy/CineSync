@@ -20,6 +20,7 @@ interface ConfigValue {
   disabled?: boolean;
   locked?: boolean;
   lockedBy?: string;
+  hidden?: boolean;
 }
 
 interface ConfigResponse {
@@ -354,14 +355,15 @@ const Settings: React.FC = () => {
     'System Configuration', // Advanced
   ];
 
-  // Group config by category
-  const configByCategory = config.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, ConfigValue[]>);
+  const configByCategory = config
+    .filter(item => !item.hidden)
+    .reduce((acc, item) => {
+      if (!acc[item.category]) {
+        acc[item.category] = [];
+      }
+      acc[item.category].push(item);
+      return acc;
+    }, {} as Record<string, ConfigValue[]>);
 
   // Sort fields within each category - prioritize source/destination paths
   Object.keys(configByCategory).forEach(category => {

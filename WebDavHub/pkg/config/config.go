@@ -42,6 +42,7 @@ type ConfigValue struct {
 	Disabled    bool   `json:"disabled,omitempty"`
 	Locked      bool   `json:"locked,omitempty"`
 	LockedBy    string `json:"lockedBy,omitempty"`
+	Hidden      bool   `json:"hidden,omitempty"`
 }
 
 // ConfigResponse represents the response structure for configuration
@@ -253,6 +254,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "JUNK_MAX_SIZE_MB", Category: "File Handling Configuration", Type: "integer", Required: false, Description: "Maximum allowed file size for junks in MB"},
 		{Key: "ALLOWED_EXTENSIONS", Category: "File Handling Configuration", Type: "array", Required: false, Description: "Allowed file extensions for processing"},
 		{Key: "SKIP_ADULT_PATTERNS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable skipping of specific file patterns"},
+		{Key: "FILE_OPERATIONS_AUTO_MODE", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable auto-processing mode for file operations", Hidden: true},
 
 		// Real-Time Monitoring Configuration
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
@@ -619,6 +621,7 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 			Disabled:    def.Disabled,
 			Locked:      locked,
 			LockedBy:    lockedBy,
+			Hidden:      def.Hidden,
 		})
 	}
 

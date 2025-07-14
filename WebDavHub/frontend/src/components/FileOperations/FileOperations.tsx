@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse } from '@mui/material';
-import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon } from '@mui/icons-material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch } from '@mui/material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -146,6 +146,40 @@ function FileOperations() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
+
+  const [autoModeEnabled, setAutoModeEnabled] = useState(false);
+  const [autoProcessingFiles, setAutoProcessingFiles] = useState<Set<string>>(new Set());
+
+  const fetchAutoModeSetting = async () => {
+    try {
+      const response = await axios.get('/api/config');
+      const config = response.data.config;
+      const autoModeSetting = config.find((item: any) => item.key === 'FILE_OPERATIONS_AUTO_MODE');
+      setAutoModeEnabled(autoModeSetting?.value === 'true');
+    } catch (error) {
+      console.error('Failed to fetch auto mode setting:', error);
+      setAutoModeEnabled(false);
+    }
+  };
+
+  const updateAutoModeSetting = async (enabled: boolean) => {
+    try {
+      await axios.post('/api/config/update-silent', {
+        updates: [{
+          key: 'FILE_OPERATIONS_AUTO_MODE',
+          value: enabled.toString(),
+          type: 'boolean',
+          required: false
+        }]
+      });
+    } catch (error) {
+      console.error('Failed to update auto mode setting:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchAutoModeSetting();
+  }, []);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
@@ -435,13 +469,6 @@ function FileOperations() {
     setLastUpdated(new Date());
   }, [tabValue, recordsPerPage]);
 
-  const removeSourceFile = useCallback((filePath: string) => {
-    if (tabValue === 0) {
-      setSourceFiles(prev => prev.filter(file => file.fullPath !== filePath));
-      setSourceTotalFiles(prev => Math.max(0, prev - 1));
-    }
-  }, [tabValue]);
-
   // Listen for file operation updates through centralized SSE
   useSSEEventListener(
     ['file_operation_update'],
@@ -485,21 +512,32 @@ function FileOperations() {
           mediaType: data.media_type
         })));
 
-        // Remove file from source files list and clear animation after delay
+        setSourceFiles(prev => prev.map(file => {
+          if (file.fullPath === data.source_file) {
+            return {
+              ...file,
+              processingStatus: 'processed',
+              tmdbId: data.tmdb_id,
+              seasonNumber: data.season_number,
+              lastProcessedAt: Date.now()
+            };
+          }
+          return file;
+        }));
+
+        // Clear animation after delay but keep the file in the list
         setTimeout(() => {
           setProcessingFiles(prev => {
             const newMap = new Map(prev);
             newMap.delete(data.source_file);
             return newMap;
           });
-
-          removeSourceFile(data.source_file);
         }, 3500);
       }
     },
     {
       source: 'mediahub',
-      dependencies: [removeSourceFile]
+      dependencies: []
     }
   );
 
@@ -508,7 +546,18 @@ function FileOperations() {
     (event) => {
       const data = event.data;
       if (data.source_file) {
-        removeSourceFile(data.source_file);
+        setSourceFiles(prev => prev.map(file => {
+          if (file.fullPath === data.source_file) {
+            return {
+              ...file,
+              processingStatus: 'created',
+              tmdbId: data.tmdb_id,
+              seasonNumber: data.season_number,
+              lastProcessedAt: Date.now()
+            };
+          }
+          return file;
+        }));
 
         setProcessingFiles(prev => new Map(prev.set(data.source_file, {
           fileName: data.filename || data.source_file.split('/').pop() || 'Unknown',
@@ -527,7 +576,7 @@ function FileOperations() {
     },
     {
       source: 'mediahub',
-      dependencies: [removeSourceFile]
+      dependencies: []
     }
   );
 
@@ -551,7 +600,11 @@ function FileOperations() {
   // Source File Browser handlers
   const handleSourceFileClick = (file: FileItem) => {
     if (file.isMediaFile && file.fullPath) {
-      handleProcessFile(file);
+      if (autoModeEnabled) {
+        autoProcessFile(file);
+      } else {
+        handleProcessFile(file);
+      }
     }
   };
 
@@ -559,6 +612,48 @@ function FileOperations() {
     if (file.fullPath) {
       setCurrentFileForProcessing(file.fullPath);
       setModifyDialogOpen(true);
+    }
+  };
+
+  // Auto-process file with auto-select first result
+  const autoProcessFile = async (file: FileItem) => {
+    if (!file.fullPath || !file.isMediaFile) return;
+
+    setAutoProcessingFiles(prev => new Set(prev).add(file.fullPath!));
+
+    setProcessingFiles(prev => new Map(prev.set(file.fullPath!, {
+      fileName: file.name,
+      mediaName: undefined,
+      mediaType: undefined
+    })));
+
+    try {
+      const requestPayload = {
+        sourcePath: file.fullPath,
+        disableMonitor: true,
+        selectedOption: 'auto-select',
+        autoSelect: true
+      };
+
+      const response = await axios.post('/api/python-bridge', requestPayload);
+
+      if (response.status === 200) {
+        console.log(`Auto-processed file: ${file.fullPath}`);
+      }
+    } catch (error) {
+      console.error(`Failed to auto-process file ${file.fullPath}:`, error);
+
+      setProcessingFiles(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(file.fullPath!);
+        return newMap;
+      });
+    } finally {
+      setAutoProcessingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.fullPath!);
+        return newSet;
+      });
     }
   };
 
@@ -1859,68 +1954,150 @@ function FileOperations() {
       {/* Search Input for each tab */}
       <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
         {tabValue === 0 ? (
-          // Source Files Search
-          (<TextField
-            fullWidth
-            size={isMobile ? "medium" : "small"}
-            placeholder={isMobile ? "🔍 Search files..." : "🔍 Search source files by name, path, or type..."}
-            value={sourceSearchQuery}
-            onChange={(e) => setSourceSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  {isSourceSearching ? (
-                    <CircularProgress size={18} sx={{ color: 'primary.main' }} />
-                  ) : (
-                    <SearchIcon sx={{
-                      color: sourceSearchQuery ? 'primary.main' : 'text.secondary',
-                      fontSize: { xs: 18, sm: 20 },
-                      transition: 'color 0.2s ease'
-                    }} />
-                  )}
-                </InputAdornment>
-              ),
-              sx: {
-                fontSize: { xs: '0.9rem', sm: '0.875rem' },
-                height: { xs: 48, sm: 40 },
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: { xs: 2, sm: 3 },
-                bgcolor: alpha(theme.palette.background.paper, 0.8),
-                backdropFilter: 'blur(10px)',
-                border: '1px solid',
-                borderColor: sourceSearchQuery ? 'primary.main' : alpha(theme.palette.divider, 0.3),
-                transition: 'all 0.3s ease',
-                minHeight: { xs: 48, sm: 40 },
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  bgcolor: 'background.paper',
-                  transform: isMobile ? 'none' : 'translateY(-1px)',
-                  boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
-                },
-                '&.Mui-focused': {
-                  borderColor: 'primary.main',
-                  borderWidth: 2,
-                  bgcolor: 'background.paper',
-                  boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.2)}`,
-                  transform: 'none',
-                },
-                '& .MuiOutlinedInput-notchedOutline': {
-                  border: 'none',
-                },
-                '& .MuiInputBase-input': {
-                  padding: { xs: '12px 14px', sm: '8.5px 14px' },
-                  fontSize: { xs: '1rem', sm: '0.875rem' },
-                  '&::placeholder': {
-                    fontSize: { xs: '0.9rem', sm: '0.875rem' },
-                    opacity: 0.7,
+          // Source Files Search with Auto Mode Toggle
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TextField
+              fullWidth
+              size={isMobile ? "medium" : "small"}
+              placeholder={isMobile ? "🔍 Search files..." : "🔍 Search source files by name, path, or type..."}
+              value={sourceSearchQuery}
+              onChange={(e) => setSourceSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    {isSourceSearching ? (
+                      <CircularProgress size={18} sx={{ color: 'primary.main' }} />
+                    ) : (
+                      <SearchIcon sx={{
+                        color: sourceSearchQuery ? 'primary.main' : 'text.secondary',
+                        fontSize: { xs: 18, sm: 20 },
+                        transition: 'color 0.2s ease'
+                      }} />
+                    )}
+                  </InputAdornment>
+                ),
+                sx: {
+                  fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                  height: { xs: 48, sm: 40 },
+                }
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: { xs: 2, sm: 3 },
+                  bgcolor: alpha(theme.palette.background.paper, 0.8),
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid',
+                  borderColor: sourceSearchQuery ? 'primary.main' : alpha(theme.palette.divider, 0.3),
+                  transition: 'all 0.3s ease',
+                  minHeight: { xs: 48, sm: 40 },
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'background.paper',
+                    transform: isMobile ? 'none' : 'translateY(-1px)',
+                    boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                  },
+                  '&.Mui-focused': {
+                    borderColor: 'primary.main',
+                    borderWidth: 2,
+                    bgcolor: 'background.paper',
+                    boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.2)}`,
+                    transform: 'none',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    border: 'none',
+                  },
+                  '& .MuiInputBase-input': {
+                    padding: { xs: '12px 14px', sm: '8.5px 14px' },
+                    fontSize: { xs: '1rem', sm: '0.875rem' },
+                    '&::placeholder': {
+                      fontSize: { xs: '0.9rem', sm: '0.875rem' },
+                      opacity: 0.7,
+                    },
                   },
                 },
-              },
-            }}
-          />)
+              }}
+            />
+
+            {/* Auto Mode Toggle - Inline with search */}
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 2,
+              py: 1,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: autoModeEnabled
+                ? alpha(theme.palette.success.main, 0.3)
+                : alpha(theme.palette.divider, 0.3),
+              bgcolor: autoModeEnabled
+                ? alpha(theme.palette.success.main, 0.05)
+                : 'background.paper',
+              transition: 'all 0.2s ease',
+              minHeight: { xs: 48, sm: 40 },
+              flexShrink: 0,
+              '&:hover': {
+                borderColor: autoModeEnabled
+                  ? alpha(theme.palette.success.main, 0.5)
+                  : alpha(theme.palette.primary.main, 0.3),
+              }
+            }}>
+              <AutoModeIcon sx={{
+                fontSize: 18,
+                color: autoModeEnabled ? 'success.main' : 'text.secondary',
+                transition: 'color 0.2s ease'
+              }} />
+
+              <Typography variant="body2" sx={{
+                fontWeight: 500,
+                color: autoModeEnabled ? 'success.main' : 'text.secondary',
+                fontSize: '0.875rem',
+                transition: 'color 0.2s ease',
+                whiteSpace: 'nowrap'
+              }}>
+                Auto Mode
+              </Typography>
+
+              <Switch
+                checked={autoModeEnabled}
+                onChange={async (e) => {
+                  const newValue = e.target.checked;
+                  setAutoModeEnabled(newValue);
+
+                  await updateAutoModeSetting(newValue);
+
+                  if (newValue && filteredSourceFiles.length > 0) {
+                    const filesToProcess = filteredSourceFiles.filter(file => {
+                      if (!file.isMediaFile || !file.fullPath) return false;
+
+                      const status = getProcessingStatus(file);
+                      return !status || status.status === 'unprocessed';
+                    });
+
+                    if (filesToProcess.length > 0) {
+                      filesToProcess.forEach((file, index) => {
+                        setTimeout(() => {
+                          autoProcessFile(file);
+                        }, index * 300);
+                      });
+                    } else {
+                      console.log('No unprocessed media files found to auto-process');
+                    }
+                  }
+                }}
+                color="success"
+                size="small"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: 'success.main',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'success.main',
+                  },
+                }}
+              />
+            </Box>
+          </Box>
         ) : (
           // File Operations Search
           (<TextField
@@ -2228,7 +2405,7 @@ function FileOperations() {
                           : 'divider',
                         bgcolor: 'background.paper',
                         overflow: 'hidden',
-                        cursor: file.type === 'directory' || file.isSourceRoot ? 'pointer' : 'default',
+                        cursor: (file.type === 'directory' || file.isSourceRoot || (file.isMediaFile && autoModeEnabled)) ? 'pointer' : 'default',
                         '&:hover': {
                           borderColor: getProcessingStatus(file)?.status === 'processed' || getProcessingStatus(file)?.status === 'created'
                             ? alpha(theme.palette.success.main, 0.5)
@@ -2307,11 +2484,23 @@ function FileOperations() {
 
                               {/* File details */}
                               <Stack direction="row" spacing={{ xs: 1, sm: 2 }} sx={{ mt: { xs: 0.5, sm: 1 }, flexWrap: 'wrap', gap: { xs: 0.5, sm: 1 } }}>
-                                {file.isSourceRoot && file.path && (
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <InfoIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary' }} />
-                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
-                                      {file.path}
+                                {file.fullPath && (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, maxWidth: '100%' }}>
+                                    <InfoIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary', flexShrink: 0 }} />
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{
+                                        fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                        fontFamily: 'monospace',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        maxWidth: '100%'
+                                      }}
+                                      title={file.fullPath}
+                                    >
+                                      {file.fullPath}
                                     </Typography>
                                   </Box>
                                 )}
@@ -2343,26 +2532,64 @@ function FileOperations() {
                           {/* Action buttons for media files */}
                           {file.isMediaFile && (
                             <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
-                              <Tooltip title="Process File">
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleProcessFile(file);
-                                  }}
-                                  sx={{
-                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                    color: 'primary.main',
-                                    '&:hover': {
-                                      bgcolor: alpha(theme.palette.primary.main, 0.2),
-                                      transform: 'scale(1.1)',
-                                    },
-                                    transition: 'all 0.2s ease'
-                                  }}
-                                >
-                                  <SettingsIcon sx={{ fontSize: 18 }} />
-                                </IconButton>
-                              </Tooltip>
+                              {/* Show auto-processing indicator */}
+                              {autoProcessingFiles.has(file.fullPath!) ? (
+                                <Tooltip title="Auto-processing...">
+                                  <Box sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    px: 1.5,
+                                    py: 0.5,
+                                    borderRadius: 2,
+                                    bgcolor: alpha(theme.palette.success.main, 0.1),
+                                    border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`
+                                  }}>
+                                    <CircularProgress
+                                      size={16}
+                                      sx={{ color: 'success.main' }}
+                                    />
+                                    <Typography variant="caption" color="success.main" sx={{ fontWeight: 600 }}>
+                                      Auto
+                                    </Typography>
+                                  </Box>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip title={autoModeEnabled ? "Click to auto-process" : "Process File"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (autoModeEnabled) {
+                                        autoProcessFile(file);
+                                      } else {
+                                        handleProcessFile(file);
+                                      }
+                                    }}
+                                    sx={{
+                                      bgcolor: alpha(
+                                        autoModeEnabled ? theme.palette.success.main : theme.palette.primary.main,
+                                        0.1
+                                      ),
+                                      color: autoModeEnabled ? 'success.main' : 'primary.main',
+                                      '&:hover': {
+                                        bgcolor: alpha(
+                                          autoModeEnabled ? theme.palette.success.main : theme.palette.primary.main,
+                                          0.2
+                                        ),
+                                        transform: 'scale(1.1)',
+                                      },
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                  >
+                                    {autoModeEnabled ? (
+                                      <AutoModeIcon sx={{ fontSize: 18 }} />
+                                    ) : (
+                                      <SettingsIcon sx={{ fontSize: 18 }} />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                             </Box>
                           )}
                         </Box>
@@ -2445,50 +2672,52 @@ function FileOperations() {
         </TabPanel>
       )}
 
-      {/* Pagination and Summary for Operations */}
-      <Box sx={{
-        mt: 3,
-        display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: { xs: 2, sm: 3 }
-      }}>
-        {Math.ceil(totalOperations / recordsPerPage) > 1 && (
-          <Pagination
-            count={Math.ceil(totalOperations / recordsPerPage)}
-            page={currentPage}
-            onChange={(_, page) => setCurrentPage(page)}
-            color="primary"
-            size={isMobile ? "small" : "medium"}
-            siblingCount={isMobile ? 0 : 1}
-            boundaryCount={isMobile ? 1 : 1}
+      {/* Pagination and Summary for Operations - Only show for operation tabs */}
+      {tabValue > 0 && (
+        <Box sx={{
+          mt: 3,
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: { xs: 2, sm: 3 }
+        }}>
+          {Math.ceil(totalOperations / recordsPerPage) > 1 && (
+            <Pagination
+              count={Math.ceil(totalOperations / recordsPerPage)}
+              page={currentPage}
+              onChange={(_, page) => setCurrentPage(page)}
+              color="primary"
+              size={isMobile ? "small" : "medium"}
+              siblingCount={isMobile ? 0 : 1}
+              boundaryCount={isMobile ? 1 : 1}
+              sx={{
+                '& .MuiPaginationItem-root': {
+                  borderRadius: 2,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minWidth: { xs: 28, sm: 32 },
+                  height: { xs: 28, sm: 32 },
+                },
+                '& .MuiPagination-ul': {
+                  gap: { xs: 0.25, sm: 0.5 }
+                }
+              }}
+            />
+          )}
+          <Typography
+            variant="body2"
+            color="text.secondary"
             sx={{
-              '& .MuiPaginationItem-root': {
-                borderRadius: 2,
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                minWidth: { xs: 28, sm: 32 },
-                height: { xs: 28, sm: 32 },
-              },
-              '& .MuiPagination-ul': {
-                gap: { xs: 0.25, sm: 0.5 }
-              }
+              whiteSpace: { xs: 'normal', sm: 'nowrap' },
+              textAlign: 'center',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
             }}
-          />
-        )}
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{
-            whiteSpace: { xs: 'normal', sm: 'nowrap' },
-            textAlign: 'center',
-            fontSize: { xs: '0.75rem', sm: '0.875rem' }
-          }}
-        >
-          Showing {operations.length} of {totalOperations.toLocaleString()} operations
-          {searchQuery && ` (filtered)`}
-        </Typography>
-      </Box>
+          >
+            Showing {operations.length} of {totalOperations.toLocaleString()} operations
+            {searchQuery && ` (filtered)`}
+          </Typography>
+        </Box>
+      )}
 
           {/* Mobile Floating Action Buttons for Operations */}
           {isMobile && (
