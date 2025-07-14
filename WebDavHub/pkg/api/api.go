@@ -435,6 +435,33 @@ func getTmdbDataFromCache(folderName string) (string, string, string, string, st
 	return "", "", "", "", ""
 }
 
+func resolveActualDirectoryPath(requestedDir, apiPath string) (string, error) {
+	if _, err := os.Stat(requestedDir); err == nil {
+		return requestedDir, nil
+	}
+
+	parentDir := filepath.Dir(requestedDir)
+	requestedFolderName := filepath.Base(requestedDir)
+
+	entries, err := os.ReadDir(parentDir)
+	if err != nil {
+		return requestedDir, nil
+	}
+
+	idPattern := regexp.MustCompile(`\s*\{(?:tmdb|imdb|tvdb)-[^}]+\}`)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			baseName := strings.TrimSpace(idPattern.ReplaceAllString(entry.Name(), ""))
+			if baseName == requestedFolderName {
+				actualPath := filepath.Join(parentDir, entry.Name())
+				return actualPath, nil
+			}
+		}
+	}
+
+	return requestedDir, nil
+}
+
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
@@ -477,6 +504,15 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	letterFilter := strings.TrimSpace(r.URL.Query().Get("letter"))
 
 	dir := filepath.Join(rootDir, path)
+
+	actualDir, err := resolveActualDirectoryPath(dir, path)
+	if err != nil {
+		logger.Warn("Failed to resolve directory path: %s - %v", dir, err)
+		http.Error(w, "Failed to resolve directory path", http.StatusInternalServerError)
+		return
+	}
+	dir = actualDir
+
 	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 
 	// Try database-first approach for folder listing with pagination
