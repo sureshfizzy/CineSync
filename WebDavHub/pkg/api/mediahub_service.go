@@ -495,15 +495,8 @@ func HandleMediaHubStop(w http.ResponseWriter, r *http.Request) {
 		logger.Info("Stopping main MediaHub process with PID: %d", mediaHubProcess.Process.Pid)
 
 		if runtime.GOOS == "windows" {
-			// On Windows, /T flag kills the entire process tree
 			stopErr = exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(mediaHubProcess.Process.Pid)).Run()
 		} else {
-			// On Unix, kill the process group to ensure child processes are also terminated
-			stopErr = exec.Command("pkill", "-P", strconv.Itoa(mediaHubProcess.Process.Pid)).Run()
-			if stopErr != nil {
-				logger.Debug("pkill failed, trying direct kill: %v", stopErr)
-			}
-			// Also kill the main process
 			stopErr = mediaHubProcess.Process.Kill()
 		}
 
