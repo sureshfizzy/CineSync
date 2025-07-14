@@ -35,6 +35,12 @@ type DatabaseRecord struct {
 var (
 	fileSizeColumnExists sync.Once
 	hasFileSizeColumn    bool
+
+	reasonColumnExists sync.Once
+	hasReasonColumn    bool
+
+	basePathColumnExists sync.Once
+	hasBasePathColumn    bool
 )
 
 // checkFileSizeColumnExists checks if the file_size column exists in processed_files table
@@ -46,12 +52,45 @@ func checkFileSizeColumnExists() bool {
 			return
 		}
 
-		// Simple query to check if column exists - if it fails, column doesn't exist
 		var dummy sql.NullInt64
 		err = mediaHubDB.QueryRow("SELECT file_size FROM processed_files LIMIT 1").Scan(&dummy)
 		hasFileSizeColumn = err == nil || !strings.Contains(err.Error(), "no such column")
 	})
 	return hasFileSizeColumn
+}
+
+// checkReasonColumnExists checks if the reason column exists in processed_files table
+func checkReasonColumnExists() bool {
+	reasonColumnExists.Do(func() {
+		mediaHubDB, err := GetDatabaseConnection()
+		if err != nil {
+			hasReasonColumn = false
+			return
+		}
+
+		// Simple query to check if column exists - if it fails, column doesn't exist
+		var dummy sql.NullString
+		err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+		hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+	})
+	return hasReasonColumn
+}
+
+// checkBasePathColumnExists checks if the base_path column exists in processed_files table
+func checkBasePathColumnExists() bool {
+	basePathColumnExists.Do(func() {
+		mediaHubDB, err := GetDatabaseConnection()
+		if err != nil {
+			hasBasePathColumn = false
+			return
+		}
+
+		// Simple query to check if column exists - if it fails, column doesn't exist
+		var dummy sql.NullString
+		err = mediaHubDB.QueryRow("SELECT base_path FROM processed_files LIMIT 1").Scan(&dummy)
+		hasBasePathColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+	})
+	return hasBasePathColumn
 }
 
 // DatabaseStats represents statistics about the database
@@ -102,6 +141,12 @@ func GetFolderCache() *FolderCache {
 func getCategoriesFromBasePath() []string {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
+		return nil
+	}
+
+	// Check if base_path column exists
+	if !checkBasePathColumnExists() {
+		logger.Debug("base_path column does not exist yet")
 		return nil
 	}
 
@@ -569,15 +614,31 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 		fileSizeSelect = "file_size"
 	}
 
+	hasReason := checkReasonColumnExists()
+	hasBasePath := checkBasePathColumnExists()
+
+	var reasonSelect, basePathSelect string
+	if hasReason {
+		reasonSelect = "COALESCE(reason, '') as reason"
+	} else {
+		reasonSelect = "'' as reason"
+	}
+
+	if hasBasePath {
+		basePathSelect = "COALESCE(base_path, '') as base_path"
+	} else {
+		basePathSelect = "'' as base_path"
+	}
+
 	// Single query that gets both data and total count
 	dataQuery := `
 		SELECT
 			file_path,
 			COALESCE(destination_path, '') as destination_path,
-			COALESCE(base_path, '') as base_path,
+			` + basePathSelect + `,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
-			COALESCE(reason, '') as reason,
+			` + reasonSelect + `,
 			` + fileSizeSelect + `,
 			COUNT(*) OVER() as total_count
 		FROM processed_files ` + whereClause + `
@@ -720,12 +781,14 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 	}
 	destDir = filepath.Clean(destDir)
 
+	// Check if base_path column exists
+	if !checkBasePathColumnExists() {
+		logger.Debug("base_path column does not exist yet")
+		return nil, 0, fmt.Errorf("base_path column not available")
+	}
+
 	// Normalize path separators - database stores with backslashes, API uses forward slashes
 	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
-
-	// Simplified approach: check if we have any base_path that starts with this category
-	// For category "Hunch", look for base_path values like "Hunch\1080p"
-	// For category "Hunch/1080p", look for exact match "Hunch\1080p"
 
 	// First check for exact match (leaf category with content)
 	exactMatchQuery := `SELECT COUNT(*) FROM processed_files WHERE base_path = ?`
@@ -1339,23 +1402,39 @@ func getDatabaseStats(db *sql.DB) (DatabaseStats, error) {
 		return stats, err
 	}
 
-	// Processed files (have destination_path and no reason)
-	err = db.QueryRow(`
-		SELECT COUNT(*) FROM processed_files
-		WHERE destination_path IS NOT NULL AND destination_path != ''
-		AND (reason IS NULL OR reason = '')
-	`).Scan(&stats.ProcessedFiles)
-	if err != nil {
-		return stats, err
-	}
+	// Check if reason column exists before using it
+	hasReason := checkReasonColumnExists()
 
-	// Skipped files (have reason)
-	err = db.QueryRow(`
-		SELECT COUNT(*) FROM processed_files
-		WHERE reason IS NOT NULL AND reason != ''
-	`).Scan(&stats.SkippedFiles)
-	if err != nil {
-		return stats, err
+	if hasReason {
+		// Processed files (have destination_path and no reason)
+		err = db.QueryRow(`
+			SELECT COUNT(*) FROM processed_files
+			WHERE destination_path IS NOT NULL AND destination_path != ''
+			AND (reason IS NULL OR reason = '')
+		`).Scan(&stats.ProcessedFiles)
+		if err != nil {
+			return stats, err
+		}
+
+		// Skipped files (have reason)
+		err = db.QueryRow(`
+			SELECT COUNT(*) FROM processed_files
+			WHERE reason IS NOT NULL AND reason != ''
+		`).Scan(&stats.SkippedFiles)
+		if err != nil {
+			return stats, err
+		}
+	} else {
+		// Fallback when reason column doesn't exist
+		err = db.QueryRow(`
+			SELECT COUNT(*) FROM processed_files
+			WHERE destination_path IS NOT NULL AND destination_path != ''
+		`).Scan(&stats.ProcessedFiles)
+		if err != nil {
+			return stats, err
+		}
+
+		stats.SkippedFiles = 0
 	}
 
 	// Movies (have tmdb_id but no season_number)

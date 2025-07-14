@@ -421,36 +421,45 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 	}
 
 	if statusFilter == "failed" {
-		// Handle failures from processed_files table
-		var failuresQuery string
-		var countArgs []interface{}
-
-		if searchQuery != "" {
-			searchPattern := "%" + searchQuery + "%"
-			failuresQuery = `
-				SELECT COUNT(*) FROM processed_files
-				WHERE reason IS NOT NULL AND reason != '' AND
-					  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
-						   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
-						   LOWER(reason) LIKE '%adult content%') AND
-					  (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)
-			`
-			countArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern}
-		} else {
-			failuresQuery = `
-				SELECT COUNT(*) FROM processed_files
-				WHERE reason IS NOT NULL AND reason != '' AND
-					  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
-						   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
-						   LOWER(reason) LIKE '%adult content%')
-			`
-		}
+		// Check if reason column exists
+		var hasReasonColumn bool
+		var dummy sql.NullString
+		err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+		hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
 
 		var totalFailures int
-		err = mediaHubDB.QueryRow(failuresQuery, countArgs...).Scan(&totalFailures)
-		if err != nil {
-			logger.Warn("Failed to get failures count: %v", err)
+		if !hasReasonColumn {
 			totalFailures = 0
+		} else {
+			var failuresQuery string
+			var countArgs []interface{}
+
+			if searchQuery != "" {
+				searchPattern := "%" + searchQuery + "%"
+				failuresQuery = `
+					SELECT COUNT(*) FROM processed_files
+					WHERE reason IS NOT NULL AND reason != '' AND
+						  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+							   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+							   LOWER(reason) LIKE '%adult content%') AND
+						  (file_path LIKE ? OR destination_path LIKE ? OR tmdb_id LIKE ? OR reason LIKE ?)
+				`
+				countArgs = []interface{}{searchPattern, searchPattern, searchPattern, searchPattern}
+			} else {
+				failuresQuery = `
+					SELECT COUNT(*) FROM processed_files
+					WHERE reason IS NOT NULL AND reason != '' AND
+						  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+							   LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+							   LOWER(reason) LIKE '%adult content%')
+				`
+			}
+
+			err = mediaHubDB.QueryRow(failuresQuery, countArgs...).Scan(&totalFailures)
+			if err != nil {
+				logger.Warn("Failed to get failures count: %v", err)
+				totalFailures = 0
+			}
 		}
 
 		failures, err := getFailureRecordsWithPagination(mediaHubDB, limit, offset, searchQuery)
@@ -492,18 +501,38 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		totalCount = 0
 	}
 
-	// Query processed files with pagination and filtering
-	query := `
-		SELECT
-			file_path,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(season_number, '') as season_number,
-			COALESCE(reason, '') as reason
-		FROM processed_files ` + whereClause + `
-		ORDER BY rowid DESC
-		LIMIT ? OFFSET ?
-	`
+	// Check if reason column exists
+	var hasReasonColumn bool
+	var dummy sql.NullString
+	err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+	hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+
+	// Build query based on column availability
+	var query string
+	if hasReasonColumn {
+		query = `
+			SELECT
+				file_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(reason, '') as reason
+			FROM processed_files ` + whereClause + `
+			ORDER BY rowid DESC
+			LIMIT ? OFFSET ?
+		`
+	} else {
+		query = `
+			SELECT
+				file_path,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(tmdb_id, '') as tmdb_id,
+				COALESCE(season_number, '') as season_number
+			FROM processed_files ` + whereClause + `
+			ORDER BY rowid DESC
+			LIMIT ? OFFSET ?
+		`
+	}
 	args = append(args, limit, offset)
 
 	rows, err := mediaHubDB.Query(query, args...)
@@ -517,7 +546,13 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		var op FileOperation
 		var seasonStr string
 
-		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason)
+		if hasReasonColumn {
+			err = rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason)
+		} else {
+			err = rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr)
+			op.Reason = ""
+		}
+
 		if err != nil {
 			logger.Warn("Failed to scan row: %v", err)
 			continue
@@ -650,24 +685,44 @@ func getStatusCounts(operations []FileOperation, total int) (map[string]int, err
 		"deleted":  0,
 	}
 
+	// Check if reason column exists
+	var hasReasonColumn bool
+	var dummy sql.NullString
+	err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+	hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+
 	// Count processed files by status
-	query := `
-		SELECT
-			CASE
-				WHEN reason IS NOT NULL AND reason != '' THEN
-					CASE
-						WHEN LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
-							 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
-							 LOWER(reason) LIKE '%adult content%' THEN 'skipped'
-						ELSE 'failed'
-					END
-				WHEN destination_path IS NOT NULL AND destination_path != '' THEN 'created'
-				ELSE 'failed'
-			END as status,
-			COUNT(*) as count
-		FROM processed_files
-		GROUP BY status
-	`
+	var query string
+	if hasReasonColumn {
+		query = `
+			SELECT
+				CASE
+					WHEN reason IS NOT NULL AND reason != '' THEN
+						CASE
+							WHEN LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+								 LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+								 LOWER(reason) LIKE '%adult content%' THEN 'skipped'
+							ELSE 'failed'
+						END
+					WHEN destination_path IS NOT NULL AND destination_path != '' THEN 'created'
+					ELSE 'failed'
+				END as status,
+				COUNT(*) as count
+			FROM processed_files
+			GROUP BY status
+		`
+	} else {
+		query = `
+			SELECT
+				CASE
+					WHEN destination_path IS NOT NULL AND destination_path != '' THEN 'created'
+					ELSE 'failed'
+				END as status,
+				COUNT(*) as count
+			FROM processed_files
+			GROUP BY status
+		`
+	}
 
 	rows, err := mediaHubDB.Query(query)
 	if err != nil {
@@ -996,6 +1051,16 @@ func getDeletionRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery
 
 func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery string) ([]FileOperation, error) {
 	var operations []FileOperation
+
+	// Check if reason column exists
+	var hasReasonColumn bool
+	var dummy sql.NullString
+	err := db.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+	hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+
+	if !hasReasonColumn {
+		return operations, nil
+	}
 
 	var failuresQuery string
 	var queryArgs []interface{}

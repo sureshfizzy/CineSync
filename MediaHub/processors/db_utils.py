@@ -192,63 +192,33 @@ def initialize_db(conn):
         cursor.execute("PRAGMA table_info(processed_files)")
         columns = [column[1] for column in cursor.fetchall()]
 
-        # Add column if it doesn't exist
-        if "destination_path" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN destination_path TEXT")
-            log_message("Added destination_path column to processed_files table.", level="INFO")
+        # Define all required columns with their types
+        required_columns = {
+            "destination_path": "TEXT",
+            "base_path": "TEXT",
+            "tmdb_id": "TEXT",
+            "season_number": "TEXT",
+            "reason": "TEXT",
+            "file_size": "INTEGER",
+            "error_message": "TEXT",
+            "processed_at": "TIMESTAMP",
+            "media_type": "TEXT",
+            "proper_name": "TEXT",
+            "year": "TEXT",
+            "episode_number": "TEXT",
+            "imdb_id": "TEXT",
+            "is_anime_genre": "INTEGER"
+        }
 
-        if "base_path" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN base_path TEXT")
-            log_message("Added base_path column to processed_files table.", level="INFO")
+        # Add missing columns
+        for column_name, column_type in required_columns.items():
+            if column_name not in columns:
+                cursor.execute(f"ALTER TABLE processed_files ADD COLUMN {column_name} {column_type}")
+                log_message(f"Added {column_name} column to processed_files table.", level="INFO")
 
-        if "tmdb_id" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN tmdb_id TEXT")
-            log_message("Added tmdb_id column to processed_files table.", level="INFO")
-
-        if "season_number" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN season_number TEXT")
-            log_message("Added season column to processed_files table.", level="INFO")
-
-        if "reason" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN reason TEXT")
-            log_message("Added reason column to processed_files table.", level="INFO")
-
-        if "file_size" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN file_size INTEGER")
-            log_message("Added file_size column to processed_files table.", level="INFO")
-
-        if "error_message" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN error_message TEXT")
-            log_message("Added error_message column to processed_files table.", level="INFO")
-
-        if "processed_at" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN processed_at TIMESTAMP")
-            cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
-            log_message("Added processed_at column to processed_files table.", level="INFO")
-
-        if "media_type" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN media_type TEXT")
-            log_message("Added media_type column to processed_files table.", level="INFO")
-
-        if "proper_name" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN proper_name TEXT")
-            log_message("Added proper_name column to processed_files table.", level="INFO")
-
-        if "year" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN year TEXT")
-            log_message("Added year column to processed_files table.", level="INFO")
-
-        if "episode_number" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN episode_number TEXT")
-            log_message("Added episode_number column to processed_files table.", level="INFO")
-
-        if "imdb_id" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN imdb_id TEXT")
-            log_message("Added imdb_id column to processed_files table.", level="INFO")
-
-        if "is_anime_genre" not in columns:
-            cursor.execute("ALTER TABLE processed_files ADD COLUMN is_anime_genre INTEGER")
-            log_message("Added is_anime_genre column to processed_files table.", level="INFO")
+                # Special handling for processed_at column
+                if column_name == "processed_at":
+                    cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
 
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
@@ -274,9 +244,23 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
 
         conn.commit()
+
+        # Verify all required columns exist before marking as initialized
+        cursor.execute("PRAGMA table_info(processed_files)")
+        final_columns = [column[1] for column in cursor.fetchall()]
+
+        expected_columns = {"file_path", "destination_path", "base_path", "tmdb_id", "season_number",
+                          "reason", "file_size", "error_message", "processed_at", "media_type",
+                          "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"}
+
+        missing_columns = expected_columns - set(final_columns)
+        if missing_columns:
+            log_message(f"Database initialization incomplete. Missing columns: {missing_columns}", level="ERROR")
+            return
+
         log_message("Database schema is up to date.", level="INFO")
 
-        # Create or update the lock file
+        # Create or update the lock file only if all columns exist
         with open(LOCK_FILE, 'w') as lock_file:
             lock_file.write("Database initialized and up to date.")
 
@@ -1617,15 +1601,19 @@ def update_database_to_new_format(conn):
         if not has_new_columns or not has_base_path:
             log_message("Database schema is missing new columns. Creating them now...", level="INFO")
 
-            # Add missing columns
+            # Add missing columns including reason column
             missing_columns = {
+                "reason": "TEXT",
                 "base_path": "TEXT",
                 "media_type": "TEXT",
                 "proper_name": "TEXT",
                 "year": "TEXT",
                 "episode_number": "TEXT",
                 "imdb_id": "TEXT",
-                "is_anime_genre": "INTEGER"
+                "is_anime_genre": "INTEGER",
+                "file_size": "INTEGER",
+                "error_message": "TEXT",
+                "processed_at": "TIMESTAMP"
             }
 
             for column_name, column_type in missing_columns.items():
@@ -1639,6 +1627,9 @@ def update_database_to_new_format(conn):
 
             # Create indexes for new columns
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_size ON processed_files(file_size)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_message ON processed_files(error_message)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_files(processed_at)")
 
             conn.commit()
             log_message("Database schema updated successfully.", level="INFO")
@@ -1673,14 +1664,27 @@ def update_database_to_new_format(conn):
 
         conn.commit()
 
+        # Check if reason column exists after adding missing columns
+        cursor.execute("PRAGMA table_info(processed_files)")
+        updated_columns = [column[1] for column in cursor.fetchall()]
+        has_reason_column = "reason" in updated_columns
+
         # Find entries that need migration (missing new metadata)
-        cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number
-            FROM processed_files
-            WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
-            AND reason IS NULL
-            AND file_path IS NOT NULL
-        """)
+        if has_reason_column:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number
+                FROM processed_files
+                WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
+                AND reason IS NULL
+                AND file_path IS NOT NULL
+            """)
+        else:
+            cursor.execute("""
+                SELECT file_path, destination_path, tmdb_id, season_number
+                FROM processed_files
+                WHERE (media_type IS NULL OR proper_name IS NULL OR year IS NULL)
+                AND file_path IS NOT NULL
+            """)
 
         entries_to_migrate = cursor.fetchall()
         total_entries = len(entries_to_migrate)
@@ -1901,14 +1905,29 @@ def update_database_to_new_format(conn):
                             proper_name = proper_name_row[0] if proper_name_row and proper_name_row[0] else None
                             current_base_path = extract_base_path_from_destination_path(dest_path, proper_name)
 
+                        # Calculate file size if not already set
+                        cursor.execute("SELECT file_size FROM processed_files WHERE file_path = ?", (result['file_path'],))
+                        current_file_size = cursor.fetchone()
+                        file_size = current_file_size[0] if current_file_size and current_file_size[0] else None
+
+                        if file_size is None:
+                            # Try to get file size from the source file
+                            try:
+                                if os.path.exists(result['file_path']):
+                                    file_size = os.path.getsize(result['file_path'])
+                                elif dest_path and os.path.exists(dest_path):
+                                    file_size = os.path.getsize(dest_path)
+                            except (OSError, IOError):
+                                file_size = None
+
                         cursor.execute("""
                             UPDATE processed_files
                             SET tmdb_id = ?, media_type = ?, proper_name = ?, year = ?, season_number = ?, episode_number = ?,
-                                imdb_id = ?, is_anime_genre = ?, base_path = ?
+                                imdb_id = ?, is_anime_genre = ?, base_path = ?, file_size = ?
                             WHERE file_path = ?
                         """, (result['tmdb_id'], result['media_type'], result['proper_name'], result['year'],
                               result['season_number'], result['episode_number'], result['imdb_id'],
-                              result['is_anime_genre'], current_base_path, result['file_path']))
+                              result['is_anime_genre'], current_base_path, file_size, result['file_path']))
                         batch_migrated += 1
                     except sqlite3.Error as e:
                         log_message(f"Database error updating {result['file_path']}: {e}", level="ERROR")

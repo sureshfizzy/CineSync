@@ -5,6 +5,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/config"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -1155,6 +1156,13 @@ func getCategoryFoldersFromDB() map[string]bool {
 	// Then add categories from database base_path field
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
+		return folders
+	}
+
+	// Check if base_path column exists before querying
+	var dummy sql.NullString
+	err = mediaHubDB.QueryRow("SELECT base_path FROM processed_files LIMIT 1").Scan(&dummy)
+	if err != nil && strings.Contains(err.Error(), "no such column") {
 		return folders
 	}
 

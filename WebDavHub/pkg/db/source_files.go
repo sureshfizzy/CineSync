@@ -783,8 +783,18 @@ func updateProcessingStatusFromMediaHub() error {
 
 // checkFileInMediaHub checks if a file exists in MediaHub database and returns its status
 func checkFileInMediaHub(mediaHubDB *sql.DB, filePath string) (status string, tmdbID string, seasonNumber *int) {
-	// Try to query the processed_files table directly
-	query := `SELECT destination_path, tmdb_id, season_number, reason FROM processed_files WHERE file_path = ?`
+	var hasReasonColumn bool
+	var dummy sql.NullString
+	err := mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
+	hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+
+	var query string
+	if hasReasonColumn {
+		query = `SELECT destination_path, tmdb_id, season_number, reason FROM processed_files WHERE file_path = ?`
+	} else {
+		query = `SELECT destination_path, tmdb_id, season_number FROM processed_files WHERE file_path = ?`
+	}
+
 	row := mediaHubDB.QueryRow(query, filePath)
 
 	var destPath sql.NullString
@@ -792,7 +802,12 @@ func checkFileInMediaHub(mediaHubDB *sql.DB, filePath string) (status string, tm
 	var seasonNumberVal sql.NullString
 	var reason sql.NullString
 
-	err := row.Scan(&destPath, &tmdbIDVal, &seasonNumberVal, &reason)
+	if hasReasonColumn {
+		err = row.Scan(&destPath, &tmdbIDVal, &seasonNumberVal, &reason)
+	} else {
+		err = row.Scan(&destPath, &tmdbIDVal, &seasonNumberVal)
+	}
+
 	if err == sql.ErrNoRows {
 		return "unprocessed", "", nil
 	}
@@ -804,8 +819,8 @@ func checkFileInMediaHub(mediaHubDB *sql.DB, filePath string) (status string, tm
 		return "unprocessed", "", nil
 	}
 
-	// If reason is set, file was skipped
-	if reason.Valid && reason.String != "" {
+	// If reason is set, file was skipped (only check if column exists)
+	if hasReasonColumn && reason.Valid && reason.String != "" {
 		return "skipped", "", nil
 	}
 

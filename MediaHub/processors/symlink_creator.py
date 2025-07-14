@@ -192,7 +192,56 @@ class ProcessingManager:
                 log_message("Manager: Processing interrupted by shutdown request", level="INFO")
                 return results
 
-        log_message(f"Manager: Smart parallel processing complete. Processed {len(results)} files", level="INFO")
+        log_message(f"Manager: Smart parallel processing complete. Processed {len(results)} files", level="DEBUG")
+
+        if not is_shutdown_requested():
+            missed_files = self._verify_and_find_missed_files(unprocessed_files, mode, force)
+            if missed_files:
+                log_message(f"Found {len(missed_files)} files missed. Processing them sequentially...", level="DEBUG")
+                retry_results = self._process_missed_files_sequentially(missed_files, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index)
+                results.extend(retry_results)
+                log_message(f"Retry processing complete. Additional {len(retry_results)} files processed", level="DEBUG")
+
+        return results
+
+    def _verify_and_find_missed_files(self, original_unprocessed_files, mode, force):
+        from MediaHub.processors.db_utils import load_processed_files, normalize_file_path
+
+        updated_processed_files_set = load_processed_files()
+
+        missed_files = []
+        for src_file in original_unprocessed_files:
+            if is_shutdown_requested():
+                break
+
+            normalized_src = normalize_file_path(src_file)
+            if mode == 'create' and not force:
+                if normalized_src not in updated_processed_files_set:
+                    missed_files.append(src_file)
+
+        return missed_files
+
+    def _process_missed_files_sequentially(self, missed_files, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index):
+        results = []
+
+        for src_file in missed_files:
+            if is_shutdown_requested():
+                break
+
+            try:
+                file = os.path.basename(src_file)
+                dest_key = self._generate_destination_key(file, dest_dir, force_show, force_movie)
+                if dest_key in self.seen_destinations:
+                    self.seen_destinations.remove(dest_key)
+
+                result = self._process_unprocessed_file(src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index)
+
+                if result:
+                    results.extend(result if isinstance(result, list) else [result])
+
+            except Exception as e:
+                log_message(f"Failed to retry process missed file {src_file}: {str(e)}", level="ERROR")
+
         return results
 
     def _find_unprocessed_files_only(self, src_dirs, processed_files_set, mode, force, is_single_file):
@@ -751,11 +800,16 @@ def process_file(args, force=False, batch_apply=False):
     if os.path.islink(dest_file):
         existing_src = normalize_file_path(os.readlink(dest_file))
         if existing_src == normalized_src_file:
-            log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-            log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
-            return
+            has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+
+            if has_complete_metadata:
+                log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+                log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
+                save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                return
+            else:
+                log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
         else:
             log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
             os.remove(dest_file)
@@ -774,21 +828,31 @@ def process_file(args, force=False, batch_apply=False):
                 os.remove(existing_symlink_for_source)
             else:
                 # If rename is not enabled, keep the existing symlink
-                log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
-                log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
-                save_processed_file(src_file, existing_symlink_for_source, tmdb_id)
-                return
+                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+
+                if has_complete_metadata:
+                    log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
+                    log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
+                    save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                    return
+                else:
+                    log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
         else:
             # In force mode, remove the old symlink
             log_message(f"Force mode: Removing existing symlink {existing_symlink_for_source} to create new one at {dest_file}", level="INFO")
             os.remove(existing_symlink_for_source)
     elif existing_symlink_for_source == dest_file:
-        # This should have been caught by the first check, but just in case
-        log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-        log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
-        save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
-        return
+        has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+
+        if has_complete_metadata:
+            log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+            log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
+            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+            return
+        else:
+            log_message(f"Symlink exists but metadata incomplete (fallback) - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
