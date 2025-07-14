@@ -14,7 +14,7 @@ interface FileResponse {
   headers?: Record<string, string>;
 }
 
-export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100, search?: string): Promise<FileResponse> => {
+export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100, search?: string, letter?: string): Promise<FileResponse> => {
   const headers: Record<string, string> = {};
   if (checkTmdb) {
     headers['X-Check-Tmdb'] = 'true';
@@ -25,6 +25,9 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
   params.append('limit', limit.toString());
   if (search && search.trim()) {
     params.append('search', search.trim());
+  }
+  if (letter && letter.trim()) {
+    params.append('letter', letter.trim());
   }
 
   const url = '/api/files' + path + '?' + params.toString();

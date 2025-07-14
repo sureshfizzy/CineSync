@@ -38,7 +38,7 @@ export interface MobileListItemProps {
 }
 
 export interface AlphabetIndexProps {
-  files: FileItem[];
   selectedLetter: string | null;
   onLetterClick: (letter: string | null) => void;
+  loading?: boolean;
 }

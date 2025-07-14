@@ -474,6 +474,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	// Parse search parameter
 	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
 
+	letterFilter := strings.TrimSpace(r.URL.Query().Get("letter"))
+
 	dir := filepath.Join(rootDir, path)
 	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 
@@ -483,7 +485,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	var dbErr error
 	var useDatabase bool
 
-	if searchQuery == "" {
+	if searchQuery == "" && letterFilter == "" {
 		// Regular folder listing - use cached database approach
 		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, page, limit)
 		if dbErr != nil {
@@ -491,13 +493,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		} else {
 			useDatabase = len(dbFolders) > 0
 		}
-	} else {
-		// Search query - use database search instead of filesystem
-		logger.Debug("Using database search for query: '%s'", searchQuery)
+	} else if searchQuery != "" {
 		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabase(path, searchQuery, page, limit)
 		if dbErr != nil {
-			logger.Debug("Failed to search folders in database: %v", dbErr)
-			// For search queries, if database fails, return empty results instead of filesystem fallback
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Total-Count", "0")
 			w.Header().Set("X-Page", fmt.Sprintf("%d", page))
@@ -507,8 +505,14 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode([]FileInfo{})
 			return
 		} else {
-			useDatabase = true // Always use database for search, never filesystem
-			logger.Debug("Database search returned %d folders", len(dbFolders))
+			useDatabase = true
+		}
+	} else if letterFilter != "" {
+		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, 1, 10000)
+		if dbErr != nil {
+			useDatabase = false
+		} else {
+			useDatabase = len(dbFolders) > 0
 		}
 	}
 
@@ -552,8 +556,22 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	// First, add folders from database
 	if len(dbFolders) > 0 {
-		logger.Debug("Processing %d database folders (search: '%s')", len(dbFolders), searchQuery)
 		for _, dbFolder := range dbFolders {
+			if letterFilter != "" {
+				firstChar := dbFolder.FolderName[:1]
+				isNumeric := letterFilter == "#"
+				lowerLetter := strings.ToLower(letterFilter)
+
+				if isNumeric {
+					if !(len(firstChar) > 0 && firstChar[0] >= '0' && firstChar[0] <= '9') {
+						continue
+					}
+				} else {
+					if strings.ToLower(firstChar) != lowerLetter {
+						continue
+					}
+				}
+			}
 			fileInfo := FileInfo{
 				Name:     dbFolder.FolderName,
 				Type:     "directory",
@@ -807,6 +825,26 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		files = filteredFiles
 	}
 
+	if letterFilter != "" {
+		var filteredFiles []FileInfo
+		isNumeric := letterFilter == "#"
+		lowerLetter := strings.ToLower(letterFilter)
+
+		for _, file := range files {
+			firstChar := file.Name[:1]
+			if isNumeric {
+				if len(firstChar) > 0 && firstChar[0] >= '0' && firstChar[0] <= '9' {
+					filteredFiles = append(filteredFiles, file)
+				}
+			} else {
+				if strings.ToLower(firstChar) == lowerLetter {
+					filteredFiles = append(filteredFiles, file)
+				}
+			}
+		}
+		files = filteredFiles
+	}
+
 	// Sort files: directories first, then alphabetically
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].Type == "directory" && files[j].Type != "directory" {
@@ -818,9 +856,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
 
-	// Apply pagination
 	var totalFiles int
-	if useDatabase && searchQuery == "" {
+	if useDatabase && searchQuery == "" && letterFilter == "" {
 		totalFiles = totalDbFolders
 	} else {
 		totalFiles = len(files)
@@ -837,7 +874,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add pagination headers
+
 	w.Header().Set("X-Total-Count", fmt.Sprintf("%d", totalFiles))
 	w.Header().Set("X-Page", fmt.Sprintf("%d", page))
 	w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
@@ -892,6 +929,8 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Parse search parameter
 	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	letterFilter := strings.TrimSpace(r.URL.Query().Get("letter"))
 
 	// Parse source directory index (for multiple source dirs)
 	sourceIndex := 0
@@ -1048,6 +1087,26 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 		for _, file := range files {
 			if strings.Contains(strings.ToLower(file.Name), searchLower) {
 				filteredFiles = append(filteredFiles, file)
+			}
+		}
+		files = filteredFiles
+	}
+
+	if letterFilter != "" {
+		var filteredFiles []FileInfo
+		isNumeric := letterFilter == "#"
+		lowerLetter := strings.ToLower(letterFilter)
+
+		for _, file := range files {
+			firstChar := file.Name[:1]
+			if isNumeric {
+				if len(firstChar) > 0 && firstChar[0] >= '0' && firstChar[0] <= '9' {
+					filteredFiles = append(filteredFiles, file)
+				}
+			} else {
+				if strings.ToLower(firstChar) == lowerLetter {
+					filteredFiles = append(filteredFiles, file)
+				}
 			}
 		}
 		files = filteredFiles

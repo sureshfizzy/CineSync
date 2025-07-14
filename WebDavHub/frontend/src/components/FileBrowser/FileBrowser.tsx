@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination } from '@mui/material';
+import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination, Fade } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { debounce } from '@mui/material/utils';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
 import { FileItem, SortOption } from './types';
-import { getFileIcon, joinPaths, formatDate, sortFiles, filterFilesByLetter } from './fileUtils';
+import { getFileIcon, joinPaths, formatDate, sortFiles } from './fileUtils';
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
@@ -65,12 +65,13 @@ export default function FileBrowser() {
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
 
-  // Get page and search from URL
+
   const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
   const searchFromUrl = searchParams.get('search') || '';
+  const letterFromUrl = searchParams.get('letter') || null;
   const [page, setPageState] = useState(pageFromUrl);
 
-  // Function to update both page state and URL
+
   const setPage = useCallback((newPage: number) => {
     setPageState(newPage);
     const newSearchParams = new URLSearchParams(searchParams);
@@ -83,15 +84,15 @@ export default function FileBrowser() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState(searchFromUrl);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLetterFiltering, setIsLetterFiltering] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
-  const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
+  const [selectedLetter, setSelectedLetter] = useState<string | null>(letterFromUrl);
   const [configStatus, setConfigStatus] = useState<{
     isPlaceholder: boolean;
     destinationDir: string;
     effectiveRootDir: string;
     needsConfiguration: boolean;
   } | null>(null);
-
 
   // Dialog states
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -104,14 +105,8 @@ export default function FileBrowser() {
   const isInitialMount = useRef(true);
 
   const filteredFiles = useMemo(() => {
-    let result = files;
-
-    if (selectedLetter) {
-      result = filterFilesByLetter(result, selectedLetter);
-    }
-
-    return sortFiles(result, sortOption);
-  }, [files, selectedLetter, sortOption]);
+    return sortFiles(files, sortOption);
+  }, [files, sortOption]);
 
   const [totalPages, setTotalPages] = useState(1);
   const [hasLoadedData, setHasLoadedData] = useState(false);
@@ -177,13 +172,13 @@ export default function FileBrowser() {
     };
   }, []);
 
-  const fetchFiles = async (path: string, pageNum: number = page, searchQuery?: string, isSearchOperation: boolean = false) => {
+  const fetchFiles = async (path: string, pageNum: number = page, searchQuery?: string, isSearchOperation: boolean = false, letterFilter?: string) => {
     if (!isSearchOperation) {
       setLoading(true);
     }
     setError('');
     try {
-      const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE, searchQuery);
+      const response = await fetchFilesApi(path, true, pageNum, ITEMS_PER_PAGE, searchQuery, letterFilter);
 
       if (response.headers && response.headers['x-needs-configuration'] === 'true') {
         setFiles([]);
@@ -263,15 +258,24 @@ export default function FileBrowser() {
 
   useEffect(() => {
     const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
-    fetchFiles(currentPath, currentUrlPage, search);
+    const currentUrlLetter = searchParams.get('letter') || undefined;
+    fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
   }, [currentPath]);
 
   useEffect(() => {
     const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
+    const currentUrlLetter = searchParams.get('letter') || undefined;
     if (currentUrlPage !== page) {
-      fetchFiles(currentPath, currentUrlPage, search);
+      fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
     }
   }, [searchParams.get('page')]);
+
+  useEffect(() => {
+    const letterFromUrl = searchParams.get('letter') || null;
+    if (letterFromUrl !== selectedLetter) {
+      setSelectedLetter(letterFromUrl);
+    }
+  }, [searchParams.get('letter')]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -300,7 +304,8 @@ export default function FileBrowser() {
       }
       setSearchParams(newSearchParams);
 
-      fetchFiles(currentPath, search.trim() ? 1 : page, search.trim() || undefined, true);
+      const currentUrlLetter = searchParams.get('letter') || undefined;
+      fetchFiles(currentPath, search.trim() ? 1 : page, search.trim() || undefined, true, currentUrlLetter);
       setIsSearching(false);
     }, 800);
 
@@ -402,11 +407,38 @@ export default function FileBrowser() {
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
-    fetchFiles(currentPath, value, search, search.trim().length > 0);
+    fetchFiles(currentPath, value, search, search.trim().length > 0, selectedLetter || undefined);
   };
 
   const handleLetterClick = (letter: string | null) => {
-    setSelectedLetter(letter);
+    const newLetter = selectedLetter === letter ? null : letter;
+
+    if (newLetter !== selectedLetter) {
+      setIsLetterFiltering(true);
+      setSelectedLetter(newLetter);
+
+      const newSearchParams = new URLSearchParams(searchParams);
+      if (newLetter) {
+        newSearchParams.set('letter', newLetter);
+      } else {
+        newSearchParams.delete('letter');
+      }
+
+      if (page !== 1) {
+        setPage(1);
+        newSearchParams.set('page', '1');
+      }
+
+      setSearchParams(newSearchParams, { replace: true });
+
+      fetchFiles(currentPath, 1, search, search.trim().length > 0, newLetter || undefined)
+        .then(() => {
+          setIsLetterFiltering(false);
+        })
+        .catch(() => {
+          setIsLetterFiltering(false);
+        });
+    }
   };
 
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
@@ -718,53 +750,57 @@ export default function FileBrowser() {
 
       {/* Alphabet Index */}
       <AlphabetIndex
-        files={files}
         selectedLetter={selectedLetter}
         onLetterClick={handleLetterClick}
+        loading={isLetterFiltering}
       />
 
-      {view === 'poster' ? (
-        <>
-          <PosterView
-            files={filteredFiles}
-            tmdbData={tmdbData}
-            imgLoadedMap={imgLoadedMap}
-            onFileClick={handleFileClick}
-            onImageLoad={(key: string) => setImageLoaded(key, true)}
-            currentPath={currentPath}
-            onViewDetails={handleViewDetails}
-            onRename={() => debouncedRefresh(currentPath)}
-            onDeleted={() => debouncedRefresh(currentPath)}
-            onNavigateBack={handleNavigateBack}
-          />
-          <PaginationComponent
-            totalPages={totalPages}
-            page={page}
-            onPageChange={handlePageChange}
-            isMobile={isMobile}
-          />
-        </>
-      ) : (
-        <>
-          <ListView
-            files={filteredFiles}
-            currentPath={currentPath}
-            formatDate={formatDate}
-            onItemClick={handleListViewFileClick}
-            onViewDetails={handleViewDetails}
-            onRename={() => debouncedRefresh(currentPath)}
-            onDeleted={() => debouncedRefresh(currentPath)}
-            onError={setError}
-            onNavigateBack={handleNavigateBack}
-          />
-          <PaginationComponent
-            totalPages={totalPages}
-            page={page}
-            onPageChange={handlePageChange}
-            isMobile={isMobile}
-          />
-        </>
-      )}
+      <Fade in={!isLetterFiltering} timeout={300}>
+        <Box>
+          {view === 'poster' ? (
+            <>
+              <PosterView
+                files={filteredFiles}
+                tmdbData={tmdbData}
+                imgLoadedMap={imgLoadedMap}
+                onFileClick={handleFileClick}
+                onImageLoad={(key: string) => setImageLoaded(key, true)}
+                currentPath={currentPath}
+                onViewDetails={handleViewDetails}
+                onRename={() => debouncedRefresh(currentPath)}
+                onDeleted={() => debouncedRefresh(currentPath)}
+                onNavigateBack={handleNavigateBack}
+              />
+              <PaginationComponent
+                totalPages={totalPages}
+                page={page}
+                onPageChange={handlePageChange}
+                isMobile={isMobile}
+              />
+            </>
+          ) : (
+            <>
+              <ListView
+                files={filteredFiles}
+                currentPath={currentPath}
+                formatDate={formatDate}
+                onItemClick={handleListViewFileClick}
+                onViewDetails={handleViewDetails}
+                onRename={() => debouncedRefresh(currentPath)}
+                onDeleted={() => debouncedRefresh(currentPath)}
+                onError={setError}
+                onNavigateBack={handleNavigateBack}
+              />
+              <PaginationComponent
+                totalPages={totalPages}
+                page={page}
+                onPageChange={handlePageChange}
+                isMobile={isMobile}
+              />
+            </>
+          )}
+        </Box>
+      </Fade>
 
       <Dialog
         open={detailsOpen}
