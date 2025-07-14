@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, IconButton, Dialog, DialogTitle, DialogContent, List, ListItem, ListItemText, Divider, Button, DialogActions } from '@mui/material';
+import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, IconButton, Dialog, DialogTitle, DialogContent, List, ListItemButton, ListItemText, Divider, Button, DialogActions } from '@mui/material';
 import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, ChevronRight, PlaylistPlay as PlaylistIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
 import axios from 'axios';
 import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
+import { useNavigate } from 'react-router-dom';
 
 const MotionCard = motion(Card);
 
@@ -248,6 +249,9 @@ interface RecentMedia {
   episodeNumber?: number;
   episodeTitle?: string;
   filename?: string;
+  basePath?: string;
+  properName?: string;
+  year?: string;
 }
 
 interface GroupedMedia {
@@ -275,8 +279,9 @@ const RecentlyAddedMedia: React.FC = () => {
   const fetchingIds = useRef<Set<string>>(new Set());
   const fetchTimeoutRef = useRef<number | null>(null);
 
-  // Theme hook
+  // Theme and navigation hooks
   const theme = useTheme();
+  const navigate = useNavigate();
 
   // Fetch recent media function
   const fetchRecentMedia = useCallback(async () => {
@@ -301,7 +306,10 @@ const RecentlyAddedMedia: React.FC = () => {
         seasonNumber: item.seasonNumber || null,
         episodeNumber: item.episodeNumber || null,
         episodeTitle: item.episodeTitle || '',
-        filename: item.filename || ''
+        filename: item.filename || '',
+        basePath: item.basePath || '',
+        properName: item.properName || '',
+        year: item.year || ''
       }));
 
       setRecentMedia(mediaItems);
@@ -639,6 +647,32 @@ const RecentlyAddedMedia: React.FC = () => {
     return groups;
   }, [recentMedia]);
 
+  // Handle navigation to media details
+  const handleNavigateToMedia = useCallback((media: RecentMedia) => {
+    if (!media.tmdbId) return;
+
+    const mediaType = media.type === 'tvshow' || media.type === 'tv' ? 'tv' : 'movie';
+
+    const targetName = media.properName
+      ? (media.year ? `${media.properName} (${media.year})` : media.properName)
+      : (mediaType === 'tv' ? media.showName || getDisplayTitle(media) : media.name);
+
+    if (!targetName) return;
+
+    const basePath = media.basePath || media.folderName;
+    const relativePath = `/${basePath}/${targetName}`;
+
+    navigate(`/media${relativePath}`, {
+      state: {
+        mediaType,
+        tmdbId: media.tmdbId,
+        currentPath: `/${basePath}/`,
+        returnPage: 1,
+        returnSearch: ''
+      }
+    });
+  }, [navigate, getDisplayTitle]);
+
   // Handle show episode dialog
   const handleShowEpisodes = useCallback((group: GroupedMedia) => {
     if (group.episodes && group.episodes.length > 1) {
@@ -868,7 +902,7 @@ const RecentlyAddedMedia: React.FC = () => {
                 formatTimeAgo={formatTimeAgo}
                 theme={theme}
                 episodeCount={group.episodeCount}
-                onClick={group.episodeCount > 1 ? () => handleShowEpisodes(group) : undefined}
+                onClick={group.episodeCount > 1 ? () => handleShowEpisodes(group) : () => handleNavigateToMedia(group.media)}
               />
             );
           })}
@@ -915,13 +949,20 @@ const RecentlyAddedMedia: React.FC = () => {
           <List sx={{ p: 0 }}>
             {selectedShowEpisodes.map((episode, index) => (
               <React.Fragment key={`${episode.path}-${episode.updatedAt}`}>
-                <ListItem sx={{
-                  px: 0,
-                  py: 1.5,
-                  flexDirection: { xs: 'column', sm: 'row' },
-                  alignItems: { xs: 'flex-start', sm: 'center' },
-                  gap: 1
-                }}>
+                <ListItemButton
+                  onClick={() => handleNavigateToMedia(episode)}
+                  sx={{
+                    px: 0,
+                    py: 1.5,
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    gap: 1,
+                    borderRadius: 1,
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.04)
+                    }
+                  }}
+                >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <ListItemText
                       primary={
@@ -959,7 +1000,7 @@ const RecentlyAddedMedia: React.FC = () => {
                       }
                     />
                   </Box>
-                </ListItem>
+                </ListItemButton>
                 {index < selectedShowEpisodes.length - 1 && (
                   <Divider sx={{ my: 0.5 }} />
                 )}

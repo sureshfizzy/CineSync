@@ -2362,6 +2362,12 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get MediaHub database connection to look up base_path
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get MediaHub database connection for base_path lookup: %v", err)
+	}
+
 	// Convert database format to API format for compatibility
 	// Initialize as empty slice to ensure JSON encodes as [] not null
 	var result []map[string]interface{}
@@ -2373,6 +2379,23 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 			"updatedAt":  time.Unix(media.UpdatedAt, 0).Format(time.RFC3339),
 			"type":       media.Type,
 			"filename":   media.Filename,
+		}
+
+		// Look up additional info from processed_files table
+		if mediaHubDB != nil && media.Path != "" {
+			var basePath, properName, year string
+			query := `SELECT COALESCE(base_path, ''), COALESCE(proper_name, ''), COALESCE(year, '') FROM processed_files WHERE destination_path = ? LIMIT 1`
+			if err := mediaHubDB.QueryRow(query, media.Path).Scan(&basePath, &properName, &year); err == nil {
+				if basePath != "" {
+					item["basePath"] = strings.ReplaceAll(basePath, "\\", "/")
+				}
+				if properName != "" {
+					item["properName"] = properName
+				}
+				if year != "" {
+					item["year"] = year
+				}
+			}
 		}
 
 		if media.TmdbId != "" {
