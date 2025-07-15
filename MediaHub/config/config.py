@@ -455,7 +455,7 @@ def get_db_batch_size():
 
 def get_db_max_workers():
     """Get maximum number of database workers for parallel operations"""
-    return get_env_int('DB_MAX_WORKERS', 4)
+    return get_env_int('DB_MAX_WORKERS', 20)
 
 def get_db_max_records():
     """Get maximum number of records before archiving"""
