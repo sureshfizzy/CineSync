@@ -12,45 +12,86 @@
   </a>
 </p>
 
-
-# CineSync - Organize Your Debrid Library Easily
-
-CineSync is a Python-based library management system designed to efficiently organize debrid libraries for Movies & TV shows, eliminating the need for Sonarr/Radarr. Users downloading from DMM Manager can seamlessly sort their library into seasons, whether it's a single file or a folder. CineSync streamlines the organization of your library and creates symbolic links, providing full control over your data locally. While highly optimized for debrid platforms, CineSync is also versatile and works effectively with non-debrid platforms.
-
-# General Info
-
-CineSync works by creating symbolic links from the source directory to the destination directory and organizing them according to the user's preferences. This allows users to maintain a well-structured library without physically moving or duplicating the original files.
-
-# CineSync WebDAV
-
-CineSync now includes its own **WebDAV server**, allowing you to directly access your organized library in **Infuse, Vidhub, or any WebDAV-compatible media player**.
-
 <p align="center">
-  <img src="Screenshots/CineSync-WebDav.png" alt="WebDAV">
+  <a href="https://www.buymeacoffee.com/Sureshfizzy">
+    <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support%20development-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee">
+  </a>
+  <a href="https://www.patreon.com/c/sureshs/membership">
+    <img src="https://img.shields.io/badge/Patreon-become%20a%20patron-FF424D?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon">
+  </a>
 </p>
 
-## Features
 
-- **Direct Integration with Infuse/Vidhub**: Stream your media library without additional configurations.
-- **Organized File Names & Structures**: Files and folders are structured exactly as managed by CineSync.
-- **No Additional Software Required**: Built-in WebDAV functionality eliminates the need for extra tools or mounts.
-- **Secure & Efficient Access**: Provides a stable WebDAV endpoint with **optional authentication support**.
-- **Fully Configurable**: Enable or disable WebDAV support through environment variables.
+# CineSync - Organize Your Media Library Easily
 
-With **CineSync WebDAV**, your **media library is instantly available** across multiple devices without additional setups, making your experience smooth and hassle-free.
+CineSync is a comprehensive media library management system designed to efficiently organize libraries for Movies & TV shows, eliminating the need for Sonarr/Radarr. With its modern web interface, real-time monitoring, and advanced automation features, CineSync streamlines the organization of your library while providing full control over your data locally. While highly optimized for debrid platforms, CineSync is also versatile and works effectively with non-debrid platforms.
 
-For WebDAV configuration, visit the [WebDAV Wiki](https://github.com/sureshfizzy/CineSync/wiki/WebDav).
+# CineSync Web Interface
 
-## Getting Started
+CineSync features a **modern web interface** for complete library management with professional-grade tools and real-time monitoring.
 
-For detailed instructions on installation, configuration, and usage, please visit our Wiki:
+<p align="center">
+  <img src="Screenshots/Dashbaord.png" alt="CineSync Dashboard" width="800">
+</p>
 
-- [Getting Started](https://github.com/sureshfizzy/CineSync/wiki)
-- [Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)
-- [Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration)
-- [Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage)
-- [Docker Volumes](https://github.com/sureshfizzy/CineSync/wiki/Volumes)
-- [WebDav](https://github.com/sureshfizzy/CineSync/wiki/WebDav)
+### 📸 Interface Screenshots
+
+<div align="center">
+  <img src="Screenshots/FileBrowser.png" alt="File Browser" width="400" style="margin: 10px;">
+  <img src="Screenshots/PosterView.png" alt="Poster View" width="400" style="margin: 10px;">
+</div>
+
+<div align="center">
+  <img src="Screenshots/MovieMetadata.png" alt="Movie Metadata" width="400" style="margin: 10px;">
+  <img src="Screenshots/ShowMetadata.png" alt="Show Metadata" width="400" style="margin: 10px;">
+</div>
+
+# How CineSync Works ?
+
+CineSync creates symbolic links from source directories to destination directories, organizing them according to your preferences and metadata from TMDb/IMDb/TVDB. This approach allows you to maintain a well-structured library without physically moving or duplicating files, preserving disk space while enabling advanced organization features.
+
+## What's New in CineSync
+
+- **🌐 Modern Web Interface** - Complete web-based dashboard with file browser, settings management, and real-time monitoring
+- **🤖 Auto-Processing** - Intelligent automation that processes media files as they're discovered
+- **📊 Advanced Analytics** - Comprehensive dashboard with media statistics, recent activity, and system monitoring
+- **🎯 Smart Content Separation** - Automatic categorization for Kids content, 4K media, and Anime with customizable rules
+- **🔄 Real-Time Updates** - Live dashboard updates and instant media server integration (Plex/Jellyfin/Emby)
+- **🗃️ Database Management** - Built-in database with export capabilities and advanced search functionality
+
+## Web Interface Features
+
+- **📊 Interactive Dashboard**: Real-time statistics, recent media tracking, and system monitoring
+- **📁 Advanced File Browser**: Navigate, manage, and organize your media library with drag-and-drop support
+- **⚙️ Settings Management**: Configure all CineSync options through an intuitive web interface
+- **🔍 Smart Search**: Advanced search and filtering capabilities with alphabet indexing
+- **📈 Analytics & Reporting**: Detailed insights into your media collection and processing activities
+- **🔄 Real-Time Updates**: Live notifications and automatic refresh of library changes
+- **🎯 Auto-Processing Controls**: Enable/disable automatic processing with toggle controls
+- **🗃️ Database Management**: Export, search, and manage your media database
+- **🔐 Secure Authentication**: JWT-based authentication with configurable access controls
+
+With **CineSync's integrated web interface**, your **media library is instantly manageable** across multiple devices with professional-grade tools and real-time automation.
+
+For detailed configuration and usage, visit the [Web Interface Guide](https://github.com/sureshfizzy/CineSync/wiki/Web-Interface).
+
+## 🚀 Installation
+
+Ready to get started? CineSync supports multiple installation methods to fit your environment.
+
+**📖 [Complete Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)** - Docker, manual setup, system requirements, and troubleshooting
+
+## Documentation
+
+For comprehensive guides and configuration options, visit our Wiki:
+
+- [🏠 Getting Started](https://github.com/sureshfizzy/CineSync/wiki) - Overview and quick setup
+- [📦 Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation) - Docker and manual installation
+- [⚙️ Configuration Options](https://github.com/sureshfizzy/CineSync/wiki/Configuration) - Complete configuration reference
+- [🌐 Web Interface Guide](https://github.com/sureshfizzy/CineSync/wiki/Web-Interface) - Web dashboard and features
+- [🎯 Advanced Features](https://github.com/sureshfizzy/CineSync/wiki/Advanced-Features) - Auto-processing, content separation, and automation
+- [📖 Usage Guide](https://github.com/sureshfizzy/CineSync/wiki/Usage) - Command-line and web interface usage
+- [🐳 Docker Volumes](https://github.com/sureshfizzy/CineSync/wiki/Volumes) - Docker configuration for media servers
 
 ## Docker Hub Repository
 
@@ -63,48 +104,59 @@ The CineSync Docker image is available on Docker Hub:
 - `amd64` (x86_64)
 - `arm64` (aarch64)
 
-## Features
+## Real-Time Monitoring & Automation
 
-- **Real-Time Monitoring:** Instant refresh and updates on Jellyfin/Plex (https://github.com/sureshfizzy/CineSync/wiki#real-time-monitoringupdates-on-jellyfin)
-- **Library Organization:** Easily sort your library into seasons, regardless of file or folder structure.
-- **Faster Scan:** CineSync has been optimized for faster file and directory scanning. Improved directory checks, file handling, and multi-threaded processing (controlled by `MAX_PROCESSES`) help speed up the scan process, especially for large libraries.
-- **Symbolic Link Creation:** Create symbolic links to organize your library without moving or duplicating files.
-- **Real-Time Monitoring for Files:** Monitor the watch directory for any new files and automatically create symbolic links for them, ensuring your library stays updated in real-time. (Configurable monitoring interval via `SLEEP_TIME`).
-- **Support for Single Symlinks Creation:** CineSync now supports creating symbolic links for single files or folders, providing flexibility in managing your library.
-- **Ability to Skip Already Present Symlinks:** CineSync includes the ability to skip the creation of symbolic links for files or folders that are already present, even if the folder name is different. This feature ensures efficient management of your library by preventing duplicate symlinks.
-- **Rename Files:** Properly rename your files based on TMDb data when `RENAME_ENABLED=true`.
-- **Cross-Platform Support:** Works on both Linux and Windows operating systems.
-- **Movie Collection-Based Separation:** Organize movies into collections based on TMDb or IMDb data, ensuring that all movies from the same collection are grouped together. (Enabled via `MOVIE_COLLECTION_ENABLED`).
-- **Docker Support:** Easily deploy CineSync in a Docker container for consistent and isolated environments.
-- **TMDb/IMDB/TVDB ID Integration:** Utilize TMDb/IMDB/TVDB IDs for more precise organization and naming of your media files.
-- **Automatic Separation of Extras and Resolutions:** Automatically separate extras from main episodes and sort files based on resolution (e.g., 720p, 1080p, 4K), ensuring a well-organized library. (Configurable via `SKIP_EXTRAS_FOLDER`).
-- **Resolution-Based File Sorting:** Separate files based on resolution (e.g., 720p, 1080p, 4K) for easier organization. If resolution-based separation is not enabled, files will be organized based on the source folder structure.
-- **Database Configuration:** Optimized for efficient database operations with configurable throttle rates, retry mechanisms, and batch processing to manage media metadata and symlink creation. (Controlled via `DB_*` variables).
-- **Rclone Mount Verification:** CineSync supports checking if rclone mount points are available before processing files. This feature is useful for managing remote storage and ensures the mount is active before symlink creation. (Enabled via `RCLONE_MOUNT`).
+CineSync features advanced real-time monitoring and automation capabilities that keep your media library perfectly organized without manual intervention. The modern web interface provides complete control over automation settings and real-time monitoring of all processing activities.
 
-## Real-Time Monitoring
+### 🔄 Intelligent Monitoring System
 
-CineSync now includes a fully integrated real-time monitoring feature that automatically tracks changes in your media library. This functionality is particularly useful for handling series or shows that are regularly downloaded, ensuring that your library stays up-to-date without manual intervention.
+- **Smart File Detection**: Advanced algorithms detect new media files instantly using filesystem events
+- **Auto-Processing Mode**: Toggle automatic processing through the web interface for hands-free operation
+- **Streaming Integration**: Real-time updates to media servers (Plex/Jellyfin/Emby) ensure instant library refresh
+- **Duplicate Prevention**: Intelligent deduplication prevents processing the same content multiple times
 
-### How it works:
+### 🤖 Automated Workflows
 
-- **Initial Full Scan:** Upon starting, CineSync will first perform a full scan of your library to organize and identify all existing files and folders.
+- **Initial Smart Scan**: Comprehensive library analysis and organization on startup
+- **Continuous Monitoring**: Real-time detection of new files with configurable monitoring intervals
+- **Batch Processing**: Efficient handling of multiple files with parallel processing capabilities
+- **Error Recovery**: Automatic retry mechanisms for failed operations with exponential backoff
 
-- **Automatic Trigger:** Once the full scan is completed, the real-time monitoring will automatically trigger, and from that point on, CineSync will continuously monitor your designated watch directory for new files or folders.
+### 📊 Real-Time Dashboard Updates
 
-- **Watch Directory:** CineSync continuously monitors the watch directory where new files or folders are expected to be added.
-
-- **Monitoring Interval:** By default, CineSync checks the watch directory every 60 seconds for any changes. You can modify this interval by adjusting the `SLEEP_TIME` variable in the configuration file.
-
-- **Automatic Identification:** When a new file or folder is detected, CineSync automatically identifies it based on its naming conventions and other factors.
-
-- **Symbolic Link Creation:** Once identified, CineSync creates symbolic links for the newly added file or folder. This ensures that your library remains organized without physically moving or duplicating files, preserving disk space.
-
-- **Efficiency:** Real-time monitoring allows users to stay up-to-date with library changes automatically. It streamlines the process of handling daily series or shows by organizing new additions without requiring manual input.
-
-- **Customization:** You can easily customize the monitoring interval and other settings to better suit your specific needs and library requirements.
+- **Live Statistics**: Dashboard updates in real-time showing processing progress and library stats
+- **Recent Media Tracking**: Automatic tracking and display of recently added content
+- **Processing Queue**: Visual monitoring of current and pending file operations
 
 CineSync’s real-time monitoring is now a core feature of the script and Docker images, allowing for seamless integration into your workflow. With this feature, users can effortlessly manage their media library and maintain a well-organized collection of files.
+
+### ⚙️ Customizable Automation
+
+- **Flexible Scheduling**: Configurable monitoring intervals and processing schedules
+- **Content-Specific Rules**: Different automation rules for movies, TV shows, anime, and kids content
+- **Smart Cleanup**: Automatic removal of broken symlinks and orphaned database entries
+
+### 🔗 Media Server Integration
+
+- **Jellyfin/Emby Integration**: Instant library refresh using [inotify-compatible symlinks](https://jellyfin.org/docs/general/administration/troubleshooting#real-time-monitoring)
+- **Plex Integration**: Automatic library scanning and updates via Plex API
+- **Direct Streaming**: Real-time availability of organized content through multiple access methods
+
+CineSync's automation system transforms media management from a manual chore into a seamless, intelligent process that works continuously in the background.
+
+### 🎯 Smart Content Separation
+
+- **Kids Content Detection**: Automatically separate family-friendly content based on TMDB ratings (G, PG, TV-Y, TV-G, TV-PG) and family genres
+- **4K Content Organization**: Automatic detection and separation of 4K/UHD content into dedicated folders
+- **Anime Classification**: Specialized handling for anime content with separate organization for anime movies and TV shows
+- **Resolution-Based Sorting**: Intelligent sorting by video quality (720p, 1080p, 4K, etc.)
+
+### 📁 Flexible Organization Options
+
+- **CineSync Layout**: Simplified organization into Movies and Shows directories
+- **Source Structure Preservation**: Maintain original folder structures when preferred
+- **Custom Folder Naming**: Configurable folder names for different content types
+- **Collection-Based Grouping**: Organize movie franchises and collections together
 
 # Service Provider: ElfHosted
 
@@ -130,6 +182,5 @@ Enjoy hassle-free, self-hosted app management with ElfHosted.
 
 ## Contributors
 
-- [Suresh S](https://github.com/sureshfizzy)❤️
-- Special thanks to [Paolo](https://github.com/RunAway189) for testing the application.!
-- [Buy Me a Coffee](https://www.buymeacoffee.com/Sureshfizzy)☕
+- [Suresh S](https://github.com/sureshfizzy) ❤️
+- Special thanks to [Paolo](https://github.com/RunAway189) for testing the application! 🙏

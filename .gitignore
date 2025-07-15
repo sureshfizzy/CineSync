@@ -7,11 +7,9 @@ __pycache__/
 *.pyd
 /db
 cache/
-logs
-Screenshots
+logs/
 WebDavHub/frontend/node_modules/
 WebDavHub/data/
 WebDavHub/cinesync
 WebDavHub/cinesync.exe
 WebDavHub/frontend/dist/
-
