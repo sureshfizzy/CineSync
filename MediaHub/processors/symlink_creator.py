@@ -192,7 +192,7 @@ class ProcessingManager:
                 log_message("Manager: Processing interrupted by shutdown request", level="INFO")
                 return results
 
-        log_message(f"Manager: Smart parallel processing complete. Processed {len(results)} files", level="DEBUG")
+        log_message(f"Manager: Smart parallel processing complete. Processed {completed_count} files", level="DEBUG")
 
         if not is_shutdown_requested():
             missed_files = self._verify_and_find_missed_files(unprocessed_files, mode, force)
