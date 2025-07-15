@@ -18,7 +18,18 @@ source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None, manual_search=False):
 
-    source_folder = os.path.basename(os.path.dirname(root))
+    # Determine source folder for source structure
+    if is_source_structure_enabled():
+        source_folder = None
+        for source_dir in source_dirs:
+            source_dir = source_dir.strip()
+            if source_dir and root.startswith(source_dir):
+                source_folder = os.path.basename(source_dir)
+                break
+        if not source_folder:
+            source_folder = os.path.basename(os.path.dirname(root))
+    else:
+        source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)
 
     if should_skip_file(parent_folder_name):

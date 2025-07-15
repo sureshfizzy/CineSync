@@ -46,20 +46,24 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
       const allVideoFiles = await collectVideoFiles(showFolderPath);
       const seasonMap: { [seasonNum: number]: any[] } = {};
       for (const { file } of allVideoFiles) {
-        let match = file.name.match(/S(\d{1,2})E(\d{1,2})/i) || file.name.match(/s(\d{2})e(\d{2})/i);
-        let seasonNum: number | undefined = undefined;
-        let episodeNum: number | undefined = undefined;
-        if (match) {
-          seasonNum = parseInt(match[1], 10);
-          episodeNum = parseInt(match[2], 10);
-        } else {
-          match = file.name.match(/(\d{1,2})x(\d{2})/i);
+        let seasonNum: number | undefined = file.seasonNumber;
+        let episodeNum: number | undefined = file.episodeNumber;
+
+        if (seasonNum === undefined || seasonNum === null) {
+          let match = file.name.match(/S(\d{1,2})\.?E(\d{1,2})/i) || file.name.match(/s(\d{2})\.?e(\d{2})/i);
           if (match) {
             seasonNum = parseInt(match[1], 10);
             episodeNum = parseInt(match[2], 10);
+          } else {
+            match = file.name.match(/(\d{1,2})x(\d{2})/i);
+            if (match) {
+              seasonNum = parseInt(match[1], 10);
+              episodeNum = parseInt(match[2], 10);
+            }
           }
         }
-        if (seasonNum === undefined) {
+
+        if (seasonNum === undefined || seasonNum === null) {
           seasonNum = 0;
         }
         if (!seasonMap[seasonNum]) seasonMap[seasonNum] = [];
@@ -68,7 +72,7 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
           size: file.size || '--',
           modified: file.modified || '--',
           path: (file.path as string) || '',
-          episodeNumber: episodeNum
+          episodeNumber: episodeNum || file.episodeNumber
         });
       }
       const seasonFoldersData: SeasonFolderInfo[] = Object.entries(seasonMap)

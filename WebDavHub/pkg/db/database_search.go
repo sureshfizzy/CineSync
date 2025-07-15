@@ -706,6 +706,7 @@ type FileInfo struct {
 	FileSize        int64
 	TmdbID          string
 	SeasonNumber    int
+	EpisodeNumber   int
 	SourcePath      string
 	DestinationPath string
 }
@@ -1199,6 +1200,7 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	var fileSize sql.NullInt64
 	var tmdbID sql.NullString
 	var seasonNumber sql.NullInt64
+	var episodeNumber sql.NullInt64
 	var sourcePath sql.NullString
 	var destinationPath sql.NullString
 
@@ -1212,13 +1214,14 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 		` + fileSizeSelect + `,
 		COALESCE(tmdb_id, '') as tmdb_id,
 		COALESCE(season_number, 0) as season_number,
+		COALESCE(episode_number, 0) as episode_number,
 		COALESCE(file_path, '') as source_path,
 		COALESCE(destination_path, '') as destination_path
 	FROM processed_files
 	WHERE file_path = ? OR destination_path = ?
 	LIMIT 1`
 
-	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber, &sourcePath, &destinationPath)
+	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber, &episodeNumber, &sourcePath, &destinationPath)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			logger.Debug("Failed to query file info for %s: %v", filePath, err)
@@ -1235,6 +1238,9 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	}
 	if seasonNumber.Valid {
 		info.SeasonNumber = int(seasonNumber.Int64)
+	}
+	if episodeNumber.Valid {
+		info.EpisodeNumber = int(episodeNumber.Int64)
 	}
 	if sourcePath.Valid {
 		info.SourcePath = sourcePath.String

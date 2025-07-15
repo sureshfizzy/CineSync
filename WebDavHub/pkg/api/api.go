@@ -183,6 +183,8 @@ type FileInfo struct {
 	Title    string `json:"title,omitempty"`
 	ReleaseDate string `json:"releaseDate,omitempty"`
 	FirstAirDate string `json:"firstAirDate,omitempty"`
+	SeasonNumber *int `json:"seasonNumber,omitempty"`
+	EpisodeNumber *int `json:"episodeNumber,omitempty"`
 	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
 	IsSourceFile bool `json:"isSourceFile,omitempty"`
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
@@ -860,6 +862,12 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				fileInfo.DestinationPath = dbInfo.DestinationPath
 				if dbInfo.TmdbID != "" {
 					fileInfo.TmdbId = dbInfo.TmdbID
+				}
+				if dbInfo.SeasonNumber > 0 {
+					fileInfo.SeasonNumber = &dbInfo.SeasonNumber
+				}
+				if dbInfo.EpisodeNumber > 0 {
+					fileInfo.EpisodeNumber = &dbInfo.EpisodeNumber
 				}
 			} else {
 				fileInfo.Size = formatFileSize(info.Size())
