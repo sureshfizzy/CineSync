@@ -181,7 +181,7 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	var finalAbsPath string
 
-	if strings.HasPrefix(cleanPath, "/") && runtime.GOOS != "windows" {
+	if strings.HasPrefix(cleanPath, "/") {
 		logger.Debug("Unix path detected: '%s'", cleanPath)
 		var foundPath string
 
@@ -194,7 +194,11 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 			candidatePath := filepath.Join(rootDir, relativePath)
 			logger.Debug("Trying candidate path relative to rootDir: '%s'", candidatePath)
 
-			if _, err := os.Lstat(candidatePath); err == nil {
+			resolvedPath, err := resolveActualDirectoryPath(candidatePath, relativePath)
+			if err == nil && resolvedPath != candidatePath {
+				foundPath = resolvedPath
+				logger.Debug("Resolved Unix path '%s' using ID suffix matching: '%s'", cleanPath, resolvedPath)
+			} else if _, err := os.Lstat(candidatePath); err == nil {
 				foundPath = candidatePath
 				logger.Debug("Resolved Unix path '%s' relative to rootDir: '%s'", cleanPath, candidatePath)
 			} else {
@@ -247,7 +251,15 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if filepath.IsAbs(cleanPath) {
-		finalAbsPath = cleanPath
+		apiPath := strings.TrimPrefix(cleanPath, rootDir)
+		apiPath = strings.ReplaceAll(apiPath, "\\", "/")
+		resolvedPath, err := resolveActualDirectoryPath(cleanPath, apiPath)
+		if err == nil && resolvedPath != cleanPath {
+			finalAbsPath = resolvedPath
+			logger.Debug("Resolved absolute path '%s' using ID suffix matching: '%s'", cleanPath, resolvedPath)
+		} else {
+			finalAbsPath = cleanPath
+		}
 	} else {
 		absPath := filepath.Join(rootDir, cleanPath)
 
@@ -268,6 +280,21 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(finalAbsPath, absRoot) {
 			http.Error(w, "Path outside root directory", http.StatusBadRequest)
 			return
+		}
+
+		apiPath := cleanPath
+		resolvedPath, err := resolveActualDirectoryPath(finalAbsPath, apiPath)
+		if err == nil && resolvedPath != finalAbsPath {
+			finalAbsPath = resolvedPath
+			logger.Debug("Resolved relative path '%s' using ID suffix matching: '%s'", cleanPath, resolvedPath)
+		}
+	}
+
+	if strings.HasPrefix(req.SourcePath, "/") {
+		apiPath := strings.TrimPrefix(req.SourcePath, "/")
+		resolvedPath, err := resolveActualDirectoryPath(finalAbsPath, apiPath)
+		if err == nil && resolvedPath != finalAbsPath {
+			finalAbsPath = resolvedPath
 		}
 	}
 
