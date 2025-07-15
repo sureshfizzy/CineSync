@@ -440,26 +440,47 @@ func resolveActualDirectoryPath(requestedDir, apiPath string) (string, error) {
 		return requestedDir, nil
 	}
 
-	parentDir := filepath.Dir(requestedDir)
-	requestedFolderName := filepath.Base(requestedDir)
-
-	entries, err := os.ReadDir(parentDir)
-	if err != nil {
+	pathParts := strings.Split(strings.Trim(apiPath, "/"), "/")
+	if len(pathParts) == 0 {
 		return requestedDir, nil
 	}
 
-	idPattern := regexp.MustCompile(`\s*\{(?:tmdb|imdb|tvdb)-[^}]+\}`)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			baseName := strings.TrimSpace(idPattern.ReplaceAllString(entry.Name(), ""))
-			if baseName == requestedFolderName {
-				actualPath := filepath.Join(parentDir, entry.Name())
-				return actualPath, nil
+	currentPath := rootDir
+	for _, part := range pathParts {
+		if part == "" {
+			continue
+		}
+
+		nextPath := filepath.Join(currentPath, part)
+		if _, err := os.Stat(nextPath); err == nil {
+			currentPath = nextPath
+			continue
+		}
+
+		entries, err := os.ReadDir(currentPath)
+		if err != nil {
+			return requestedDir, nil
+		}
+
+		found := false
+		idPattern := regexp.MustCompile(`\s*\{(?:tmdb|imdb|tvdb)-[^}]+\}`)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				baseName := strings.TrimSpace(idPattern.ReplaceAllString(entry.Name(), ""))
+				if baseName == part {
+					currentPath = filepath.Join(currentPath, entry.Name())
+					found = true
+					break
+				}
 			}
+		}
+
+		if !found {
+			return requestedDir, nil
 		}
 	}
 
-	return requestedDir, nil
+	return currentPath, nil
 }
 
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
