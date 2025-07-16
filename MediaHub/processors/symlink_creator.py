@@ -294,8 +294,8 @@ class ProcessingManager:
 
                         unprocessed_files.append(src_file)
 
-                        if total_scanned % 1000 == 0:
-                            log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
+                        if total_scanned % BATCH_SIZE == 0:
+                            log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="DEBUG")
 
         log_message(f"Smart scan complete: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
         return unprocessed_files
