@@ -567,11 +567,13 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			useDatabase = true
 		}
 	} else if letterFilter != "" {
-		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, 1, 10000)
+		// Use database search with letter filtering for better performance
+		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabaseWithLetter(path, letterFilter, page, limit)
 		if dbErr != nil {
-			useDatabase = false
+			dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, 1, 10000)
+			useDatabase = dbErr == nil && len(dbFolders) > 0
 		} else {
-			useDatabase = len(dbFolders) > 0
+			useDatabase = true
 		}
 	}
 
@@ -616,21 +618,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	// First, add folders from database
 	if len(dbFolders) > 0 {
 		for _, dbFolder := range dbFolders {
-			if letterFilter != "" {
-				firstChar := dbFolder.FolderName[:1]
-				isNumeric := letterFilter == "#"
-				lowerLetter := strings.ToLower(letterFilter)
-
-				if isNumeric {
-					if !(len(firstChar) > 0 && firstChar[0] >= '0' && firstChar[0] <= '9') {
-						continue
-					}
-				} else {
-					if strings.ToLower(firstChar) != lowerLetter {
-						continue
-					}
-				}
-			}
 			fileInfo := FileInfo{
 				Name:     dbFolder.FolderName,
 				Type:     "directory",
@@ -923,9 +910,14 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	})
 
 	var totalFiles int
-	if useDatabase && searchQuery == "" && letterFilter == "" {
+	if useDatabase && (searchQuery != "" || letterFilter != "") {
+		// For database searches (including letter filtering), use the total count from database
+		totalFiles = totalDbFolders
+	} else if useDatabase && searchQuery == "" && letterFilter == "" {
+		// For regular database listing without filters
 		totalFiles = totalDbFolders
 	} else {
+		// For filesystem-based results, apply pagination manually
 		totalFiles = len(files)
 		startIndex := (page - 1) * limit
 		endIndex := startIndex + limit

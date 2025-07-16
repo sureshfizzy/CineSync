@@ -795,7 +795,6 @@ func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]Folder
 
 	if cleanBasePath == "" {
 		// Root level - don't query database, let filesystem handle it
-		// This is much simpler and works perfectly as shown in your logs
 		return nil, 0, fmt.Errorf("root level should use filesystem")
 	}
 
@@ -817,7 +816,6 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 
 	// Check if base_path column exists
 	if !checkBasePathColumnExists() {
-		logger.Debug("base_path column does not exist yet")
 		return nil, 0, fmt.Errorf("base_path column not available")
 	}
 
@@ -829,7 +827,6 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 	var exactCount int
 	err := db.QueryRow(exactMatchQuery, normalizedCategory).Scan(&exactCount)
 	if err != nil {
-		logger.Debug("Failed to check exact match: %v", err)
 		return nil, 0, err
 	}
 
@@ -1007,7 +1004,6 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 							endIdx = len(expandedFolders)
 						}
 						result := expandedFolders[startIdx:endIdx]
-
 						return result, expandedTotal, nil
 					}
 				}
@@ -1028,7 +1024,6 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 	result, total, err := GetFoldersFromDatabasePaginated(basePath, 1, cacheLimit)
 
 	if err == nil {
-
 		// Populate cache with the results
 		cache.mu.Lock()
 		cache.pathFolders[cleanBasePath] = result
@@ -1208,6 +1203,182 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		}
 
 		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		folder.Modified = latestProcessedAt
+
+		folders = append(folders, folder)
+	}
+
+	return folders, totalCount, nil
+}
+
+// SearchFoldersFromDatabaseWithLetter searches folders in the database with letter filtering
+func SearchFoldersFromDatabaseWithLetter(basePath string, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Clean the base path
+	cleanBasePath := strings.Trim(basePath, "/\\")
+
+	if cleanBasePath == "" {
+		return searchRootFoldersWithLetter(mediaHubDB, letterFilter, page, limit)
+	}
+
+	return searchCategoryFoldersWithLetter(mediaHubDB, cleanBasePath, letterFilter, page, limit)
+}
+
+// searchRootFoldersWithLetter searches root folders with letter filtering
+func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+	offset := (page - 1) * limit
+	isNumeric := letterFilter == "#"
+
+	var whereClause string
+	var args []interface{}
+
+	if isNumeric {
+		// For numeric filter, match folders starting with digits 0-9
+		whereClause = `WHERE SUBSTR(proper_name, 1, 1) BETWEEN '0' AND '9'`
+	} else {
+		// For letter filter, match folders starting with the specific letter (case insensitive)
+		whereClause = `WHERE LOWER(SUBSTR(proper_name, 1, 1)) = LOWER(?)`
+		args = append(args, letterFilter)
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, 0) as season_number,
+			COUNT(*) as file_count,
+			base_path,
+			MAX(processed_at) as latest_processed_at,
+			COUNT(*) OVER() as total_count
+		FROM processed_files
+		` + whereClause + `
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id, base_path
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	var totalCount int
+
+	for rows.Next() {
+		var folder FolderInfo
+		var basePath string
+		var latestProcessedAt string
+
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
+			&folder.SeasonNumber, &folder.FileCount, &basePath, &latestProcessedAt, &totalCount)
+		if err != nil {
+			continue
+		}
+
+		// Build folder name and path
+		if folder.ProperName != "" && folder.Year != "" {
+			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
+		} else if folder.ProperName != "" {
+			folder.FolderName = folder.ProperName
+		} else {
+			continue
+		}
+
+		folder.FolderPath = "/" + basePath + "/" + folder.FolderName
+		folder.Modified = latestProcessedAt
+
+		folders = append(folders, folder)
+	}
+
+	return folders, totalCount, nil
+}
+
+// searchCategoryFoldersWithLetter searches category folders with letter filtering
+func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+	// Normalize path separators - database stores with backslashes, API uses forward slashes
+	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
+
+	offset := (page - 1) * limit
+	isNumeric := letterFilter == "#"
+
+	var whereClause string
+	var args []interface{}
+
+	// Base WHERE clause for category
+	whereClause = `WHERE base_path = ?`
+	args = append(args, normalizedCategory)
+
+	// Add letter filtering
+	if isNumeric {
+		// For numeric filter, match folders starting with digits 0-9
+		whereClause += ` AND SUBSTR(proper_name, 1, 1) BETWEEN '0' AND '9'`
+	} else {
+		// For letter filter, match folders starting with the specific letter (case insensitive)
+		whereClause += ` AND LOWER(SUBSTR(proper_name, 1, 1)) = LOWER(?)`
+		args = append(args, letterFilter)
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, 0) as season_number,
+			COUNT(*) as file_count,
+			MAX(processed_at) as latest_processed_at,
+			COUNT(*) OVER() as total_count
+		FROM processed_files
+		` + whereClause + `
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	var totalCount int
+
+	for rows.Next() {
+		var folder FolderInfo
+		var latestProcessedAt string
+
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
+			&folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
+		if err != nil {
+			continue
+		}
+
+		// Build folder name and path
+		if folder.ProperName != "" && folder.Year != "" {
+			folder.FolderName = folder.ProperName + " (" + folder.Year + ")"
+		} else if folder.ProperName != "" {
+			folder.FolderName = folder.ProperName
+		} else {
+			continue
+		}
+
+		apiPath := "/" + strings.ReplaceAll(normalizedCategory, string(filepath.Separator), "/") + "/" + folder.FolderName
+		folder.FolderPath = apiPath
 		folder.Modified = latestProcessedAt
 
 		folders = append(folders, folder)

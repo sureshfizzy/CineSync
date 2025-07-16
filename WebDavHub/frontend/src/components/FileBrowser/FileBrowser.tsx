@@ -76,8 +76,15 @@ export default function FileBrowser() {
     setPageState(newPage);
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set('page', newPage.toString());
+
+    // Preserve the letter filter when changing pages
+    const currentLetter = searchParams.get('letter');
+    if (currentLetter) {
+      newSearchParams.set('letter', currentLetter);
+    }
+
     setSearchParams(newSearchParams, { replace: true });
-  }, [searchParams, setSearchParams, page]);
+  }, [searchParams, setSearchParams]);
 
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
