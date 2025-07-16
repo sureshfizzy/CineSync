@@ -95,13 +95,19 @@ func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
 // handleTrackFileOperation tracks file additions and deletions
 func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Operation       string `json:"operation"`       // "add", "delete", or "failed"
+		Operation       string `json:"operation"`       // "add", "delete", "failed", or "force_recreate"
 		SourcePath      string `json:"sourcePath"`
 		DestinationPath string `json:"destinationPath"`
 		TmdbID          string `json:"tmdbId"`
 		SeasonNumber    string `json:"seasonNumber"`
 		Reason          string `json:"reason"`
 		Error           string `json:"error"`
+		ProperName      string `json:"properName"`
+		Year            string `json:"year"`
+		MediaType       string `json:"mediaType"`
+		OldDestinationPath string `json:"oldDestinationPath"`
+		OldProperName      string `json:"oldProperName"`
+		OldYear            string `json:"oldYear"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -125,7 +131,17 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	switch req.Operation {
 	case "add":
 		message = "Addition tracked successfully"
-		UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
+		if req.ProperName != "" && req.MediaType != "" {
+			seasonNumber := 0
+			if req.SeasonNumber != "" {
+				if sn, err := strconv.Atoi(req.SeasonNumber); err == nil {
+					seasonNumber = sn
+				}
+			}
+			UpdateFolderCacheForNewFile(req.DestinationPath, req.ProperName, req.Year, req.TmdbID, req.MediaType, seasonNumber)
+		} else {
+			UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
+		}
 
 	case "delete":
 		err = TrackFileDeletion(req.SourcePath, req.DestinationPath, req.TmdbID, req.SeasonNumber, req.Reason)
@@ -135,7 +151,11 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		message = "Deletion tracked successfully"
-		RemoveFolderFromCacheFromDB(req.DestinationPath, req.TmdbID)
+		if req.ProperName != "" {
+			RemoveFolderFromCache(req.DestinationPath, req.ProperName, req.Year)
+		} else {
+			RemoveFolderFromCacheFromDB(req.DestinationPath, req.TmdbID)
+		}
 
 	case "failed":
 		err = TrackFileFailure(req.SourcePath, req.TmdbID, req.SeasonNumber, req.Reason, req.Error)
@@ -146,8 +166,26 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 		}
 		message = "Failure tracked successfully"
 
+	case "force_recreate":
+		message = "Force recreation tracked successfully"
+		if req.OldDestinationPath != "" && req.OldProperName != "" {
+			RemoveFolderFromCache(req.OldDestinationPath, req.OldProperName, req.OldYear)
+		}
+
+		if req.ProperName != "" && req.MediaType != "" {
+			seasonNumber := 0
+			if req.SeasonNumber != "" {
+				if sn, err := strconv.Atoi(req.SeasonNumber); err == nil {
+					seasonNumber = sn
+				}
+			}
+			UpdateFolderCacheForNewFile(req.DestinationPath, req.ProperName, req.Year, req.TmdbID, req.MediaType, seasonNumber)
+		} else {
+			UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
+		}
+
 	default:
-		http.Error(w, "Invalid operation. Must be 'add', 'delete', or 'failed'", http.StatusBadRequest)
+		http.Error(w, "Invalid operation. Must be 'add', 'delete', 'failed', or 'force_recreate'", http.StatusBadRequest)
 		return
 	}
 

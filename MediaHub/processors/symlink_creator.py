@@ -32,6 +32,7 @@ from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
 from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
+from MediaHub.processors.db_utils import track_force_recreation
 
 log_imported_db = False
 db_initialized = False
@@ -912,9 +913,34 @@ def process_file(args, force=False, batch_apply=False):
         save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
                           media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
 
-        # Cleanup old symlink if it exists (force mode)
-        if force and 'old_symlink_info' in locals():
+        # Handle cache updates for force mode vs normal mode
+        if force and 'old_symlink_info' in locals() and old_symlink_info:
+            try:
+                old_dest_path = old_symlink_info.get('path')
+                old_proper_name = old_symlink_info.get('proper_name')
+                old_year = old_symlink_info.get('year')
+
+                track_force_recreation(
+                    source_path=src_file,
+                    new_dest_path=dest_file,
+                    new_tmdb_id=tmdb_id,
+                    new_season_number=season_number,
+                    new_proper_name=proper_name,
+                    new_year=year,
+                    new_media_type=media_type,
+                    old_dest_path=old_dest_path,
+                    old_proper_name=old_proper_name,
+                    old_year=old_year
+                )
+            except Exception as e:
+                log_message(f"Error updating cache for force recreation: {e}", level="DEBUG")
+
             _cleanup_old_symlink(old_symlink_info, dest_file)
+        else:
+            try:
+                track_file_addition(src_file, dest_file, tmdb_id, season_number)
+            except Exception as e:
+                log_message(f"Error updating cache for new symlink: {e}", level="DEBUG")
 
         if plex_update() and plex_token():
             update_plex_after_symlink(dest_file)

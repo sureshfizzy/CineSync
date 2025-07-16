@@ -285,6 +285,29 @@ func InvalidateFolderCache() {
 	logger.Info("Folder cache invalidated")
 }
 
+// InvalidateFolderCacheForCategory clears the cache for a specific category
+func InvalidateFolderCacheForCategory(category string) {
+	cache := GetFolderCache()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if !cache.initialized {
+		return
+	}
+
+	delete(cache.pathFolders, category)
+	delete(cache.totalCounts, category)
+
+	if rootFolders, exists := cache.rootFolders[""]; exists {
+		for i, folder := range rootFolders {
+			if folder.FolderName == category {
+				cache.rootFolders[""] = append(rootFolders[:i], rootFolders[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
 // UpdateFolderCacheForNewFile adds a new file to the cache instead of invalidating everything
 func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, mediaType string, seasonNumber int) {
 	if destinationPath == "" || properName == "" {

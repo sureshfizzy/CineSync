@@ -2255,6 +2255,7 @@ func handleSymlinkCreated(data map[string]interface{}) {
 	filename, _ := data["filename"].(string)
 	sourceFile, _ := data["source_file"].(string)
 	tmdbIdInterface := data["tmdb_id"]
+	forceMode, _ := data["force_mode"].(bool)
 
 	var tmdbId string
 	if tmdbIdInterface != nil {
@@ -2267,6 +2268,11 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	if mediaName == "" || mediaType == "" {
 		return
+	}
+
+	// Handle cache updates for force mode
+	if forceMode {
+		handleForceModeSymlinkCreated(data, tmdbId)
 	}
 
 	// Immediately update source file processing status if source file is provided
@@ -2368,6 +2374,53 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	// Notify dashboard about stats change (file was added)
 	db.NotifyDashboardStatsChanged()
+}
+
+// handleForceModeSymlinkCreated handles cache updates for force mode symlink creation
+func handleForceModeSymlinkCreated(data map[string]interface{}, tmdbId string) {
+	destinationFile, _ := data["destination_file"].(string)
+	mediaName, _ := data["media_name"].(string)
+	mediaType, _ := data["media_type"].(string)
+
+	var properName, year string
+	if strings.Contains(mediaName, "(") && strings.Contains(mediaName, ")") {
+		parts := strings.Split(mediaName, "(")
+		if len(parts) >= 2 {
+			properName = strings.TrimSpace(parts[0])
+			yearPart := strings.Split(parts[1], ")")[0]
+			year = strings.TrimSpace(yearPart)
+		}
+	} else {
+		properName = mediaName
+		year = ""
+	}
+
+	// Get season number if available
+	seasonNumber := 0
+	if seasonInterface, exists := data["season_number"]; exists {
+		if season, ok := seasonInterface.(float64); ok {
+			seasonNumber = int(season)
+		}
+	}
+
+	// For force mode, invalidate the cache for the affected category to ensure consistency
+	// This handles cases where the old entry might have different metadata
+	if destinationFile != "" {
+		destDir := env.GetString("DESTINATION_DIR", "")
+		if destDir != "" {
+			relativePath := strings.TrimPrefix(destinationFile, destDir)
+			relativePath = strings.Trim(relativePath, "/\\")
+			pathParts := strings.Split(relativePath, string(filepath.Separator))
+			if len(pathParts) > 0 {
+				category := pathParts[0]
+				db.InvalidateFolderCacheForCategory(category)
+			}
+		}
+	}
+
+	if destinationFile != "" && properName != "" {
+		db.UpdateFolderCacheForNewFile(destinationFile, properName, year, tmdbId, mediaType, seasonNumber)
+	}
 }
 
 // broadcastMediaHubUpdate sends real-time updates to all connected SSE clients

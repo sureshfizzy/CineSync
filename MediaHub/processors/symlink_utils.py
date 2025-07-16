@@ -227,12 +227,21 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         os.remove(safe_path)
                                         symlinks_deleted = True
 
+                                        # Get source path for cache update before removing from database
+                                        cursor1.execute("SELECT file_path FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                                        source_result = cursor1.fetchone()
+                                        source_path = source_result[0] if source_result else None
+
                                         # Remove from both databases
                                         log_message(f"Removing entry from processed_files: {symlink_path}", level="DEBUG")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
 
                                         log_message(f"Removing entry from file_index: {symlink_path}", level="DEBUG")
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+
+                                        # Update cache by notifying WebDavHub
+                                        if source_path:
+                                            track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring")
 
                                         _cleanup_empty_dirs(os.path.dirname(safe_path))
                                     except OSError as e:
@@ -258,12 +267,21 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             log_message(f"Successfully deleted symlink using rm command: {safe_path}", level="INFO")
                                             symlinks_deleted = True
 
+                                            # Get source path for cache update before removing from database
+                                            cursor1.execute("SELECT file_path FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                                            source_result = cursor1.fetchone()
+                                            source_path = source_result[0] if source_result else None
+
                                             # Remove from both databases
                                             log_message(f"Removing entry from processed_files: {symlink_path}", level="DEBUG")
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
 
                                             log_message(f"Removing entry from file_index: {symlink_path}", level="DEBUG")
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+
+                                            # Update cache by notifying WebDavHub
+                                            if source_path:
+                                                track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command)")
 
                                             # Clean up empty directories
                                             try:
@@ -515,12 +533,21 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             log_message(f"Successfully deleted symlink using rm command: {safe_path}", level="INFO")
                                             symlinks_deleted = True
 
+                                            # Get source path for cache update before removing from database
+                                            cursor1.execute("SELECT file_path FROM processed_files WHERE destination_path = ?", (symlink_path,))
+                                            source_result = cursor1.fetchone()
+                                            source_path = source_result[0] if source_result else None
+
                                             # Remove from both databases
                                             log_message(f"Removing from processed_files: {symlink_path}", level="DEBUG")
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
 
                                             log_message(f"Removing from file_index: {symlink_path}", level="DEBUG")
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
+
+                                            # Update cache by notifying WebDavHub
+                                            if source_path:
+                                                track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command fallback)")
 
                                             # Clean up empty directories
                                             try:

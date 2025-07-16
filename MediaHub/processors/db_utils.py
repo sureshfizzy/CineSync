@@ -1098,6 +1098,32 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
     except Exception as e:
         log_message(f"Error tracking file deletion: {e}", level="DEBUG")
 
+def track_force_recreation(source_path, new_dest_path, new_tmdb_id, new_season_number, new_proper_name, new_year, new_media_type, old_dest_path=None, old_proper_name=None, old_year=None):
+    """Track force recreation in WebDavHub - removes old entry and adds new entry in one operation"""
+    try:
+        payload = {
+            'operation': 'force_recreate',
+            'sourcePath': source_path,
+            'destinationPath': new_dest_path,
+            'tmdbId': str(new_tmdb_id) if new_tmdb_id else '',
+            'seasonNumber': str(new_season_number) if new_season_number else '',
+            'properName': new_proper_name or '',
+            'year': new_year or '',
+            'mediaType': new_media_type or '',
+            'oldDestinationPath': old_dest_path or '',
+            'oldProperName': old_proper_name or '',
+            'oldYear': old_year or ''
+        }
+
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
+
+        send_dashboard_notification(url, payload, "force recreation")
+
+    except Exception as e:
+        log_message(f"Error tracking force recreation: {e}", level="DEBUG")
+
 def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None):
     """Save file processing failure directly to database"""
     try:
