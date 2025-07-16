@@ -29,6 +29,7 @@ type DatabaseRecord struct {
 	SeasonNumber    string `json:"season_number,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 	FileSize        *int64 `json:"file_size,omitempty"`
+	ProcessedAt     string `json:"processed_at,omitempty"`
 }
 
 // Cache for column existence to avoid repeated PRAGMA queries
@@ -646,6 +647,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 			COALESCE(season_number, '') as season_number,
 			` + reasonSelect + `,
 			` + fileSizeSelect + `,
+			COALESCE(processed_at, '') as processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files ` + whereClause + `
 		ORDER BY rowid DESC LIMIT ? OFFSET ?`
@@ -676,6 +678,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 			&record.SeasonNumber,
 			&record.Reason,
 			&fileSize,
+			&record.ProcessedAt,
 			&totalCount,
 		)
 		if err != nil {
@@ -755,6 +758,7 @@ type FolderInfo struct {
 	ProperName   string `json:"proper_name,omitempty"`
 	SeasonNumber int    `json:"season_number,omitempty"`
 	FileCount    int    `json:"file_count"`
+	Modified     string `json:"modified,omitempty"`
 }
 
 func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
@@ -886,6 +890,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
 		WHERE base_path = ?
@@ -907,8 +912,9 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 
 	for rows.Next() {
 		var folder FolderInfo
+		var latestProcessedAt string
 
-		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &totalCount)
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
 		if err != nil {
 			continue
 		}
@@ -922,9 +928,9 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			continue
 		}
 
-		// Set folder path - convert base_path back to API path format
 		apiPath := "/" + strings.ReplaceAll(basePath, string(filepath.Separator), "/") + "/" + folder.FolderName
 		folder.FolderPath = apiPath
+		folder.Modified = latestProcessedAt
 
 		folders = append(folders, folder)
 	}
@@ -1051,7 +1057,6 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 	searchPathPattern := destDir + string(filepath.Separator) + "%"
 	offset := (page - 1) * limit
 
-	// Optimized direct query for root folder search using base_path
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -1061,6 +1066,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
 			COALESCE(base_path, '') as base_path,
+			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
 		WHERE destination_path IS NOT NULL
@@ -1086,9 +1092,10 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 	for rows.Next() {
 		var folder FolderInfo
 		var basePath string
+		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &basePath, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &basePath, &latestProcessedAt, &totalCount)
 		if err != nil {
 			logger.Debug("Failed to scan search result: %v", err)
 			continue
@@ -1103,13 +1110,14 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			continue
 		}
 
-		// Use base_path
 		if basePath != "" {
 			apiBasePath := strings.ReplaceAll(basePath, "\\", "/")
 			folder.FolderPath = "/" + apiBasePath + "/" + folder.FolderName
 		} else {
 			folder.FolderPath = "/" + folder.FolderName
 		}
+
+		folder.Modified = latestProcessedAt
 
 		folders = append(folders, folder)
 	}
@@ -1135,6 +1143,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
 		WHERE base_path = ?
@@ -1157,9 +1166,10 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 
 	for rows.Next() {
 		var folder FolderInfo
+		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
 		if err != nil {
 			logger.Debug("Failed to scan category search result: %v", err)
 			continue
@@ -1175,6 +1185,8 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		}
 
 		folder.FolderPath = "/" + category + "/" + folder.FolderName
+		folder.Modified = latestProcessedAt
+
 		folders = append(folders, folder)
 	}
 

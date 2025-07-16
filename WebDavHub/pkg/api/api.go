@@ -637,6 +637,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				Path:     dbFolder.FolderPath,
 				FullPath: dbFolder.FolderPath,
 				Icon:     getFileIcon(dbFolder.FolderName, true),
+				Modified: dbFolder.Modified,
 			}
 
 			// Set database metadata
