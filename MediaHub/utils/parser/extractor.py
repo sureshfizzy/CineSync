@@ -440,15 +440,15 @@ def _parse_filename_structure(filename: str) -> ParsedFilename:
 def _is_tv_show(parsed: ParsedFilename) -> bool:
     """Detect if this appears to be a TV show."""
     episode_patterns = [
-        r'S\d{1,2}\.E\d{1,2}',  # Dot-separated season/episode format like S01.E01
-        r'S\d{1,2}E\d{1,2}',
-        r'S(0[1-9]|1[0-9]|30)(?!E)',  # Standalone season patterns S01-S30
+        r'^S\d{1,2}\.E\d{1,2}$',  # Dot-separated season/episode format like S01.E01
+        r'^S\d{1,2}E\d{1,2}$',
+        r'^S(\d{1,2})(?!E)$',  # Standalone season patterns S01-S99, must be the entire part
         r'Season\s+\d+',
         r'\bEpisode\s+\d+',
         r'\bepisode\.\d+',  # episode.1, episode.2, etc.
         r'\bEP\d+',
         r'S\d{1,2}\s*-\s*E\d{1,2}',
-        r'E\d{1,3}',  # Standalone episode patterns like E01, E02, etc.
+        r'\bE\d{1,3}\b(?![A-Z])',  # Standalone episode patterns like E01, E02, but not followed by letters (avoid FS100, etc.)
         r'\d{1,2}x\d{1,3}',  # Season x Episode format like 1x18
         r'\d{1,2}x\d{1,3}-\d{1,3}',  # Season x Episode range format like 1x18-20
     ]
@@ -456,10 +456,15 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
     for part in parsed.parts:
         clean_part = part.strip()
         for pattern in episode_patterns:
-            if re.match(pattern, clean_part, re.IGNORECASE):
-                return True
-            if re.search(pattern, clean_part, re.IGNORECASE):
-                return True
+            # For patterns that start with ^ and end with $, only use re.match (full string match)
+            if pattern.startswith('^') and pattern.endswith('$'):
+                if re.match(pattern, clean_part, re.IGNORECASE):
+                    return True
+            else:
+                if re.match(pattern, clean_part, re.IGNORECASE):
+                    return True
+                if re.search(pattern, clean_part, re.IGNORECASE):
+                    return True
 
     for i, part in enumerate(parsed.parts):
         if part.lower() == 'season' and i + 1 < len(parsed.parts):
