@@ -786,7 +786,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
       setUseBatchApply(true);
     }
 
-    startPythonCommand();
+    startPythonCommand(shouldUseBatchApply);
   };
 
   const handleForceCancel = () => setForceConfirmOpen(false);
