@@ -156,9 +156,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     resolution_folder = get_movie_resolution_folder(file, resolution)
 
     # Check if file is 4K/2160p for custom layout selection
-    is_4k = '2160' in file or '4k' in file.lower() or 'uhd' in file.lower()
-
-
+    is_4k = ('2160' in file or
+             re.search(r'\b4k\b', file, re.IGNORECASE) or
+             re.search(r'\buhd\b', file, re.IGNORECASE))
 
     # Determine destination path based on various configurations
     if is_source_structure_enabled() or is_cinesync_layout_enabled():

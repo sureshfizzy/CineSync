@@ -292,9 +292,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     resolution_folder = get_show_resolution_folder(file, resolution)
 
     # Check if file is 4K/2160p
-    is_4k = '2160' in resolution or '4k' in resolution.lower() or '4K' in resolution
-
-
+    is_4k = ('2160' in resolution or
+             re.search(r'\b4k\b', resolution, re.IGNORECASE) if resolution else False)
 
     # Modified destination path determination
     if is_extra:

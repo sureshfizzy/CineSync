@@ -330,7 +330,7 @@ def get_movie_resolution_folder(file, resolution):
     mappings = {**default_mappings, **custom_mappings}
 
     if 'remux' in file.lower():
-        if '2160' in file or '4k' in file.lower():
+        if '2160' in file or re.search(r'\b4k\b', file, re.IGNORECASE):
             return mappings.get('remux_4k', '4KRemux')
         elif '1080' in file:
             return mappings.get('remux_1080p', '1080pRemux')
@@ -380,7 +380,7 @@ def get_show_resolution_folder(file, resolution):
     mappings = {**default_mappings, **custom_mappings}
 
     if 'remux' in file.lower():
-        if '2160' in file or '4k' in file.lower():
+        if '2160' in file or re.search(r'\b4k\b', file, re.IGNORECASE):
             return mappings.get('remux_4k', 'UltraHDRemuxShows')
         elif '1080' in file:
             return mappings.get('remux_1080p', '1080pRemuxLibrary')
