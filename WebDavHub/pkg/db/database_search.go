@@ -314,7 +314,13 @@ func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, medi
 		return
 	}
 
-	category := pathParts[0]
+	// Determine the correct category based on source structure
+	var category string
+	if env.GetString("USE_SOURCE_STRUCTURE", "false") == "true" && len(pathParts) >= 2 {
+		category = pathParts[1]
+	} else {
+		category = pathParts[0]
+	}
 
 	// Build folder name from proper_name and year
 	var folderName string
