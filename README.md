@@ -81,6 +81,18 @@ Ready to get started? CineSync supports multiple installation methods to fit you
 
 **📖 [Complete Installation Guide](https://github.com/sureshfizzy/CineSync/wiki/Installation)** - Docker, manual setup, system requirements, and troubleshooting
 
+## ⚡️ Easy Mode (ElfHosted)
+
+❤️ CineSync is proudly [sponsored sponsored](https://github.com/sponsors/sureshfizzy) by ElfHosted (*along with many more excellent [open-source projects](https://docs.elfhosted.com/sponsorship/)*!)
+
+What is ElfHosted? [ElfHosted](https://store.elfhosted.com) is "easy mode" for self-hosting - an [open-source](https://docs.elfhosted.com/open/) PaaS which runs runs over 100 popular self-hostable apps for you, reliably and securely. They take responsibility for the painful stuff (*hardware, security, configuration, automation and updates*), so you sit back and enjoy the fun stuff! (*actually **using** your applications!*)
+
+Popular [streaming bundles](https://store.elfhosted.com/product-category/streaming-bundles/) are available with Plex, Jellyfin, or Emby, integrated with cloud storage like RealDebrid, Premiumize, etc, and tooled with heavy-hitters such as Radarr/Sonarr, [CineSync](https://store.elfhosted.com/product/cinesync/) (*hello!*), Riven, [Stremio Addons](https://store.elfhosted.com/product-category/stremio-addons/) and [more](https://store.elfhosted.com/product-category/apps/).
+
+ElfHosted have an ["excellent" ⭐️⭐️⭐️⭐️⭐️ rating on TrustPilot](https://www.trustpilot.com/review/elfhosted.com), a well-moderated [Discord](https://discord.elfhosted.com) community (*[highly praised](https://docs.elfhosted.com/testimonials/) for support and friendliness*), and [comprehensive documentation and guides](https://docs.elfhosted.com) resource.
+
+Grab a [7-day trial for only $1](https://store.elfhosted.com), and experience ElfHosted for yourself! 🎉
+
 ## Documentation
 
 For comprehensive guides and configuration options, visit our Wiki:
@@ -157,28 +169,6 @@ CineSync's automation system transforms media management from a manual chore int
 - **Source Structure Preservation**: Maintain original folder structures when preferred
 - **Custom Folder Naming**: Configurable folder names for different content types
 - **Collection-Based Grouping**: Organize movie franchises and collections together
-
-# Service Provider: ElfHosted
-
-**ElfHosted** offers an easy, open-source, Kubernetes/GitOps-driven hosting solution for popular self-hosted apps. It is designed for simplicity with minimal setup, no ongoing maintenance, and tightly integrated, secure environments.
-
-With **ElfHosted**, you can enjoy a seamless experience for hosting your favorite apps without worrying about constant updates or technical upkeep. It's perfect for users seeking an efficient and reliable self-hosted solution with the added security of tested and optimized integrations.
-
-## Features
-- **Minimal setup**: Quick and easy setup for self-hosted apps.
-- **No maintenance**: Automated updates and maintenance handled for you.
-- **Tightly integrated and secure**: Tested and optimized integrations for popular apps.
-- **Kubernetes/GitOps-driven hosting**: Scalable, efficient hosting powered by Kubernetes and GitOps practices.
-
-## Trial and Pricing
-- **7-day free trial** with a **$1.00 sign-up fee**: Test out the platform with no commitment and start your journey with a low-cost sign-up.
-
-## Links
-- [ElfHosted Documentation](https://docs.elfhosted.com/)
-- [CineSync Product Page](https://store.elfhosted.com/product/cinesync/)
-- [Starter Streaming Bundles](https://store.elfhosted.com/product-category/streaming-bundles/starter/)
-
-Enjoy hassle-free, self-hosted app management with ElfHosted.
 
 ## Contributors
 
