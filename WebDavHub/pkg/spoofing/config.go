@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"gopkg.in/yaml.v3"
@@ -92,14 +93,23 @@ func loadConfigFromFile() (*SpoofingConfig, error) {
 	configPath := getConfigPath()
 
 	// Check if file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("config file does not exist")
+	fileInfo, err := os.Stat(configPath)
+	if os.IsNotExist(err) {
+		return nil, fmt.Errorf("Config file does not exist")
+	}
+
+	if fileInfo.Size() == 0 {
+		return nil, fmt.Errorf("Config file is empty")
 	}
 
 	// Read file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, fmt.Errorf("Config file contains only whitespace")
 	}
 
 	// Parse YAML
@@ -142,6 +152,13 @@ func InitializeConfig() error {
 		config = cfg
 		logger.Info("Loaded spoofing configuration from file")
 	} else {
+		configPath := getConfigPath()
+		if _, statErr := os.Stat(configPath); statErr == nil {
+			logger.Info("Config file exists but is empty or invalid, creating default configuration: %v", err)
+		} else {
+			logger.Info("Config file not found, creating default configuration")
+		}
+
 		config = &SpoofingConfig{
 			Enabled:      false,
 			InstanceName: hardcodedInstanceName,
@@ -149,12 +166,12 @@ func InitializeConfig() error {
 			Branch:       "master",
 			APIKey:       generateAPIKey(),
 		}
-		logger.Info("Created default spoofing configuration with generated API key")
 
 		// Save default config to file
 		if err := saveConfigToFile(config); err != nil {
 			return fmt.Errorf("failed to save default config: %v", err)
 		}
+		logger.Info("Created and saved default spoofing configuration with generated API key")
 	}
 
 	return nil
