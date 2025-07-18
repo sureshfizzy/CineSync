@@ -2187,6 +2187,8 @@ func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
 		handleSymlinkCreated(message.Data)
 	} else if message.Type == "source_file_update" {
 		handleSourceFileUpdate(message.Data)
+	} else if message.Type == "file_deleted" {
+		handleFileDeleted(message.Data)
 	}
 
 	forwardToPythonBridge(message)
@@ -2403,6 +2405,30 @@ func handleSourceFileUpdate(data map[string]interface{}) {
 		"tmdb_id":          tmdbId,
 		"season_number":    seasonNumber,
 		"timestamp":        time.Now().UnixMilli(),
+	})
+}
+
+// handleFileDeleted handles file deletion messages from MediaHub via webdav_api
+func handleFileDeleted(data map[string]interface{}) {
+	sourcePath, _ := data["source_path"].(string)
+	destinationPath, _ := data["dest_path"].(string)
+	tmdbID, _ := data["tmdb_id"].(string)
+	seasonNumber, _ := data["season_number"].(string)
+	reason, _ := data["reason"].(string)
+
+	if sourcePath == "" {
+		logger.Warn("Invalid source_path in file deletion message")
+		return
+	}
+
+	// Broadcast the deletion event to connected clients for real-time UI updates
+	BroadcastMediaHubEvent("file_deleted", map[string]interface{}{
+		"source_path":      sourcePath,
+		"destination_path": destinationPath,
+		"tmdb_id":         tmdbID,
+		"season_number":   seasonNumber,
+		"reason":          reason,
+		"timestamp":       time.Now().UnixMilli(),
 	})
 }
 

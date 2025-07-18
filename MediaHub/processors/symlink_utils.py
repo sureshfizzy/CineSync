@@ -10,7 +10,7 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
-from MediaHub.utils.webdav_api import send_structured_message
+from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 
 def delete_broken_symlinks_batch(dest_dir, removed_paths):
     """Delete broken symlinks for multiple removed paths using parallel processing and database configurations.
@@ -241,7 +241,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                         # Update cache by notifying WebDavHub
                                         if source_path:
-                                            track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring")
+                                            send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring")
 
                                         _cleanup_empty_dirs(os.path.dirname(safe_path))
                                     except OSError as e:
@@ -281,7 +281,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                             # Update cache by notifying WebDavHub
                                             if source_path:
-                                                track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command)")
+                                                send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command)")
 
                                             # Clean up empty directories
                                             try:
@@ -297,7 +297,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id, season_number = result
-                                            track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Symlink path not found")
+                                            send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
                                 except subprocess.TimeoutExpired:
@@ -394,7 +394,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             result = cursor1.fetchone()
                                             if result:
                                                 source_path, tmdb_id, season_number = result
-                                                track_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
+                                                send_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
                                             _cleanup_empty_dirs(os.path.dirname(possible_dest_path))
@@ -468,7 +468,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     os.remove(dest_path)
                                                     symlinks_deleted = True
                                                     log_message(f"Deleted broken symlink: {dest_path}", level="INFO")
-                                                    track_file_deletion(removed_path, dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
+                                                    send_file_deletion(removed_path, dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
                                                     _cleanup_empty_dirs(os.path.dirname(dest_path))
@@ -501,7 +501,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id_db, season_number_db = result
-                                            track_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Source file removed, cleaned up symlink")
+                                            send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Source file removed, cleaned up symlink")
 
                                         # Remove from both databases
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
@@ -547,7 +547,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                             # Update cache by notifying WebDavHub
                                             if source_path:
-                                                track_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command fallback)")
+                                                send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command fallback)")
 
                                             # Clean up empty directories
                                             try:
@@ -563,7 +563,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id_db, season_number_db = result
-                                            track_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Symlink path not found")
+                                            send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
                                 except subprocess.TimeoutExpired:
@@ -637,7 +637,7 @@ def _check_all_symlinks(dest_dir):
                     result = cursor1.fetchone()
                     if result:
                         source_path, tmdb_id, season_number = result
-                        track_file_deletion(source_path, file_path, tmdb_id, season_number, "Broken symlink detected and removed")
+                        send_file_deletion(source_path, file_path, tmdb_id, season_number, "Broken symlink detected and removed")
 
                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))

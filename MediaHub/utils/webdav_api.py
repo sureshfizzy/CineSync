@@ -117,3 +117,24 @@ def send_source_file_update(file_path, processing_status, tmdb_id=None, season_n
     except Exception as e:
         log_message(f"Error sending source file update: {e}", level="DEBUG")
         return False
+
+def send_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
+    """Send file deletion message to WebDavHub via webdav_api for real-time UI updates."""
+    try:
+        data = {
+            "source_path": source_path,
+            "dest_path": dest_path,
+            "timestamp": time.time()
+        }
+
+        if tmdb_id:
+            data["tmdb_id"] = str(tmdb_id)
+        if season_number:
+            data["season_number"] = str(season_number)
+        if reason:
+            data["reason"] = reason
+
+        return send_structured_message("file_deleted", data)
+    except Exception as e:
+        log_message(f"Error sending file deletion message: {e}", level="DEBUG")
+        return False
