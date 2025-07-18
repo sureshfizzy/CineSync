@@ -95,3 +95,40 @@ func IsBool(key string, defaultValue bool) bool {
 func SetEnvVar(key, value string) {
 	os.Setenv(key, value)
 }
+
+// Spoofing configuration functions
+
+// IsSpoofingEnabled returns whether spoofing mode is enabled
+func IsSpoofingEnabled() bool {
+	return IsBool("SPOOFING_ENABLED", false)
+}
+
+// GetSpoofingService returns which service to spoof (radarr or sonarr)
+func GetSpoofingService() string {
+	service := GetString("SPOOFING_SERVICE", "radarr")
+	if service != "radarr" && service != "sonarr" {
+		logger.Warn("Invalid SPOOFING_SERVICE value '%s', defaulting to 'radarr'", service)
+		return "radarr"
+	}
+	return service
+}
+
+// GetSpoofingInstanceName returns the instance name for the spoofed service
+func GetSpoofingInstanceName() string {
+	return GetString("SPOOFING_INSTANCE_NAME", "CineSync")
+}
+
+// GetSpoofingVersion returns the version to report for the spoofed service
+func GetSpoofingVersion() string {
+	return GetString("SPOOFING_VERSION", "5.14.0.9383")
+}
+
+// GetSpoofingBranch returns the branch name to report
+func GetSpoofingBranch() string {
+	return GetString("SPOOFING_BRANCH", "master")
+}
+
+// GetSpoofingAPIKey returns the API key for spoofed service authentication
+func GetSpoofingAPIKey() string {
+	return GetString("SPOOFING_API_KEY", "1234567890abcdef1234567890abcdef")
+}

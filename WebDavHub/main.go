@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/server"
+	"cinesync/pkg/spoofing"
 	"cinesync/pkg/webdav"
 
 	"github.com/joho/godotenv"
@@ -44,6 +46,12 @@ func main() {
 	// Initialize logger early so we can use it for warnings
 	logger.Init()
 	env.LoadEnv()
+
+	// Initialize spoofing configuration
+	if err := spoofing.InitializeConfig(); err != nil {
+		logger.Error("Failed to initialize spoofing configuration: %v", err)
+		os.Exit(1)
+	}
 
 	rootDir := env.GetString("DESTINATION_DIR", "")
 	if rootDir == "" {
@@ -171,6 +179,22 @@ func main() {
 		}
 		api.HandleJobsRouter(w, r)
 	})
+
+	// Spoofing configuration endpoints with mux in context
+	apiMux.HandleFunc("/api/spoofing/config", func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), "mux", apiMux)
+		api.HandleSpoofingConfig(w, r.WithContext(ctx))
+	})
+	apiMux.HandleFunc("/api/spoofing/switch", func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), "mux", apiMux)
+		api.HandleSpoofingSwitch(w, r.WithContext(ctx))
+	})
+	apiMux.HandleFunc("/api/spoofing/regenerate-key", func(w http.ResponseWriter, r *http.Request) {
+		api.HandleRegenerateAPIKey(w, r)
+	})
+
+	// Register spoofing routes using the new spoofing package
+	spoofing.RegisterRoutes(apiMux)
 
 	// Use the new WebDAV handler from pkg/webdav
 	webdavHandler := webdav.NewWebDAVHandler(effectiveRootDir)

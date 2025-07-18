@@ -514,6 +514,8 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		switch statusFilter {
 		case "created":
 			whereClause = "WHERE destination_path IS NOT NULL AND destination_path != '' AND (reason IS NULL OR reason = '')"
+		case "failed":
+			whereClause = "WHERE reason IS NOT NULL AND reason != '' AND NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR LOWER(reason) LIKE '%adult content%')"
 		case "skipped":
 			whereClause = "WHERE reason IS NOT NULL AND reason != '' AND (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR LOWER(reason) LIKE '%adult content%')"
 		}

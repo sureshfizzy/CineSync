@@ -7,6 +7,7 @@ import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
 import MediaHubService from '../components/Settings/MediaHubService';
 import JobsTable from '../components/Jobs/JobsTable';
+import SpoofingSettings from '../components/spoofing/SpoofingSettings';
 
 
 interface ConfigValue {
@@ -47,7 +48,7 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services, 2: Jobs
+  const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services, 2: Spoofing, 3: Jobs
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
@@ -335,6 +336,7 @@ const Settings: React.FC = () => {
   const mainTabs = [
     { name: 'General', icon: <TuneRounded sx={{ fontSize: 28 }} />, color: '#3b82f6' },
     { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#10b981' },
+    { name: 'Spoofing', icon: <LiveTvRounded sx={{ fontSize: 28 }} />, color: '#f59e0b' },
     { name: 'Jobs', icon: <WorkRounded sx={{ fontSize: 28 }} />, color: '#8b5cf6' }
   ];
 
@@ -658,8 +660,8 @@ const Settings: React.FC = () => {
           <Box
             sx={{
               display: 'flex',
-              gap: 0.5,
-              p: 0.5,
+              gap: { xs: 0.25, sm: 0.5 },
+              p: { xs: 0.25, sm: 0.5 },
               bgcolor: alpha(theme.palette.background.paper, 0.8),
               borderRadius: 3,
               border: '1px solid',
@@ -686,8 +688,8 @@ const Settings: React.FC = () => {
                   }}
                   sx={{
                     cursor: 'pointer',
-                    px: { xs: 1.5, sm: 4 },
-                    py: { xs: 1, sm: 2 },
+                    px: { xs: 2, sm: 4 },
+                    py: { xs: 1.5, sm: 2 },
                     borderRadius: 2.5,
                     bgcolor: isSelected
                       ? `linear-gradient(135deg, ${tab.color} 0%, ${alpha(tab.color, 0.8)} 100%)`
@@ -697,8 +699,8 @@ const Settings: React.FC = () => {
                       : 'transparent',
                     color: isSelected ? 'white' : 'text.primary',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    flex: { xs: '1 1 0', sm: '0 0 auto' },
-                    minWidth: { xs: 0, sm: 'auto' },
+                    flex: { xs: '1 1 auto', sm: '0 0 auto' },
+                    minWidth: { xs: 'fit-content', sm: 'auto' },
                     whiteSpace: 'nowrap',
                     position: 'relative',
                     overflow: 'hidden',
@@ -733,8 +735,8 @@ const Settings: React.FC = () => {
                   <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
                     <Box
                       sx={{
-                        width: { xs: 18, sm: 24 },
-                        height: { xs: 18, sm: 24 },
+                        width: { xs: 20, sm: 24 },
+                        height: { xs: 20, sm: 24 },
                         borderRadius: 1,
                         bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : alpha(tab.color, 0.15),
                         display: 'flex',
@@ -744,7 +746,7 @@ const Settings: React.FC = () => {
                         transition: 'all 0.3s ease',
                         flexShrink: 0,
                         '& svg': {
-                          fontSize: { xs: 14, sm: 18 },
+                          fontSize: { xs: 16, sm: 18 },
                           filter: isSelected ? 'none' : 'none',
                         },
                       }}
@@ -755,7 +757,7 @@ const Settings: React.FC = () => {
                       variant="body1"
                       fontWeight="600"
                       sx={{
-                        fontSize: { xs: '0.8rem', sm: '1rem' },
+                        fontSize: { xs: '0.85rem', sm: '1rem' },
                         letterSpacing: '0.02em',
                         flexShrink: 0,
                         minWidth: 0,
@@ -1606,8 +1608,15 @@ const Settings: React.FC = () => {
           </Box>
         )}
 
-        {/* Jobs Tab Content */}
+        {/* Spoofing Tab Content */}
         {selectedMainTab === 2 && (
+          <Box>
+            <SpoofingSettings />
+          </Box>
+        )}
+
+        {/* Jobs Tab Content */}
+        {selectedMainTab === 3 && (
           <Box>
             <JobsTable onRefresh={fetchConfig} />
           </Box>
