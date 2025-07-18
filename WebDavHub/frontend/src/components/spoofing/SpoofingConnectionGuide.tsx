@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Card, CardContent, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, ListItemText, ListItemIcon, Chip, Alert, Button, TextField, InputAdornment, IconButton, Tooltip } from '@mui/material';
+import { Box, Card, CardContent, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, ListItemText, ListItemIcon, Chip, Alert, TextField, InputAdornment, IconButton, Tooltip } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon, CheckCircle as CheckCircleIcon, ContentCopy as CopyIcon, Launch as LaunchIcon, Movie as MovieIcon, Tv as TvIcon } from '@mui/icons-material';
 import { useConfig } from '../../contexts/ConfigContext';
 
@@ -9,8 +9,7 @@ interface ConnectionGuideProps {
 }
 
 const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
-  apiKey,
-  serverUrl = 'http://localhost:8082'
+  apiKey
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const { config } = useConfig();

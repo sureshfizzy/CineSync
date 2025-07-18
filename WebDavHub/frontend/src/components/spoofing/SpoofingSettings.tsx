@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Card, CardContent, Typography, Switch, TextField, Button, Grid, Alert, Snackbar, IconButton, Tooltip, Chip, Divider, CircularProgress, InputAdornment } from '@mui/material';
+import { Box, Card, CardContent, Typography, Switch, TextField, Button, Alert, Snackbar, IconButton, Tooltip, Chip, Divider, CircularProgress, InputAdornment } from '@mui/material';
 import { Refresh as RefreshIcon, ContentCopy as CopyIcon, Info as InfoIcon, Save as SaveIcon, Security as SecurityIcon, Tv as TvIcon, Person as PersonIcon, Tag as TagIcon } from '@mui/icons-material';
 import SpoofingConnectionGuide from './SpoofingConnectionGuide';
-import { useConfig } from '../../contexts/ConfigContext';
 
 interface SpoofingConfig {
   enabled: boolean;
@@ -188,129 +187,130 @@ const SpoofingSettings: React.FC = () => {
 
           <Divider sx={{ mb: 3 }} />
 
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <Box display="flex" alignItems="center" mb={1}>
-                <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="subtitle1">
-                  Instance Name
-                </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Instance Name and Version Row */}
+            <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+              <Box sx={{ flex: 1 }}>
+                <Box display="flex" alignItems="center" mb={1}>
+                  <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
+                  <Typography variant="subtitle1">
+                    Instance Name
+                  </Typography>
+                </Box>
+                <TextField
+                  fullWidth
+                  value="CineSync"
+                  disabled={true}
+                  helperText="Name displayed to connecting applications"
+                  InputProps={{
+                    style: { fontSize: '14px' }
+                  }}
+                />
               </Box>
-              <TextField
-                fullWidth
-                value="CineSync"
-                disabled={true}
-                helperText="Name displayed to connecting applications"
-                InputProps={{
-                  style: { fontSize: '14px' }
-                }}
-              />
-            </Grid>
 
-            <Grid item xs={12} md={6}>
-              <Box display="flex" alignItems="center" mb={1}>
-                <TagIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="subtitle1">
-                  Version
-                </Typography>
+              <Box sx={{ flex: 1 }}>
+                <Box display="flex" alignItems="center" mb={1}>
+                  <TagIcon sx={{ mr: 1, color: 'primary.main' }} />
+                  <Typography variant="subtitle1">
+                    Version
+                  </Typography>
+                </Box>
+                <TextField
+                  fullWidth
+                  value={config.version || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, version: e.target.value })}
+                  disabled={loading}
+                  helperText="Version reported to applications"
+                  InputProps={{
+                    style: { fontSize: '14px' }
+                  }}
+                />
               </Box>
-              <TextField
-                fullWidth
-                value={config.version || ''}
-                onChange={(e) => setConfig({ ...config, version: e.target.value })}
-                disabled={loading}
-                helperText="Version reported to applications"
-                InputProps={{
-                  style: { fontSize: '14px' }
-                }}
-              />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12} md={4}>
+            {/* API Key Section */}
+            <Box>
               <Box display="flex" alignItems="center" mb={1}>
                 <SecurityIcon sx={{ mr: 1, color: 'primary.main' }} />
                 <Typography variant="subtitle1">
                   API Key
                 </Typography>
               </Box>
-              <Box display="flex" alignItems="center" gap={1}>
-                <TextField
-                  fullWidth
-                  value={regenerating ? 'Generating API key...' : (config.apiKey || '')}
-                  InputProps={{
-                    readOnly: true,
-                    style: {
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                    },
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <Box display="flex" gap={0.5}>
-                          <Tooltip title="Copy API Key">
-                            <IconButton
-                              onClick={copyAPIKey}
-                              size="small"
-                              disabled={!config.apiKey}
-                            >
-                              <CopyIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Regenerate API Key">
-                            <IconButton
-                              onClick={regenerateAPIKey}
-                              disabled={loading || regenerating}
-                              size="small"
-                            >
-                              <RefreshIcon
-                                sx={{
-                                  animation: regenerating ? 'spin 1s linear infinite' : 'none',
-                                  '@keyframes spin': {
-                                    '0%': {
-                                      transform: 'rotate(0deg)',
-                                    },
-                                    '100%': {
-                                      transform: 'rotate(360deg)',
-                                    },
+              <TextField
+                fullWidth
+                value={regenerating ? 'Generating API key...' : (config.apiKey || '')}
+                InputProps={{
+                  readOnly: true,
+                  style: {
+                    fontFamily: 'monospace',
+                    fontSize: '14px',
+                  },
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Box display="flex" gap={0.5}>
+                        <Tooltip title="Copy API Key">
+                          <IconButton
+                            onClick={copyAPIKey}
+                            size="small"
+                            disabled={!config.apiKey}
+                          >
+                            <CopyIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Regenerate API Key">
+                          <IconButton
+                            onClick={regenerateAPIKey}
+                            disabled={loading || regenerating}
+                            size="small"
+                          >
+                            <RefreshIcon
+                              sx={{
+                                animation: regenerating ? 'spin 1s linear infinite' : 'none',
+                                '@keyframes spin': {
+                                  '0%': {
+                                    transform: 'rotate(0deg)',
                                   },
-                                }}
-                              />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </InputAdornment>
-                    ),
-                  }}
-                  error={!config.apiKey && !regenerating}
-                />
-              </Box>
+                                  '100%': {
+                                    transform: 'rotate(360deg)',
+                                  },
+                                },
+                              }}
+                            />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </InputAdornment>
+                  ),
+                }}
+                error={!config.apiKey && !regenerating}
+              />
               <Typography variant="caption" color="text.secondary">
                 Use this API key when configuring Bazarr or other applications
               </Typography>
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
-              <Box display="flex" gap={2} justifyContent="center" alignItems="center" sx={{ mt: 2 }}>
-                <Button
-                  onClick={loadConfig}
-                  disabled={loading}
-                  startIcon={<RefreshIcon />}
-                  variant="outlined"
-                  color="secondary"
-                >
-                  Reset
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={saveConfig}
-                  disabled={loading}
-                  startIcon={<SaveIcon />}
-                  size="large"
-                >
-                  Save Configuration
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
+            {/* Action Buttons */}
+            <Box display="flex" gap={2} justifyContent="center" alignItems="center" sx={{ mt: 2 }}>
+              <Button
+                onClick={loadConfig}
+                disabled={loading}
+                startIcon={<RefreshIcon />}
+                variant="outlined"
+                color="secondary"
+              >
+                Reset
+              </Button>
+              <Button
+                variant="contained"
+                onClick={saveConfig}
+                disabled={loading}
+                startIcon={<SaveIcon />}
+                size="large"
+              >
+                Save Configuration
+              </Button>
+            </Box>
+          </Box>
         </Box>
 
         <Snackbar
