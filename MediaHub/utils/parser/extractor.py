@@ -1314,12 +1314,12 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
             return int(match.group(1))
 
         # Handle dot-separated season/episode format like S01.E01
-        match = re.match(r'S(\d{1,2})\.E\d{1,2}', clean_part, re.IGNORECASE)
+        match = re.search(r'S(\d{1,2})\.E\d{1,2}', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
         # Handle standard season/episode format like S01E01
-        match = re.match(r'S(\d{1,2})E\d{1,2}', clean_part, re.IGNORECASE)
+        match = re.search(r'S(\d{1,2})E\d{1,2}', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
@@ -1372,12 +1372,12 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         clean_part = part.strip().rstrip('.')
 
         # Handle dot-separated season/episode format like S01.E01
-        match = re.match(r'S\d{1,2}\.E(\d{1,2})', clean_part, re.IGNORECASE)
+        match = re.search(r'S\d{1,2}\.E(\d{1,2})', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
         # Handle standard season/episode format like S01E01
-        match = re.match(r'S\d{1,2}E(\d{1,2})', clean_part, re.IGNORECASE)
+        match = re.search(r'S\d{1,2}E(\d{1,2})', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
