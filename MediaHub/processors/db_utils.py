@@ -100,6 +100,9 @@ class ConnectionPool:
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
                     conn.execute(f"PRAGMA cache_size={CACHE_SIZE}")
+                    conn.execute("PRAGMA wal_autocheckpoint=1000")
+                    conn.execute("PRAGMA mmap_size=268435456")
+                    conn.execute("PRAGMA read_uncommitted=true")
                     return conn
                 except sqlite3.OperationalError as e:
                     print(f"[ERROR] Failed to open database file: {self.db_file}")
@@ -115,8 +118,8 @@ class ConnectionPool:
                 conn.close()
 
 # Create connection pools using database configuration
-main_pool = ConnectionPool(DB_FILE, max_connections=max(1, MAX_WORKERS // 2))
-archive_pool = ConnectionPool(ARCHIVE_DB_FILE, max_connections=1)
+main_pool = ConnectionPool(DB_FILE, max_connections=max(2, MAX_WORKERS))
+archive_pool = ConnectionPool(ARCHIVE_DB_FILE, max_connections=2)
 
 def with_connection(pool):
     def decorator(func):

@@ -116,6 +116,7 @@ services:
       # MediaHub Service Configuration
       - MEDIAHUB_AUTO_START=${MEDIAHUB_AUTO_START:-true}
       - RTM_AUTO_START=${RTM_AUTO_START:-false}
+      - FILE_OPERATIONS_AUTO_MODE=${FILE_OPERATIONS_AUTO_MODE=true:-true}
 
       # Database Configuration
       - DB_THROTTLE_RATE=${DB_THROTTLE_RATE:-100}

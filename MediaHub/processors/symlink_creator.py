@@ -33,6 +33,7 @@ from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
 from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
 from MediaHub.processors.db_utils import track_force_recreation
+from MediaHub.processors.source_files_db import *
 
 log_imported_db = False
 db_initialized = False
@@ -100,7 +101,7 @@ class ProcessingManager:
         except Exception as e:
             return hashlib.md5(filename.encode()).hexdigest()[:16]
 
-    def process_files_truly_parallel(self, src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file):
+    def process_files_truly_parallel(self, src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, use_source_db=True):
         """Smart parallel processing: pre-filter unprocessed files only"""
         log_message(f"Manager: Starting smart parallel processing with {self.max_workers} workers", level="INFO")
 
@@ -116,7 +117,7 @@ class ProcessingManager:
             dest_index, reverse_index, processed_files_set = set(), {}, set()
 
         log_message("Pre-filtering: Finding unprocessed files only...", level="INFO")
-        unprocessed_files = self._find_unprocessed_files_only(src_dirs, processed_files_set, mode, force, is_single_file)
+        unprocessed_files = self._find_unprocessed_files_only(src_dirs, processed_files_set, mode, force, is_single_file, use_source_db)
 
         if not unprocessed_files:
             log_message("Smart filtering complete: No unprocessed files found. All files are already processed!", level="INFO")
@@ -245,13 +246,59 @@ class ProcessingManager:
 
         return results
 
-    def _find_unprocessed_files_only(self, src_dirs, processed_files_set, mode, force, is_single_file):
+    def _find_unprocessed_files_only(self, src_dirs, processed_files_set, mode, force, is_single_file, use_source_db=True):
         """Pre-filter to find only unprocessed files - MUCH faster than scanning everything"""
         from MediaHub.processors.db_utils import normalize_file_path
 
         unprocessed_files = []
         total_scanned = 0
         total_skipped = 0
+
+        if use_source_db and mode == 'create' and not force and not is_single_file:
+            try:
+                if check_source_db_availability():
+                    log_message("Using source files database to find unprocessed files", level="INFO")
+
+                    source_db_files = get_unprocessed_files_from_source_db()
+
+                    if source_db_files:
+                        for src_file in source_db_files:
+                            if is_shutdown_requested():
+                                break
+
+                            file_in_src_dirs = False
+                            for src_dir in src_dirs:
+                                if src_file.startswith(os.path.normpath(src_dir)):
+                                    file_in_src_dirs = True
+                                    break
+
+                            if not file_in_src_dirs:
+                                continue
+
+                            if not os.path.exists(src_file):
+                                continue
+
+                            normalized_src = normalize_file_path(src_file)
+                            if processed_files_set and normalized_src in processed_files_set:
+                                total_skipped += 1
+                                continue
+
+                            if should_skip_processing(os.path.basename(src_file)):
+                                continue
+
+                            unprocessed_files.append(src_file)
+                            total_scanned += 1
+
+                        log_message(f"Source DB scan complete: {total_scanned} files from source DB, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
+                        return unprocessed_files
+                    else:
+                        log_message("No unprocessed files found in source database, falling back to filesystem scan", level="INFO")
+                else:
+                    log_message("Source files database not available, using filesystem scan", level="DEBUG")
+            except Exception as e:
+                log_message(f"Error accessing source files database, falling back to filesystem scan: {e}", level="WARNING")
+
+        log_message("Using filesystem scan to find unprocessed files", level="INFO")
 
         for src_dir in src_dirs:
             if is_shutdown_requested():
@@ -297,7 +344,7 @@ class ProcessingManager:
                         if total_scanned % BATCH_SIZE == 0:
                             log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="DEBUG")
 
-        log_message(f"Smart scan complete: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
+        log_message(f"Filesystem scan complete: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
         return unprocessed_files
 
     def _process_unprocessed_file(self, src_file, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index):
@@ -971,8 +1018,12 @@ def signal_handler(signum, frame):
     set_shutdown()
     # Don't call sys.exit(0) here - let the main thread handle cleanup
 
-def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False, manual_search=False):
-    """Create symlinks for media files from source directories to destination directory."""
+def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, force=False, mode='create', tmdb_id=None, imdb_id=None, tvdb_id=None, force_show=False, force_movie=False, season_number=None, episode_number=None, force_extra=False, skip=False, batch_apply=False, manual_search=False, use_source_db=True):
+    """Create symlinks for media files from source directories to destination directory.
+
+    Args:
+        use_source_db: If True, use source files database to find unprocessed files (default: True)
+    """
     global log_imported_db
 
     # Only set up signal handlers if we're in the main thread
@@ -1007,6 +1058,16 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     if mode == 'monitor' and not os.path.exists(PROCESS_DB):
         initialize_file_database()
 
+    # Log source database status
+    if use_source_db:
+        if check_source_db_availability():
+            unprocessed_count = get_unprocessed_files_count()
+            log_message(f"Source files database available with {unprocessed_count} unprocessed files", level="INFO")
+        else:
+            log_message("Source files database not available, will use filesystem scanning", level="INFO")
+    else:
+        log_message("Source files database disabled, using filesystem scanning", level="INFO")
+
     # Use single_path if provided, resolving symlinks first
     if single_path:
         original_single_path = single_path
@@ -1033,7 +1094,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
         # Manager: Scan and process simultaneously
         try:
-            results = manager.process_files_truly_parallel(src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file)
+            results = manager.process_files_truly_parallel(src_dirs, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, use_source_db)
 
             # Process results
             for result in results:

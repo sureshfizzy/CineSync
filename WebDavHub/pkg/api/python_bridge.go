@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sync"
 	"strings"
+	"time"
 	"io"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/env"
@@ -26,6 +27,7 @@ type PythonBridgeRequest struct {
 	BatchApply bool `json:"batchApply,omitempty"`
 	ManualSearch bool `json:"manualSearch,omitempty"`
 	AutoSelect bool `json:"autoSelect,omitempty"`
+	BulkAutoProcess bool `json:"bulkAutoProcess,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
@@ -164,6 +166,12 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Received python bridge request: %+v", req)
+
+	if req.BulkAutoProcess {
+		handleBulkAutoProcess(w, r, req)
+		return
+	}
+
 	logger.Info("Source path: '%s'", req.SourcePath)
 	if req.SelectedIds != nil {
 		logger.Info("Selected IDs received:")
@@ -363,6 +371,7 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AutoSelect {
 		args = append(args, "--auto-select")
+		args = append(args, "--use-source-db")
 	}
 
 	// Add selected action option if provided
@@ -621,6 +630,144 @@ func HandlePythonBridgeInput(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func handleBulkAutoProcess(w http.ResponseWriter, r *http.Request, req PythonBridgeRequest) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+
+	sendResponse := func(response PythonBridgeResponse) error {
+		data, err := json.Marshal(response)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(data)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return nil
+	}
+
+	if err := sendResponse(PythonBridgeResponse{Output: "Starting bulk auto processing...\n"}); err != nil {
+		logger.Error("Error sending initial response: %v", err)
+		return
+	}
+
+	args := []string{"../MediaHub/main.py"}
+
+	if req.DisableMonitor {
+		args = append(args, "--disable-monitor")
+	}
+	args = append(args, "--force")
+	if req.BatchApply {
+		args = append(args, "--batch-apply")
+	}
+	if req.ManualSearch {
+		args = append(args, "--manual-search")
+	}
+	if req.AutoSelect {
+		args = append(args, "--auto-select", "--use-source-db")
+	}
+
+	pythonCmd := getPythonCommand()
+	logger.Info("Starting bulk auto processing with command: %s %v", pythonCmd, args)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, pythonCmd, args...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		sendResponse(PythonBridgeResponse{Error: "Failed to get stdout pipe: " + err.Error(), Done: true})
+		return
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		sendResponse(PythonBridgeResponse{Error: "Failed to get stderr pipe: " + err.Error(), Done: true})
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		sendResponse(PythonBridgeResponse{Error: "Failed to start bulk processing: " + err.Error(), Done: true})
+		return
+	}
+
+	var wg sync.WaitGroup
+	doneChan := make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if err := sendResponse(PythonBridgeResponse{Output: line + "\n"}); err != nil {
+				if !isClientDisconnectError(err) {
+					logger.Error("Error sending stdout response: %v", err)
+				}
+				return
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if err := sendResponse(PythonBridgeResponse{Output: line + "\n"}); err != nil {
+				if !isClientDisconnectError(err) {
+					logger.Error("Error sending stderr response: %v", err)
+				}
+				return
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		doneChan <- cmd.Wait()
+	}()
+
+	clientDisconnected := make(chan bool, 1)
+	go func() {
+		<-r.Context().Done()
+		clientDisconnected <- true
+	}()
+
+	select {
+	case err := <-doneChan:
+		if err != nil {
+			logger.Error("Auto processing failed: %v", err)
+			sendResponse(PythonBridgeResponse{Error: err.Error(), Done: true})
+		} else {
+			logger.Info("Auto processing completed successfully")
+			sendResponse(PythonBridgeResponse{Done: true})
+		}
+	case <-clientDisconnected:
+		logger.Info("Client disconnected during bulk processing, terminating")
+		cancel()
+		select {
+		case <-doneChan:
+		case <-time.After(5 * time.Second):
+			if cmd.Process != nil {
+				cmd.Process.Kill()
+			}
+		}
+	}
 }
 
 // HandlePythonMessage handles structured messages sent directly from Python processors

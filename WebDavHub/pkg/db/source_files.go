@@ -1,9 +1,11 @@
 package db
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -67,6 +69,64 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleAddSourceFile handles adding individual files to source database
+func handleAddSourceFile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action            string `json:"action"`
+		FilePath          string `json:"file_path"`
+		FileName          string `json:"file_name"`
+		FileSize          int64  `json:"file_size"`
+		FileSizeFormatted string `json:"file_size_formatted"`
+		ModifiedTime      int64  `json:"modified_time"`
+		IsMediaFile       bool   `json:"is_media_file"`
+		MediaType         string `json:"media_type"`
+		SourceIndex       int    `json:"source_index"`
+		SourceDirectory   string `json:"source_directory"`
+		RelativePath      string `json:"relative_path"`
+		FileExtension     string `json:"file_extension"`
+		ProcessingStatus  string `json:"processing_status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.FilePath == "" || req.FileName == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Add file to database
+	err := executeWriteOperationSync(func(db *sql.DB) error {
+		query := `INSERT OR REPLACE INTO source_files
+			(file_path, file_name, file_size, file_size_formatted, modified_time,
+			 is_media_file, media_type, source_index, source_directory, relative_path,
+			 file_extension, discovered_at, last_seen_at, is_active, processing_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+		currentTime := time.Now().Unix()
+		_, err := db.Exec(query,
+			req.FilePath, req.FileName, req.FileSize, req.FileSizeFormatted, req.ModifiedTime,
+			req.IsMediaFile, req.MediaType, req.SourceIndex, req.SourceDirectory, req.RelativePath,
+			req.FileExtension, currentTime, currentTime, true, req.ProcessingStatus)
+		return err
+	})
+
+	if err != nil {
+		logger.Error("Failed to add source file: %v", err)
+		http.Error(w, "Failed to add source file", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":   "Source file added successfully",
+		"file_path": req.FilePath,
+	})
 }
 
 // handleGetSourceFiles retrieves source files with pagination and filtering
@@ -235,6 +295,27 @@ func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateSourceFiles handles bulk updates to source files
 func handleUpdateSourceFiles(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var actionReq struct {
+		Action string `json:"action"`
+	}
+
+	if err := json.Unmarshal(body, &actionReq); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if actionReq.Action == "add" {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		handleAddSourceFile(w, r)
+		return
+	}
+
 	var req struct {
 		Action string `json:"action"`
 		Files  []struct {
@@ -246,7 +327,7 @@ func handleUpdateSourceFiles(w http.ResponseWriter, r *http.Request) {
 		ScanType string `json:"scanType,omitempty"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}

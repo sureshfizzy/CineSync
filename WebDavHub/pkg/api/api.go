@@ -2185,6 +2185,8 @@ func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
 
 	if message.Type == "symlink_created" {
 		handleSymlinkCreated(message.Data)
+	} else if message.Type == "source_file_update" {
+		handleSourceFileUpdate(message.Data)
 	}
 
 	forwardToPythonBridge(message)
@@ -2278,24 +2280,18 @@ func handleSymlinkCreated(data map[string]interface{}) {
 			}
 		}
 
-		// Update the source file status to "processed"
-		err := db.UpdateSourceFileProcessingStatus(sourceFile, "processed", tmdbId, seasonNumber)
-		if err != nil {
-			logger.Error("Failed to update source file processing status: %v", err)
-		} else {
-			logger.Info("Updated source file processing status for: %s", sourceFile)
+		// Broadcast file processing event for real-time UI updates first
+		BroadcastMediaHubEvent("file_processed", map[string]interface{}{
+			"source_file":      sourceFile,
+			"destination_file": destinationFile,
+			"media_name":       mediaName,
+			"media_type":       mediaType,
+			"tmdb_id":          tmdbId,
+			"season_number":    seasonNumber,
+			"filename":         filename,
+		})
 
-			// Broadcast file processing event for real-time UI updates
-			BroadcastMediaHubEvent("file_processed", map[string]interface{}{
-				"source_file":      sourceFile,
-				"destination_file": destinationFile,
-				"media_name":       mediaName,
-				"media_type":       mediaType,
-				"tmdb_id":          tmdbId,
-				"season_number":    seasonNumber,
-				"filename":         filename,
-			})
-		}
+		db.UpdateSourceFileProcessingStatus(sourceFile, "processed", tmdbId, seasonNumber)
 	}
 
 	// Determine folder name based on media type
@@ -2366,6 +2362,48 @@ func handleSymlinkCreated(data map[string]interface{}) {
 
 	// Notify dashboard about stats change (file was added)
 	db.NotifyDashboardStatsChanged()
+}
+
+// handleSourceFileUpdate handles real-time source file status updates from MediaHub
+func handleSourceFileUpdate(data map[string]interface{}) {
+	filePath, _ := data["file_path"].(string)
+	processingStatus, _ := data["processing_status"].(string)
+
+	if filePath == "" || processingStatus == "" {
+		return
+	}
+
+	var tmdbId string
+	var seasonNumber *int
+
+	if tmdbIdInterface, exists := data["tmdb_id"]; exists {
+		if id, ok := tmdbIdInterface.(string); ok {
+			tmdbId = id
+		} else if id, ok := tmdbIdInterface.(float64); ok {
+			tmdbId = fmt.Sprintf("%.0f", id)
+		}
+	}
+
+	if seasonInterface, exists := data["season_number"]; exists {
+		if season, ok := seasonInterface.(float64); ok {
+			seasonInt := int(season)
+			seasonNumber = &seasonInt
+		} else if season, ok := seasonInterface.(int); ok {
+			seasonNumber = &season
+		}
+	}
+
+	// Update source file processing status in database
+	db.UpdateSourceFileProcessingStatus(filePath, processingStatus, tmdbId, seasonNumber)
+
+	// Broadcast the update to connected clients for real-time UI updates
+	BroadcastMediaHubEvent("source_file_updated", map[string]interface{}{
+		"file_path":         filePath,
+		"processing_status": processingStatus,
+		"tmdb_id":          tmdbId,
+		"season_number":    seasonNumber,
+		"timestamp":        time.Now().UnixMilli(),
+	})
 }
 
 // handleForceModeSymlinkCreated handles cache updates for force mode symlink creation

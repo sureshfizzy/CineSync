@@ -27,17 +27,17 @@ var (
 func GetSourceDatabaseConnection() (*sql.DB, error) {
 	sourceDBPoolOnce.Do(func() {
 
-		maxWorkers := env.GetInt("DB_MAX_WORKERS", 8)
-		if maxWorkers > 10 {
-			maxWorkers = 10
+		maxWorkers := env.GetInt("DB_MAX_WORKERS", 12)
+		if maxWorkers > 20 {
+			maxWorkers = 20
 		}
 		if maxWorkers < 1 {
 			maxWorkers = 1
 		}
 
-		maxReaders := maxWorkers * 2
-		if maxReaders > 20 {
-			maxReaders = 20
+		maxReaders := maxWorkers * 3
+		if maxReaders > 40 {
+			maxReaders = 40
 		}
 		sourceDBReadSemaphore = make(chan struct{}, maxReaders)
 		sourceDBWriteSemaphore = make(chan struct{}, maxWorkers)

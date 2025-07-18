@@ -30,6 +30,7 @@ export function useMediaHubUpdates(): MediaHubUpdateHook {
       const mediaHubEventTypes = [
         'symlink_created',
         'file_processed',
+        'source_file_updated',
         'scan_started',
         'scan_completed',
         'scan_failed',

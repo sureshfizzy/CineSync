@@ -18,6 +18,8 @@ from MediaHub.processors.symlink_creator import *
 from MediaHub.processors.symlink_utils import delete_broken_symlinks, delete_broken_symlinks_batch
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
+from MediaHub.utils.webdav_api import send_source_file_update
+import requests
 
 # Load .env file from the parent directory
 dotenv_path = find_dotenv('../.env')
@@ -245,6 +247,23 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_
 
             if added_files:
                 log_message(f"New files detected in {directory}: {added_files}", level="INFO")
+
+                try:
+                    for file in added_files:
+                        if file != 'version.txt':
+                            full_path = os.path.join(directory, file)
+
+                            # Add file to source database
+                            if add_file_to_source_database(full_path, directory):
+                                try:
+                                    send_source_file_update(full_path, "unprocessed")
+                                except Exception:
+                                    pass
+                            else:
+                                log_message(f"Failed to add file to source database: {full_path}", level="WARNING")
+                except Exception as e:
+                    log_message(f"Error adding files to source database: {e}", level="WARNING")
+
                 for file in added_files:
                     if file != 'version.txt':
                         full_path = os.path.join(directory, file)
@@ -297,10 +316,40 @@ def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_bat
             for added_file in added_files:
                 file_path = os.path.join(mod_dir, added_file)
                 log_message(f"Processing new file from modified directory: {file_path}", level="INFO")
+
+                # Add file to source database and send update
                 try:
-                    create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+                    if add_file_to_source_database(file_path, mod_dir):
+                        try:
+                            send_source_file_update(file_path, "unprocessed")
+                        except Exception:
+                            pass
+                    else:
+                        log_message(f"Failed to add file from modified directory to source database: {file_path}", level="WARNING")
+                except Exception as e:
+                    log_message(f"Error adding file from modified directory to source database: {e}", level="WARNING")
+
+                try:
+                    if not is_auto_mode_enabled():
+                        try:
+                            send_source_file_update(file_path, "unprocessed")
+                        except Exception:
+                            pass
+                    else:
+                        create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+                        try:
+                            send_source_file_update(file_path, "processed")
+                        except Exception:
+                            pass
+
                 except Exception as e:
                     log_message(f"Error creating symlink for {file_path}: {str(e)}", level="ERROR")
+
+                    # Send source file update for failed file
+                    try:
+                        send_source_file_update(file_path, "failed")
+                    except Exception:
+                        pass
 
         if removed_files:
             removed_file_paths = [os.path.join(mod_dir, removed_file) for removed_file in removed_files]
@@ -337,12 +386,39 @@ def process_file(file_path):
                 log_message("Source or destination directory not set in environment variables", level="ERROR")
                 return
 
-            # Call create_symlinks with the specific file path
-            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
-            log_message(f"Symlink monitoring completed for {file_path}", level="INFO")
+            # Check auto mode setting before calling create_symlinks
+            if not is_auto_mode_enabled():
+                try:
+                    send_source_file_update(file_path, "unprocessed")
+                except Exception:
+                    pass
+                return
+            # Check auto mode status and process accordingly
+            auto_mode_enabled = is_auto_mode_enabled()
+
+            if not auto_mode_enabled:
+                log_message("Auto Processing mode is DISABLED - Auto-processing will be skipped", level="DEBUG")
+                try:
+                    send_source_file_update(file_path, "unprocessed")
+                except Exception:
+                    pass
+            else:
+                # Call create_symlinks with the specific file path
+                create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, auto_select=True, single_path=file_path, force=False, mode='monitor')
+                try:
+                    send_source_file_update(file_path, "processed")
+                except Exception:
+                    pass
 
         except Exception as e:
             log_message(f"Failed to process file: {file_path}. Error: {e}", level="ERROR")
+
+            # Send source file update for failed file
+            try:
+                send_source_file_update(file_path, "failed")
+            except Exception:
+                pass
+
             set_shutdown()
     else:
         log_message(f"File already exists in the database, skipping processing: {file_path}", level="DEBUG")
@@ -400,6 +476,7 @@ def main():
 
     current_files = {}
     last_mod_times = {}
+
     while not shutdown_event.is_set():
         try:
             # Reset error event at the start of each cycle (only reset error_event, not shutdown events)
@@ -444,6 +521,104 @@ def main():
             log_message(f"Unexpected error in main loop: {str(e)}", level="ERROR")
             set_shutdown()
             time.sleep(sleep_time)
+
+def add_file_to_source_database(file_path, source_directory):
+    """Add a new file to the WebDavHub source database."""
+    try:
+
+        # Get file information
+        if not os.path.exists(file_path):
+            return False
+
+        file_info = os.stat(file_path)
+        file_name = os.path.basename(file_path)
+        file_size = file_info.st_size
+        modified_time = int(file_info.st_mtime)
+
+        # Format file size
+        def format_file_size(size):
+            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+                if size < 1024.0:
+                    return f"{size:.1f} {unit}"
+                size /= 1024.0
+            return f"{size:.1f} PB"
+
+        file_size_formatted = format_file_size(file_size)
+
+        # Get relative path
+        try:
+            relative_path = os.path.relpath(file_path, source_directory)
+        except ValueError:
+            relative_path = file_name
+
+        # Detect if it's a media file
+        media_extensions = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv'}
+        file_ext = os.path.splitext(file_name)[1].lower()
+        is_media_file = file_ext in media_extensions
+
+        # Detect media type
+        media_type = ""
+        if is_media_file:
+            # Simple heuristic: if filename contains season/episode indicators, it's TV
+            name_lower = file_name.lower()
+            if any(indicator in name_lower for indicator in ['s0', 'season', 'episode', 'e0']):
+                media_type = "tv"
+            else:
+                media_type = "movie"
+
+        # Determine source index (0 for first source directory, 1 for second, etc.)
+        try:
+            source_dirs, _ = get_directories()
+            source_index = 0
+            for i, src_dir in enumerate(source_dirs):
+                try:
+                    if os.path.commonpath([source_directory, src_dir]) == src_dir:
+                        source_index = i
+                        break
+                except ValueError:
+                    # Paths are on different drives or incompatible
+                    if os.path.normpath(source_directory) == os.path.normpath(src_dir):
+                        source_index = i
+                        break
+        except Exception:
+            source_index = 0
+
+        # Prepare data for WebDavHub API
+        cinesync_ip = get_cinesync_ip()
+        cinesync_port = get_cinesync_api_port()
+
+        if not cinesync_ip or not cinesync_port:
+            return False
+
+        url = f"http://{cinesync_ip}:{cinesync_port}/api/database/source-files"
+
+        payload = {
+            "action": "add",
+            "file_path": file_path,
+            "file_name": file_name,
+            "file_size": file_size,
+            "file_size_formatted": file_size_formatted,
+            "modified_time": modified_time,
+            "is_media_file": is_media_file,
+            "media_type": media_type,
+            "source_index": source_index,
+            "source_directory": source_directory,
+            "relative_path": relative_path,
+            "file_extension": file_ext,
+            "processing_status": "unprocessed"
+        }
+
+        response = requests.post(url, json=payload, timeout=10)
+
+        if response.status_code == 200:
+            return True
+        else:
+            log_message(f"Failed to add file to source database: HTTP {response.status_code}", level="WARNING")
+            return False
+
+    except Exception:
+        return False
+
 
 if __name__ == "__main__":
     main()

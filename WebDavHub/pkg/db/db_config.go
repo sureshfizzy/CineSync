@@ -32,13 +32,13 @@ func GetDefaultDatabaseConfig() DatabaseConfig {
 	}
 
 	return DatabaseConfig{
-		MaxOpenConns:    maxConnections,
+		MaxOpenConns:    maxConnections * 2,
 		MaxIdleConns:    maxConnections,
 		ConnMaxLifetime: time.Hour * 24,
-		BusyTimeout:     "60000",
+		BusyTimeout:     "120000",
 		JournalMode:     "WAL",
 		Synchronous:     "NORMAL",
-		CacheSize:       "100000",
+		CacheSize:       "200000",
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}
@@ -52,7 +52,11 @@ func (config DatabaseConfig) BuildConnectionString(dbPath string) string {
 		"&_synchronous=" + config.Synchronous +
 		"&_cache_size=" + config.CacheSize +
 		"&_foreign_keys=" + config.ForeignKeys +
-		"&_temp_store=" + config.TempStore
+		"&_temp_store=" + config.TempStore +
+		"&_wal_autocheckpoint=1000" +
+		"&_mmap_size=268435456" +
+		"&_locking_mode=NORMAL" +
+		"&_read_uncommitted=true"
 }
 
 

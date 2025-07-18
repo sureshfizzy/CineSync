@@ -98,3 +98,22 @@ def send_structured_message(message_type, data, max_retries=2):
     except Exception as e:
         log_message(f"Error sending structured message: {e}", level="DEBUG")
         return False
+
+def send_source_file_update(file_path, processing_status, tmdb_id=None, season_number=None):
+    """Send source file status update to WebDavHub for real-time UI updates."""
+    try:
+        data = {
+            "file_path": file_path,
+            "processing_status": processing_status,
+            "timestamp": time.time()
+        }
+
+        if tmdb_id:
+            data["tmdb_id"] = str(tmdb_id)
+        if season_number:
+            data["season_number"] = int(season_number)
+
+        return send_structured_message("source_file_update", data)
+    except Exception as e:
+        log_message(f"Error sending source file update: {e}", level="DEBUG")
+        return False

@@ -149,6 +149,7 @@ function FileOperations() {
 
   const [autoModeEnabled, setAutoModeEnabled] = useState(false);
   const [autoProcessingFiles, setAutoProcessingFiles] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const fetchAutoModeSetting = async () => {
     try {
@@ -580,6 +581,32 @@ function FileOperations() {
     }
   );
 
+  // Listen for direct source file updates from MediaHub processing
+  useSSEEventListener(
+    ['source_file_updated'],
+    (event) => {
+      const data = event.data;
+      if (data.file_path) {
+        setSourceFiles(prev => prev.map(file => {
+          if (file.fullPath === data.file_path) {
+            return {
+              ...file,
+              processingStatus: data.processing_status,
+              tmdbId: data.tmdb_id || file.tmdbId,
+              seasonNumber: data.season_number || file.seasonNumber,
+              lastProcessedAt: data.timestamp || Date.now()
+            };
+          }
+          return file;
+        }));
+      }
+    },
+    {
+      source: 'mediahub',
+      dependencies: []
+    }
+  );
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
     setCurrentPage(1);
@@ -632,13 +659,13 @@ function FileOperations() {
         sourcePath: file.fullPath,
         disableMonitor: true,
         selectedOption: 'auto-select',
-        autoSelect: true
+        autoSelect: true,
+        bulkAutoProcess: false
       };
 
       const response = await axios.post('/api/python-bridge', requestPayload);
 
       if (response.status === 200) {
-        console.log(`Auto-processed file: ${file.fullPath}`);
       }
     } catch (error) {
       console.error(`Failed to auto-process file ${file.fullPath}:`, error);
@@ -654,6 +681,38 @@ function FileOperations() {
         newSet.delete(file.fullPath!);
         return newSet;
       });
+    }
+  };
+
+  // Bulk auto-process all unprocessed files from source database
+  const bulkAutoProcessFiles = async () => {
+    if (bulkProcessing) return;
+
+    setBulkProcessing(true);
+
+    try {
+      const requestPayload = {
+        sourcePath: '',
+        bulkAutoProcess: true,
+        disableMonitor: true,
+        selectedOption: 'auto-select',
+        autoSelect: true,
+        batchApply: true
+      };
+
+      const response = await axios.post('/api/python-bridge', requestPayload);
+
+      if (response.status === 200) {
+        setTimeout(() => {
+          if (tabValue === 0) {
+            fetchSourceFilesData(sourcePage, sourceIndex);
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Failed to start bulk auto-processing:', error);
+    } finally {
+      setBulkProcessing(false);
     }
   };
 
@@ -2027,62 +2086,60 @@ function FileOperations() {
               py: 1,
               borderRadius: 2,
               border: '1px solid',
-              borderColor: autoModeEnabled
-                ? alpha(theme.palette.success.main, 0.3)
-                : alpha(theme.palette.divider, 0.3),
-              bgcolor: autoModeEnabled
-                ? alpha(theme.palette.success.main, 0.05)
-                : 'background.paper',
+              borderColor: bulkProcessing
+                ? alpha(theme.palette.primary.main, 0.3)
+                : (autoModeEnabled
+                  ? alpha(theme.palette.success.main, 0.3)
+                  : alpha(theme.palette.divider, 0.3)),
+              bgcolor: bulkProcessing
+                ? alpha(theme.palette.primary.main, 0.05)
+                : (autoModeEnabled
+                  ? alpha(theme.palette.success.main, 0.05)
+                  : 'background.paper'),
               transition: 'all 0.2s ease',
               minHeight: { xs: 48, sm: 40 },
               flexShrink: 0,
               '&:hover': {
-                borderColor: autoModeEnabled
-                  ? alpha(theme.palette.success.main, 0.5)
-                  : alpha(theme.palette.primary.main, 0.3),
+                borderColor: bulkProcessing
+                  ? alpha(theme.palette.primary.main, 0.5)
+                  : (autoModeEnabled
+                    ? alpha(theme.palette.success.main, 0.5)
+                    : alpha(theme.palette.primary.main, 0.3)),
               }
             }}>
-              <AutoModeIcon sx={{
-                fontSize: 18,
-                color: autoModeEnabled ? 'success.main' : 'text.secondary',
-                transition: 'color 0.2s ease'
-              }} />
+              {bulkProcessing ? (
+                <CircularProgress
+                  size={18}
+                  sx={{ color: 'primary.main' }}
+                />
+              ) : (
+                <AutoModeIcon sx={{
+                  fontSize: 18,
+                  color: autoModeEnabled ? 'success.main' : 'text.secondary',
+                  transition: 'color 0.2s ease'
+                }} />
+              )}
 
               <Typography variant="body2" sx={{
                 fontWeight: 500,
-                color: autoModeEnabled ? 'success.main' : 'text.secondary',
+                color: bulkProcessing ? 'primary.main' : (autoModeEnabled ? 'success.main' : 'text.secondary'),
                 fontSize: '0.875rem',
                 transition: 'color 0.2s ease',
                 whiteSpace: 'nowrap'
               }}>
-                Auto Mode
+                {bulkProcessing ? 'Processing...' : 'Auto Mode'}
               </Typography>
 
               <Switch
                 checked={autoModeEnabled}
+                disabled={bulkProcessing}
                 onChange={async (e) => {
                   const newValue = e.target.checked;
                   setAutoModeEnabled(newValue);
-
                   await updateAutoModeSetting(newValue);
 
-                  if (newValue && filteredSourceFiles.length > 0) {
-                    const filesToProcess = filteredSourceFiles.filter(file => {
-                      if (!file.isMediaFile || !file.fullPath) return false;
-
-                      const status = getProcessingStatus(file);
-                      return !status || status.status === 'unprocessed';
-                    });
-
-                    if (filesToProcess.length > 0) {
-                      filesToProcess.forEach((file, index) => {
-                        setTimeout(() => {
-                          autoProcessFile(file);
-                        }, index * 300);
-                      });
-                    } else {
-                      console.log('No unprocessed media files found to auto-process');
-                    }
+                  if (newValue) {
+                    bulkAutoProcessFiles();
                   }
                 }}
                 color="success"
@@ -2097,6 +2154,8 @@ function FileOperations() {
                 }}
               />
             </Box>
+
+
           </Box>
         ) : (
           // File Operations Search

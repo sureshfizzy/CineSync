@@ -465,6 +465,18 @@ def get_db_connection_timeout():
     """Get database connection timeout in seconds"""
     return get_env_float('DB_CONNECTION_TIMEOUT', 20.0)
 
+def is_auto_mode_enabled():
+    """
+    Check if FILE_OPERATIONS_AUTO_MODE is enabled.
+    Returns True if auto processing should happen, False otherwise.
+    """
+    try:
+        auto_mode = get_setting_with_client_lock('FILE_OPERATIONS_AUTO_MODE', 'true', 'boolean')
+        return auto_mode.lower() == 'true' if isinstance(auto_mode, str) else bool(auto_mode)
+    except Exception as e:
+        log_message(f"Error checking FILE_OPERATIONS_AUTO_MODE setting: {e}", level="WARNING")
+        return False
+
 def get_db_cache_size():
     """Get database cache size"""
     return get_env_int('DB_CACHE_SIZE', 10000)

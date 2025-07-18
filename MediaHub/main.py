@@ -472,6 +472,7 @@ def start_webdav_server():
 def main(dest_dir):
     parser = argparse.ArgumentParser(description="Create symlinks for files from src_dirs in dest_dir.")
     parser.add_argument("--auto-select", action="store_true", help="Automatically chooses the first option without prompting the user")
+    parser.add_argument("--use-source-db", action="store_true", help="Use source files database to find unprocessed files (faster for auto mode)")
     parser.add_argument("single_path", nargs="?", help="Single path to process instead of using SOURCE_DIRS from environment variables")
     parser.add_argument("--force", action="store_true", help="Force recreate symlinks even if they already exist")
     parser.add_argument("--force-show", action="store_true", help="Force process file as a TV show regardless of naming pattern")
@@ -620,7 +621,7 @@ def main(dest_dir):
 
                         for source_file_path, expected_dest_path in missing_files_list:
                             log_message(f"Attempting to recreate symlink for missing file: {source_file_path}", level="INFO")
-                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, single_path=source_file_path, force=True, mode='create', auto_select=True
+                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, single_path=source_file_path, force=True, mode='create', auto_select=True, use_source_db=args.use_source_db
                             )
                     else:
                         log_message("No missing files found.", level="INFO")
@@ -668,7 +669,7 @@ def main(dest_dir):
             monitor_thread.daemon = True
             monitor_thread.start()
             time.sleep(2)
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search, use_source_db=args.use_source_db)
 
             while monitor_thread.is_alive() and not terminate_flag.is_set():
                 time.sleep(0.1)
@@ -678,7 +679,7 @@ def main(dest_dir):
         else:
             if is_single_file_operation:
                 log_message("Single file operation - skipping monitoring services for faster processing", level="INFO")
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search)
+            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search, use_source_db=args.use_source_db)
     except KeyboardInterrupt:
         log_message("Keyboard interrupt received, cleaning up and exiting...", level="INFO")
         set_shutdown()
