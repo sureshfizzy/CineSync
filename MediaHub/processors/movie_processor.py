@@ -18,6 +18,13 @@ source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=None, movie_data=None, manual_search=False):
 
+    # Initialize variables
+    is_kids_content = False
+    is_anime_genre = False
+    proper_name = None
+    proper_movie_name = None
+    collection_info = None
+
     # Determine source folder for source structure
     if is_source_structure_enabled():
         source_folder = None

@@ -19,6 +19,11 @@ source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
 def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=None, imdb_id=None, tvdb_id=None, season_number=None, episode_number=None, is_anime_show=False, force_extra=False, file_metadata=None, manual_search=False):
 
+    # Initialize variables
+    is_kids_content = False
+    is_anime_genre = False
+    proper_show_name = None
+
     if any(root == source_dir.strip() for source_dir in source_dirs):
         parent_folder_name = os.path.basename(root)
         source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
@@ -274,10 +279,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         show_folder = show_folder
 
     show_folder = show_folder.replace('/', '')
-
-    # Ensure is_kids_content is defined
-    if 'is_kids_content' not in locals():
-        is_kids_content = False
 
     # Determine resolution-specific folder for shows
     if anime_result and anime_result.get('resolution'):
