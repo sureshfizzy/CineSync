@@ -451,6 +451,8 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
         r'\bE\d{1,3}\b(?![A-Z])',  # Standalone episode patterns like E01, E02, but not followed by letters (avoid FS100, etc.)
         r'\d{1,2}x\d{1,3}',  # Season x Episode format like 1x18
         r'\d{1,2}x\d{1,3}-\d{1,3}',  # Season x Episode range format like 1x18-20
+        r'S\d{1,2}\.E\d{1,2}',  # Embedded dot-separated season/episode format
+        r'S\d{1,2}E\d{1,2}',    # Embedded standard season/episode format
     ]
 
     for part in parsed.parts:
@@ -665,12 +667,12 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 re.match(r'\d{1,2}x\d{1,3}(?:-\d{1,3})?', clean_part, re.IGNORECASE)):
                 break
 
-            if (re.search(r'\bS\d{1,2}E\d{1,2}\b', clean_part, re.IGNORECASE) or
-                re.search(r'\bS\d{1,2}\b(?!E)', clean_part, re.IGNORECASE) or
-                re.search(r'\bE\d{1,3}\b', clean_part, re.IGNORECASE) or
-                re.search(r'\bSeason\s+\d{1,2}\b', clean_part, re.IGNORECASE) or
-                re.search(r'\b\d{1,2}x\d{1,3}(?:-\d{1,3})?\b', clean_part, re.IGNORECASE)):
-                season_episode_match = re.search(r'\b(S\d{1,2}E\d{1,2}|S\d{1,2}|E\d{1,3}|Season\s+\d{1,2}|\d{1,2}x\d{1,3}(?:-\d{1,3})?)\b', clean_part, re.IGNORECASE)
+            if (re.search(r'S\d{1,2}E\d{1,2}', clean_part, re.IGNORECASE) or
+                re.search(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
+                re.search(r'E\d{1,3}', clean_part, re.IGNORECASE) or
+                re.search(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
+                re.search(r'\d{1,2}x\d{1,3}(?:-\d{1,3})?', clean_part, re.IGNORECASE)):
+                season_episode_match = re.search(r'(S\d{1,2}E\d{1,2}|S\d{1,2}(?!E)|E\d{1,3}|Season\s+\d{1,2}|\d{1,2}x\d{1,3}(?:-\d{1,3})?)', clean_part, re.IGNORECASE)
                 if season_episode_match:
                     before_season = clean_part[:season_episode_match.start()].strip()
                     if before_season:
