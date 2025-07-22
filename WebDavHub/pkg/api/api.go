@@ -868,7 +868,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Apply search filtering if search query is provided
 	if searchQuery != "" {
-		var filteredFiles []FileInfo
+		filteredFiles := make([]FileInfo, 0)
 		searchLower := strings.ToLower(searchQuery)
 		for _, file := range files {
 			if strings.Contains(strings.ToLower(file.Name), searchLower) {
@@ -879,7 +879,7 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if letterFilter != "" {
-		var filteredFiles []FileInfo
+		filteredFiles := make([]FileInfo, 0)
 		isNumeric := letterFilter == "#"
 		lowerLetter := strings.ToLower(letterFilter)
 
@@ -1140,7 +1140,7 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Apply search filtering if search query is provided
 	if searchQuery != "" {
-		var filteredFiles []FileInfo
+		filteredFiles := make([]FileInfo, 0)
 		searchLower := strings.ToLower(searchQuery)
 		for _, file := range files {
 			if strings.Contains(strings.ToLower(file.Name), searchLower) {
@@ -1151,7 +1151,7 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if letterFilter != "" {
-		var filteredFiles []FileInfo
+		filteredFiles := make([]FileInfo, 0)
 		isNumeric := letterFilter == "#"
 		lowerLetter := strings.ToLower(letterFilter)
 
