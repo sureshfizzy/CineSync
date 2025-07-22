@@ -56,7 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const authOptionalPaths = [
             '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
             '/api/mediahub/events', '/api/mediahub/logs', '/api/file-operations', '/api/source-browse',
-            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
+            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate',
+            '/api/v3/system/status', '/api/system/status', '/api/v3/health', '/api/v3/rootfolder',
+            '/api/v3/qualityprofile', '/api/v3/languageprofile', '/api/v3/tag', '/api/v3/movie',
+            '/api/v3/series', '/api/v3/episode', '/api/spoofing/config', '/api/spoofing/switch',
+            '/api/spoofing/regenerate-key', '/api'
           ];
 
           const isAuthOptional = authOptionalPaths.some(path => config.url?.includes(path));
@@ -79,7 +83,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const authOptionalPaths = [
             '/api/health', '/api/auth/', '/api/download', '/api/config', '/api/mediahub/message',
             '/api/mediahub/events', '/api/mediahub/logs', '/api/file-operations', '/api/source-browse',
-            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate'
+            '/api/database/', '/api/stats', '/api/jobs', '/api/python-bridge/terminate',
+            '/api/v3/system/status', '/api/system/status', '/api/v3/health', '/api/v3/rootfolder',
+            '/api/v3/qualityprofile', '/api/v3/languageprofile', '/api/v3/tag', '/api/v3/movie',
+            '/api/v3/series', '/api/v3/episode', '/api/spoofing/config', '/api/spoofing/switch',
+            '/api/spoofing/regenerate-key', '/api'
           ];
 
           const isAuthOptional = authOptionalPaths.some(path =>

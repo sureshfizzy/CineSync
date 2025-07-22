@@ -61,6 +61,20 @@ func isAuthEndpoint(path string) bool {
 		"/api/stats",
 		"/api/jobs",
 		"/api/python-bridge/terminate",
+		"/api/v3/system/status",
+		"/api/system/status",
+		"/api/v3/health",
+		"/api/v3/rootfolder",
+		"/api/v3/qualityprofile",
+		"/api/v3/languageprofile",
+		"/api/v3/tag",
+		"/api/v3/movie",
+		"/api/v3/series",
+		"/api/v3/episode",
+		"/api/spoofing/config",
+		"/api/spoofing/switch",
+		"/api/spoofing/regenerate-key",
+		"/api",
 	}
 	for _, endpoint := range authEndpoints {
 		if path == endpoint {
