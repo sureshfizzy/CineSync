@@ -52,6 +52,7 @@ try:
     optimize_database = db_utils_module.optimize_database
     get_database_stats = db_utils_module.get_database_stats
     display_missing_files = db_utils_module.display_missing_files
+    cleanup_missing_destinations = db_utils_module.cleanup_missing_destinations
 except Exception as e:
     sys.exit(1)
 
@@ -91,10 +92,14 @@ def run_missing_files():
 
     display_missing_files(dest_dir)
 
+def run_cleanup_missing_destinations():
+    """Clean up database entries where destination files are missing but source files still exist"""
+    cleanup_missing_destinations()
+
 def main():
     """Main function to run database maintenance using existing MediaHub logic"""
     parser = argparse.ArgumentParser(description='Database maintenance jobs')
-    parser.add_argument('action', choices=['initialize', 'reset', 'vacuum', 'verify', 'optimize', 'status', 'missing-files'],
+    parser.add_argument('action', choices=['initialize', 'reset', 'vacuum', 'verify', 'optimize', 'status', 'missing-files', 'cleanup-missing-destinations'],
                        help='Database maintenance action to perform')
 
     args = parser.parse_args()
@@ -114,6 +119,8 @@ def main():
             run_status()
         elif args.action == 'missing-files':
             run_missing_files()
+        elif args.action == 'cleanup-missing-destinations':
+            run_cleanup_missing_destinations()
         else:
             sys.exit(1)
 

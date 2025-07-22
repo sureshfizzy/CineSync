@@ -109,6 +109,9 @@ func (m *Manager) loadOrInitializeJobs() {
 			m.jobs[job.ID] = job
 		}
 		logger.Info("Loaded %d jobs from database", len(savedJobs))
+
+		// Check for missing default jobs and add them
+		m.addMissingDefaultJobs()
 	} else {
 		m.initializeDefaultJobs()
 	}
@@ -136,6 +139,24 @@ func (m *Manager) initializeDefaultJobs() {
 			Category:     "Maintenance",
 			Tags:         []string{"files", "validation", "database", "symlinks"},
 			MaxRetries:   3,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+		{
+			ID:           "remove-missing-database-entries",
+			Name:         "Remove Missing Database Entries",
+			Description:  "Remove database entries where destination files are missing but source files still exist (manually deleted destinations)",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeManual,
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "cleanup-missing-destinations"},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Maintenance",
+			Tags:         []string{"database", "cleanup", "orphaned", "entries"},
+			MaxRetries:   2,
 			LogOutput:    true,
 			CreatedAt:    time.Now(),
 			UpdatedAt:    time.Now(),
@@ -189,6 +210,109 @@ func (m *Manager) initializeDefaultJobs() {
 	}
 
 	logger.Info("Initialized %d default jobs", len(defaultJobs))
+}
+
+// addMissingDefaultJobs checks for missing default jobs and adds them
+func (m *Manager) addMissingDefaultJobs() {
+	// Get symlink cleanup interval from environment variable
+	symlinkCleanupInterval := env.GetInt("SYMLINK_CLEANUP_INTERVAL", 600) // Default to 10 minutes if not set
+
+	// Define all default jobs that should exist
+	defaultJobsToCheck := map[string]*Job{
+		"missing-files-check": {
+			ID:           "missing-files-check",
+			Name:         "Missing Files Check",
+			Description:  "Scan for missing source files and automatically trigger broken symlinks cleanup when source files no longer exist",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeInterval,
+			IntervalSeconds: symlinkCleanupInterval,
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "missing-files"},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Maintenance",
+			Tags:         []string{"files", "validation", "database", "symlinks"},
+			MaxRetries:   3,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+		"remove-missing-database-entries": {
+			ID:           "remove-missing-database-entries",
+			Name:         "Remove Missing Database Entries",
+			Description:  "Remove database entries where destination files are missing but source files still exist (manually deleted destinations)",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeManual,
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "cleanup-missing-destinations"},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Maintenance",
+			Tags:         []string{"database", "cleanup", "orphaned", "entries"},
+			MaxRetries:   2,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+		"database-optimize": {
+			ID:           "database-optimize",
+			Name:         "Database Optimize",
+			Description:  "Optimize database indexes and analyze tables for better performance",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeManual,
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "optimize"},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Database",
+			Tags:         []string{"database", "archive"},
+			MaxRetries:   2,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+		"source-files-scan": {
+			ID:           "source-files-scan",
+			Name:         "Source Files Scan",
+			Description:  "Scan source directories for new and updated media files",
+			Type:         JobTypeProcess,
+			Status:       JobStatusIdle,
+			ScheduleType: ScheduleTypeInterval,
+			IntervalSeconds: 24 * 60 * 60, // 24 hours
+			Command:      m.pythonCmd,
+			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "source_scan_job.py")},
+			WorkingDir:   m.mediaHubDir,
+			Enabled:      true,
+			Category:     "Files",
+			Tags:         []string{"source", "scan", "files", "discovery"},
+			MaxRetries:   3,
+			LogOutput:    true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		},
+	}
+
+	// Check which jobs are missing and add them
+	addedCount := 0
+	for jobID, defaultJob := range defaultJobsToCheck {
+		if _, exists := m.jobs[jobID]; !exists {
+			m.jobs[jobID] = defaultJob
+			// Save to database
+			if err := saveJobToDB(defaultJob); err != nil {
+				logger.Error("Failed to save missing default job %s to database: %v", jobID, err)
+			} else {
+				logger.Info("Added missing default job: %s", defaultJob.Name)
+				addedCount++
+			}
+		}
+	}
+
+	if addedCount > 0 {
+		logger.Info("Added %d missing default jobs", addedCount)
+	}
 }
 
 // startJobTimers starts individual timers for each interval job

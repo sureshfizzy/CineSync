@@ -550,7 +550,7 @@ def process_file_batch(batch, file_set, destination_folder):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def display_missing_files(conn, destination_folder):
+def display_missing_files(conn, destination_folder, cleanup_missing=False):
     start_time = time.time()
     log_message("Starting display_missing_files function.", level="INFO")
     destination_folder = os.path.normpath(destination_folder)
@@ -558,13 +558,14 @@ def display_missing_files(conn, destination_folder):
         cursor = conn.cursor()
         # Only select files that aren't marked as skipped (don't have a reason)
         cursor.execute("""
-            SELECT file_path, destination_path, reason
+            SELECT file_path, destination_path, reason, tmdb_id, season_number
             FROM processed_files
             WHERE reason IS NULL
         """)
         missing_files = []
+        cleaned_count = 0
 
-        for source_path, dest_path, reason in cursor.fetchall():
+        for source_path, dest_path, reason, tmdb_id, season_number in cursor.fetchall():
             if source_path is None:
                 log_message("Skipping entry with null source path", level="WARNING")
                 continue
@@ -630,12 +631,27 @@ def display_missing_files(conn, destination_folder):
                     if not renamed:
                         missing_files.append((source_path, dest_path))
                         log_message(f"Missing file: {source_path} - Expected at: {dest_path}", level="DEBUG")
+
+                        # Remove the database entry for manually deleted destination files
+                        if cleanup_missing and os.path.exists(source_path):
+                            log_message(f"Removing database entry for manually deleted destination file: {dest_path}", level="INFO")
+                            try:
+                                track_file_deletion(source_path, dest_path, tmdb_id, season_number, reason="Destination file manually deleted")
+                                cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (source_path,))
+                                cleaned_count += 1
+                            except Exception as cleanup_error:
+                                log_message(f"Error removing database entry for {source_path}: {cleanup_error}", level="ERROR")
+
             except (OSError, IOError) as e:
                 log_message(f"Error accessing file or directory: {e}", level="WARNING")
                 continue
             except Exception as e:
                 log_message(f"Unexpected error processing paths - Source: {source_path}, Dest: {dest_path} - Error: {str(e)}", level="ERROR")
                 continue
+
+        if cleanup_missing and cleaned_count > 0:
+            conn.commit()
+            log_message(f"Cleaned up {cleaned_count} database entries for manually deleted destination files.", level="INFO")
 
         total_duration = time.time() - start_time
         log_message(f"Total time taken for display_missing_files function: {total_duration:.2f} seconds", level="INFO")
@@ -867,6 +883,38 @@ def cleanup_database(conn):
         return deleted_count
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error during database cleanup: {e}", level="ERROR")
+        conn.rollback()
+        return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def cleanup_missing_destinations(conn):
+    """Clean up database entries where destination files are missing but source files still exist."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT file_path, destination_path, tmdb_id, season_number
+            FROM processed_files
+            WHERE reason IS NULL AND destination_path IS NOT NULL
+        """)
+        rows = cursor.fetchall()
+
+        deleted_count = 0
+        for file_path, dest_path, tmdb_id, season_number in rows:
+            if file_path and dest_path:
+                # Source exists but destination doesn't - this means manually deleted destination
+                if os.path.exists(file_path) and not os.path.exists(dest_path):
+                    log_message(f"Removing database entry for manually deleted destination: {dest_path}", level="INFO")
+                    track_file_deletion(file_path, dest_path, tmdb_id, season_number, reason="Destination file manually deleted")
+                    cursor.execute("DELETE FROM processed_files WHERE file_path = ?", (file_path,))
+                    deleted_count += 1
+
+        conn.commit()
+        log_message(f"Missing destinations cleanup completed. Removed {deleted_count} entries for manually deleted destination files.", level="INFO")
+        return deleted_count
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error during missing destinations cleanup: {e}", level="ERROR")
         conn.rollback()
         return None
 
