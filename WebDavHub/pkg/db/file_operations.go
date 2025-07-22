@@ -604,7 +604,7 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		// Extract filename from path
 		op.FileName = filepath.Base(op.FilePath)
 
-		// Determine status based on reason first, then destination path
+		// Determine status based on reason first, then file existence
 		if op.Reason != "" && op.Reason != "NULL" {
 			reasonLower := strings.ToLower(op.Reason)
 			if strings.Contains(reasonLower, "skipped") ||
@@ -620,12 +620,29 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 				}
 			}
 		} else if op.DestinationPath != "" && op.DestinationPath != "NULL" {
+			// Check both source and destination file existence
+			sourceExists := false
+			destExists := false
+
+			if _, err := os.Stat(op.FilePath); err == nil {
+				sourceExists = true
+			}
+
 			if _, err := os.Stat(op.DestinationPath); err == nil {
+				destExists = true
+			}
+
+			if destExists {
 				op.Status = "created"
-			} else {
+			} else if sourceExists {
 				op.Status = "failed"
 				if op.Reason == "" {
 					op.Reason = "Destination file not found"
+				}
+			} else {
+				op.Status = "failed"
+				if op.Reason == "" {
+					op.Reason = "Source file not found"
 				}
 			}
 		} else {
