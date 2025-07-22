@@ -783,23 +783,27 @@ func updateProcessingStatusFromMediaHub() error {
 		return nil // Don't fail the scan if MediaHub DB is not available
 	}
 
-	var filePaths []string
+	type fileInfo struct {
+		path   string
+		status string
+	}
+	var fileInfos []fileInfo
 
 	err = executeReadOperation(func(sourceDB *sql.DB) error {
-		// Get all unprocessed files from source database
-		query := `SELECT file_path FROM source_files WHERE processing_status = 'unprocessed' AND is_active = TRUE`
+		// Get all active files from source database to check their status against MediaHub
+		query := `SELECT file_path, processing_status FROM source_files WHERE is_active = TRUE`
 		rows, err := sourceDB.Query(query)
 		if err != nil {
-			return fmt.Errorf("failed to query unprocessed files: %w", err)
+			return fmt.Errorf("failed to query active files: %w", err)
 		}
 		defer rows.Close()
 
 		for rows.Next() {
-			var filePath string
-			if err := rows.Scan(&filePath); err != nil {
+			var filePath, currentStatus string
+			if err := rows.Scan(&filePath, &currentStatus); err != nil {
 				continue
 			}
-			filePaths = append(filePaths, filePath)
+			fileInfos = append(fileInfos, fileInfo{path: filePath, status: currentStatus})
 		}
 		return nil
 	})
@@ -812,11 +816,12 @@ func updateProcessingStatusFromMediaHub() error {
 	var batchOperations []func(*sql.Tx) error
 	updated := 0
 
-	for _, filePath := range filePaths {
-		status, tmdbID, seasonNumber := checkFileInMediaHub(mediaHubDB, filePath)
-		if status != "unprocessed" {
-			// Capture variables in closure
-			fp, st, tid, sn := filePath, status, tmdbID, seasonNumber
+	for _, fileInfo := range fileInfos {
+		newStatus, tmdbID, seasonNumber := checkFileInMediaHub(mediaHubDB, fileInfo.path)
+
+		// Only update if the status has actually changed
+		if newStatus != fileInfo.status {
+			fp, st, tid, sn := fileInfo.path, newStatus, tmdbID, seasonNumber
 			batchOperations = append(batchOperations, func(tx *sql.Tx) error {
 				query := `UPDATE source_files SET processing_status = ?, last_processed_at = ?, tmdb_id = ?, season_number = ?
 						  WHERE file_path = ?`
