@@ -149,14 +149,14 @@ RELEASE_GROUP_PATTERNS = {
 
 # Episode/Season patterns
 EPISODE_PATTERNS = {
-    'standard': re.compile(r'\bS(\d{1,2})E(\d{1,2})\b', re.IGNORECASE),
+    'standard': re.compile(r'\bS(\d{1,2})E(\d{1,3})\b', re.IGNORECASE),
     'season_only': re.compile(r'\bS(\d{1,2})\b(?!E)', re.IGNORECASE),
-    'episode_only': re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE),
+    'episode_only': re.compile(r'\bE(\d{1,3})\b', re.IGNORECASE),
     'season_range': re.compile(r'\bS(\d{1,2})-S(\d{1,2})\b', re.IGNORECASE),
     'season_range_compact': re.compile(r'\bS(\d{1,2})S(\d{1,2})\b', re.IGNORECASE),
-    'episode_range': re.compile(r'\bE(\d{1,2})-E(\d{1,2})\b', re.IGNORECASE),
+    'episode_range': re.compile(r'\bE(\d{1,3})-E(\d{1,3})\b', re.IGNORECASE),
     'complete': re.compile(r'\b(Complete|Collection)\b', re.IGNORECASE),
-    'season_ep': re.compile(r'\bS(\d{1,2})EP(\d{1,2})\b', re.IGNORECASE),
+    'season_ep': re.compile(r'\bS(\d{1,2})EP(\d{1,3})\b', re.IGNORECASE),
     'season_word': re.compile(r'\b(Season|Stagione)\s+(\d{1,2})\b', re.IGNORECASE),
     'ordinal_season': re.compile(r'\b(\d{1,2})(?:st|nd|rd|th)\s+Season\b', re.IGNORECASE),
     'season_word_range': re.compile(r'\bSeason\s+(\d{1,2})\s*-\s*(\d{1,2})\b', re.IGNORECASE),

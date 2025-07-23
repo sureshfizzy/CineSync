@@ -257,10 +257,10 @@ def clean_query(query: str) -> Dict[str, Any]:
 
         # For episode_identifier, create if we have episode info
         if metadata.episode and metadata.season:
-            result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:02d}"
+            result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:03d}"
         elif metadata.episode:
             # If we have episode but no season, just use episode number
-            result['episode_identifier'] = f"E{metadata.episode:02d}"
+            result['episode_identifier'] = f"E{metadata.episode:03d}"
         else:
             result['episode_identifier'] = None
 

@@ -64,7 +64,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 if episode_match:
                     episode_number = int(episode_match.group(1))
                     season_num = int(season_number) if isinstance(season_number, str) else season_number
-                    episode_identifier = f"S{season_num:02d}E{episode_number:02d}"
+                    episode_identifier = f"S{season_num:02d}E{episode_number:03d}"
                     log_message(f"Updated episode identifier to: {episode_identifier}", level="DEBUG")
 
         if episode_identifier:

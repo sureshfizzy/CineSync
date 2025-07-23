@@ -264,7 +264,7 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
             episode_name = sanitize_windows_filename(episode_name)
 
-        formatted_name = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
+        formatted_name = f"S{season_number:02d}E{episode_number:03d} - {episode_name}"
         log_message(f"Direct episode lookup successful: {formatted_name}", level="DEBUG")
         return formatted_name, season_number, episode_number
 
@@ -355,7 +355,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                         if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
                             direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
-                        formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
+                        formatted_name = f"S{season:02d}E{absolute_episode:03d} - {direct_episode_name}"
                         log_message(f"Found direct episode match! Episode {absolute_episode} exists in season {season}", level="DEBUG")
                         return formatted_name, season, int(absolute_episode)
 
@@ -381,7 +381,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             # If the remaining episodes fit in this season
             if remaining_episodes <= episode_count:
                 current_episode = remaining_episodes
-                log_message(f"Absolute episode {absolute_episode} maps to S{season:02d}E{current_episode:02d}", level="INFO")
+                log_message(f"Absolute episode {absolute_episode} maps to S{season:02d}E{current_episode:03d}", level="INFO")
 
                 # Get the episode name
                 try:
@@ -399,7 +399,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
                         mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
 
-                    formatted_name = f"S{season:02d}E{current_episode:02d} - {mapped_episode_name}"
+                    formatted_name = f"S{season:02d}E{current_episode:03d} - {mapped_episode_name}"
                     log_message(f"Mapped to: {formatted_name}", level="DEBUG")
                     return formatted_name, season, current_episode
 
@@ -429,7 +429,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
                         direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
-                    formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
+                    formatted_name = f"S{season:02d}E{absolute_episode:03d} - {direct_episode_name}"
                     log_message(f"Second attempt found direct episode match! S{season}E{absolute_episode}", level="DEBUG")
                     return formatted_name, season, int(absolute_episode)
             except:
@@ -450,7 +450,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             if fallback_episode == 0:
                 fallback_episode = last_season_episodes
 
-        log_message(f"All mapping approaches failed. Final fallback: S{last_season:02d}E{fallback_episode:02d}", level="WARNING")
+        log_message(f"All mapping approaches failed. Final fallback: S{last_season:02d}E{fallback_episode:03d}", level="WARNING")
 
         # Try to get episode name for final fallback
         try:
@@ -467,12 +467,12 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             if mapped_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
                 mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
 
-            formatted_name = f"S{last_season:02d}E{fallback_episode:02d} - {mapped_episode_name}"
+            formatted_name = f"S{last_season:02d}E{fallback_episode:03d} - {mapped_episode_name}"
             return formatted_name, last_season, fallback_episode
 
         except requests.exceptions.RequestException:
             log_message(f"Could not get episode name for final fallback mapping", level="ERROR")
-            return f"S{last_season:02d}E{fallback_episode:02d}", last_season, fallback_episode
+            return f"S{last_season:02d}E{fallback_episode:03d}", last_season, fallback_episode
 
     except requests.exceptions.RequestException as se:
         log_message(f"Error fetching season data: {se}", level="ERROR")
@@ -492,7 +492,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
                     direct_episode_name = sanitize_windows_filename(direct_episode_name)
 
-                formatted_name = f"S01E{absolute_episode:02d} - {direct_episode_name}"
+                formatted_name = f"S01E{absolute_episode:03d} - {direct_episode_name}"
                 log_message(f"Final attempt found match at S01E{absolute_episode}", level="INFO")
                 return formatted_name, 1, int(absolute_episode)
         except:
@@ -500,7 +500,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
         # If everything fails, just return a basic season 1, episode X
         log_message(f"All approaches failed. Using S01E{absolute_episode} as last resort", level="WARNING")
-        return f"S01E{absolute_episode:02d}", 1, int(absolute_episode)
+        return f"S01E{absolute_episode:03d}", 1, int(absolute_episode)
 
 
 
@@ -718,7 +718,7 @@ def display_available_episodes(episodes):
             try:
                 ep_num = int(ep.get('episode_number', 0))
                 ep_name = str(ep.get('name', 'Unknown'))
-                episode_info.append(f"E{ep_num:02d}: {ep_name}")
+                episode_info.append(f"E{ep_num:03d}: {ep_name}")
             except (ValueError, TypeError):
                 log_message(f"Invalid episode data: {ep}", level="ERROR")
                 continue
@@ -774,7 +774,7 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
             if episode_info:
                 log_message(f"Selected: {episode_info}", level="INFO")
             else:
-                log_message(f"Selected: S{season_number:02d}E{new_episode_number:02d}", level="INFO")
+                log_message(f"Selected: S{season_number:02d}E{new_episode_number:03d}", level="INFO")
             return new_episode_number
     except ValueError:
         pass

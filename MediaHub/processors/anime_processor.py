@@ -223,7 +223,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     mapped_episode = episode_number
 
     # Parse the original filename to get the correct episode number
-    original_episode_match = re.search(r'S(\d{2})E(\d{2})', file)
+    original_episode_match = re.search(r'S(\d{2})E(\d{2,3})', file)
     if original_episode_match:
         season_number = original_episode_match.group(1)
         actual_episode = original_episode_match.group(2)
