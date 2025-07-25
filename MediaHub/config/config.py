@@ -254,7 +254,8 @@ def is_anime_separation_enabled():
 
 def is_4k_separation_enabled():
     """Check if 4K content separation should be enabled"""
-    return os.getenv('4K_SEPARATION', 'true').lower() == 'true'
+    value = os.getenv('_4K_SEPARATION') or os.getenv('4K_SEPARATION', 'true')
+    return value.lower() == 'true'
 
 def is_kids_separation_enabled():
     """Check if kids content separation should be enabled"""

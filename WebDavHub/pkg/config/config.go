@@ -178,7 +178,7 @@ func getConfigDefinitions() []ConfigValue {
 
 		// Media Folders Configuration
 		{Key: "CINESYNC_LAYOUT", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable CineSync layout organization"},
-		{Key: "4K_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable automatic 4K content separation into separate folders"},
+		{Key: "4K_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable automatic 4K content separation into separate folders (can also use _4K_SEPARATION for Kubernetes compatibility)"},
 		{Key: "ANIME_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable anime separation"},
 		{Key: "KIDS_SEPARATION", Category: "Media Folders Configuration", Type: "boolean", Required: false, Description: "Enable kids/family content separation based on TMDB content ratings (G, PG, TV-Y, TV-G, TV-PG) and family genres"},
 		{Key: "CUSTOM_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for TV shows"},
@@ -408,6 +408,13 @@ func readEnvFile() (map[string]string, error) {
 		return readFromEnvironment(), nil
 	}
 
+	// Handle Kubernetes-compatible alternative: if _4K_SEPARATION is set but 4K_SEPARATION is not, use _4K_SEPARATION
+	if _, has4K := envVars["4K_SEPARATION"]; !has4K {
+		if value, hasAlt := envVars["_4K_SEPARATION"]; hasAlt {
+			envVars["4K_SEPARATION"] = value
+		}
+	}
+
 	return envVars, nil
 }
 
@@ -421,6 +428,11 @@ func readFromEnvironment() map[string]string {
 	for _, def := range definitions {
 		if value := os.Getenv(def.Key); value != "" {
 			envVars[def.Key] = value
+		} else if def.Key == "4K_SEPARATION" {
+			// Check for Kubernetes-compatible alternative _4K_SEPARATION
+			if value := os.Getenv("_4K_SEPARATION"); value != "" {
+				envVars[def.Key] = value
+			}
 		}
 	}
 

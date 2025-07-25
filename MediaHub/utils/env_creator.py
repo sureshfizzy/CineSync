@@ -27,6 +27,10 @@ def create_env_file_from_environment():
         if value:
             env_vars[key] = value
 
+    # Handle Kubernetes-compatible alternative: if _4K_SEPARATION is set but 4K_SEPARATION is not, use _4K_SEPARATION
+    if '_4K_SEPARATION' in env_vars and '4K_SEPARATION' not in env_vars:
+        env_vars['4K_SEPARATION'] = env_vars['_4K_SEPARATION']
+
     # If no environment variables found, create with minimal defaults
     if not env_vars:
         print("No environment variables found, creating .env with minimal defaults")
