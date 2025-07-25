@@ -99,7 +99,7 @@ var (
 
 // getConfigPath returns the path to the configuration file
 func getConfigPath() string {
-	return filepath.Join("..", configFileName)
+	return filepath.Join("..", "db", configFileName)
 }
 
 // loadConfigFromFile loads configuration from YAML file
