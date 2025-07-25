@@ -100,6 +100,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
                 tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result[:5]
+                is_kids_content = result[5] if len(result) > 5 else False
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
@@ -140,6 +141,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{imdb-{imdb_id}}}"
         elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
+            # Initialize is_kids_content for dict results
+            is_kids_content = False
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
