@@ -1593,7 +1593,7 @@ function FileOperations() {
         >
           {[
             { name: 'Operations', icon: <OperationsIcon />, color: '#3b82f6' },
-            { name: 'Database', icon: <DatabaseIcon />, color: '#10b981' }
+            { name: 'Database', icon: <DatabaseIcon />, color: '#4CAF50' }
           ].map((tab, index) => {
             const isSelected = mainTabValue === index;
             return (

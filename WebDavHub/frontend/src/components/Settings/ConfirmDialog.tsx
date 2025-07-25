@@ -7,6 +7,7 @@ import {
   Typography,
   Box,
   IconButton,
+  useTheme,
 } from '@mui/material';
 import { Close, Warning, Info, Error, CheckCircle } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
@@ -51,6 +52,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   maxWidth = 'sm',
 }) => {
   const IconComponent = iconMap[type];
+  const theme = useTheme();
 
   const handleConfirm = async () => {
     try {
@@ -69,7 +71,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       PaperProps={{
         sx: {
           borderRadius: 2,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 8px 32px rgba(0, 0, 0, 0.8)'
+            : '0 8px 32px rgba(0, 0, 0, 0.12)',
+          bgcolor: theme.palette.mode === 'dark'
+            ? '#000000'
+            : 'background.paper',
+          border: theme.palette.mode === 'dark'
+            ? '1px solid rgba(255, 255, 255, 0.12)'
+            : 'none',
         },
       }}
     >

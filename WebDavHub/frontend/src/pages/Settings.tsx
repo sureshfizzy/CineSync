@@ -122,8 +122,8 @@ const Settings: React.FC = () => {
         name: 'Renaming Structure',
         description: 'File renaming & metadata parsing',
         icon: <DriveFileRenameOutlineRounded sx={{ fontSize: 28 }} />,
-        color: '#10b981',
-        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#4CAF50',
+        gradient: 'linear-gradient(135deg, #4CAF50 0%, #059669 100%)',
       },
       'Movie Collection Settings': {
         name: 'Movie Collections',
@@ -136,8 +136,8 @@ const Settings: React.FC = () => {
         name: 'MediaHub Service',
         description: 'Service startup & control settings',
         icon: <SettingsApplicationsRounded sx={{ fontSize: 28 }} />,
-        color: '#10b981',
-        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#4CAF50',
+        gradient: 'linear-gradient(135deg, #4CAF50 0%, #059669 100%)',
       },
       'Plex Integration Configuration': {
         name: 'Plex Integration',
@@ -150,8 +150,8 @@ const Settings: React.FC = () => {
         name: 'Database',
         description: 'Database settings & performance',
         icon: <StorageRounded sx={{ fontSize: 28 }} />,
-        color: '#10b981',
-        gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#4CAF50',
+        gradient: 'linear-gradient(135deg, #4CAF50 0%, #059669 100%)',
       },
       'Real-Time Monitoring Configuration': {
         name: 'Monitoring',
@@ -335,7 +335,7 @@ const Settings: React.FC = () => {
   // Define main tabs
   const mainTabs = [
     { name: 'General', icon: <TuneRounded sx={{ fontSize: 28 }} />, color: '#3b82f6' },
-    { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#10b981' },
+    { name: 'Services', icon: <ApiRounded sx={{ fontSize: 28 }} />, color: '#4CAF50' },
     { name: 'Spoofing', icon: <LiveTvRounded sx={{ fontSize: 28 }} />, color: '#f59e0b' },
     { name: 'Jobs', icon: <WorkRounded sx={{ fontSize: 28 }} />, color: '#8b5cf6' }
   ];

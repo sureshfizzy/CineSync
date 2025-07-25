@@ -16,11 +16,14 @@ import (
 
 // SpoofingConfig holds the configuration for spoofing services
 type SpoofingConfig struct {
-	Enabled      bool   `yaml:"enabled" json:"enabled"`
-	InstanceName string `json:"instanceName"`
-	Version      string `yaml:"version" json:"version"`
-	Branch       string `yaml:"branch" json:"branch"`
-	APIKey       string `yaml:"apiKey" json:"apiKey"`
+	Enabled        bool            `yaml:"enabled" json:"enabled"`
+	InstanceName   string          `json:"instanceName"`
+	Version        string          `yaml:"version" json:"version"`
+	Branch         string          `yaml:"branch" json:"branch"`
+	APIKey         string          `yaml:"apiKey" json:"apiKey"`
+	ServiceType    string          `yaml:"serviceType" json:"serviceType"`
+	FolderMode     bool            `yaml:"folderMode" json:"folderMode"`
+	FolderMappings []FolderMapping `yaml:"folderMappings" json:"folderMappings"`
 }
 
 const hardcodedInstanceName = "CineSync"
@@ -30,11 +33,14 @@ const configFileName = "config.yml"
 // DefaultConfig returns the default spoofing configuration
 func DefaultConfig() *SpoofingConfig {
 	return &SpoofingConfig{
-		Enabled:      false,
-		InstanceName: hardcodedInstanceName,
-		Version:      "5.14.0.9383",
-		Branch:       "master",
-		APIKey:       generateAPIKey(),
+		Enabled:        false,
+		InstanceName:   hardcodedInstanceName,
+		Version:        "5.14.0.9383",
+		Branch:         "master",
+		APIKey:         generateAPIKey(),
+		ServiceType:    "radarr", // Default to Radarr
+		FolderMode:     false,
+		FolderMappings: []FolderMapping{},
 	}
 }
 
@@ -72,6 +78,14 @@ func (c *SpoofingConfig) Validate() error {
 	}
 	if c.Branch == "" {
 		c.Branch = "master"
+	}
+	if c.ServiceType == "" {
+		c.ServiceType = "radarr"
+	}
+
+	// Validate service type
+	if c.ServiceType != "radarr" && c.ServiceType != "sonarr" && c.ServiceType != "auto" {
+		return fmt.Errorf("invalid service type: %s (must be 'radarr', 'sonarr', or 'auto')", c.ServiceType)
 	}
 
 	return nil
@@ -165,6 +179,7 @@ func InitializeConfig() error {
 			Version:      "5.14.0.9383",
 			Branch:       "master",
 			APIKey:       generateAPIKey(),
+			ServiceType:  "radarr",
 		}
 
 		// Save default config to file

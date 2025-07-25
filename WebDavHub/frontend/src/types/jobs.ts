@@ -80,7 +80,7 @@ export const getJobStatusColor = (status: JobStatus): string => {
     case JobStatus.RUNNING:
       return '#3b82f6';
     case JobStatus.COMPLETED:
-      return '#10b981';
+      return '#4CAF50';
     case JobStatus.FAILED:
       return '#ef4444';
     case JobStatus.CANCELLED:

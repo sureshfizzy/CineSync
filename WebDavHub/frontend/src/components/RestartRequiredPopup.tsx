@@ -145,7 +145,7 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
             background: isRestarting
               ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
               : restartComplete
-              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+              ? 'linear-gradient(135deg, #4CAF50 0%, #059669 100%)'
               : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             boxShadow: '0 8px 25px -8px rgba(59, 130, 246, 0.4)',
           }}
@@ -373,7 +373,7 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
         <Fade in={restartComplete}>
           <Box sx={{ textAlign: 'center', py: 3 }}>
             <Typography variant="body1" sx={{
-              color: theme.palette.mode === 'dark' ? '#10b981' : '#059669',
+              color: theme.palette.mode === 'dark' ? '#4CAF50' : '#059669',
               mb: 1,
               fontWeight: 500
             }}>

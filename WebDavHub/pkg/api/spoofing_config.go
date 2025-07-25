@@ -10,10 +10,13 @@ import (
 
 // SpoofingConfigRequest represents a request to update the spoofing configuration
 type SpoofingConfigRequest struct {
-	Enabled bool   `json:"enabled"`
-	Version string `json:"version"`
-	Branch  string `json:"branch"`
-	APIKey  string `json:"apiKey"`
+	Enabled        bool                      `json:"enabled"`
+	Version        string                    `json:"version"`
+	Branch         string                    `json:"branch"`
+	APIKey         string                    `json:"apiKey"`
+	ServiceType    string                    `json:"serviceType"`
+	FolderMode     bool                      `json:"folderMode"`
+	FolderMappings []spoofing.FolderMapping  `json:"folderMappings"`
 }
 
 // HandleSpoofingConfig handles GET and POST requests for the spoofing configuration
@@ -51,6 +54,9 @@ func HandleSpoofingConfig(w http.ResponseWriter, r *http.Request) {
 		config.Version = req.Version
 		config.Branch = req.Branch
 		config.APIKey = req.APIKey
+		config.ServiceType = req.ServiceType
+		config.FolderMode = req.FolderMode
+		config.FolderMappings = req.FolderMappings
 
 		if err := spoofing.SetConfig(config); err != nil {
 			logger.Warn("Failed to update spoofing config: %v", err)

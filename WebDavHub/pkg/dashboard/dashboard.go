@@ -149,7 +149,7 @@ func DetectMediaType(folderName string) (mediaType, icon, iconColor, description
 	} else if strings.Contains(lowerName, "tv") || strings.Contains(lowerName, "show") || strings.Contains(lowerName, "series") {
 		mediaType = "tvshows"
 		icon = "fas fa-tv"
-		iconColor = "#10b981" // Green
+		iconColor = "#4CAF50" // Green
 		description = "TV shows collection"
 	} else if strings.Contains(lowerName, "music") || strings.Contains(lowerName, "audio") || strings.Contains(lowerName, "song") {
 		mediaType = "music"

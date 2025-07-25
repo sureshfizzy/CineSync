@@ -277,7 +277,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
 
   const getStatusColor = () => {
     if (!status) return '#6B7280';
-    if (status.isRunning && status.monitorRunning) return '#10B981';
+    if (status.isRunning && status.monitorRunning) return '#4CAF50';
     if (status.isRunning || status.monitorRunning) return '#F59E0B';
     return '#EF4444';
   };
@@ -388,7 +388,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
             mb: 3,
             borderRadius: 2,
             border: 'none',
-            bgcolor: alpha('#10B981', 0.1),
+            bgcolor: alpha('#4CAF50', 0.1),
             color: '#059669',
             '& .MuiAlert-icon': { color: '#059669' }
           }}
@@ -467,11 +467,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   p: 2,
                   borderRadius: 2,
                   bgcolor: status.isRunning
-                    ? alpha('#10B981', 0.1)
+                    ? alpha('#4CAF50', 0.1)
                     : alpha('#EF4444', 0.1),
                   border: '1px solid',
                   borderColor: status.isRunning
-                    ? alpha('#10B981', 0.2)
+                    ? alpha('#4CAF50', 0.2)
                     : alpha('#EF4444', 0.2),
                   transition: 'all 0.4s ease-in-out',
                 }}
@@ -480,7 +480,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   <Speed
                     sx={{
                       fontSize: 20,
-                      color: status.isRunning ? '#10B981' : '#EF4444'
+                      color: status.isRunning ? '#4CAF50' : '#EF4444'
                     }}
                   />
                   <Box flex={1}>
@@ -495,7 +495,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     label={status.isRunning ? 'Running' : 'Stopped'}
                     size="small"
                     sx={{
-                      bgcolor: status.isRunning ? '#10B981' : '#EF4444',
+                      bgcolor: status.isRunning ? '#4CAF50' : '#EF4444',
                       color: 'white',
                       fontWeight: 600,
                       transition: 'all 0.4s ease-in-out',
@@ -515,11 +515,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   p: 2,
                   borderRadius: 2,
                   bgcolor: status.monitorRunning
-                    ? alpha('#10B981', 0.1)
+                    ? alpha('#4CAF50', 0.1)
                     : alpha('#EF4444', 0.1),
                   border: '1px solid',
                   borderColor: status.monitorRunning
-                    ? alpha('#10B981', 0.2)
+                    ? alpha('#4CAF50', 0.2)
                     : alpha('#EF4444', 0.2),
                   transition: 'all 0.4s ease-in-out',
                 }}
@@ -528,7 +528,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   <Visibility
                     sx={{
                       fontSize: 20,
-                      color: status.monitorRunning ? '#10B981' : '#EF4444'
+                      color: status.monitorRunning ? '#4CAF50' : '#EF4444'
                     }}
                   />
                   <Box flex={1}>
@@ -543,7 +543,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     label={status.monitorRunning ? 'Active' : 'Stopped'}
                     size="small"
                     sx={{
-                      bgcolor: status.monitorRunning ? '#10B981' : '#EF4444',
+                      bgcolor: status.monitorRunning ? '#4CAF50' : '#EF4444',
                       color: 'white',
                       fontWeight: 600,
                       transition: 'all 0.4s ease-in-out',
@@ -640,7 +640,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 borderRadius: 2,
                 fontWeight: 600,
                 textTransform: 'none',
-                bgcolor: '#10B981',
+                bgcolor: '#4CAF50',
                 color: 'white',
                 boxShadow: 'none',
                 '&:hover': {
@@ -741,10 +741,10 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 disabled={autoStartLoading}
                 sx={{
                   '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#10B981',
+                    color: '#4CAF50',
                   },
                   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: '#10B981',
+                    backgroundColor: '#4CAF50',
                   },
                 }}
               />
@@ -874,7 +874,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   borderRadius: 2,
                   fontWeight: 600,
                   textTransform: 'none',
-                  bgcolor: '#10B981',
+                  bgcolor: '#4CAF50',
                   color: 'white',
                   boxShadow: 'none',
                   '&:hover': {
@@ -1002,7 +1002,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                       color: log.includes('[ERROR]') ? '#EF4444' :
                             log.includes('[WARNING]') ? '#F59E0B' :
                             log.includes('[INFO]') ? '#3B82F6' :
-                            log.includes('[SUCCESS]') ? '#10B981' :
+                            log.includes('[SUCCESS]') ? '#4CAF50' :
                             'text.primary',
                       fontSize: '0.875rem',
                       fontFamily: 'inherit',

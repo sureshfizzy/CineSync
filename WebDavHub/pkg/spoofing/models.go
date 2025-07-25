@@ -33,6 +33,22 @@ type SystemStatusResponse struct {
 	PackageUpdateMechanism string `json:"packageUpdateMechanism"`
 }
 
+// FolderMapping represents a folder mapping for spoofing
+type FolderMapping struct {
+	FolderPath   string `json:"folderPath"`
+	DisplayName  string `json:"displayName"`
+	ServiceType  string `json:"serviceType"`
+	APIKey       string `json:"apiKey"`
+	Enabled      bool   `json:"enabled"`
+}
+
+// AvailableFolder represents a folder available for mapping
+type AvailableFolder struct {
+	Path        string `json:"path"`
+	DisplayName string `json:"displayName"`
+	FileCount   int    `json:"fileCount"`
+}
+
 // MovieFile represents a movie file in Radarr
 type MovieFile struct {
 	ID           int       `json:"id"`
