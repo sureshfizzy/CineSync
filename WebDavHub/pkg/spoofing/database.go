@@ -32,8 +32,7 @@ func getMoviesFromDatabase() ([]MovieResource, error) {
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		GROUP BY proper_name, year, tmdb_id
-		ORDER BY proper_name, year
-		LIMIT 1000`
+		ORDER BY proper_name, year`
 
 	rows, err := mediaHubDB.Query(query)
 	if err != nil {
@@ -188,8 +187,7 @@ func getSeriesFromDatabase() ([]SeriesResource, error) {
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		GROUP BY proper_name, year, tmdb_id
-		ORDER BY proper_name, year
-		LIMIT 1000`
+		ORDER BY proper_name, year`
 
 	rows, err := mediaHubDB.Query(query)
 	if err != nil {
@@ -377,8 +375,7 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 		AND proper_name != ''
 		AND base_path = ?
 		GROUP BY proper_name, year, tmdb_id
-		ORDER BY proper_name, year
-		LIMIT 1000`
+		ORDER BY proper_name, year`
 
 	rows, err := mediaHubDB.Query(query, folderPath)
 	if err != nil {
@@ -443,8 +440,7 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 		AND proper_name != ''
 		AND base_path = ?
 		GROUP BY proper_name, year, tmdb_id
-		ORDER BY proper_name, year
-		LIMIT 1000`
+		ORDER BY proper_name, year`
 
 	rows, err := mediaHubDB.Query(query, folderPath)
 	if err != nil {
@@ -511,8 +507,7 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 		AND proper_name != ''
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)
-		LIMIT 1000`
+		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
 	rows, err := mediaHubDB.Query(query)
 	if err != nil {
@@ -580,8 +575,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
 		AND base_path = ?
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)
-		LIMIT 1000`
+		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
 	rows, err := mediaHubDB.Query(query, folderPath)
 	if err != nil {
