@@ -11,6 +11,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
+from MediaHub.api.media_cover import cleanup_tmdb_covers
 
 def delete_broken_symlinks_batch(dest_dir, removed_paths):
     """Delete broken symlinks for multiple removed paths using parallel processing and database configurations.
@@ -297,6 +298,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id, season_number = result
+                                            if tmdb_id:
+                                                try:
+                                                    cleanup_tmdb_covers(int(tmdb_id))
+                                                except Exception as e:
+                                                    log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
                                             send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
@@ -394,6 +400,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             result = cursor1.fetchone()
                                             if result:
                                                 source_path, tmdb_id, season_number = result
+                                                if tmdb_id:
+                                                    try:
+                                                        cleanup_tmdb_covers(int(tmdb_id))
+                                                    except Exception as e:
+                                                        log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
                                                 send_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
@@ -469,6 +480,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     symlinks_deleted = True
                                                     log_message(f"Deleted broken symlink: {dest_path}", level="INFO")
                                                     send_file_deletion(removed_path, dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
+                                                    if tmdb_id:
+                                                        try:
+                                                            cleanup_tmdb_covers(int(tmdb_id))
+                                                        except Exception as e:
+                                                            log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
                                                     _cleanup_empty_dirs(os.path.dirname(dest_path))
@@ -563,6 +579,11 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id_db, season_number_db = result
+                                            if tmdb_id_db:
+                                                try:
+                                                    cleanup_tmdb_covers(int(tmdb_id_db))
+                                                except Exception as e:
+                                                    log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id_db}: {e}", level="WARNING")
                                             send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
@@ -638,6 +659,11 @@ def _check_all_symlinks(dest_dir):
                     if result:
                         source_path, tmdb_id, season_number = result
                         send_file_deletion(source_path, file_path, tmdb_id, season_number, "Broken symlink detected and removed")
+                        if tmdb_id:
+                            try:
+                                cleanup_tmdb_covers(int(tmdb_id))
+                            except Exception as e:
+                                log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
 
                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))

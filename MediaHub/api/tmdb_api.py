@@ -15,6 +15,7 @@ from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
+from MediaHub.api.media_cover import process_tmdb_covers
 
 # Thread-safe caches
 _api_cache = {}
@@ -128,6 +129,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 response = cached_get(url, params=params)
                 response.raise_for_status()
                 show_data = response.json()
+                process_tmdb_covers(tmdb_id, show_data)
 
             elif imdb_id or tvdb_id:
                 external_id_type = 'imdb_id' if imdb_id else 'tvdb_id'
@@ -155,6 +157,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 response = cached_get(url, params=params)
                 response.raise_for_status()
                 show_data = response.json()
+                process_tmdb_covers(tmdb_id, show_data)
 
             # Process show data with the potentially updated season/episode info
             if show_data:
@@ -504,6 +507,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 response = session.get(url, params=params, timeout=10)
                 response.raise_for_status()
                 movie_data = response.json()
+                process_tmdb_covers(tmdb_id, movie_data)
 
             # Process movie data
             original_movie_name = movie_data['title']
@@ -741,6 +745,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
+        process_tmdb_covers(tmdb_id, chosen_movie)
 
         movie_data = get_movie_data(tmdb_id)
         imdb_id = movie_data.get('imdb_id', '')
@@ -952,6 +957,7 @@ def process_chosen_movie(chosen_movie):
     release_date = chosen_movie.get('release_date')
     movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
     tmdb_id = chosen_movie.get('id')
+    process_tmdb_covers(tmdb_id, chosen_movie)
 
     if is_imdb_folder_id_enabled():
         external_ids = get_external_ids(tmdb_id, 'movie')

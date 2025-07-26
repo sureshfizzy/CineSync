@@ -15,6 +15,7 @@ from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
+from MediaHub.api.media_cover import process_tmdb_covers
 
 _api_cache = {}
 
@@ -121,6 +122,7 @@ def get_movie_data(tmdb_id):
         rating = us_rating or other_rating
         has_appropriate_rating = is_family_friendly_rating(rating)
         is_kids_content = has_appropriate_rating and has_family_indicators
+        process_tmdb_covers(tmdb_id, data)
 
         return {
             'imdb_id': imdb_id,
@@ -189,6 +191,7 @@ def get_show_data(tmdb_id):
         rating = us_rating or other_rating
         has_appropriate_rating = is_family_friendly_rating(rating)
         is_kids_content = has_appropriate_rating and has_family_indicators
+        process_tmdb_covers(tmdb_id, data)
 
         return {
             'external_ids': external_ids,

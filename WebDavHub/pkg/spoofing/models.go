@@ -122,29 +122,35 @@ type MovieResource struct {
 
 // SeriesResource represents a Sonarr TV series
 type SeriesResource struct {
-	ID               int           `json:"id"`
-	Title            string        `json:"title"`
-	AlternateTitles  []interface{} `json:"alternateTitles"`
-	SortTitle        string        `json:"sortTitle"`
-	Status           string        `json:"status"`
-	Images           []interface{} `json:"images"`
-	Seasons          []interface{} `json:"seasons"`
-	Year             int           `json:"year"`
-	Path             string        `json:"path"`
-	QualityProfileId int           `json:"qualityProfileId"`
-	SeasonFolder     bool          `json:"seasonFolder"`
-	Monitored        bool          `json:"monitored"`
-	Runtime          int           `json:"runtime"`
-	TvdbId           int           `json:"tvdbId"`
-	TvRageId         int           `json:"tvRageId"`
-	TvMazeId         int           `json:"tvMazeId"`
-	SeriesType       string        `json:"seriesType"`
-	CleanTitle       string        `json:"cleanTitle"`
-	TitleSlug        string        `json:"titleSlug"`
-	RootFolderPath   string        `json:"rootFolderPath"`
-	Genres           []string      `json:"genres"`
-	Tags             []int         `json:"tags"`
-	Added            time.Time     `json:"added"`
+	ID                int           `json:"id"`
+	Title             string        `json:"title"`
+	AlternateTitles   []interface{} `json:"alternateTitles"`
+	SortTitle         string        `json:"sortTitle"`
+	Status            string        `json:"status"`
+	Overview          string        `json:"overview"`
+	Network           string        `json:"network"`
+	AirTime           string        `json:"airTime"`
+	Images            []interface{} `json:"images"`
+	Seasons           []interface{} `json:"seasons"`
+	Year              int           `json:"year"`
+	Path              string        `json:"path"`
+	QualityProfileId  int           `json:"qualityProfileId"`
+	LanguageProfileId int           `json:"languageProfileId"`
+	SeasonFolder      bool          `json:"seasonFolder"`
+	Monitored         bool          `json:"monitored"`
+	Runtime           int           `json:"runtime"`
+	TvdbId            int           `json:"tvdbId"`
+	TvRageId          int           `json:"tvRageId"`
+	TvMazeId          int           `json:"tvMazeId"`
+	FirstAired        string        `json:"firstAired"`
+	LastInfoSync      time.Time     `json:"lastInfoSync"`
+	SeriesType        string        `json:"seriesType"`
+	CleanTitle        string        `json:"cleanTitle"`
+	TitleSlug         string        `json:"titleSlug"`
+	RootFolderPath    string        `json:"rootFolderPath"`
+	Genres            []string      `json:"genres"`
+	Tags              []int         `json:"tags"`
+	Added             time.Time     `json:"added"`
 }
 
 // QualityProfile represents a quality profile

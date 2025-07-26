@@ -22,6 +22,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/rootfolder/":     HandleSpoofedRootFolder,
 		"/api/v3/qualityprofile":  HandleSpoofedQualityProfile,
 		"/api/v3/qualityprofile/": HandleSpoofedQualityProfile,
+		"/api/v3/language":        HandleSpoofedLanguage,
+		"/api/v3/language/":       HandleSpoofedLanguage,
 		"/api/v3/tag":             HandleSpoofedTag,
 		"/api/v3/tag/":            HandleSpoofedTag,
 		"/api":                    HandleSpoofedAPI,
@@ -49,10 +51,14 @@ func RegisterRoutes(mux *http.ServeMux) {
 		// The handlers will determine which data to return based on the folder mapping's service type
 		serviceEndpoints["/api/v3/movie"] = HandleSpoofedMovies
 		serviceEndpoints["/api/v3/movie/"] = HandleSpoofedMovies
+		serviceEndpoints["/api/v3/moviefile"] = HandleSpoofedMovieFiles
+		serviceEndpoints["/api/v3/moviefile/"] = HandleSpoofedMovieFiles
 		serviceEndpoints["/api/v3/series"] = HandleSpoofedSeries
 		serviceEndpoints["/api/v3/series/"] = HandleSpoofedSeries
 		serviceEndpoints["/api/v3/episode"] = HandleSpoofedEpisode
 		serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
+		serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
+		serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
 		serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 		serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 	} else {
@@ -62,22 +68,30 @@ func RegisterRoutes(mux *http.ServeMux) {
 			// Radarr-specific endpoints
 			serviceEndpoints["/api/v3/movie"] = HandleSpoofedMovies
 			serviceEndpoints["/api/v3/movie/"] = HandleSpoofedMovies
+			serviceEndpoints["/api/v3/moviefile"] = HandleSpoofedMovieFiles
+			serviceEndpoints["/api/v3/moviefile/"] = HandleSpoofedMovieFiles
 		case "sonarr":
 			// Sonarr-specific endpoints
 			serviceEndpoints["/api/v3/series"] = HandleSpoofedSeries
 			serviceEndpoints["/api/v3/series/"] = HandleSpoofedSeries
 			serviceEndpoints["/api/v3/episode"] = HandleSpoofedEpisode
 			serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
+			serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 			serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 		case "auto":
 			// Auto mode - register both sets of endpoints
 			serviceEndpoints["/api/v3/movie"] = HandleSpoofedMovies
 			serviceEndpoints["/api/v3/movie/"] = HandleSpoofedMovies
+			serviceEndpoints["/api/v3/moviefile"] = HandleSpoofedMovieFiles
+			serviceEndpoints["/api/v3/moviefile/"] = HandleSpoofedMovieFiles
 			serviceEndpoints["/api/v3/series"] = HandleSpoofedSeries
 			serviceEndpoints["/api/v3/series/"] = HandleSpoofedSeries
 			serviceEndpoints["/api/v3/episode"] = HandleSpoofedEpisode
 			serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
+			serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 			serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 		}

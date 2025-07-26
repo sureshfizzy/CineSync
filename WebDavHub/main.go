@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,6 +37,204 @@ func getNetworkIP() string {
 
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 	return localAddr.IP.String()
+}
+
+// handleMediaCover serves poster and fanart images from the MediaCover directory
+func handleMediaCover(w http.ResponseWriter, r *http.Request) {
+	// Extract the path after /MediaCover/
+	path := strings.TrimPrefix(r.URL.Path, "/MediaCover/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Construct the full file path
+	filePath := filepath.Join("../db", "MediaCover", path)
+
+	// Security check: ensure the path doesn't escape the MediaCover directory
+	absMediaCoverDir, _ := filepath.Abs(filepath.Join("../db", "MediaCover"))
+	absFilePath, _ := filepath.Abs(filePath)
+	if !strings.HasPrefix(absFilePath, absMediaCoverDir) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set appropriate content type based on file extension
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".webp":
+		w.Header().Set("Content-Type", "image/webp")
+	default:
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	// Set cache headers for better performance
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+
+	// Serve the file
+	http.ServeFile(w, r, filePath)
+}
+
+// handleBazarrMediaCover serves poster and fanart images for Bazarr with size suffixes
+func handleBazarrMediaCover(w http.ResponseWriter, r *http.Request) {
+	// Extract the path after /images/movies/MediaCover/
+	path := strings.TrimPrefix(r.URL.Path, "/images/movies/MediaCover/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Parse the path to extract TMDB ID and image type with size
+	// Expected format: {tmdb_id}/{type}-{size}.jpg (e.g., "535292/poster-500.jpg")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	tmdbID := parts[0]
+	imageFile := parts[1]
+
+	// Extract the base image type (poster or fanart) by removing size suffix
+	var baseImageFile string
+	if strings.Contains(imageFile, "poster-") {
+		baseImageFile = "poster.jpg"
+	} else if strings.Contains(imageFile, "fanart-") {
+		baseImageFile = "fanart.jpg"
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Construct the actual file path (without size suffix)
+	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
+
+	// Security check: ensure the path doesn't escape the MediaCover directory
+	absMediaCoverDir, _ := filepath.Abs(filepath.Join("../db", "MediaCover"))
+	absFilePath, _ := filepath.Abs(filePath)
+	if !strings.HasPrefix(absFilePath, absMediaCoverDir) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set appropriate content type
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+
+	// Serve the file
+	http.ServeFile(w, r, filePath)
+}
+
+func handleBazarrAPIMediaCover(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/images/movies/MediaCover/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	tmdbID, imageFile := parts[0], parts[1]
+	var baseImageFile string
+
+	if strings.Contains(imageFile, "poster-") {
+		baseImageFile = "poster.jpg"
+	} else if strings.Contains(imageFile, "fanart-") {
+		baseImageFile = "fanart.jpg"
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, filePath)
+}
+
+func handleBazarrAPISeriesMediaCover(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/images/series/MediaCover/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	tmdbID, imageFile := parts[0], parts[1]
+	var baseImageFile string
+
+	if strings.Contains(imageFile, "poster-") {
+		baseImageFile = "poster.jpg"
+	} else if strings.Contains(imageFile, "fanart-") {
+		baseImageFile = "fanart.jpg"
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, filePath)
+}
+
+func handleBazarrSeriesMediaCover(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/images/series/MediaCover/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	tmdbID, imageFile := parts[0], parts[1]
+	var baseImageFile string
+
+	if strings.Contains(imageFile, "poster-") {
+		baseImageFile = "poster.jpg"
+	} else if strings.Contains(imageFile, "fanart-") {
+		baseImageFile = "fanart.jpg"
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, filePath)
 }
 
 func main() {
@@ -135,6 +334,8 @@ func main() {
 	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 	apiMux.HandleFunc("/api/image-cache", api.HandleImageCache)
+	apiMux.HandleFunc("/api/v3/images/movies/MediaCover/", handleBazarrAPIMediaCover)
+	apiMux.HandleFunc("/api/v3/images/series/MediaCover/", handleBazarrAPISeriesMediaCover)
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
 	apiMux.HandleFunc("/api/python-bridge/message", api.HandlePythonMessage)
@@ -215,6 +416,11 @@ func main() {
 
 	// WebDAV Handler
 	rootMux.Handle("/webdav/", auth.BasicAuthMiddleware(http.StripPrefix("/webdav", webdavHandler)))
+
+	// MediaCover Handler (no authentication required for poster images)
+	rootMux.HandleFunc("/MediaCover/", handleMediaCover)
+	rootMux.HandleFunc("/images/movies/MediaCover/", handleBazarrMediaCover)
+	rootMux.HandleFunc("/images/series/MediaCover/", handleBazarrSeriesMediaCover)
 
 	// Root path handler for the server itself
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

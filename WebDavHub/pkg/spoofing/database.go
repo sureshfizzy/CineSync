@@ -1,21 +1,48 @@
 package spoofing
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
+	"math/rand"
+	"net/http"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cinesync/pkg/db"
 )
 
+var (
+	tmdbCache = make(map[int]*TMDBMovieDetails)
+	tmdbMutex sync.RWMutex
+	tmdbClient = &http.Client{Timeout: 10 * time.Second}
+)
+
+
+
 // getMoviesFromDatabase retrieves movies from the CineSync database and formats them for Radarr
 func getMoviesFromDatabase() ([]MovieResource, error) {
-	mediaHubDB, err := db.GetDatabaseConnection()
-	if err != nil {
-		return nil, err
-	}
+	var movies []MovieResource
+
+	err := executeWithRetry(func() error {
+		mediaHubDB, err := db.GetDatabaseConnection()
+		if err != nil {
+			return err
+		}
+
+		movies, err = getMoviesFromDatabaseInternal(mediaHubDB)
+		return err
+	})
+
+	return movies, err
+}
+
+func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) {
 
 	query := `
 		SELECT
@@ -41,7 +68,6 @@ func getMoviesFromDatabase() ([]MovieResource, error) {
 	defer rows.Close()
 
 	var movies []MovieResource
-	movieID := 1
 
 	for rows.Next() {
 		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
@@ -62,9 +88,8 @@ func getMoviesFromDatabase() ([]MovieResource, error) {
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		movie := createMovieResource(movieID, properName, year, tmdbID, destinationPath, addedTime, fileSize)
+		movie := createMovieResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime, fileSize)
 		movies = append(movies, movie)
-		movieID++
 	}
 
 	return movies, rows.Err()
@@ -74,6 +99,127 @@ func getMoviesFromDatabase() ([]MovieResource, error) {
 func createMovieResource(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64) MovieResource {
 	return createMovieResourceInternal(id, title, year, tmdbID, filePath, added, fileSize)
 }
+
+type TMDBMovieDetails struct {
+	Overview string `json:"overview"`
+	Runtime  int    `json:"runtime"`
+	Genres   []struct {
+		Name string `json:"name"`
+	} `json:"genres"`
+	Releases struct {
+		Countries []struct {
+			Certification string `json:"certification"`
+			ISO31661      string `json:"iso_3166_1"`
+		} `json:"countries"`
+	} `json:"releases"`
+}
+
+func fetchMovieMetadata(tmdbID int) (string, int, []string, string) {
+	if tmdbID <= 0 {
+		return "", 0, []string{}, ""
+	}
+
+	// Check cache
+	tmdbMutex.RLock()
+	if cached, exists := tmdbCache[tmdbID]; exists {
+		tmdbMutex.RUnlock()
+		return extractMetadata(cached)
+	}
+	tmdbMutex.RUnlock()
+
+	// Fetch from API
+	apiKey := os.Getenv("TMDB_API_KEY")
+	if apiKey == "" {
+		return "", 0, []string{}, ""
+	}
+
+	url := fmt.Sprintf("https://api.themoviedb.org/3/movie/%d?api_key=%s&append_to_response=releases", tmdbID, apiKey)
+	resp, err := tmdbClient.Get(url)
+	if err != nil || resp.StatusCode != 200 {
+		return "", 0, []string{}, ""
+	}
+	defer resp.Body.Close()
+
+	var details TMDBMovieDetails
+	if json.NewDecoder(resp.Body).Decode(&details) != nil {
+		return "", 0, []string{}, ""
+	}
+
+	// Cache result
+	tmdbMutex.Lock()
+	tmdbCache[tmdbID] = &details
+	tmdbMutex.Unlock()
+
+	return extractMetadata(&details)
+}
+
+func extractMetadata(details *TMDBMovieDetails) (string, int, []string, string) {
+	var genres []string
+	for _, g := range details.Genres {
+		if g.Name != "" {
+			genres = append(genres, g.Name)
+		}
+	}
+
+	var cert string
+	for _, c := range details.Releases.Countries {
+		if c.ISO31661 == "US" && c.Certification != "" {
+			cert = c.Certification
+			break
+		}
+	}
+
+	return details.Overview, details.Runtime, genres, cert
+}
+
+// TV metadata functions
+func fetchTVMetadata(tmdbID int) (string, int, []string, string) {
+	if tmdbID <= 0 {
+		return "", 0, []string{}, ""
+	}
+
+	apiKey := os.Getenv("TMDB_API_KEY")
+	if apiKey == "" {
+		return "", 0, []string{}, ""
+	}
+
+	url := fmt.Sprintf("https://api.themoviedb.org/3/tv/%d?api_key=%s", tmdbID, apiKey)
+	resp, err := tmdbClient.Get(url)
+	if err != nil || resp.StatusCode != 200 {
+		return "", 0, []string{}, ""
+	}
+	defer resp.Body.Close()
+
+	var details struct {
+		Overview string `json:"overview"`
+		Genres   []struct {
+			Name string `json:"name"`
+		} `json:"genres"`
+		EpisodeRunTime []int `json:"episode_run_time"`
+	}
+
+	if json.NewDecoder(resp.Body).Decode(&details) != nil {
+		return "", 0, []string{}, ""
+	}
+
+	var genres []string
+	for _, g := range details.Genres {
+		if g.Name != "" {
+			genres = append(genres, g.Name)
+		}
+	}
+
+	runtime := 0
+	if len(details.EpisodeRunTime) > 0 {
+		runtime = details.EpisodeRunTime[0]
+	}
+
+	return details.Overview, runtime, genres, ""
+}
+
+
+
+
 
 // createMovieResourceInternal
 func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64) MovieResource {
@@ -85,6 +231,9 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		}
 	}
 
+	overview, runtime, genres, certification := fetchMovieMetadata(tmdbID)
+	quality := detectQualityFromPath(filePath)
+
 	movieFile := &MovieFile{
 		ID:           id,
 		MovieId:      id,
@@ -92,16 +241,8 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		Path:         filePath,
 		Size:         fileSize,
 		DateAdded:    added,
-		Quality: Quality{
-			Quality: QualityDefinition{
-				ID:         1,
-				Name:       "Unknown",
-				Source:     "unknown",
-				Resolution: 0,
-			},
-			Revision: QualityRevision{Version: 1, Real: 0, IsRepack: false},
-		},
-		Languages: []Language{{ID: 1, Name: "Unknown"}},
+		Quality:      quality,
+		Languages:    getDefaultLanguages(),
 	}
 
 	return MovieResource{
@@ -110,7 +251,7 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		OriginalTitle:       title,
 		SortTitle:           title,
 		Status:              "released",
-		Overview:            "",
+		Overview:            overview,
 		Year:                year,
 		HasFile:             true,
 		MovieFileId:         id,
@@ -119,58 +260,78 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		Monitored:           true,
 		MinimumAvailability: "released",
 		IsAvailable:         true,
-		Runtime:             0,
+		Runtime:             runtime,
 		CleanTitle:          strings.ToLower(strings.ReplaceAll(title, " ", "")),
 		ImdbId:              "",
 		TmdbId:              tmdbID,
 		TitleSlug:           strings.ToLower(strings.ReplaceAll(title, " ", "-")),
 		RootFolderPath:      "/movies",
-		Certification:       "",
-		Genres:              []string{},
+		Certification:       certification,
+		Genres:              genres,
 		Tags:                []int{},
 		Added:               added,
-		Images:              []interface{}{},
+		Images:              createMediaImages(tmdbID, "movie"),
 		Popularity:          0,
 		MovieFile:           movieFile,
 		SizeOnDisk:          fileSize,
 	}
 }
 
-// createSeriesResource creates a properly formatted SeriesResource
 func createSeriesResource(id int, title string, year, tmdbID int, filePath string, added time.Time) SeriesResource {
+	overview, runtime, genres, _ := fetchTVMetadata(tmdbID)
+
 	return SeriesResource{
-		ID:               id,
-		Title:            title,
-		AlternateTitles:  []interface{}{},
-		SortTitle:        title,
-		Status:           "continuing",
-		Year:             year,
-		Path:             filePath,
-		QualityProfileId: 1,
-		SeasonFolder:     true,
-		Monitored:        true,
-		Runtime:          0,
-		TvdbId:           tmdbID,
-		TvRageId:         0,
-		TvMazeId:         0,
-		SeriesType:       "standard",
-		CleanTitle:       strings.ToLower(strings.ReplaceAll(title, " ", "")),
-		TitleSlug:        strings.ToLower(strings.ReplaceAll(title, " ", "-")),
-		RootFolderPath:   "/tv",
-		Genres:           []string{},
-		Tags:             []int{},
-		Added:            added,
-		Images:           []interface{}{},
-		Seasons:          []interface{}{},
+		ID:                id,
+		Title:             title,
+		AlternateTitles:   []interface{}{},
+		SortTitle:         title,
+		Status:            "continuing",
+		Overview:          overview,
+		Network:           "",
+		AirTime:           "",
+		Year:              year,
+		Path:              filePath,
+		QualityProfileId:  1,
+		LanguageProfileId: 1,
+		SeasonFolder:      true,
+		Monitored:         true,
+		Runtime:           runtime,
+		TvdbId:            tmdbID,
+		TvRageId:          0,
+		TvMazeId:          0,
+		FirstAired:        added.Format("2006-01-02T15:04:05Z"),
+		LastInfoSync:      added,
+		SeriesType:        "standard",
+		CleanTitle:        strings.ToLower(strings.ReplaceAll(title, " ", "")),
+		TitleSlug:         strings.ToLower(strings.ReplaceAll(title, " ", "-")),
+		RootFolderPath:    "/tv",
+		Genres:            genres,
+		Tags:              []int{},
+		Added:             added,
+		Images:            createMediaImages(tmdbID, "tv"),
+		Seasons:           []interface{}{},
 	}
 }
 
-// getSeriesFromDatabase retrieves TV series from the CineSync database and formats them for Sonarr
 func getSeriesFromDatabase() ([]SeriesResource, error) {
-	mediaHubDB, err := db.GetDatabaseConnection()
-	if err != nil {
-		return nil, err
-	}
+	var series []SeriesResource
+
+	err := executeWithRetry(func() error {
+		mediaHubDB, err := db.GetDatabaseConnection()
+		if err != nil {
+			return err
+		}
+
+		series, err = getSeriesFromDatabaseInternal(mediaHubDB)
+		return err
+	})
+
+	return series, err
+}
+
+func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error) {
+
+
 
 	query := `
 		SELECT
@@ -181,7 +342,7 @@ func getSeriesFromDatabase() ([]SeriesResource, error) {
 			MAX(processed_at) as latest_processed_at,
 			SUM(COALESCE(file_size, 0)) as total_file_size
 		FROM processed_files
-		WHERE UPPER(media_type) = 'TV'
+		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
 		AND destination_path IS NOT NULL
 		AND destination_path != ''
 		AND proper_name IS NOT NULL
@@ -196,7 +357,6 @@ func getSeriesFromDatabase() ([]SeriesResource, error) {
 	defer rows.Close()
 
 	var series []SeriesResource
-	seriesID := 1
 
 	for rows.Next() {
 		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
@@ -217,10 +377,9 @@ func getSeriesFromDatabase() ([]SeriesResource, error) {
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		show := createSeriesResource(seriesID, properName, year, tmdbID, destinationPath, addedTime)
-
+		// Use TMDB ID as the series ID for consistency
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime)
 		series = append(series, show)
-		seriesID++
 	}
 
 	return series, rows.Err()
@@ -284,6 +443,26 @@ func getQualityProfilesFromDatabase() ([]QualityProfile, error) {
 		{ID: 2, Name: "HD-720p"},
 		{ID: 3, Name: "4K-2160p"},
 		{ID: 4, Name: "Any"},
+	}, nil
+}
+
+// getLanguagesFromDatabase retrieves available languages
+func getLanguagesFromDatabase() ([]Language, error) {
+	return []Language{
+		{ID: 1, Name: "Unknown"},
+		{ID: 2, Name: "English"},
+		{ID: 3, Name: "French"},
+		{ID: 4, Name: "Spanish"},
+		{ID: 5, Name: "German"},
+		{ID: 6, Name: "Italian"},
+		{ID: 7, Name: "Dutch"},
+		{ID: 8, Name: "Japanese"},
+		{ID: 9, Name: "Korean"},
+		{ID: 10, Name: "Chinese"},
+		{ID: 11, Name: "Portuguese"},
+		{ID: 12, Name: "Russian"},
+		{ID: 13, Name: "Arabic"},
+		{ID: 14, Name: "Hindi"},
 	}, nil
 }
 
@@ -384,7 +563,6 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 	defer rows.Close()
 
 	var movies []MovieResource
-	movieID := 1
 
 	for rows.Next() {
 		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
@@ -403,15 +581,19 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 			}
 		}
 
+		// Skip movies without valid TMDB ID
+		if tmdbID == 0 {
+			continue
+		}
+
 		// Parse processed time
 		processedTime, _ := time.Parse("2006-01-02 15:04:05", latestProcessedAt)
 		if processedTime.IsZero() {
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		movie := createMovieResource(movieID, properName, year, tmdbID, destinationPath, processedTime, fileSize)
+		movie := createMovieResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime, fileSize)
 		movies = append(movies, movie)
-		movieID++
 	}
 
 	return movies, nil
@@ -449,7 +631,6 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 	defer rows.Close()
 
 	var series []SeriesResource
-	seriesID := 1
 
 	for rows.Next() {
 		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
@@ -474,10 +655,9 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		show := createSeriesResource(seriesID, properName, year, tmdbID, destinationPath, processedTime)
-
+		// Use TMDB ID as the series ID for consistency
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime)
 		series = append(series, show)
-		seriesID++
 	}
 
 	return series, nil
@@ -485,10 +665,22 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 
 // getEpisodesFromDatabase retrieves episodes for a specific series from the database
 func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
-	mediaHubDB, err := db.GetDatabaseConnection()
-	if err != nil {
-		return nil, err
-	}
+	var episodes []interface{}
+
+	err := executeWithRetry(func() error {
+		mediaHubDB, err := db.GetDatabaseConnection()
+		if err != nil {
+			return err
+		}
+
+		episodes, err = getEpisodesFromDatabaseInternal(mediaHubDB, seriesId)
+		return err
+	})
+
+	return episodes, err
+}
+
+func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
 
 	// Map the seriesId back to the series name
 	query := `
@@ -516,7 +708,6 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 	defer rows.Close()
 
 	var episodes []interface{}
-	episodeID := 1
 
 	for rows.Next() {
 		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
@@ -526,26 +717,18 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 			continue
 		}
 
-		// Convert season and episode numbers to integers
-		seasonNum := 1
-		if sn, err := strconv.Atoi(seasonNumber); err == nil {
-			seasonNum = sn
-		}
+		seasonNum := safeAtoi(seasonNumber, 1)
+		episodeNum := safeAtoi(episodeNumber, 1)
+		seriesIDInt := safeAtoi(seriesId, 1)
+		episodeID := generateUniqueEpisodeID(seriesIDInt, seasonNum, episodeNum)
 
-		episodeNum := 1
-		if en, err := strconv.Atoi(episodeNumber); err == nil {
-			episodeNum = en
-		}
-
-		// Parse processed time
-		processedTime, _ := time.Parse("2006-01-02 15:04:05", processedAt)
+		processedTime := parseProcessedTime(processedAt)
 		if processedTime.IsZero() {
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
 		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize)
 		episodes = append(episodes, episode)
-		episodeID++
 	}
 
 	return episodes, nil
@@ -584,7 +767,6 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 	defer rows.Close()
 
 	var episodes []interface{}
-	episodeID := 1
 
 	for rows.Next() {
 		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
@@ -594,26 +776,18 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 			continue
 		}
 
-		// Convert season and episode numbers to integers
-		seasonNum := 1
-		if sn, err := strconv.Atoi(seasonNumber); err == nil {
-			seasonNum = sn
-		}
+		seasonNum := safeAtoi(seasonNumber, 1)
+		episodeNum := safeAtoi(episodeNumber, 1)
+		seriesIDInt := safeAtoi(seriesId, 1)
+		episodeID := generateUniqueEpisodeID(seriesIDInt, seasonNum, episodeNum)
 
-		episodeNum := 1
-		if en, err := strconv.Atoi(episodeNumber); err == nil {
-			episodeNum = en
-		}
-
-		// Parse processed time
-		processedTime, _ := time.Parse("2006-01-02 15:04:05", processedAt)
+		processedTime := parseProcessedTime(processedAt)
 		if processedTime.IsZero() {
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
 		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize)
 		episodes = append(episodes, episode)
-		episodeID++
 	}
 
 	return episodes, nil
@@ -621,8 +795,8 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 
 // createEpisodeResource creates a properly formatted episode resource
 func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber int, seriesTitle, filePath string, airDate time.Time, fileSize int64) interface{} {
-	// Extract episode title from file path if possible
-	episodeTitle := fmt.Sprintf("S%02dE%02d", seasonNumber, episodeNumber)
+	episodeTitle := extractEpisodeTitle(filePath, seasonNumber, episodeNumber)
+	quality := detectQualityFromPath(filePath)
 
 	return map[string]interface{}{
 		"id":                       id,
@@ -651,25 +825,373 @@ func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber 
 			"path":         filePath,
 			"size":         fileSize,
 			"dateAdded":    airDate.Format("2006-01-02T15:04:05Z"),
-			"quality": map[string]interface{}{
-				"quality": map[string]interface{}{
-					"id":         1,
-					"name":       "Unknown",
-					"source":     "unknown",
-					"resolution": 0,
-				},
-				"revision": map[string]interface{}{
-					"version":  1,
-					"real":     0,
-					"isRepack": false,
-				},
+			"quality": quality,
+			"languages": getDefaultLanguages(),
+		},
+	}
+}
+
+
+
+// getEpisodeFilesFromDatabase retrieves episode files for a specific series
+func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(episode_number, '') as episode_number,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(processed_at, '') as processed_at,
+			COALESCE(file_size, 0) as file_size
+		FROM processed_files
+		WHERE UPPER(media_type) = 'TV'
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		AND season_number IS NOT NULL
+		AND episode_number IS NOT NULL
+		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var episodeFiles []interface{}
+
+	for rows.Next() {
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var fileSize int64
+
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+			continue
+		}
+
+		seasonNum := safeAtoi(seasonNumber, 1)
+		episodeNum := safeAtoi(episodeNumber, 1)
+		seriesIDInt := safeAtoi(seriesId, 1)
+		episodeFileID := generateUniqueEpisodeFileID(seriesIDInt, seasonNum, episodeNum)
+
+		processedTime := parseProcessedTime(processedAt)
+
+		quality := detectQualityFromPath(destinationPath)
+
+		episodeFile := map[string]interface{}{
+			"id":           episodeFileID,
+			"seriesId":     seriesId,
+			"seasonNumber": seasonNum,
+			"relativePath": filepath.Base(destinationPath),
+			"path":         destinationPath,
+			"size":         fileSize,
+			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
+			"quality":      quality,
+			"languages": getDefaultLanguages(),
+		}
+
+		episodeFiles = append(episodeFiles, episodeFile)
+	}
+
+	return episodeFiles, nil
+}
+
+// getEpisodeFilesFromDatabaseByFolder retrieves episode files for a specific series filtered by folder
+func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}, error) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(episode_number, '') as episode_number,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(processed_at, '') as processed_at,
+			COALESCE(file_size, 0) as file_size
+		FROM processed_files
+		WHERE UPPER(media_type) = 'TV'
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		AND season_number IS NOT NULL
+		AND episode_number IS NOT NULL
+		AND base_path = ?
+		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+
+	rows, err := mediaHubDB.Query(query, folderPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var episodeFiles []interface{}
+
+	for rows.Next() {
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var fileSize int64
+
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+			continue
+		}
+
+		seasonNum := safeAtoi(seasonNumber, 1)
+		episodeNum := safeAtoi(episodeNumber, 1)
+		seriesIDInt := safeAtoi(seriesId, 1)
+		episodeFileID := generateUniqueEpisodeFileID(seriesIDInt, seasonNum, episodeNum)
+
+		processedTime := parseProcessedTime(processedAt)
+
+		quality := detectQualityFromPath(destinationPath)
+
+		episodeFile := map[string]interface{}{
+			"id":           episodeFileID,
+			"seriesId":     seriesId,
+			"seasonNumber": seasonNum,
+			"relativePath": filepath.Base(destinationPath),
+			"path":         destinationPath,
+			"size":         fileSize,
+			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
+			"quality":      quality,
+			"languages": getDefaultLanguages(),
+		}
+
+		episodeFiles = append(episodeFiles, episodeFile)
+	}
+
+	return episodeFiles, nil
+}
+
+// getMovieByIDFromDatabase retrieves a specific movie by ID from the CineSync database
+func getMovieByIDFromDatabase(movieID int) (*MovieResource, error) {
+	// Get all movies first, then find the one with the matching ID
+	movies, err := getMoviesFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the movie with the matching ID
+	for _, movie := range movies {
+		if movie.ID == movieID {
+			return &movie, nil
+		}
+	}
+
+	return nil, nil // Movie not found
+}
+
+// getMovieByIDFromDatabaseByFolder retrieves a specific movie by ID filtered by folder
+func getMovieByIDFromDatabaseByFolder(movieID int, folderPath string) (*MovieResource, error) {
+	// Get movies from the specific folder first, then find the one with the matching ID
+	movies, err := getMoviesFromDatabaseByFolder(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the movie with the matching ID
+	for _, movie := range movies {
+		if movie.ID == movieID {
+			return &movie, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// getMovieFilesFromDatabase retrieves all movie files from the CineSync database
+func getMovieFilesFromDatabase() ([]MovieFile, error) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, 0) as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(destination_path, '') as destination_path,
+			MAX(processed_at) as latest_processed_at,
+			COALESCE(file_size, 0) as file_size
+		FROM processed_files
+		WHERE UPPER(media_type) = 'MOVIE'
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year`
+
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var movieFiles []MovieFile
+
+	for rows.Next() {
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var year int
+		var fileSize int64
+
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize); err != nil {
+			continue
+		}
+
+		tmdbID, _ := strconv.Atoi(tmdbIDStr)
+		if tmdbID == 0 {
+			continue
+		}
+
+		addedTime, _ := time.Parse(time.RFC3339, latestProcessedAt)
+		if addedTime.IsZero() {
+			addedTime = time.Now().Add(-24 * time.Hour)
+		}
+
+		// Use TMDB ID as both the file ID and movie ID for consistency
+		movieFile := createMovieFile(tmdbID, tmdbID, destinationPath, fileSize, addedTime)
+		movieFiles = append(movieFiles, movieFile)
+	}
+
+	return movieFiles, rows.Err()
+}
+
+// getMovieFilesFromDatabaseByFolder retrieves movie files filtered by folder
+func getMovieFilesFromDatabaseByFolder(folderPath string) ([]MovieFile, error) {
+	// Get all movie files first, then filter by folder path
+	allMovieFiles, err := getMovieFilesFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	var movieFiles []MovieFile
+	for _, movieFile := range allMovieFiles {
+		if strings.Contains(movieFile.Path, folderPath) {
+			movieFiles = append(movieFiles, movieFile)
+		}
+	}
+
+	return movieFiles, nil
+}
+
+// getMovieFilesByMovieIDFromDatabase retrieves movie files for a specific movie ID
+func getMovieFilesByMovieIDFromDatabase(movieID int) ([]MovieFile, error) {
+	// Get all movie files first, then filter by movie ID
+	allMovieFiles, err := getMovieFilesFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	var movieFiles []MovieFile
+	for _, movieFile := range allMovieFiles {
+		if movieFile.MovieId == movieID {
+			movieFiles = append(movieFiles, movieFile)
+		}
+	}
+
+	return movieFiles, nil
+}
+
+// getMovieFilesByMovieIDFromDatabaseByFolder retrieves movie files for a specific movie ID filtered by folder
+func getMovieFilesByMovieIDFromDatabaseByFolder(movieID int, folderPath string) ([]MovieFile, error) {
+	// Get movie files from the specific folder first, then filter by movie ID
+	folderMovieFiles, err := getMovieFilesFromDatabaseByFolder(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var movieFiles []MovieFile
+	for _, movieFile := range folderMovieFiles {
+		if movieFile.MovieId == movieID {
+			movieFiles = append(movieFiles, movieFile)
+		}
+	}
+
+	return movieFiles, nil
+}
+
+// getMovieFileByIDFromDatabase retrieves a specific movie file by ID
+func getMovieFileByIDFromDatabase(movieFileID int) (*MovieFile, error) {
+	// Get all movie files first, then find the one with the matching ID
+	movieFiles, err := getMovieFilesFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the movie file with the matching ID
+	for _, movieFile := range movieFiles {
+		if movieFile.ID == movieFileID {
+			return &movieFile, nil
+		}
+	}
+
+	return nil, nil // Movie file not found
+}
+
+// getMovieFileByIDFromDatabaseByFolder retrieves a specific movie file by ID filtered by folder
+func getMovieFileByIDFromDatabaseByFolder(movieFileID int, folderPath string) (*MovieFile, error) {
+	// Get movie files from the specific folder first, then find the one with the matching ID
+	folderMovieFiles, err := getMovieFilesFromDatabaseByFolder(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the movie file with the matching ID
+	for _, movieFile := range folderMovieFiles {
+		if movieFile.ID == movieFileID {
+			return &movieFile, nil
+		}
+	}
+
+	return nil, nil // Movie file not found
+}
+
+// createMovieFile creates a properly formatted MovieFile
+func createMovieFile(id, movieID int, filePath string, fileSize int64, added time.Time) MovieFile {
+	relativePath := filepath.Base(filePath)
+
+	return MovieFile{
+		ID:           id,
+		MovieId:      movieID,
+		RelativePath: relativePath,
+		Path:         filePath,
+		Size:         fileSize,
+		DateAdded:    added,
+		Quality: Quality{
+			Quality: QualityDefinition{
+				ID:         1,
+				Name:       "Unknown",
+				Source:     "unknown",
+				Resolution: 0,
 			},
-			"languages": []map[string]interface{}{
-				{
-					"id":   1,
-					"name": "Unknown",
-				},
+			Revision: QualityRevision{
+				Version:  1,
+				Real:     0,
+				IsRepack: false,
+			},
+		},
+		Languages: []Language{
+			{
+				ID:   1,
+				Name: "Unknown",
 			},
 		},
 	}
+}
+
+
+
+func ClearTMDBCache() {
+	tmdbMutex.Lock()
+	tmdbCache = make(map[int]*TMDBMovieDetails)
+	tmdbMutex.Unlock()
 }

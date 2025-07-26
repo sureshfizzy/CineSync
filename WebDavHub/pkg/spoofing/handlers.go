@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"cinesync/pkg/logger"
@@ -56,6 +58,17 @@ func HandleSystemStatusV1(w http.ResponseWriter, r *http.Request) {
 // HandleSpoofedMovies handles the /api/v3/movie endpoint for Radarr
 func HandleSpoofedMovies(w http.ResponseWriter, r *http.Request) {
 	config := GetConfig()
+
+	// Check if this is a request for a specific movie by ID
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/movie")
+	if path != "" && path != "/" {
+		// Extract movie ID from path
+		movieIDStr := strings.Trim(path, "/")
+		if movieID, err := strconv.Atoi(movieIDStr); err == nil {
+			HandleSpoofedMovieByID(w, r, movieID)
+			return
+		}
+	}
 
 	var movies []MovieResource
 	var err error
@@ -158,6 +171,45 @@ func HandleSpoofedEpisode(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(episodes)
 }
 
+// HandleSpoofedEpisodeFiles handles the /api/v3/episodefile endpoint for Sonarr
+func HandleSpoofedEpisodeFiles(w http.ResponseWriter, r *http.Request) {
+	config := GetConfig()
+
+	// Get seriesId from query parameters
+	seriesId := r.URL.Query().Get("seriesId")
+
+	var episodeFiles []interface{}
+	var err error
+
+	if config.FolderMode {
+		folderMapping := getFolderMappingFromRequest(r, config.FolderMappings)
+		if folderMapping != nil && seriesId != "" {
+			if folderMapping.ServiceType == "sonarr" || folderMapping.ServiceType == "auto" || folderMapping.ServiceType == "" {
+				episodeFiles, err = getEpisodeFilesFromDatabaseByFolder(folderMapping.FolderPath, seriesId)
+			} else {
+				episodeFiles = []interface{}{}
+			}
+		} else {
+			episodeFiles = []interface{}{}
+		}
+	} else {
+		if seriesId != "" {
+			episodeFiles, err = getEpisodeFilesFromDatabase(seriesId)
+		} else {
+			episodeFiles = []interface{}{}
+		}
+	}
+
+	if err != nil {
+		logger.Error("Failed to get episode files: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(episodeFiles)
+}
+
 // HandleSpoofedHealth handles the /api/v3/health endpoint for both Radarr and Sonarr
 func HandleSpoofedHealth(w http.ResponseWriter, r *http.Request) {
 	health, err := getHealthStatusFromDatabase()
@@ -195,6 +247,19 @@ func HandleSpoofedQualityProfile(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(qualityProfiles)
+}
+
+// HandleSpoofedLanguage handles the /api/v3/language endpoint for both Radarr and Sonarr
+func HandleSpoofedLanguage(w http.ResponseWriter, r *http.Request) {
+	languages, err := getLanguagesFromDatabase()
+	if err != nil {
+		logger.Error("Failed to get languages: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(languages)
 }
 
 // HandleSpoofedLanguageProfile handles the /api/v3/languageprofile endpoint for Sonarr
@@ -382,4 +447,141 @@ func HandleConfigHost(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// HandleSpoofedMovieByID handles requests for individual movies by ID
+func HandleSpoofedMovieByID(w http.ResponseWriter, r *http.Request, movieID int) {
+	config := GetConfig()
+
+	var movie *MovieResource
+	var err error
+
+	// Check if folder mode is enabled and get folder from request
+	if config.FolderMode {
+		folderMapping := getFolderMappingFromRequest(r, config.FolderMappings)
+		if folderMapping != nil {
+			if folderMapping.ServiceType == "radarr" || folderMapping.ServiceType == "auto" || folderMapping.ServiceType == "" {
+				movie, err = getMovieByIDFromDatabaseByFolder(movieID, folderMapping.FolderPath)
+			} else {
+				http.NotFound(w, r)
+				return
+			}
+		} else {
+			http.NotFound(w, r)
+			return
+		}
+	} else {
+		movie, err = getMovieByIDFromDatabase(movieID)
+	}
+
+	if err != nil {
+		logger.Error("Failed to get movie by ID %d: %v", movieID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if movie == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(movie)
+}
+
+// HandleSpoofedMovieFiles handles the /api/v3/moviefile endpoint for Radarr
+func HandleSpoofedMovieFiles(w http.ResponseWriter, r *http.Request) {
+	config := GetConfig()
+
+	// Check if this is a request for a specific moviefile by ID
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/moviefile")
+	if path != "" && path != "/" {
+		// Extract moviefile ID from path
+		movieFileIDStr := strings.Trim(path, "/")
+		if movieFileID, err := strconv.Atoi(movieFileIDStr); err == nil {
+			HandleSpoofedMovieFileByID(w, r, movieFileID)
+			return
+		}
+	}
+
+	// Get movieId from query parameters if provided
+	movieIDStr := r.URL.Query().Get("movieId")
+	var movieFiles []MovieFile
+	var err error
+
+	if config.FolderMode {
+		folderMapping := getFolderMappingFromRequest(r, config.FolderMappings)
+		if folderMapping != nil {
+			if folderMapping.ServiceType == "radarr" || folderMapping.ServiceType == "auto" || folderMapping.ServiceType == "" {
+				if movieIDStr != "" {
+					if movieID, parseErr := strconv.Atoi(movieIDStr); parseErr == nil {
+						movieFiles, err = getMovieFilesByMovieIDFromDatabaseByFolder(movieID, folderMapping.FolderPath)
+					}
+				} else {
+					movieFiles, err = getMovieFilesFromDatabaseByFolder(folderMapping.FolderPath)
+				}
+			} else {
+				movieFiles = []MovieFile{}
+			}
+		} else {
+			movieFiles = []MovieFile{}
+		}
+	} else {
+		if movieIDStr != "" {
+			if movieID, parseErr := strconv.Atoi(movieIDStr); parseErr == nil {
+				movieFiles, err = getMovieFilesByMovieIDFromDatabase(movieID)
+			}
+		} else {
+			movieFiles, err = getMovieFilesFromDatabase()
+		}
+	}
+
+	if err != nil {
+		logger.Error("Failed to get movie files: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(movieFiles)
+}
+
+// HandleSpoofedMovieFileByID handles requests for individual movie files by ID
+func HandleSpoofedMovieFileByID(w http.ResponseWriter, r *http.Request, movieFileID int) {
+	config := GetConfig()
+
+	var movieFile *MovieFile
+	var err error
+
+	// Check if folder mode is enabled and get folder from request
+	if config.FolderMode {
+		folderMapping := getFolderMappingFromRequest(r, config.FolderMappings)
+		if folderMapping != nil {
+			if folderMapping.ServiceType == "radarr" || folderMapping.ServiceType == "auto" || folderMapping.ServiceType == "" {
+				movieFile, err = getMovieFileByIDFromDatabaseByFolder(movieFileID, folderMapping.FolderPath)
+			} else {
+				http.NotFound(w, r)
+				return
+			}
+		} else {
+			http.NotFound(w, r)
+			return
+		}
+	} else {
+		movieFile, err = getMovieFileByIDFromDatabase(movieFileID)
+	}
+
+	if err != nil {
+		logger.Error("Failed to get movie file by ID %d: %v", movieFileID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if movieFile == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(movieFile)
 }

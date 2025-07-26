@@ -28,6 +28,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
 from MediaHub.processors.process_db import *
+from MediaHub.api.media_cover import cleanup_tmdb_covers
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
@@ -526,6 +527,18 @@ def process_file(args, force=False, batch_apply=False):
         if existing_dest_path:
             existing_dest_path = normalize_file_path(existing_dest_path)
 
+        # Get TMDB ID before removing from database for MediaCover cleanup
+        existing_tmdb_id = None
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT tmdb_id FROM processed_files WHERE file_path = ?", (src_file,))
+                result = cursor.fetchone()
+                if result and result[0]:
+                    existing_tmdb_id = result[0]
+        except Exception as e:
+            log_message(f"Error getting TMDB ID for MediaCover cleanup: {e}", level="WARNING")
+
         remove_processed_file(src_file)
 
         # Clean up existing symlink and directories if they exist
@@ -538,11 +551,17 @@ def process_file(args, force=False, batch_apply=False):
                     'parent_dir': os.path.dirname(existing_dest_path),
                     'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path))
                 }
-                # .tmdb file handling removed - using database instead
 
                 # Remove the symlink
                 os.remove(existing_dest_path)
                 log_message(f"Skip mode: Removed existing symlink for {file}", level="INFO")
+
+                # Cleanup MediaCover if TMDB ID exists
+                if existing_tmdb_id:
+                    try:
+                        cleanup_tmdb_covers(int(existing_tmdb_id))
+                    except Exception as e:
+                        log_message(f"Failed to cleanup MediaCover for TMDB ID {existing_tmdb_id}: {e}", level="WARNING")
 
                 # Delete empty directories
                 if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
