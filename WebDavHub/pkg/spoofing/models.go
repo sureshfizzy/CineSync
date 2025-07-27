@@ -143,6 +143,9 @@ type SeriesResource struct {
 	TvRageId          int           `json:"tvRageId"`
 	TvMazeId          int           `json:"tvMazeId"`
 	FirstAired        string        `json:"firstAired"`
+	LastAired         *string       `json:"lastAired,omitempty"`
+	NextAiring        *string       `json:"nextAiring,omitempty"`
+	PreviousAiring    *string       `json:"previousAiring,omitempty"`
 	LastInfoSync      time.Time     `json:"lastInfoSync"`
 	SeriesType        string        `json:"seriesType"`
 	CleanTitle        string        `json:"cleanTitle"`

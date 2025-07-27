@@ -16,12 +16,11 @@ import (
 )
 
 var (
-	tmdbCache = make(map[int]*TMDBMovieDetails)
-	tmdbMutex sync.RWMutex
-	tmdbClient = &http.Client{Timeout: 10 * time.Second}
+	tmdbCache   = make(map[int]*TMDBMovieDetails)
+	tmdbTVCache = make(map[int]*TMDBTVDetails)
+	tmdbMutex   sync.RWMutex
+	tmdbClient  = &http.Client{Timeout: 10 * time.Second}
 )
-
-
 
 // getMoviesFromDatabase retrieves movies from the CineSync database and formats them for Radarr
 func getMoviesFromDatabase() ([]MovieResource, error) {
@@ -172,36 +171,60 @@ func extractMetadata(details *TMDBMovieDetails) (string, int, []string, string) 
 	return details.Overview, details.Runtime, genres, cert
 }
 
-// TV metadata functions
-func fetchTVMetadata(tmdbID int) (string, int, []string, string) {
+// TMDBTVDetails represents the structure of TMDB TV show API response
+type TMDBTVDetails struct {
+	Overview string `json:"overview"`
+	Genres   []struct {
+		Name string `json:"name"`
+	} `json:"genres"`
+	EpisodeRunTime []int    `json:"episode_run_time"`
+	Status         string   `json:"status"`
+	FirstAirDate   string   `json:"first_air_date"`
+	Networks       []struct {
+		Name string `json:"name"`
+	} `json:"networks"`
+}
+
+// TV metadata functions - enhanced to return more fields
+func fetchTVMetadata(tmdbID int) (string, int, []string, string, string, string) {
 	if tmdbID <= 0 {
-		return "", 0, []string{}, ""
+		return "", 0, []string{}, "", "", ""
 	}
+
+	// Check cache first
+	tmdbMutex.RLock()
+	if cached, exists := tmdbTVCache[tmdbID]; exists {
+		tmdbMutex.RUnlock()
+		return extractTVMetadata(cached)
+	}
+	tmdbMutex.RUnlock()
 
 	apiKey := os.Getenv("TMDB_API_KEY")
 	if apiKey == "" {
-		return "", 0, []string{}, ""
+		return "", 0, []string{}, "", "", ""
 	}
 
 	url := fmt.Sprintf("https://api.themoviedb.org/3/tv/%d?api_key=%s", tmdbID, apiKey)
 	resp, err := tmdbClient.Get(url)
 	if err != nil || resp.StatusCode != 200 {
-		return "", 0, []string{}, ""
+		return "", 0, []string{}, "", "", ""
 	}
 	defer resp.Body.Close()
 
-	var details struct {
-		Overview string `json:"overview"`
-		Genres   []struct {
-			Name string `json:"name"`
-		} `json:"genres"`
-		EpisodeRunTime []int `json:"episode_run_time"`
-	}
-
+	var details TMDBTVDetails
 	if json.NewDecoder(resp.Body).Decode(&details) != nil {
-		return "", 0, []string{}, ""
+		return "", 0, []string{}, "", "", ""
 	}
 
+	// Cache the result
+	tmdbMutex.Lock()
+	tmdbTVCache[tmdbID] = &details
+	tmdbMutex.Unlock()
+
+	return extractTVMetadata(&details)
+}
+
+func extractTVMetadata(details *TMDBTVDetails) (string, int, []string, string, string, string) {
 	var genres []string
 	for _, g := range details.Genres {
 		if g.Name != "" {
@@ -214,12 +237,29 @@ func fetchTVMetadata(tmdbID int) (string, int, []string, string) {
 		runtime = details.EpisodeRunTime[0]
 	}
 
-	return details.Overview, runtime, genres, ""
+	// Extract network name (use first network if multiple)
+	network := ""
+	if len(details.Networks) > 0 {
+		network = details.Networks[0].Name
+	}
+
+	// Map TMDB status to appropriate values
+	status := "continuing"
+	switch strings.ToLower(details.Status) {
+	case "ended":
+		status = "ended"
+	case "canceled", "cancelled":
+		status = "ended"
+	case "returning series":
+		status = "continuing"
+	case "in production":
+		status = "continuing"
+	default:
+		status = "continuing"
+	}
+
+	return details.Overview, runtime, genres, status, network, details.FirstAirDate
 }
-
-
-
-
 
 // createMovieResourceInternal
 func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, dbLanguage, dbQuality string) MovieResource {
@@ -279,16 +319,28 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 }
 
 func createSeriesResource(id int, title string, year, tmdbID int, filePath string, added time.Time, language, quality string) SeriesResource {
-	overview, runtime, genres, _ := fetchTVMetadata(tmdbID)
+	overview, runtime, genres, status, network, firstAirDate := fetchTVMetadata(tmdbID)
+
+	firstAired := added.Format("2006-01-02T15:04:05Z")
+	if firstAirDate != "" {
+		if parsedDate, err := time.Parse("2006-01-02", firstAirDate); err == nil {
+			firstAired = parsedDate.Format("2006-01-02T15:04:05Z")
+		}
+	}
+
+	var lastAired *string
+	if firstAirDate != "" {
+		lastAired = &firstAired
+	}
 
 	return SeriesResource{
 		ID:                id,
 		Title:             title,
 		AlternateTitles:   []interface{}{},
 		SortTitle:         title,
-		Status:            "continuing",
+		Status:            status,
 		Overview:          overview,
-		Network:           "",
+		Network:           network,
 		AirTime:           "",
 		Year:              year,
 		Path:              filePath,
@@ -300,7 +352,10 @@ func createSeriesResource(id int, title string, year, tmdbID int, filePath strin
 		TvdbId:            tmdbID,
 		TvRageId:          0,
 		TvMazeId:          0,
-		FirstAired:        added.Format("2006-01-02T15:04:05Z"),
+		FirstAired:        firstAired,
+		LastAired:         lastAired,
+		NextAiring:        nil,
+		PreviousAiring:    nil,
 		LastInfoSync:      added,
 		SeriesType:        "standard",
 		CleanTitle:        strings.ToLower(strings.ReplaceAll(title, " ", "")),
@@ -1190,5 +1245,6 @@ func createMovieFile(id, movieID int, filePath string, fileSize int64, added tim
 func ClearTMDBCache() {
 	tmdbMutex.Lock()
 	tmdbCache = make(map[int]*TMDBMovieDetails)
+	tmdbTVCache = make(map[int]*TMDBTVDetails)
 	tmdbMutex.Unlock()
 }
