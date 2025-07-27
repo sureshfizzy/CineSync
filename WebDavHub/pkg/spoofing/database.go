@@ -380,8 +380,11 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
+		// Construct series folder path from destination path, title, and year
+		seriesPath := constructSeriesPath(destinationPath, properName, year)
+
 		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime, language, quality)
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, seriesPath, addedTime, language, quality)
 		series = append(series, show)
 	}
 
@@ -599,6 +602,7 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 			COALESCE(year, 0) as year,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(destination_path, '') as destination_path,
+			COALESCE(base_path, '') as base_path,
 			MAX(processed_at) as latest_processed_at,
 			SUM(COALESCE(file_size, 0)) as total_file_size
 		FROM processed_files
@@ -620,11 +624,11 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 	var series []SeriesResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var properName, tmdbIDStr, destinationPath, basePath, latestProcessedAt string
 		var year int
 		var totalFileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &totalFileSize); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &basePath, &latestProcessedAt, &totalFileSize); err != nil {
 			continue
 		}
 
@@ -642,8 +646,10 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
+		seriesPath := constructSeriesPath(destinationPath, properName, year)
+
 		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime, "", "")
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, seriesPath, processedTime, "", "")
 		series = append(series, show)
 	}
 
@@ -668,16 +674,15 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 }
 
 func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
-
-	// Map the seriesId back to the series name
+	// Query episodes directly by TMDB ID, grouped to avoid duplicates
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
-			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size,
+			MAX(processed_at) as latest_processed_at,
+			SUM(COALESCE(file_size, 0)) as total_file_size,
 			COALESCE(language, '') as language,
 			COALESCE(quality, '') as quality
 		FROM processed_files
@@ -688,9 +693,11 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 		AND proper_name != ''
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+		AND COALESCE(tmdb_id, '') = ?
+		GROUP BY proper_name, season_number, episode_number
+		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query)
+	rows, err := mediaHubDB.Query(query, seriesId)
 	if err != nil {
 		return nil, err
 	}
@@ -730,14 +737,15 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 		return nil, err
 	}
 
+	// Query episodes directly by TMDB ID with folder filtering, grouped to avoid duplicates
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
 			COALESCE(season_number, '') as season_number,
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
-			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size
+			MAX(processed_at) as latest_processed_at,
+			SUM(COALESCE(file_size, 0)) as total_file_size
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -746,10 +754,12 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 		AND proper_name != ''
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
+		AND COALESCE(tmdb_id, '') = ?
 		AND base_path = ?
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+		GROUP BY proper_name, season_number, episode_number
+		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, folderPath)
+	rows, err := mediaHubDB.Query(query, seriesId, folderPath)
 	if err != nil {
 		return nil, err
 	}
@@ -830,6 +840,7 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 		return nil, err
 	}
 
+	// Query episode files directly by TMDB ID
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -848,9 +859,10 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 		AND proper_name != ''
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+		AND COALESCE(tmdb_id, '') = ?
+		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query)
+	rows, err := mediaHubDB.Query(query, seriesId)
 	if err != nil {
 		return nil, err
 	}
@@ -901,6 +913,7 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		return nil, err
 	}
 
+	// Query episode files directly by TMDB ID with folder filtering
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -919,10 +932,11 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		AND proper_name != ''
 		AND season_number IS NOT NULL
 		AND episode_number IS NOT NULL
+		AND COALESCE(tmdb_id, '') = ?
 		AND base_path = ?
-		ORDER BY proper_name, CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, folderPath)
+	rows, err := mediaHubDB.Query(query, seriesId, folderPath)
 	if err != nil {
 		return nil, err
 	}

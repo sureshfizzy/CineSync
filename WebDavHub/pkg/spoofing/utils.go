@@ -314,3 +314,108 @@ func safeAtoi(s string, defaultValue int) int {
 	}
 	return defaultValue
 }
+
+// constructSeriesPath constructs the series folder path from destination path, title, and year
+func constructSeriesPath(destinationPath, title string, year int) string {
+	if destinationPath == "" || title == "" {
+		return destinationPath
+	}
+
+	seriesFolderName := fmt.Sprintf("%s (%d)", title, year)
+
+	if idx := strings.Index(destinationPath, seriesFolderName); idx != -1 {
+		endIdx := idx + len(seriesFolderName)
+		return destinationPath[:endIdx]
+	}
+
+	pathParts := strings.Split(filepath.ToSlash(destinationPath), "/")
+
+	for i, part := range pathParts {
+		if strings.Contains(part, title) && strings.Contains(part, fmt.Sprintf("(%d)", year)) {
+			return filepath.Join(pathParts[:i+1]...)
+		}
+	}
+
+	return filepath.Dir(destinationPath)
+}
+
+// getSeriesNameByTmdbID retrieves the series name from TMDB ID
+func getSeriesNameByTmdbID(db *sql.DB, tmdbID, folderPath string) (string, error) {
+	var seriesName string
+	var query string
+	var args []interface{}
+
+	if folderPath != "" {
+		query = `
+			SELECT COALESCE(proper_name, '') as proper_name
+			FROM processed_files
+			WHERE UPPER(media_type) = 'TV'
+			AND COALESCE(tmdb_id, '') = ?
+			AND base_path = ?
+			AND proper_name IS NOT NULL
+			AND proper_name != ''
+			LIMIT 1`
+		args = []interface{}{tmdbID, folderPath}
+	} else {
+		query = `
+			SELECT COALESCE(proper_name, '') as proper_name
+			FROM processed_files
+			WHERE UPPER(media_type) = 'TV'
+			AND COALESCE(tmdb_id, '') = ?
+			AND proper_name IS NOT NULL
+			AND proper_name != ''
+			LIMIT 1`
+		args = []interface{}{tmdbID}
+	}
+
+	err := db.QueryRow(query, args...).Scan(&seriesName)
+	return seriesName, err
+}
+
+// buildEpisodesQuery builds the episodes query with optional folder filtering
+func buildEpisodesQuery(seriesName, folderPath string, groupBy bool) (string, []interface{}) {
+	var args []interface{}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(episode_number, '') as episode_number,
+			COALESCE(destination_path, '') as destination_path,`
+
+	if groupBy {
+		query += `
+			MAX(processed_at) as latest_processed_at,
+			SUM(COALESCE(file_size, 0)) as total_file_size,`
+	} else {
+		query += `
+			COALESCE(processed_at, '') as processed_at,
+			COALESCE(file_size, 0) as file_size,`
+	}
+
+	query += `
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
+		FROM processed_files
+		WHERE UPPER(media_type) = 'TV'
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name = ?
+		AND season_number IS NOT NULL
+		AND episode_number IS NOT NULL`
+
+	args = append(args, seriesName)
+
+	if folderPath != "" {
+		query += ` AND base_path = ?`
+		args = append(args, folderPath)
+	}
+
+	if groupBy {
+		query += ` GROUP BY proper_name, season_number, episode_number`
+	}
+
+	query += ` ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
+
+	return query, args
+}
