@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -251,15 +253,46 @@ func HandleSpoofedQualityProfile(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedLanguage handles the /api/v3/language endpoint for both Radarr and Sonarr
 func HandleSpoofedLanguage(w http.ResponseWriter, r *http.Request) {
-	languages, err := getLanguagesFromDatabase()
-	if err != nil {
-		logger.Error("Failed to get languages: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+	languages := getLanguagesFromDatabase("")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(languages)
+}
+
+// HandleMediaCover serves poster and fanart images for Bazarr
+func HandleMediaCover(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/MediaCover/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	tmdbID, imageFile := parts[0], parts[1]
+	var baseImageFile string
+
+	// Handle various image file formats that Bazarr might request
+	if strings.Contains(imageFile, "poster") {
+		baseImageFile = "poster.jpg"
+	} else if strings.Contains(imageFile, "fanart") {
+		baseImageFile = "fanart.jpg"
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
+	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set appropriate headers
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	http.ServeFile(w, r, filePath)
 }
 
 // HandleSpoofedLanguageProfile handles the /api/v3/languageprofile endpoint for Sonarr

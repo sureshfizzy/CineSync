@@ -46,20 +46,86 @@ func executeWithRetry(operation func() error) error {
 }
 
 // Quality detection utilities
-func detectQualityFromPath(filePath string) Quality {
-	path := strings.ToLower(filePath)
-	
-	if strings.Contains(path, "2160p") || strings.Contains(path, "4k") {
-		return createQuality(3, "4K-2160p", "bluray", 2160)
+func detectQualityFromDatabase(dbQuality, filePath string) Quality {
+	if dbQuality != "" {
+		// Use database quality if available
+		quality := strings.ToLower(strings.TrimSpace(dbQuality))
+
+		// Determine source type first
+		var source string
+		if strings.Contains(quality, "bluray") && (strings.Contains(quality, "remux") || strings.Contains(quality, "bdremux")) {
+			source = "bluray-remux"
+		} else if strings.Contains(quality, "bluray") || strings.Contains(quality, "bdrip") || strings.Contains(quality, "bd") {
+			source = "bluray"
+		} else if strings.Contains(quality, "webdl") || strings.Contains(quality, "web-dl") || strings.Contains(quality, "web dl") {
+			source = "webdl"
+		} else if strings.Contains(quality, "webrip") || strings.Contains(quality, "web-rip") || strings.Contains(quality, "web rip") {
+			source = "webrip"
+		} else if strings.Contains(quality, "hdrip") || strings.Contains(quality, "hd-rip") || strings.Contains(quality, "hd rip") {
+			source = "hdrip"
+		} else if strings.Contains(quality, "hdtv") || strings.Contains(quality, "hd-tv") || strings.Contains(quality, "hd tv") {
+			source = "hdtv"
+		} else if strings.Contains(quality, "sdtv") || strings.Contains(quality, "sd-tv") || strings.Contains(quality, "sd tv") {
+			source = "sdtv"
+		} else {
+			source = "unknown"
+		}
+
+		// Determine resolution and return appropriate quality
+		if strings.Contains(quality, "2160p") || strings.Contains(quality, "4k") {
+			return createQuality(3, "4K-2160p", source, 2160)
+		}
+		if strings.Contains(quality, "1080p") {
+			return createQuality(1, "HD-1080p", source, 1080)
+		}
+		if strings.Contains(quality, "720p") {
+			return createQuality(2, "HD-720p", source, 720)
+		}
+		if strings.Contains(quality, "480p") || strings.Contains(quality, "sd") {
+			return createQuality(4, "SD-480p", source, 480)
+		}
 	}
-	if strings.Contains(path, "1080p") {
-		return createQuality(1, "HD-1080p", "bluray", 1080)
+
+	// If no database quality, try to detect from file path as fallback
+	if filePath != "" {
+		path := strings.ToLower(filePath)
+
+		// Determine source from file path
+		var source string
+		if strings.Contains(path, "bluray") && strings.Contains(path, "remux") {
+			source = "bluray-remux"
+		} else if strings.Contains(path, "bluray") || strings.Contains(path, "bdrip") {
+			source = "bluray"
+		} else if strings.Contains(path, "webdl") || strings.Contains(path, "web-dl") {
+			source = "webdl"
+		} else if strings.Contains(path, "webrip") {
+			source = "webrip"
+		} else if strings.Contains(path, "hdrip") {
+			source = "hdrip"
+		} else if strings.Contains(path, "hdtv") {
+			source = "hdtv"
+		} else if strings.Contains(path, "sdtv") {
+			source = "sdtv"
+		} else {
+			source = "unknown"
+		}
+
+		if strings.Contains(path, "2160p") || strings.Contains(path, "4k") {
+			return createQuality(3, "4K-2160p", source, 2160)
+		}
+		if strings.Contains(path, "1080p") {
+			return createQuality(1, "HD-1080p", source, 1080)
+		}
+		if strings.Contains(path, "720p") {
+			return createQuality(2, "HD-720p", source, 720)
+		}
+		if strings.Contains(path, "480p") {
+			return createQuality(4, "SD-480p", source, 480)
+		}
 	}
-	if strings.Contains(path, "720p") {
-		return createQuality(2, "HD-720p", "bluray", 720)
-	}
-	
-	return createQuality(1, "Unknown", "unknown", 0)
+
+	// Fallback to 1080p when quality is empty or unknown
+	return createQuality(1, "HD-1080p", "unknown", 1080)
 }
 
 func createQuality(id int, name, source string, resolution int) Quality {
@@ -88,7 +154,6 @@ func createMediaImages(tmdbID int, mediaType string) []interface{} {
 	posterPath := getPosterPathFromDatabase(tmdbID, mediaType)
 	
 	images := []interface{}{}
-	baseURL := getImageBaseURL(mediaType)
 
 	if posterPath != "" {
 		// Use cached/proxied images
@@ -100,14 +165,14 @@ func createMediaImages(tmdbID int, mediaType string) []interface{} {
 			fmt.Sprintf("/api/image-cache?poster=%s&size=w1280", posterPath),
 			fmt.Sprintf("https://image.tmdb.org/t/p/w1280%s", posterPath)))
 	} else if checkLocalMediaExists(tmdbID, mediaType) {
-		// Use local files
+		// Use local files - same path for both movies and series
 		images = append(images, createImageEntry("poster",
-			fmt.Sprintf("%s/%d/poster-500.jpg", baseURL, tmdbID),
-			fmt.Sprintf("%s/%d/poster-500.jpg", baseURL, tmdbID)))
-		
+			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
+			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID)))
+
 		images = append(images, createImageEntry("fanart",
-			fmt.Sprintf("%s/%d/fanart-1280.jpg", baseURL, tmdbID),
-			fmt.Sprintf("%s/%d/fanart-1280.jpg", baseURL, tmdbID)))
+			fmt.Sprintf("/MediaCover/%d/fanart.jpg", tmdbID),
+			fmt.Sprintf("/MediaCover/%d/fanart.jpg", tmdbID)))
 	}
 
 	return images
@@ -124,19 +189,17 @@ func createImageEntry(coverType, url, remoteUrl string) map[string]interface{} {
 func getImageBaseURL(mediaType string) string {
 	switch mediaType {
 	case "movie":
-		return "/images/movies/MediaCover"
+		return "/images/MediaCover"
 	case "tv", "series":
-		return "/images/series/MediaCover"
+		return "/images/MediaCover"
 	default:
-		return "/images/movies/MediaCover"
+		return "/images/MediaCover"
 	}
 }
 
 func checkLocalMediaExists(tmdbID int, mediaType string) bool {
-	baseURL := getImageBaseURL(mediaType)
-	// Remove the leading slash and convert to file path
-	dirPath := strings.TrimPrefix(baseURL, "/images/")
-	posterPath := filepath.Join("../db", dirPath, fmt.Sprintf("%d", tmdbID), "poster.jpg")
+	// Check for poster in db/MediaCover/{tmdbID}/poster.jpg
+	posterPath := filepath.Join("../db", "MediaCover", fmt.Sprintf("%d", tmdbID), "poster.jpg")
 	_, err := os.Stat(posterPath)
 	return err == nil
 }
@@ -195,6 +258,40 @@ func withDatabaseConnection(operation func(*sql.DB) error) error {
 
 // Common language utilities
 func getDefaultLanguages() []Language {
+	return getLanguagesFromDatabase("")
+}
+
+func getLanguagesFromDatabase(dbLanguage string) []Language {
+	if dbLanguage == "" {
+		// Fallback to English when language is empty
+		return []Language{{ID: 2, Name: "English"}}
+	}
+
+	// Map common language names to IDs
+	languageMap := map[string]Language{
+		"english": {ID: 2, Name: "English"},
+		"hindi":   {ID: 14, Name: "Hindi"},
+		"french":  {ID: 3, Name: "French"},
+		"spanish": {ID: 4, Name: "Spanish"},
+		"german":  {ID: 5, Name: "German"},
+		"italian": {ID: 6, Name: "Italian"},
+		"dutch":   {ID: 7, Name: "Dutch"},
+		"japanese": {ID: 8, Name: "Japanese"},
+		"korean":  {ID: 9, Name: "Korean"},
+		"chinese": {ID: 10, Name: "Chinese"},
+		"portuguese": {ID: 11, Name: "Portuguese"},
+		"russian": {ID: 12, Name: "Russian"},
+		"arabic":  {ID: 13, Name: "Arabic"},
+	}
+
+	// Normalize the language name
+	normalizedLang := strings.ToLower(strings.TrimSpace(dbLanguage))
+
+	if lang, exists := languageMap[normalizedLang]; exists {
+		return []Language{lang}
+	}
+
+	// If language not found in map, fallback to English
 	return []Language{{ID: 2, Name: "English"}}
 }
 

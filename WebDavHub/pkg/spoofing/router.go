@@ -26,6 +26,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/language/":       HandleSpoofedLanguage,
 		"/api/v3/tag":             HandleSpoofedTag,
 		"/api/v3/tag/":            HandleSpoofedTag,
+		"/api/v3/MediaCover/":     HandleMediaCover,
 		"/api":                    HandleSpoofedAPI,
 
 		// Event and sync endpoints

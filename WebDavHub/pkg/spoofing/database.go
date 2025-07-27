@@ -4,11 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,7 +49,9 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(destination_path, '') as destination_path,
 			MAX(processed_at) as latest_processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
 		AND destination_path IS NOT NULL
@@ -70,11 +70,11 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 	var movies []MovieResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
 		var year int
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -88,7 +88,7 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		movie := createMovieResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime, fileSize)
+		movie := createMovieResourceInternal(tmdbID, properName, year, tmdbID, destinationPath, addedTime, fileSize, language, quality)
 		movies = append(movies, movie)
 	}
 
@@ -96,8 +96,8 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 }
 
 // createMovieResource creates a properly formatted MovieResource with actual file size
-func createMovieResource(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64) MovieResource {
-	return createMovieResourceInternal(id, title, year, tmdbID, filePath, added, fileSize)
+func createMovieResource(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, language, quality string) MovieResource {
+	return createMovieResourceInternal(id, title, year, tmdbID, filePath, added, fileSize, language, quality)
 }
 
 type TMDBMovieDetails struct {
@@ -222,7 +222,7 @@ func fetchTVMetadata(tmdbID int) (string, int, []string, string) {
 
 
 // createMovieResourceInternal
-func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64) MovieResource {
+func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, dbLanguage, dbQuality string) MovieResource {
 
 	relativePath := filepath.Base(filePath)
 	if strings.Contains(filePath, title) {
@@ -232,7 +232,8 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 	}
 
 	overview, runtime, genres, certification := fetchMovieMetadata(tmdbID)
-	quality := detectQualityFromPath(filePath)
+	quality := detectQualityFromDatabase(dbQuality, filePath)
+	languages := getLanguagesFromDatabase(dbLanguage)
 
 	movieFile := &MovieFile{
 		ID:           id,
@@ -242,7 +243,7 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		Size:         fileSize,
 		DateAdded:    added,
 		Quality:      quality,
-		Languages:    getDefaultLanguages(),
+		Languages:    languages,
 	}
 
 	return MovieResource{
@@ -277,7 +278,7 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 	}
 }
 
-func createSeriesResource(id int, title string, year, tmdbID int, filePath string, added time.Time) SeriesResource {
+func createSeriesResource(id int, title string, year, tmdbID int, filePath string, added time.Time, language, quality string) SeriesResource {
 	overview, runtime, genres, _ := fetchTVMetadata(tmdbID)
 
 	return SeriesResource{
@@ -340,7 +341,9 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(destination_path, '') as destination_path,
 			MAX(processed_at) as latest_processed_at,
-			SUM(COALESCE(file_size, 0)) as total_file_size
+			SUM(COALESCE(file_size, 0)) as total_file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
 		AND destination_path IS NOT NULL
@@ -359,11 +362,11 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 	var series []SeriesResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
 		var year int
 		var totalFileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &totalFileSize); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &totalFileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -378,7 +381,7 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 		}
 
 		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime)
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, addedTime, language, quality)
 		series = append(series, show)
 	}
 
@@ -446,25 +449,7 @@ func getQualityProfilesFromDatabase() ([]QualityProfile, error) {
 	}, nil
 }
 
-// getLanguagesFromDatabase retrieves available languages
-func getLanguagesFromDatabase() ([]Language, error) {
-	return []Language{
-		{ID: 1, Name: "Unknown"},
-		{ID: 2, Name: "English"},
-		{ID: 3, Name: "French"},
-		{ID: 4, Name: "Spanish"},
-		{ID: 5, Name: "German"},
-		{ID: 6, Name: "Italian"},
-		{ID: 7, Name: "Dutch"},
-		{ID: 8, Name: "Japanese"},
-		{ID: 9, Name: "Korean"},
-		{ID: 10, Name: "Chinese"},
-		{ID: 11, Name: "Portuguese"},
-		{ID: 12, Name: "Russian"},
-		{ID: 13, Name: "Arabic"},
-		{ID: 14, Name: "Hindi"},
-	}, nil
-}
+
 
 // getLanguageProfilesFromDatabase retrieves language profiles
 func getLanguageProfilesFromDatabase() ([]LanguageProfile, error) {
@@ -545,7 +530,9 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(destination_path, '') as destination_path,
 			MAX(processed_at) as latest_processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
 		AND destination_path IS NOT NULL
@@ -565,11 +552,11 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 	var movies []MovieResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
 		var year int
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -592,7 +579,7 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		movie := createMovieResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime, fileSize)
+		movie := createMovieResourceInternal(tmdbID, properName, year, tmdbID, destinationPath, processedTime, fileSize, language, quality)
 		movies = append(movies, movie)
 	}
 
@@ -656,7 +643,7 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 		}
 
 		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime)
+		show := createSeriesResource(tmdbID, properName, year, tmdbID, destinationPath, processedTime, "", "")
 		series = append(series, show)
 	}
 
@@ -690,7 +677,9 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -710,10 +699,10 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 	var episodes []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -727,7 +716,7 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize)
+		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, language, quality)
 		episodes = append(episodes, episode)
 	}
 
@@ -786,7 +775,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize)
+		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, "", "")
 		episodes = append(episodes, episode)
 	}
 
@@ -794,9 +783,10 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 }
 
 // createEpisodeResource creates a properly formatted episode resource
-func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber int, seriesTitle, filePath string, airDate time.Time, fileSize int64) interface{} {
+func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber int, seriesTitle, filePath string, airDate time.Time, fileSize int64, language, quality string) interface{} {
 	episodeTitle := extractEpisodeTitle(filePath, seasonNumber, episodeNumber)
-	quality := detectQualityFromPath(filePath)
+	qualityObj := detectQualityFromDatabase(quality, filePath)
+	languages := getLanguagesFromDatabase(language)
 
 	return map[string]interface{}{
 		"id":                       id,
@@ -825,8 +815,8 @@ func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber 
 			"path":         filePath,
 			"size":         fileSize,
 			"dateAdded":    airDate.Format("2006-01-02T15:04:05Z"),
-			"quality": quality,
-			"languages": getDefaultLanguages(),
+			"quality": qualityObj,
+			"languages": languages,
 		},
 	}
 }
@@ -847,7 +837,9 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -867,10 +859,10 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 	var episodeFiles []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -881,7 +873,8 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 
 		processedTime := parseProcessedTime(processedAt)
 
-		quality := detectQualityFromPath(destinationPath)
+		qualityObj := detectQualityFromDatabase(quality, destinationPath)
+		languages := getLanguagesFromDatabase(language)
 
 		episodeFile := map[string]interface{}{
 			"id":           episodeFileID,
@@ -891,8 +884,8 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 			"path":         destinationPath,
 			"size":         fileSize,
 			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
-			"quality":      quality,
-			"languages": getDefaultLanguages(),
+			"quality":      qualityObj,
+			"languages": languages,
 		}
 
 		episodeFiles = append(episodeFiles, episodeFile)
@@ -915,7 +908,9 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -936,10 +931,10 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 	var episodeFiles []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -950,7 +945,8 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 
 		processedTime := parseProcessedTime(processedAt)
 
-		quality := detectQualityFromPath(destinationPath)
+		qualityObj := detectQualityFromDatabase(quality, destinationPath)
+		languages := getLanguagesFromDatabase(language)
 
 		episodeFile := map[string]interface{}{
 			"id":           episodeFileID,
@@ -960,8 +956,8 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 			"path":         destinationPath,
 			"size":         fileSize,
 			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
-			"quality":      quality,
-			"languages": getDefaultLanguages(),
+			"quality":      qualityObj,
+			"languages": languages,
 		}
 
 		episodeFiles = append(episodeFiles, episodeFile)
@@ -1020,7 +1016,9 @@ func getMovieFilesFromDatabase() ([]MovieFile, error) {
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(destination_path, '') as destination_path,
 			MAX(processed_at) as latest_processed_at,
-			COALESCE(file_size, 0) as file_size
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
 		AND destination_path IS NOT NULL
@@ -1039,11 +1037,11 @@ func getMovieFilesFromDatabase() ([]MovieFile, error) {
 	var movieFiles []MovieFile
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt string
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
 		var year int
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality); err != nil {
 			continue
 		}
 
@@ -1058,7 +1056,7 @@ func getMovieFilesFromDatabase() ([]MovieFile, error) {
 		}
 
 		// Use TMDB ID as both the file ID and movie ID for consistency
-		movieFile := createMovieFile(tmdbID, tmdbID, destinationPath, fileSize, addedTime)
+		movieFile := createMovieFile(tmdbID, tmdbID, destinationPath, fileSize, addedTime, language, quality)
 		movieFiles = append(movieFiles, movieFile)
 	}
 
@@ -1156,8 +1154,10 @@ func getMovieFileByIDFromDatabaseByFolder(movieFileID int, folderPath string) (*
 }
 
 // createMovieFile creates a properly formatted MovieFile
-func createMovieFile(id, movieID int, filePath string, fileSize int64, added time.Time) MovieFile {
+func createMovieFile(id, movieID int, filePath string, fileSize int64, added time.Time, language, quality string) MovieFile {
 	relativePath := filepath.Base(filePath)
+	qualityObj := detectQualityFromDatabase(quality, filePath)
+	languages := getLanguagesFromDatabase(language)
 
 	return MovieFile{
 		ID:           id,
@@ -1166,25 +1166,8 @@ func createMovieFile(id, movieID int, filePath string, fileSize int64, added tim
 		Path:         filePath,
 		Size:         fileSize,
 		DateAdded:    added,
-		Quality: Quality{
-			Quality: QualityDefinition{
-				ID:         1,
-				Name:       "Unknown",
-				Source:     "unknown",
-				Resolution: 0,
-			},
-			Revision: QualityRevision{
-				Version:  1,
-				Real:     0,
-				IsRepack: false,
-			},
-		},
-		Languages: []Language{
-			{
-				ID:   1,
-				Name: "Unknown",
-			},
-		},
+		Quality:      qualityObj,
+		Languages:    languages,
 	}
 }
 
