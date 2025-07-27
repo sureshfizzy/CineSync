@@ -65,7 +65,7 @@ def get_movie_data(tmdb_id):
 
     if not api_key:
         log_message("API key is missing. Cannot fetch movie data.", level="ERROR")
-        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False, 'original_language': None}
 
     params = {
         'api_key': api_key,
@@ -124,16 +124,25 @@ def get_movie_data(tmdb_id):
         is_kids_content = has_appropriate_rating and has_family_indicators
         process_tmdb_covers(tmdb_id, data)
 
+        # Map language code to full name
+        lang_map = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
+            'ru': 'Russian', 'pt': 'Portuguese', 'ar': 'Arabic', 'hi': 'Hindi'
+        }
+        original_language_name = lang_map.get(language, language.upper() if language else None)
+
         return {
             'imdb_id': imdb_id,
             'collection_name': collection_name,
             'is_anime_genre': is_anime_genre,
-            'is_kids_content': is_kids_content
+            'is_kids_content': is_kids_content,
+            'original_language': original_language_name
         }
 
     except requests.exceptions.RequestException as e:
         log_message(f"TMDB movie data fetch failed for movie ID {tmdb_id} - Network error: {e}", level="ERROR")
-        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False}
+        return {'imdb_id': '', 'collection_name': None, 'is_anime_genre': False, 'is_kids_content': False, 'original_language': None}
 
 def get_show_data(tmdb_id):
     """Get all TV show data (external IDs, genres, keywords, ratings) in one optimized API call."""
@@ -193,15 +202,24 @@ def get_show_data(tmdb_id):
         is_kids_content = has_appropriate_rating and has_family_indicators
         process_tmdb_covers(tmdb_id, data)
 
+        # Map language code to full name
+        lang_map = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
+            'ru': 'Russian', 'pt': 'Portuguese', 'ar': 'Arabic', 'hi': 'Hindi'
+        }
+        original_language_name = lang_map.get(language, language.upper() if language else None)
+
         return {
             'external_ids': external_ids,
             'is_anime_genre': is_anime_genre,
-            'is_kids_content': is_kids_content
+            'is_kids_content': is_kids_content,
+            'original_language': original_language_name
         }
 
     except requests.exceptions.RequestException as e:
         log_message(f"TMDB TV data fetch failed for TV ID {tmdb_id} - Network error: {e}", level="ERROR")
-        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False}
+        return {'external_ids': {}, 'is_anime_genre': False, 'is_kids_content': False, 'original_language': None}
 
 def check_anime_genre(genres, language):
     """Check if content is anime based on genres and language."""

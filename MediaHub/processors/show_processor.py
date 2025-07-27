@@ -39,6 +39,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     else:
         file_result = clean_query(file)
 
+    # Initialize language and quality variables and extract from file_result
+    languages = file_result.get('languages', [])
+    language = ', '.join(languages) if isinstance(languages, list) and languages else None
+
+    resolution_info = file_result.get('resolution', '')
+    quality_source = file_result.get('quality_source', '')
+    quality_parts = [part for part in [resolution_info, quality_source] if part]
+    quality = ' '.join(quality_parts) if quality_parts else None
+
     # Store original parameters before they get overwritten by file parsing
     original_season_number = season_number
     original_episode_number = episode_number
@@ -159,6 +168,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         show_id = anime_result.get('show_id')
         episode_title = anime_result.get('episode_title')
         episode_number = anime_result.get('episode_number')
+
+        # Use language and quality from anime processor if available
+        anime_language = anime_result.get('language')
+        anime_quality = anime_result.get('quality')
+        if anime_language:
+            language = anime_language
+        if anime_quality:
+            quality = anime_quality
         resolution = anime_result.get('resolution')
         is_anime_genre = anime_result.get('is_anime_genre')
         is_extra = anime_result.get('is_extra')
@@ -250,6 +267,13 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         elif isinstance(result, tuple) and len(result) >= 7:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
             episode_identifier = f"S{season_number}E{episode_number}"
+
+            # Get TMDB language as fallback if not available from file metadata
+            if not language and tmdb_id:
+                from MediaHub.api.tmdb_api_helpers import get_show_data
+                show_data = get_show_data(tmdb_id)
+                if show_data:
+                    language = show_data.get('original_language')
 
             if season_number is not None and episode_number is not None:
                 if force_extra:
@@ -516,8 +540,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             extracted_year = year_match.group(1)
             clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
 
-    # Return all fields
+    # Return all fields including language and quality
     return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, None,
-            1 if is_anime_genre else 0, is_kids_content)
+            1 if is_anime_genre else 0, is_kids_content, language, quality)

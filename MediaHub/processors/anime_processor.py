@@ -138,6 +138,21 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     episode_title = anime_info['episode_title']
     is_extra = anime_info.get('is_extra', False)
 
+    # Extract language and quality from file_metadata
+    language = None
+    quality = None
+
+    if file_metadata:
+        # Extract language information
+        languages = file_metadata.get('languages', [])
+        language = ', '.join(languages) if isinstance(languages, list) and languages else None
+
+        # Extract quality information (resolution + source)
+        resolution_info = file_metadata.get('resolution', '')
+        quality_source = file_metadata.get('quality_source', '')
+        quality_parts = [part for part in [resolution_info, quality_source] if part]
+        quality = ' '.join(quality_parts) if quality_parts else None
+
     log_message(f"Processing anime: {show_name} S{season_number}E{episode_number}", level="DEBUG")
 
     # Extract resolution from filename and parent folder
@@ -298,6 +313,13 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             log_message(f"Error processing anime filename: {e}", level="ERROR")
             new_name = file
 
+    # Get TMDB language as fallback if not available from file metadata
+    if not language and tmdb_id:
+        from MediaHub.api.tmdb_api_helpers import get_show_data
+        show_data = get_show_data(tmdb_id)
+        if show_data:
+            language = show_data.get('original_language')
+
     # Return necessary information
     return {
         'show_name': show_name,
@@ -312,5 +334,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'media_info': media_info,
         'is_anime_genre': is_anime_genre,
         'is_extra': is_extra,
-        'tmdb_id': tmdb_id
+        'tmdb_id': tmdb_id,
+        'language': language,
+        'quality': quality
     }

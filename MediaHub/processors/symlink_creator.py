@@ -799,7 +799,7 @@ def process_file(args, force=False, batch_apply=False):
             return
 
         # Handle show processor return format
-        dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
+        dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
         # Convert string episode number back to int if needed
         if episode_number_str:
             try:
@@ -830,7 +830,7 @@ def process_file(args, force=False, batch_apply=False):
             return
 
         # Handle movie processor return format
-        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content = result
+        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -875,7 +875,7 @@ def process_file(args, force=False, batch_apply=False):
                 log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
                 log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
                 save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
                 return
             else:
                 log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -903,7 +903,7 @@ def process_file(args, force=False, batch_apply=False):
                     log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
                     log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
                     save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
                     return
                 else:
                     log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
@@ -918,7 +918,7 @@ def process_file(args, force=False, batch_apply=False):
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
             save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
             return
         else:
             log_message(f"Symlink exists but metadata incomplete (fallback) - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -979,7 +979,7 @@ def process_file(args, force=False, batch_apply=False):
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
 
         # Handle cache updates for force mode vs normal mode
         if force and 'old_symlink_info' in locals() and old_symlink_info:

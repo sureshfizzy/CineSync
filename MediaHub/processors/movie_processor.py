@@ -54,6 +54,15 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     year = movie_result.get('year') or extract_year(parent_folder_name)
     episode_info = movie_result.get('episode_identifier')
 
+    # Extract language and quality from movie_result
+    languages = movie_result.get('languages', [])
+    language = ', '.join(languages) if isinstance(languages, list) and languages else None
+
+    resolution_info = movie_result.get('resolution', '')
+    quality_source = movie_result.get('quality_source', '')
+    quality_parts = [part for part in [resolution_info, quality_source] if part]
+    quality = ' '.join(quality_parts) if quality_parts else None
+
     # If episode_info is found, this might be a TV show misclassified as movie
     if episode_info:
         print(f"DEBUG: WARNING - Movie processor detected episode info: {episode_info}. This might be a TV show!")
@@ -116,6 +125,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_data = get_movie_data(tmdb_id)
                 collection_name = movie_data.get('collection_name')
                 collection_info = (collection_name, tmdb_id) if collection_name else None
+
+                # Use TMDB language as fallback if not available from file metadata
+                if not language:
+                    language = movie_data.get('original_language')
             else:
                 collection_info = None
         else:
@@ -139,6 +152,13 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{tmdb-{tmdb_id}}}"
             if is_imdb_folder_id_enabled() and imdb_id:
                 proper_movie_name += f" {{imdb-{imdb_id}}}"
+
+            # Get TMDB language as fallback if not available from file metadata
+            if not language and tmdb_id:
+                movie_data = get_movie_data(tmdb_id)
+                if movie_data:
+                    language = movie_data.get('original_language')
+
         elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
             # Initialize is_kids_content for dict results
@@ -147,6 +167,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
                 proper_movie_name += f" {{tmdb-{result['id']}}}"
+
+            # Get TMDB language as fallback if not available from file metadata
+            if not language and result.get('id'):
+                movie_data = get_movie_data(result['id'])
+                if movie_data:
+                    language = movie_data.get('original_language')
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -454,6 +480,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
 
-    # Return all fields
+    # Return all fields including language and quality
     return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
-            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content)
+            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content, language, quality)
