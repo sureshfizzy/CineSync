@@ -115,17 +115,11 @@ func SignalRAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			for _, mapping := range config.FolderMappings {
 				if mapping.Enabled && strings.EqualFold(mapping.APIKey, accessToken) {
 					validToken = true
-					logger.Debug("SignalR: Found matching access token for folder: %s", mapping.FolderPath)
 					break
 				}
 			}
 
 			if !validToken {
-				logger.Warn("Invalid access token for SignalR endpoint: %s (token: %s)", r.URL.Path, accessToken)
-				logger.Debug("Available folder mappings: %d", len(config.FolderMappings))
-				for i, mapping := range config.FolderMappings {
-					logger.Debug("SignalR Mapping %d: Enabled=%t, APIKey=%s, Folder=%s", i, mapping.Enabled, mapping.APIKey, mapping.FolderPath)
-				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
@@ -141,8 +135,6 @@ func SignalRAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-
-		logger.Debug("SignalR: Valid access token found for endpoint: %s", r.URL.Path)
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

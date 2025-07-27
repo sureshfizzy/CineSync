@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	"github.com/gorilla/websocket"
 )
 
 // HandleSystemStatus handles the /api/v3/system/status endpoint for both Radarr and Sonarr
@@ -383,7 +384,7 @@ func HandleAvailableFolders(w http.ResponseWriter, r *http.Request) {
 func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 	connectionId := fmt.Sprintf("cinesync-%d", time.Now().UnixNano())
 
-	// SignalR negotiation response
+	// ASP.NET Core SignalR negotiation response format
 	response := map[string]interface{}{
 		"connectionId":        connectionId,
 		"connectionToken":     connectionId,
@@ -405,14 +406,123 @@ func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	json.NewEncoder(w).Encode(response)
+}
+
+// WebSocket upgrader for SignalR connections
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 // HandleSignalRMessages handles SignalR message requests
 func HandleSignalRMessages(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{})
+	if r.Header.Get("Upgrade") == "websocket" {
+		handleSignalRWebSocket(w, r)
+		return
+	}
+	handleSignalRSSE(w, r)
+}
+
+// handleSignalRWebSocket handles WebSocket connections for SignalR
+func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.Error("WebSocket upgrade failed: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	// Send handshake response immediately
+	handshakeResponse := `{"error":null}` + "\x1e"
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(handshakeResponse)); err != nil {
+		logger.Error("Failed to send handshake response: %v", err)
+		return
+	}
+
+	config := GetConfig()
+	versionMessage := fmt.Sprintf(`{"type":1,"target":"receiveMessage","arguments":[{"name":"version","body":{"version":"%s"}}]}`+"\x1e", config.Version)
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(versionMessage)); err != nil {
+		logger.Error("Failed to send version message: %v", err)
+		return
+	}
+
+	// Keep connection alive with periodic pings
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					logger.Error("WebSocket unexpected close: %v", err)
+				}
+				return
+			}
+		}
+	}()
+
+	// Main loop for sending periodic pings
+	for {
+		select {
+		case <-ticker.C:
+			pingMessage := `{"type":6}` + "\x1e"
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(pingMessage)); err != nil {
+				return
+			}
+		case <-done:
+			return
+		}
+	}
+}
+
+// handleSignalRSSE handles Server-Sent Events fallback
+func handleSignalRSSE(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	handshakeResponse := `{"error":null}` + "\x1e"
+	w.Write([]byte(handshakeResponse))
+	flusher.Flush()
+
+	config := GetConfig()
+	versionMessage := fmt.Sprintf(`{"type":1,"target":"receiveMessage","arguments":[{"name":"version","body":{"version":"%s"}}]}`+"\x1e", config.Version)
+	w.Write([]byte(versionMessage))
+	flusher.Flush()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	timeout := time.After(5 * time.Minute)
+
+	for {
+		select {
+		case <-ticker.C:
+			pingMessage := `{"type":6}`+"\x1e"
+			w.Write([]byte(pingMessage))
+			flusher.Flush()
+		case <-timeout:
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // HandleSystemEvents handles system events requests
@@ -422,7 +532,7 @@ func HandleSystemEvents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-// HandleCommand handles command requests (like triggering syncs)
+// HandleCommand handles command requests
 func HandleCommand(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		response := map[string]interface{}{
@@ -438,7 +548,6 @@ func HandleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET request - return empty commands array
 	commands := []interface{}{}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(commands)

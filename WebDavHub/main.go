@@ -261,6 +261,12 @@ func main() {
 	})
 	rootMux.Handle("/api/", apiRouter)
 
+	// SignalR Handler (for spoofing endpoints)
+	signalrRouter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiMux.ServeHTTP(w, r)
+	})
+	rootMux.Handle("/signalr/", signalrRouter)
+
 	// WebDAV Handler
 	rootMux.Handle("/webdav/", auth.BasicAuthMiddleware(http.StripPrefix("/webdav", webdavHandler)))
 

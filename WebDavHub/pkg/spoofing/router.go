@@ -39,6 +39,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	}
 
 	// SignalR endpoints (use different auth middleware)
+	// Based on Radarr source: x.MapHub<MessageHub>("/signalr/messages").RequireAuthorization("SignalR");
 	signalREndpoints := map[string]http.HandlerFunc{
 		"/signalr/messages/negotiate": HandleSignalRNegotiate,
 		"/signalr/messages":           HandleSignalRMessages,
