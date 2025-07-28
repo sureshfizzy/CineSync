@@ -43,6 +43,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 	signalREndpoints := map[string]http.HandlerFunc{
 		"/signalr/messages/negotiate": HandleSignalRNegotiate,
 		"/signalr/messages":           HandleSignalRMessages,
+		"/signalr/negotiate":          HandleSignalRNegotiate,
+		"/signalr":                    HandleSignalRMessages,
 	}
 
 	// Service-specific endpoints

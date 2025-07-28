@@ -382,6 +382,15 @@ func HandleAvailableFolders(w http.ResponseWriter, r *http.Request) {
 
 // HandleSignalRNegotiate handles SignalR negotiation requests
 func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	connectionId := fmt.Sprintf("cinesync-%d", time.Now().UnixNano())
 
 	// ASP.NET Core SignalR negotiation response format
@@ -407,7 +416,7 @@ func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	json.NewEncoder(w).Encode(response)
 }
 
