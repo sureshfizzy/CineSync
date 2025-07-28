@@ -234,10 +234,24 @@ def _extract_title_from_content(content: str) -> str:
         return clean_title_string(title)
 
     # Pattern 2: Handle season patterns FIRST (before dash and space patterns)
-    # Include both "Season X" and ordinal patterns like "3rd Season"
-    season_match = re.match(r'^(.+?)(?:\s*\(\d{4}\))?\s+(?:S\d+(?:E\d+)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
+    # Include both "Season X", ordinal patterns like "3rd Season", and word ordinals like "Second Season"
+    ordinal_words = r'(?:First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth)'
+
+    season_match = re.match(rf'^(.+?)(?:\s*\(\d{{4}}\))?\s+(?:S\d+(?:E\d+)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
     if season_match:
         title = season_match.group(1).strip()
+        return clean_title_string(title)
+
+    # Separate pattern for ordinal seasons with clear separators
+    ordinal_season_match = re.match(rf'^(.+?)\s*[-–]\s*{ordinal_words}\s+Season(?:\s|$|\[)', content, re.IGNORECASE)
+    if ordinal_season_match:
+        title = ordinal_season_match.group(1).strip()
+        return clean_title_string(title)
+
+    # Pattern for ordinal seasons without dash separator
+    ordinal_no_dash_match = re.match(rf'^(.+?)\s+{ordinal_words}\s+Season\s*[-–]\s*\d+(?:\s|$|\[)', content, re.IGNORECASE)
+    if ordinal_no_dash_match:
+        title = ordinal_no_dash_match.group(1).strip()
         return clean_title_string(title)
 
     # Pattern 3: Handle standard anime naming with dash: "Title - Episode/Season [Quality]"
@@ -306,6 +320,11 @@ def _extract_title_from_content(content: str) -> str:
     # Remove "Season" from anime titles (user preference)
     title = re.sub(r'\s+(?:The\s+)?Final\s+Season\b', ' Final', title, flags=re.IGNORECASE)
     title = re.sub(r'\s+Season\b', '', title, flags=re.IGNORECASE)
+
+    # Only remove when they're clearly season indicators, not part of the actual title
+    # Pattern: ordinal followed by "Season" and then episode/quality info
+    ordinal_season_pattern = r'\s+(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth)\s+Season(?=\s*[-–]\s*\d+|\s*\[|\s*$)'
+    title = re.sub(ordinal_season_pattern, '', title, flags=re.IGNORECASE)
 
     title = re.sub(r'\s+', ' ', title).strip()  # Normalize whitespace
 

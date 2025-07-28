@@ -179,7 +179,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
                 log_message(f"Successfully retrieved show data using ID: {proper_name}", level="INFO")
 
-                return process_chosen_show(show_data, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file)
+                return process_chosen_show(show_data, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra, query)
 
         except requests.exceptions.RequestException as e:
             log_message(f"Error fetching show data: {e}", level="ERROR")
@@ -363,7 +363,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     if auto_select:
         chosen_show = results[0]
-        result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
+        result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra, query)
         if isinstance(query, tuple):
             query_str = query[0] if query else ""
         else:
@@ -387,7 +387,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             if choice.lower() in ['1', '2', '3']:
                 chosen_show = results[int(choice) - 1]
-                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra, query)
                 set_cached_result(cache_key, result)
                 return result
             elif choice.strip():
@@ -401,7 +401,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                     continue
             else:
                 chosen_show = results[0]
-                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra)
+                result = process_chosen_show(chosen_show, auto_select, tmdb_id, season_number, episode_number, episode_match, is_extra, file, force_extra, query)
                 if isinstance(query, tuple):
                     query_str = query[0] if query else ""
                 else:
@@ -870,7 +870,7 @@ def search_manual_general(query, year=None, auto_select=False, actual_dir=None, 
 
                 if media_type == 'tv':
                     from MediaHub.api.tmdb_api_helpers import process_chosen_show
-                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra)
+                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra, query)
                 else:
                     log_message(f"Movie selected during manual search. Redirecting to movie processor.", level="INFO")
                     return {'redirect_to_movie': True, 'movie_data': chosen_item}
@@ -890,7 +890,7 @@ def search_manual_general(query, year=None, auto_select=False, actual_dir=None, 
 
                 if media_type == 'tv':
                     from MediaHub.api.tmdb_api_helpers import process_chosen_show
-                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra)
+                    return process_chosen_show(chosen_item, auto_select, chosen_item.get('id'), season_number, episode_number, episode_match, is_extra, file, force_extra, query)
                 else:
                     log_message(f"Movie selected during manual search. Redirecting to movie processor.", level="INFO")
                     return {'redirect_to_movie': True, 'movie_data': chosen_item}

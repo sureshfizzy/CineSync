@@ -43,7 +43,7 @@ def extract_anime_episode_info(filename, file_metadata=None):
         return _extract_anime_fallback(filename)
 
     # Extract season and episode numbers
-    season_number = anime_result.get('season_number', "01")
+    season_number = anime_result.get('season_number')
     episode_number = anime_result.get('episode_number')
 
     if not episode_number and episode_identifier:
@@ -133,7 +133,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     # Prepare variables from enhanced extraction
     show_name = anime_info['show_name']
-    season_number = season_number or anime_info['season_number'] or "01"
+    season_number = season_number or anime_info['season_number']
     episode_number = episode_number or anime_info['episode_number']
     episode_title = anime_info['episode_title']
     is_extra = anime_info.get('is_extra', False)

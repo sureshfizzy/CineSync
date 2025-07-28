@@ -214,7 +214,9 @@ def get_show_data(tmdb_id):
             'external_ids': external_ids,
             'is_anime_genre': is_anime_genre,
             'is_kids_content': is_kids_content,
-            'original_language': original_language_name
+            'original_language': original_language_name,
+            'seasons': data.get('seasons', []),
+            'name': data.get('name', '')
         }
 
     except requests.exceptions.RequestException as e:
@@ -803,7 +805,7 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
     log_message("No valid episode selected, continuing without episode specification", level="INFO")
     return None
 
-def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=None, episode_number=None, episode_match=None, is_extra=None, file=None, force_extra=None):
+def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=None, episode_number=None, episode_match=None, is_extra=None, file=None, force_extra=None, original_query=None):
     """
     Process a chosen TV show and extract relevant information.
     Args:
@@ -815,6 +817,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
         episode_match: Optional episode pattern match information
         is_extra: Whether this is extra content
         file: The file being processed
+        original_query: The original search query for season title matching
     Returns:
         tuple: (proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id)
     """
@@ -863,6 +866,41 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Invalid episode number provided: {episode_number}", level="ERROR")
             new_episode_number = None
 
+    if new_season_number is None and original_query:
+        seasons = tv_data.get('seasons', [])
+        if seasons:
+            original_query_lower = original_query.lower()
+            best_match_season = None
+            best_similarity = 0
+
+            for season in seasons:
+                season_name = season.get('name', '')
+                season_number_candidate = season.get('season_number', 0)
+
+                # Skip Season 0 (specials) unless it's the only option
+                if season_number_candidate == 0:
+                    continue
+
+                # Calculate similarity between original query and season name
+                import difflib
+                similarity = difflib.SequenceMatcher(None, original_query_lower, season_name.lower()).ratio()
+
+                # Also check if the season name contains key words from the query
+                query_words = set(original_query_lower.split())
+                season_words = set(season_name.lower().split())
+                word_overlap = len(query_words.intersection(season_words)) / len(query_words) if query_words else 0
+
+                # Combine similarity metrics
+                combined_score = (similarity * 0.7) + (word_overlap * 0.3)
+
+                if combined_score > best_similarity and combined_score > 0.6:
+                    best_similarity = combined_score
+                    best_match_season = season_number_candidate
+
+            if best_match_season:
+                new_season_number = best_match_season
+                log_message(f"Season title match: '{original_query}' -> Season {new_season_number} (score: {best_similarity:.2f})", level="INFO")
+
     # Special handling for anime when we have episode but no season
     if is_anime_genre and new_episode_number is not None and new_season_number is None:
         log_message(f"Anime show with episode number but no season number - forcing AniDB-style mapping", level="DEBUG")
@@ -884,11 +922,25 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"No season number identified, proceeding with season selection", level="INFO")
             new_season_number = select_season(seasons, auto_select)
 
-    # If we still don't have a season number for anime, default to Season 1
     if is_anime_genre and new_season_number is None and new_episode_number is not None:
-        new_season_number = 1
-        log_message(f"No season selected for anime - defaulting to Season 1 for organization", level="INFO")
-        log_message(f"Note: Episode {new_episode_number} will be treated as absolute episode number", level="INFO")
+        # If original_query is available and appears to contain season subtitle info, don't default to Season 1
+        should_default_to_season_1 = True
+        if original_query:
+            words = original_query.split()
+            has_potential_season_info = (
+                len(words) > 3 or
+                any(word.lower() in ['season', 'part', 'cour', 'final', 'vs', 'versus'] for word in words) or
+                any(char in original_query for char in ['-', ':', '!', '?']) or
+                any(word.isdigit() for word in words[-2:])
+            )
+            if has_potential_season_info:
+                should_default_to_season_1 = False
+                log_message(f"Potential season subtitle detected in '{original_query}' but season title matching failed - using AniDB-style mapping", level="INFO")
+
+        if should_default_to_season_1:
+            new_season_number = 1
+            log_message(f"No season selected for anime - defaulting to Season 1 for organization", level="INFO")
+            log_message(f"Note: Episode {new_episode_number} will be treated as absolute episode number", level="INFO")
 
     # Handle episode selection if we have a season but no episode
     if new_season_number is not None and new_episode_number is None:

@@ -253,7 +253,7 @@ ANIME_PATTERNS = {
     ],
 
     # Anime-specific episode numbering patterns
-    'episode_number': re.compile(r'\s-?\s?(\d{2,4})\s', re.IGNORECASE),
+    'episode_number': re.compile(r'\s-?\s?(\d{2,4})(?:\s|\.mkv|\.mp4|\.avi|$)', re.IGNORECASE),
 
     # Anime episode indicators that suggest anime content
     'anime_episode_indicators': [
