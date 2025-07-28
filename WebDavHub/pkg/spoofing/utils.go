@@ -144,6 +144,46 @@ func generateUniqueEpisodeFileID(seriesID, season, episode int) int {
 	return generateUniqueEpisodeID(seriesID, season, episode)
 }
 
+// generateUniqueSeriesID creates a unique series ID based on TMDB ID, title, and year
+// This prevents collisions when the same TMDB ID appears multiple times
+func generateUniqueSeriesID(tmdbID int, title string, year int) int {
+	if tmdbID <= 0 {
+		return generateHashBasedID(title, year)
+	}
+
+	titleHash := simpleStringHash(title)
+	uniqueID := tmdbID*1000 + (titleHash+year)%1000
+
+	if uniqueID <= 0 {
+		uniqueID = tmdbID*1000 + 1
+	}
+
+	return uniqueID
+}
+
+// generateHashBasedID creates an ID based on title and year when TMDB ID is not available
+func generateHashBasedID(title string, year int) int {
+	hash := simpleStringHash(title)
+	return (hash*10000 + year) % 999999 + 100000
+}
+
+// simpleStringHash creates a simple hash from a string
+func simpleStringHash(s string) int {
+	hash := 0
+	for _, char := range s {
+		hash = hash*31 + int(char)
+	}
+	if hash < 0 {
+		hash = -hash
+	}
+	return hash % 10000
+}
+
+// extractTMDBIDFromSeriesID extracts the original TMDB ID from a generated unique series ID
+func extractTMDBIDFromSeriesID(uniqueSeriesID int) int {
+	return uniqueSeriesID / 1000
+}
+
 // Image creation utilities
 func createMediaImages(tmdbID int, mediaType string) []interface{} {
 	if tmdbID <= 0 {

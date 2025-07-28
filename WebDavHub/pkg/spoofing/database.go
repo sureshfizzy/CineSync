@@ -441,8 +441,9 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 		// Construct series folder path from destination path, title, and year
 		seriesPath := constructSeriesPath(destinationPath, properName, year)
 
-		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, seriesPath, addedTime, language, quality)
+		// Generate unique series ID to prevent BAZARR constraint violations
+		uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
+		show := createSeriesResource(uniqueSeriesID, properName, year, tmdbID, seriesPath, addedTime, language, quality)
 		series = append(series, show)
 	}
 
@@ -706,8 +707,9 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 
 		seriesPath := constructSeriesPath(destinationPath, properName, year)
 
-		// Use TMDB ID as the series ID for consistency
-		show := createSeriesResource(tmdbID, properName, year, tmdbID, seriesPath, processedTime, "", "")
+		// Generate unique series ID to prevent BAZARR constraint violations
+		uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
+		show := createSeriesResource(uniqueSeriesID, properName, year, tmdbID, seriesPath, processedTime, "", "")
 		series = append(series, show)
 	}
 
@@ -732,6 +734,10 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 }
 
 func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
+	seriesIDInt := safeAtoi(seriesId, 0)
+	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbIDStr := strconv.Itoa(tmdbID)
+
 	// Query episodes directly by TMDB ID, grouped to avoid duplicates
 	query := `
 		SELECT
@@ -755,7 +761,7 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 		GROUP BY proper_name, season_number, episode_number
 		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, seriesId)
+	rows, err := mediaHubDB.Query(query, tmdbIDStr)
 	if err != nil {
 		return nil, err
 	}
@@ -795,6 +801,10 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 		return nil, err
 	}
 
+	seriesIDInt := safeAtoi(seriesId, 0)
+	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbIDStr := strconv.Itoa(tmdbID)
+
 	// Query episodes directly by TMDB ID with folder filtering, grouped to avoid duplicates
 	query := `
 		SELECT
@@ -817,7 +827,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 		GROUP BY proper_name, season_number, episode_number
 		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, seriesId, folderPath)
+	rows, err := mediaHubDB.Query(query, tmdbIDStr, folderPath)
 	if err != nil {
 		return nil, err
 	}
@@ -898,6 +908,10 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 		return nil, err
 	}
 
+	seriesIDInt := safeAtoi(seriesId, 0)
+	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbIDStr := strconv.Itoa(tmdbID)
+
 	// Query episode files directly by TMDB ID
 	query := `
 		SELECT
@@ -920,7 +934,7 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 		AND COALESCE(tmdb_id, '') = ?
 		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, seriesId)
+	rows, err := mediaHubDB.Query(query, tmdbIDStr)
 	if err != nil {
 		return nil, err
 	}
@@ -971,6 +985,10 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		return nil, err
 	}
 
+	seriesIDInt := safeAtoi(seriesId, 0)
+	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbIDStr := strconv.Itoa(tmdbID)
+
 	// Query episode files directly by TMDB ID with folder filtering
 	query := `
 		SELECT
@@ -994,7 +1012,7 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		AND base_path = ?
 		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-	rows, err := mediaHubDB.Query(query, seriesId, folderPath)
+	rows, err := mediaHubDB.Query(query, tmdbIDStr, folderPath)
 	if err != nil {
 		return nil, err
 	}
