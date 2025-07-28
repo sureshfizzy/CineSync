@@ -284,11 +284,14 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		DateAdded:    added,
 		Quality:      quality,
 		Languages:    languages,
+		SceneName:    "",
+		ReleaseGroup: "",
 	}
 
 	return MovieResource{
 		ID:                  id,
 		Title:               title,
+		AlternateTitles:     []interface{}{},
 		OriginalTitle:       title,
 		SortTitle:           title,
 		Status:              "released",
@@ -1237,6 +1240,8 @@ func createMovieFile(id, movieID int, filePath string, fileSize int64, added tim
 		DateAdded:    added,
 		Quality:      qualityObj,
 		Languages:    languages,
+		SceneName:    "",
+		ReleaseGroup: "",
 	}
 }
 

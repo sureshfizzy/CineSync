@@ -59,6 +59,8 @@ type MovieFile struct {
 	DateAdded    time.Time `json:"dateAdded"`
 	Quality      Quality   `json:"quality"`
 	Languages    []Language `json:"languages"`
+	SceneName    string    `json:"sceneName"`
+	ReleaseGroup string    `json:"releaseGroup"`
 }
 
 // Quality represents quality information
@@ -92,6 +94,7 @@ type Language struct {
 type MovieResource struct {
 	ID                  int           `json:"id"`
 	Title               string        `json:"title"`
+	AlternateTitles     []interface{} `json:"alternateTitles"`
 	OriginalTitle       string        `json:"originalTitle"`
 	SortTitle           string        `json:"sortTitle"`
 	Status              string        `json:"status"`
