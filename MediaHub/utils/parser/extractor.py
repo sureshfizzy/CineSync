@@ -163,6 +163,12 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
 
     # Determine content type
     is_tv = _is_tv_show(parsed)
+    episode = _extract_episode_from_parsed(parsed)
+
+    # If we found an episode number
+    if episode is not None:
+        is_tv = True
+
     is_movie = not is_tv and bool(title)
 
     metadata = MediaMetadata(
@@ -181,7 +187,7 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         release_group=_extract_release_group_from_parsed(parsed),
         edition=_extract_edition_from_parsed(parsed),
         season=_extract_season_from_parsed(parsed),
-        episode=_extract_episode_from_parsed(parsed),
+        episode=episode,
         is_tv_show=is_tv,
         is_movie=is_movie,
         episode_title=_extract_episode_title_from_parsed(parsed),
@@ -660,6 +666,11 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
     # Check if this is a TV show
     is_tv = _is_tv_show(parsed)
 
+    # If we found an episode number
+    episode = _extract_episode_from_parsed(parsed)
+    if episode is not None:
+        is_tv = True
+
     # For TV shows, use simple title extraction that stops at season/episode info
     if is_tv:
         title_parts = []
@@ -693,10 +704,10 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
             should_add_part = True
 
-            # Special handling for dashes: don't add if followed by episode number
+            # Special handling for dashes: don't add if followed by episode number (anime-style)
             if clean_part == '-' and i + 1 < len(parts):
                 next_part = parts[i + 1].strip().rstrip('.')
-                if re.match(r'^(?:[1-9]\d{0,2}|1[0-4]\d{2})$', next_part):
+                if re.match(r'^\d{1,4}$', next_part):
                     should_add_part = False
                     break
 
