@@ -30,7 +30,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         source_folder = None
         for source_dir in source_dirs:
             source_dir = source_dir.strip()
-            if source_dir and root.startswith(source_dir):
+            if source_dir and root.startswith(source_dir + os.sep):
                 source_folder = os.path.basename(source_dir)
                 break
         if not source_folder:
