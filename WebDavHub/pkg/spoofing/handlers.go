@@ -325,7 +325,7 @@ func HandleSpoofedTag(w http.ResponseWriter, r *http.Request) {
 // HandleSpoofedAPI handles the /api endpoint for both Radarr and Sonarr
 func HandleSpoofedAPI(w http.ResponseWriter, r *http.Request) {
 	config := GetConfig()
-	
+
 	response := map[string]interface{}{
 		"current": config.Version,
 		"version": config.Version,
@@ -333,6 +333,205 @@ func HandleSpoofedAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// HandleSpoofedFilesystem handles the /api/v3/filesystem endpoint for both Radarr and Sonarr
+func HandleSpoofedFilesystem(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	includeFiles := r.URL.Query().Get("includeFiles") == "true"
+
+	// Handle special filesystem endpoints
+	if strings.HasSuffix(r.URL.Path, "/type") {
+		response := map[string]interface{}{
+			"driveType": "Fixed",
+			"type":      "Drive",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if strings.HasSuffix(r.URL.Path, "/mediafiles") {
+		if path == "" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+			return
+		}
+
+		filesystemItems, err := getFilesystemContents(path, true)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+			return
+		}
+
+		// Filter to only return media files
+		var mediaFiles []map[string]interface{}
+		for _, item := range filesystemItems {
+			if item["type"] == "video" {
+				mediaFiles = append(mediaFiles, item)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(mediaFiles)
+		return
+	}
+
+	// If no path specified, return root folders
+	if path == "" {
+		rootFolders, err := getRootFoldersFromDatabase()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		var filesystemItems []map[string]interface{}
+		for _, folder := range rootFolders {
+			filesystemItems = append(filesystemItems, map[string]interface{}{
+				"path":        folder.Path,
+				"name":        filepath.Base(folder.Path),
+				"type":        "folder",
+				"isDirectory": true,
+				"size":        0,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(filesystemItems)
+		return
+	}
+
+	// Return directory contents
+	filesystemItems, err := getFilesystemContents(path, includeFiles)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(filesystemItems)
+}
+
+// getFilesystemContents returns the contents of a directory in filesystem API format
+func getFilesystemContents(dirPath string, includeFiles bool) ([]map[string]interface{}, error) {
+	cleanPath := filepath.Clean(dirPath)
+
+	rootFolders, err := getRootFoldersFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	allowed := false
+	for _, rootFolder := range rootFolders {
+		if strings.HasPrefix(cleanPath, filepath.Clean(rootFolder.Path)) {
+			allowed = true
+			break
+		}
+	}
+
+	if !allowed {
+		return nil, fmt.Errorf("access denied")
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil || !info.IsDir() {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(cleanPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var filesystemItems []map[string]interface{}
+	for _, entry := range entries {
+		entryInfo, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		isDir := entry.IsDir()
+		if !includeFiles && !isDir {
+			continue
+		}
+
+		filesystemItems = append(filesystemItems, map[string]interface{}{
+			"path":        filepath.Join(cleanPath, entry.Name()),
+			"name":        entry.Name(),
+			"type":        getFileType(isDir, entry.Name()),
+			"isDirectory": isDir,
+			"size":        entryInfo.Size(),
+		})
+	}
+
+	return filesystemItems, nil
+}
+
+// getFileType returns the appropriate type string for filesystem items
+func getFileType(isDirectory bool, name string) string {
+	if isDirectory {
+		return "folder"
+	}
+
+	ext := strings.ToLower(filepath.Ext(name))
+	if strings.Contains(".mp4.mkv.avi.mov.wmv.flv.webm.m4v.mpg.mpeg.3gp.ogv", ext) {
+		return "video"
+	}
+	if strings.Contains(".srt.ass.ssa.vtt.sub.idx", ext) {
+		return "subtitle"
+	}
+	return "file"
+}
+
+// HandleSpoofedUtils handles the /api/v3/utils endpoint for both Radarr and Sonarr
+func HandleSpoofedUtils(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/utils")
+
+	w.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(path, "/backup") || strings.HasPrefix(path, "/logs") {
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	} else {
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+	}
+}
+
+// HandleSpoofedNotification handles the /api/v3/notification endpoint for both Radarr and Sonarr
+func HandleSpoofedNotification(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]map[string]interface{}{})
+}
+
+// HandleSpoofedDownloadClient handles the /api/v3/downloadclient endpoint for both Radarr and Sonarr
+func HandleSpoofedDownloadClient(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]map[string]interface{}{})
+}
+
+// HandleSpoofedIndexer handles the /api/v3/indexer endpoint for both Radarr and Sonarr
+func HandleSpoofedIndexer(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]map[string]interface{}{})
+}
+
+// HandleSpoofedImportList handles the /api/v3/importlist endpoint for Radarr
+func HandleSpoofedImportList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]map[string]interface{}{})
+}
+
+// HandleSpoofedQueue handles the /api/v3/queue endpoint for both Radarr and Sonarr
+func HandleSpoofedQueue(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"page":          1,
+		"pageSize":      20,
+		"sortKey":       "timeleft",
+		"sortDirection": "ascending",
+		"totalRecords":  0,
+		"records":       []map[string]interface{}{},
+	})
 }
 
 // getFolderPathFromRequest determines which folder mapping to use based on the request
@@ -468,22 +667,22 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer close(done)
 		for {
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			_, _, err := conn.ReadMessage()
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					logger.Error("WebSocket unexpected close: %v", err)
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
+					logger.Warn("WebSocket unexpected close: %v", err)
 				}
 				return
 			}
 		}
 	}()
 
-	// Main loop for sending periodic pings
 	for {
 		select {
 		case <-ticker.C:
-			pingMessage := `{"type":6}` + "\x1e"
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(pingMessage)); err != nil {
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":6}`+"\x1e")); err != nil {
 				return
 			}
 		case <-done:

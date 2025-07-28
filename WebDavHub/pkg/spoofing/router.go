@@ -29,6 +29,26 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/MediaCover/":     HandleMediaCover,
 		"/api":                    HandleSpoofedAPI,
 
+		// Filesystem and utils endpoints
+		"/api/v3/filesystem":           HandleSpoofedFilesystem,
+		"/api/v3/filesystem/":          HandleSpoofedFilesystem,
+		"/api/v3/filesystem/type":      HandleSpoofedFilesystem,
+		"/api/v3/filesystem/mediafiles": HandleSpoofedFilesystem,
+		"/api/v3/utils":                HandleSpoofedUtils,
+		"/api/v3/utils/":               HandleSpoofedUtils,
+
+		// Additional common endpoints
+		"/api/v3/notification":    HandleSpoofedNotification,
+		"/api/v3/notification/":   HandleSpoofedNotification,
+		"/api/v3/downloadclient":  HandleSpoofedDownloadClient,
+		"/api/v3/downloadclient/": HandleSpoofedDownloadClient,
+		"/api/v3/indexer":         HandleSpoofedIndexer,
+		"/api/v3/indexer/":        HandleSpoofedIndexer,
+		"/api/v3/importlist":      HandleSpoofedImportList,
+		"/api/v3/importlist/":     HandleSpoofedImportList,
+		"/api/v3/queue":           HandleSpoofedQueue,
+		"/api/v3/queue/":          HandleSpoofedQueue,
+
 		// Event and sync endpoints
 		"/api/v3/system/events":   HandleSystemEvents,
 		"/api/v3/system/events/":  HandleSystemEvents,
