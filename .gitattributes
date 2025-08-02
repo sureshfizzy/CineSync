@@ -4,3 +4,4 @@
 *.ts text eol=lf
 *.js text eol=lf
 *.json text eol=lf
+*.exe filter=lfs diff=lfs merge=lfs -text
