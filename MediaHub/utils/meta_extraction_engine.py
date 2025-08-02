@@ -1,12 +1,29 @@
 import subprocess
 import json
 import os
+import platform
 from MediaHub.utils.ffprobe_parser import *
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.mediainfo import extract_media_info, keywords
 
-# Get the absolute path to ffprobe.exe
-FFPROBE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediainfo', 'ffprobe.exe')
+def get_ffprobe_path():
+    """
+    Get the appropriate ffprobe path based on the operating system
+
+    Returns:
+        str: Path to ffprobe executable
+    """
+    if platform.system() == 'Windows':
+        local_ffprobe = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediainfo', 'ffprobe.exe')
+        if os.path.exists(local_ffprobe):
+            return local_ffprobe
+        else:
+            return 'ffprobe.exe'
+    else:
+        return 'ffprobe'
+
+# Get the ffprobe path
+FFPROBE_PATH = get_ffprobe_path()
 
 def get_ffprobe_media_info(file_path):
     """
@@ -21,7 +38,7 @@ def get_ffprobe_media_info(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
         # Check if ffprobe exists
-        if not os.path.exists(FFPROBE_PATH):
+        if platform.system() == 'Windows' and not os.path.exists(FFPROBE_PATH):
             log_message(f"ffprobe not found at: {FFPROBE_PATH}", level="ERROR")
             raise FileNotFoundError(f"ffprobe not found at: {FFPROBE_PATH}")
 

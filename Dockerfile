@@ -41,7 +41,7 @@ FROM python:3.11-slim
 
 # Install required system packages
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu curl psmisc && \
+    apt-get install -y inotify-tools bash gosu curl psmisc ffmpeg && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*

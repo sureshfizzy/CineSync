@@ -9,6 +9,7 @@ WebDavHub/cinesync
 WebDavHub/cinesync.exe
 WebDavHub/frontend/dist/
 WebDavHub/frontend/node_modules/
+MediaHub/utils/mediainfo/ffprobe.exe
 
 # Data and logs
 /db
@@ -26,4 +27,3 @@ Screenshots
 # Environment files
 .env
 .env.local
-
