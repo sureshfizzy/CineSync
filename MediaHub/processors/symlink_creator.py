@@ -799,7 +799,13 @@ def process_file(args, force=False, batch_apply=False):
             return
 
         # Handle show processor return format
-        dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+        if len(result) >= 14:
+            # New format with TVDB ID
+            dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id = result
+        else:
+            # Legacy format without TVDB ID
+            dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+            tvdb_id = None
         # Convert string episode number back to int if needed
         if episode_number_str:
             try:
@@ -979,7 +985,7 @@ def process_file(args, force=False, batch_apply=False):
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
         save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
+                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id)
 
         # Handle cache updates for force mode vs normal mode
         if force and 'old_symlink_info' in locals() and old_symlink_info:

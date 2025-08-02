@@ -8,8 +8,6 @@ from MediaHub.utils.logging_utils import log_message
 
 # Beta features that are currently disabled (HARDCODED)
 BETA_DISABLED_FEATURES = {
-    'MEDIAINFO_PARSER': 'MediaInfo Parser is a beta feature currently disabled for usage.',
-    'MEDIAINFO_TAGS': 'MediaInfo Tags is a beta feature currently disabled for usage.'
 }
 
 # Client locked settings - loaded from JSON file if available
@@ -190,16 +188,32 @@ def custom_kids_show_layout():
 
 def get_mediainfo_tags():
     """Get mediainfo tags from environment variable and properly clean them"""
-    # Check if this beta feature is disabled
-    if is_beta_feature_disabled('MEDIAINFO_TAGS'):
-        return []
-
     tags_env = os.getenv('MEDIAINFO_TAGS', '')
     if not tags_env:
         return []
 
     tags = re.findall(r'\{([^{}]+)\}', tags_env)
     return [tag.strip() for tag in tags]
+
+def get_sonarr_standard_episode_format():
+    """Get Sonarr standard episode format from environment variable"""
+    return os.getenv('MEDIAINFO_SONARR_STANDARD_EPISODE_FORMAT',
+                    '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}')
+
+def get_sonarr_daily_episode_format():
+    """Get Sonarr daily episode format from environment variable"""
+    return os.getenv('MEDIAINFO_SONARR_DAILY_EPISODE_FORMAT',
+                    '{Series Title} - {Air-Date} - {Episode Title} {Quality Full}')
+
+def get_sonarr_anime_episode_format():
+    """Get Sonarr anime episode format from environment variable"""
+    return os.getenv('MEDIAINFO_SONARR_ANIME_EPISODE_FORMAT',
+                    '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}')
+
+def get_sonarr_season_folder_format():
+    """Get Sonarr season folder format from environment variable"""
+    return os.getenv('MEDIAINFO_SONARR_SEASON_FOLDER_FORMAT',
+                    'Season{season}')
 
 def get_rename_tags():
     """Get rename tags from environment variable and properly clean them"""
@@ -266,10 +280,6 @@ def tmdb_api_language():
 
 def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""
-    # Check if this beta feature is disabled
-    if is_beta_feature_disabled('MEDIAINFO_PARSER'):
-        return False
-
     return os.getenv('MEDIAINFO_PARSER', 'false').lower() == 'true'
 
 def get_max_cores():

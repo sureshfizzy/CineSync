@@ -1,9 +1,9 @@
 import os
 import re
 import requests
+import sys
 from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import extract_resolution_from_filename, clean_query, extract_year, extract_resolution_from_folder
-
 from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.utils.logging_utils import log_message
@@ -13,6 +13,11 @@ from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name
 from MediaHub.processors.db_utils import track_file_failure
+from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
+
+# Add the mediainfo directory to the path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils', 'mediainfo'))
+from sonarr_naming import get_sonarr_episode_filename, get_sonarr_season_folder_name
 
 # Retrieve base_dir from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
@@ -265,7 +270,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
         elif isinstance(result, tuple) and len(result) >= 7:
-            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
+            if len(result) >= 9:
+                # New format with external IDs
+                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id = result
+            else:
+                # Legacy format without external IDs
+                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
+                imdb_id = None
+                tvdb_id = None
             episode_identifier = f"S{season_number}E{episode_number}"
 
             # Get TMDB language as fallback if not available from file metadata
@@ -293,14 +305,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"TMDb could not provide valid show name for: {show_folder} ({year}). Skipping show processing.", level="ERROR")
             return None
 
+        # Store the original proper_show_name with all IDs
+        proper_show_name_with_ids = proper_show_name
+
         if is_tmdb_folder_id_enabled():
             show_folder = proper_show_name
         elif is_imdb_folder_id_enabled():
             show_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
         else:
             show_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
-    else:
-        show_folder = show_folder
 
     show_folder = show_folder.replace('/', '')
 
@@ -444,11 +457,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder)
                 extras_base_dest_path = os.path.join(dest_dir, 'CineSync', 'Shows', show_folder, 'Extras')
 
-        # Use anime season number if available, otherwise use the default season handling
-        if anime_result:
-            season_dest_path = os.path.join(base_dest_path, f"Season {int(anime_result.get('season_number', '01'))}")
+        # Use Sonarr season folder naming if enabled, otherwise use default season handling
+        if mediainfo_parser():
+            show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
+            if anime_result:
+                season_folder_name = get_sonarr_season_folder_name(show_name_for_sonarr, show_name, anime_result.get('season_number', '01'))
+            else:
+                season_folder_name = get_sonarr_season_folder_name(show_name_for_sonarr, show_name, season_number)
+            season_dest_path = os.path.join(base_dest_path, season_folder_name)
         else:
-            season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
+            if anime_result:
+                season_dest_path = os.path.join(base_dest_path, f"Season {int(anime_result.get('season_number', '01'))}")
+            else:
+                season_dest_path = os.path.join(base_dest_path, f"Season {int(season_number)}")
 
     # Function to check if show folder exists in any resolution folder
     def find_show_folder_in_resolution_folders():
@@ -478,51 +499,81 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         dest_file = os.path.join(season_dest_path, new_name)
     else:
         if episode_identifier and rename_enabled and not is_extra:
+            # Get episode name from TMDB if available
+            episode_name = None
             tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
             if tmdb_id_match:
                 show_id = tmdb_id_match.group(1)
                 episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
 
                 if episode_number_match:
-                    episode_number = episode_number_match.group(1)
-                    episode_name, mapped_season, mapped_episode = get_episode_name(show_id, int(season_number), int(episode_number))
-
-                    if episode_name:
-                        base_name = f"{show_name} - {episode_name}".replace(' - -', ' -')
-                        log_message(f"Renaming {file}", level="INFO")
-                    else:
-                        base_name = f"{show_name} - S{season_number}E{episode_number}"
-                else:
-                    base_name = f"{show_name} - {episode_identifier}"
-            else:
-                base_name = f"{show_name} - {episode_identifier}"
-
-            if is_rename_enabled() and get_rename_tags():
-                media_info = extract_media_info(file, keywords, root)
-                details = []
-                release_group = ""
-
-                for tag in get_rename_tags():
-                    tag = tag.strip()
-                    if tag in media_info:
-                        value = media_info[tag]
-
-                        if tag.lower() in ['releasegroup', 'release group']:
-                            release_group = str(value)
+                    episode_num = episode_number_match.group(1)
+                    episode_name_result, mapped_season, mapped_episode = get_episode_name(show_id, int(season_number), int(episode_num))
+                    if episode_name_result:
+                        # Extract just the episode title from the formatted result (remove S01E01 - prefix)
+                        if " - " in episode_name_result:
+                            episode_name = episode_name_result.split(" - ", 1)[1]  # Get everything after first " - "
                         else:
-                            if isinstance(value, list):
-                                formatted_value = '+'.join([str(language).upper() for language in value])
-                                details.append(f"[{formatted_value}]")
-                            else:
-                                details.append(f"[{value}]")
-                if release_group:
-                    details.append(f"-{release_group}")
+                            episode_name = episode_name_result
+                        log_message(f"Found episode name: {episode_name} (from: {episode_name_result})", level="DEBUG")
 
-                new_name = f"{base_name}{''.join(details)}{os.path.splitext(file)[1]}"
+            # Check if MEDIAINFO PARSER is enabled to determine naming strategy
+            if mediainfo_parser():
+                # Determine content type for appropriate naming format
+                content_type = "standard"  # Default
+
+                # Check if it's anime content
+                if is_anime_genre or anime_result:
+                    content_type = "anime"
+                    # Get absolute episode number if available from anime result
+                    absolute_episode = anime_result.get('absolute_episode') if anime_result else None
+                    show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
+                    new_name = get_sonarr_episode_filename(
+                        file, root, show_name_for_sonarr, show_name, season_number,
+                        episode_number, episode_identifier, episode_name,
+                        content_type=content_type, absolute_episode=absolute_episode
+                    )
+                else:
+                    show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
+                    new_name = get_sonarr_episode_filename(
+                        file, root, show_name_for_sonarr, show_name, season_number,
+                        episode_number, episode_identifier, episode_name,
+                        content_type=None
+                    )
             else:
-                new_name = f"{base_name}{os.path.splitext(file)[1]}"
+                if episode_name:
+                    base_name = f"{show_name} - {episode_name}".replace(' - -', ' -')
+                    log_message(f"Renaming {file}", level="INFO")
+                else:
+                    base_name = f"{show_name} - S{season_number}E{episode_number}" if season_number and episode_number else f"{show_name} - {episode_identifier}"
 
-            new_name = re.sub(r'-{2,}', '-', new_name).strip('-')
+                if is_rename_enabled() and get_rename_tags():
+                    media_info = extract_media_info(file, keywords, root)
+                    details = []
+                    release_group = ""
+
+                    for tag in get_rename_tags():
+                        tag = tag.strip()
+                        if tag in media_info:
+                            value = media_info[tag]
+
+                            if tag.lower() in ['releasegroup', 'release group']:
+                                release_group = str(value)
+                            else:
+                                if isinstance(value, list):
+                                    formatted_value = '+'.join([str(language).upper() for language in value])
+                                    details.append(f"[{formatted_value}]")
+                                else:
+                                    details.append(f"[{value}]")
+                    if release_group:
+                        details.append(f"-{release_group}")
+
+                    new_name = f"{base_name}{''.join(details)}{os.path.splitext(file)[1]}"
+                else:
+                    new_name = f"{base_name}{os.path.splitext(file)[1]}"
+
+                new_name = re.sub(r'-{2,}', '-', new_name).strip('-')
+
             dest_file = os.path.join(season_dest_path, new_name)
         else:
             dest_file = os.path.join(season_dest_path, file)
@@ -543,5 +594,5 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     # Return all fields including language and quality
     return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
             clean_name, str(extracted_year) if extracted_year else None,
-            str(episode_number) if episode_number else None, None,
-            1 if is_anime_genre else 0, is_kids_content, language, quality)
+            str(episode_number) if episode_number else None, imdb_id,
+            1 if is_anime_genre else 0, is_kids_content, language, quality, tvdb_id)
