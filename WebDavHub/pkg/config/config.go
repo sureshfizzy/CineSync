@@ -240,9 +240,13 @@ func getConfigDefinitions() []ConfigValue {
 
 		// Renaming Structure Configuration
 		{Key: "RENAME_ENABLED", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Enable or disable file renaming based on TMDb data"},
-		{Key: "MEDIAINFO_PARSER", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Determines if MediaInfo will be used to gather metadata information", Beta: true, Disabled: true},
 		{Key: "RENAME_TAGS", Category: "Renaming Structure Configuration", Type: "array", Required: false, Description: "Optional tags to include in file renaming"},
-		{Key: "MEDIAINFO_TAGS", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Specifies the tags from MediaInfo to be used for renaming", Beta: true, Disabled: true},
+		{Key: "MEDIAINFO_PARSER", Category: "Renaming Structure Configuration", Type: "boolean", Required: false, Description: "Determines if MediaInfo will be used to gather metadata information"},
+		{Key: "MEDIAINFO_RADARR_TAGS", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Specifies the tags from MediaInfo to be used for Radarr movie renaming"},
+		{Key: "MEDIAINFO_SONARR_STANDARD_EPISODE_FORMAT", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Sonarr standard episode format for MediaInfo renaming"},
+		{Key: "MEDIAINFO_SONARR_DAILY_EPISODE_FORMAT", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Sonarr daily episode format for MediaInfo renaming"},
+		{Key: "MEDIAINFO_SONARR_ANIME_EPISODE_FORMAT", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Sonarr anime episode format for MediaInfo renaming"},
+		{Key: "MEDIAINFO_SONARR_SEASON_FOLDER_FORMAT", Category: "Renaming Structure Configuration", Type: "string", Required: false, Description: "Sonarr season folder format for MediaInfo renaming"},
 
 		// System Configuration
 		{Key: "RELATIVE_SYMLINK", Category: "System Configuration", Type: "boolean", Required: false, Description: "Create relative symlinks instead of absolute symlinks"},

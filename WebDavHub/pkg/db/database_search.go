@@ -26,6 +26,8 @@ type DatabaseRecord struct {
 	DestinationPath string `json:"destination_path,omitempty"`
 	BasePath        string `json:"base_path,omitempty"`
 	TmdbID          string `json:"tmdb_id,omitempty"`
+	ImdbID          string `json:"imdb_id,omitempty"`
+	TvdbID          string `json:"tvdb_id,omitempty"`
 	SeasonNumber    string `json:"season_number,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 	FileSize        *int64 `json:"file_size,omitempty"`

@@ -13,6 +13,11 @@ from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_fi
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 from MediaHub.processors.db_utils import track_file_failure
 
+# Add the mediainfo directory to the path
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils', 'mediainfo'))
+from radarr_naming import get_radarr_movie_filename, apply_radarr_movie_tags, get_radarr_movie_folder_name
+
 # Retrieve base_dir and skip patterns from environment variables
 source_dirs = os.getenv('SOURCE_DIR', '').split(',')
 
@@ -332,24 +337,25 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     if is_rename_enabled():
         use_media_parser = mediainfo_parser()
 
-        # Get media info
+        # Get media info and generate filename using appropriate method
         if use_media_parser:
             media_info = get_ffprobe_media_info(os.path.join(root, file))
-            tags_to_use = get_mediainfo_tags()
+            tags_to_use = get_mediainfo_radarr_tags()
+            enhanced_movie_folder = get_radarr_movie_filename(
+                proper_movie_name, year, file, root, media_info
+            ).replace(f" ({year})", "")
         else:
-            # Fall back to filename-based media info extraction
             media_info = extract_media_info(file, keywords)
-            # Include folder-based resolution if not already present
             if resolution and 'Resolution' not in media_info:
                 media_info['Resolution'] = resolution
             tags_to_use = get_rename_tags()
 
-        # Remove ID tag from the movie name and extract ID tag if needed
-        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
-        id_tag = ''
-
-        # Handle ID tags with RENAME_TAGS only (not for MEDIAINFO_TAGS)
+        # Process legacy naming if not using MediaInfo parser
         if not use_media_parser:
+            clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+            id_tag = ''
+
+            # Handle ID tags with RENAME_TAGS
             if 'TMDB' in tags_to_use:
                 id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
                 id_tag = id_tag_match.group(0) if id_tag_match else ''
@@ -357,10 +363,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
                 id_tag = id_tag_match.group(0) if id_tag_match else ''
 
-        # Extract media details with appropriate format based on which tags we're using
-        details_str = ''
-
-        if use_media_parser:
+            # Extract media details with legacy format
+            details_str = ''
             tag_strings = []
             quality_info = ""
             custom_formats = media_info.get('Custom Formats', '')
@@ -392,7 +396,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                         if value:
                             other_tags.append(value)
 
-            # Build the details string with proper ordering - other tags first, then custom formats, then quality
+            # Build the details string with proper ordering
             details_parts = []
 
             # Add regular media info

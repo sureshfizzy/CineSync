@@ -1,6 +1,6 @@
 import React from 'react';
 import { TextField, Switch, FormControlLabel, Select, MenuItem, Chip, Box, Typography, InputAdornment, IconButton, Tooltip, Stack, Alert } from '@mui/material';
-import { Info, Visibility, VisibilityOff, Science, Lock } from '@mui/icons-material';
+import { Info, Visibility, VisibilityOff, Science, Lock, Help } from '@mui/icons-material';
 
 export interface FormFieldProps {
   label: string;
@@ -19,6 +19,8 @@ export interface FormFieldProps {
   disabledReason?: string;
   locked?: boolean;
   lockedBy?: string;
+  showTokenHelper?: boolean;
+  onTokenHelperClick?: () => void;
 }
 
 export const FormField: React.FC<FormFieldProps> = ({
@@ -38,6 +40,8 @@ export const FormField: React.FC<FormFieldProps> = ({
   disabledReason,
   locked = false,
   lockedBy,
+  showTokenHelper = false,
+  onTokenHelperClick,
 }) => {
   const [showPassword, setShowPassword] = React.useState(false);
 
@@ -183,6 +187,28 @@ export const FormField: React.FC<FormFieldProps> = ({
             size="small"
             multiline={multiline}
             rows={rows}
+            InputProps={showTokenHelper ? {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title="Show available tokens" placement="top">
+                    <IconButton
+                      onClick={onTokenHelperClick}
+                      edge="end"
+                      size="small"
+                      sx={{
+                        color: 'primary.main',
+                        '&:hover': {
+                          bgcolor: 'primary.main',
+                          color: 'primary.contrastText',
+                        }
+                      }}
+                    >
+                      <Help />
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            } : undefined}
           />
         );
     }

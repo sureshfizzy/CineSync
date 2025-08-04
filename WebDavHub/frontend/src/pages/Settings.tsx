@@ -8,7 +8,8 @@ import { FormField } from '../components/Settings/FormField';
 import MediaHubService from '../components/Settings/MediaHubService';
 import JobsTable from '../components/Jobs/JobsTable';
 import SpoofingSettings from '../components/spoofing/SpoofingSettings';
-
+import SonarrTokenDialog from '../components/Settings/SonarrTokenDialog';
+import RadarrTokenDialog from '../components/Settings/RadarrTokenDialog';
 
 interface ConfigValue {
   key: string;
@@ -58,6 +59,31 @@ const Settings: React.FC = () => {
     effectiveRootDir: string;
     needsConfiguration: boolean;
   } | null>(null);
+  const [tokenDialog, setTokenDialog] = useState<{
+    open: boolean;
+    fieldKey: string;
+    formatType: 'standard' | 'daily' | 'anime' | 'season';
+    title: string;
+    currentValue: string;
+  }>({
+    open: false,
+    fieldKey: '',
+    formatType: 'standard',
+    title: '',
+    currentValue: '',
+  });
+
+  const [radarrDialog, setRadarrDialog] = useState<{
+    open: boolean;
+    fieldKey: string;
+    title: string;
+    currentValue: string;
+  }>({
+    open: false,
+    fieldKey: '',
+    title: '',
+    currentValue: '',
+  });
 
   useEffect(() => {
     fetchConfig();
@@ -332,6 +358,74 @@ const Settings: React.FC = () => {
     return item.type;
   };
 
+  const shouldShowTokenHelper = (item: ConfigValue): boolean => {
+    return (item.key.includes('MEDIAINFO_SONARR_') && item.key.includes('_FORMAT')) ||
+           item.key === 'MEDIAINFO_RADARR_TAGS';
+  };
+
+  const getTokenFormatType = (fieldKey: string): 'standard' | 'daily' | 'anime' | 'season' => {
+    if (fieldKey.includes('STANDARD_EPISODE')) return 'standard';
+    if (fieldKey.includes('DAILY_EPISODE')) return 'daily';
+    if (fieldKey.includes('ANIME_EPISODE')) return 'anime';
+    if (fieldKey.includes('SEASON_FOLDER')) return 'season';
+    return 'standard';
+  };
+
+  const getTokenDialogTitle = (fieldKey: string): string => {
+    if (fieldKey.includes('STANDARD_EPISODE')) return 'Standard Episode Format';
+    if (fieldKey.includes('DAILY_EPISODE')) return 'Daily Episode Format';
+    if (fieldKey.includes('ANIME_EPISODE')) return 'Anime Episode Format';
+    if (fieldKey.includes('SEASON_FOLDER')) return 'Season Folder Format';
+    return 'Format';
+  };
+
+  const handleTokenHelperClick = (fieldKey: string) => {
+    const currentFieldValue = getFieldValue(config.find(item => item.key === fieldKey)!);
+
+    if (fieldKey === 'MEDIAINFO_RADARR_TAGS') {
+      // Open Radarr dialog for movie tags
+      setRadarrDialog({
+        open: true,
+        fieldKey,
+        title: 'Radarr Movie Tags',
+        currentValue: currentFieldValue,
+      });
+    } else {
+      // Open Sonarr dialog for TV show formats
+      setTokenDialog({
+        open: true,
+        fieldKey,
+        formatType: getTokenFormatType(fieldKey),
+        title: getTokenDialogTitle(fieldKey),
+        currentValue: currentFieldValue,
+      });
+    }
+  };
+
+
+
+  const handleTokenValueChange = (newValue: string) => {
+    // Update the dialog's current value state and apply changes in real-time
+    setTokenDialog(prev => ({ ...prev, currentValue: newValue }));
+    handleFieldChange(tokenDialog.fieldKey, newValue);
+  };
+
+  const handleTokenDialogClose = () => {
+    setTokenDialog(prev => ({ ...prev, open: false }));
+  };
+
+  // Radarr dialog handlers
+
+  const handleRadarrValueChange = (newValue: string) => {
+    // Update the dialog's current value state and apply changes in real-time
+    setRadarrDialog(prev => ({ ...prev, currentValue: newValue }));
+    handleFieldChange(radarrDialog.fieldKey, newValue);
+  };
+
+  const handleRadarrDialogClose = () => {
+    setRadarrDialog(prev => ({ ...prev, open: false }));
+  };
+
   // Define main tabs
   const mainTabs = [
     { name: 'General', icon: <TuneRounded sx={{ fontSize: 28 }} />, color: '#3b82f6' },
@@ -414,6 +508,19 @@ const Settings: React.FC = () => {
         const resolutionStructureOrder = ['MOVIE_RESOLUTION_STRUCTURE', 'SHOW_RESOLUTION_STRUCTURE'];
         const aIndex = resolutionStructureOrder.indexOf(a.key);
         const bIndex = resolutionStructureOrder.indexOf(b.key);
+
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+      }
+
+      // For Renaming Structure Configuration category
+      if (category === 'Renaming Structure Configuration') {
+        const renamingOrder = ['RENAME_ENABLED', 'RENAME_TAGS'];
+        const aIndex = renamingOrder.indexOf(a.key);
+        const bIndex = renamingOrder.indexOf(b.key);
 
         if (aIndex !== -1 && bIndex !== -1) {
           return aIndex - bIndex;
@@ -1153,6 +1260,282 @@ const Settings: React.FC = () => {
         {selectedMainTab === 0 && orderedCategories[selectedTab] && (() => {
           const [currentCategory, items] = orderedCategories[selectedTab];
 
+          // Layout for Renaming Structure Configuration
+          if (currentCategory === 'Renaming Structure Configuration') {
+            const renameEnabledValue = pendingChanges['RENAME_ENABLED'] !== undefined
+              ? pendingChanges['RENAME_ENABLED']
+              : config.find(item => item.key === 'RENAME_ENABLED')?.value || 'false';
+            const isRenameEnabled = renameEnabledValue.toLowerCase() === 'true';
+
+            const mediainfoParserValue = pendingChanges['MEDIAINFO_PARSER'] !== undefined
+              ? pendingChanges['MEDIAINFO_PARSER']
+              : config.find(item => item.key === 'MEDIAINFO_PARSER')?.value || 'false';
+            const isMediainfoParserEnabled = mediainfoParserValue.toLowerCase() === 'true';
+
+            const basicSettings = items.filter(item =>
+              item.key === 'RENAME_ENABLED' || item.key === 'RENAME_TAGS'
+            );
+
+            let advancedSettings = items.filter(item =>
+              item.key !== 'RENAME_ENABLED' && item.key !== 'RENAME_TAGS'
+            );
+
+            if (!isMediainfoParserEnabled) {
+              advancedSettings = advancedSettings.filter(item =>
+                !item.key.includes('MEDIAINFO_SONARR_') && item.key !== 'MEDIAINFO_RADARR_TAGS'
+              );
+            }
+
+            return (
+              <Box>
+                {/* Basic Renaming Settings */}
+                <Grid container spacing={3}>
+                  {basicSettings.map((item) => (
+                    <Grid
+                      key={item.key}
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
+                      <Box
+                        sx={{
+                          p: 3,
+                          bgcolor: 'background.paper',
+                          border: '1px solid',
+                          borderColor: pendingChanges[item.key] !== undefined
+                            ? 'warning.main'
+                            : 'divider',
+                          borderRadius: 3,
+                          transition: 'all 0.2s ease-in-out',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                            transform: 'translateY(-1px)',
+                          },
+                        }}
+                      >
+                        <Stack spacing={2}>
+                          <Box>
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight="600"
+                              sx={{
+                                color: 'text.primary',
+                                mb: 0.5,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {formatFieldLabel(item.key)}
+                              {item.required && (
+                                <Chip
+                                  label="Required"
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                              {pendingChanges[item.key] !== undefined && (
+                                <Chip
+                                  label="Modified"
+                                  size="small"
+                                  color="warning"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mb: 2, lineHeight: 1.4 }}
+                            >
+                              {item.description}
+                            </Typography>
+                          </Box>
+                          <FormField
+                            label=""
+                            value={getFieldValue(item)}
+                            onChange={(value) => handleFieldChange(item.key, value)}
+                            type={getFieldType(item)}
+                            required={item.required}
+                            options={getFieldOptions(item)}
+                            multiline={item.type === 'array' || item.key.includes('TAGS')}
+                            rows={item.type === 'array' ? 2 : 1}
+                            beta={item.beta}
+                            disabled={item.disabled}
+                            disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                            locked={item.locked}
+                            lockedBy={item.lockedBy}
+                          />
+                        </Stack>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+
+                {/* Advanced Settings - Only show when RENAME_ENABLED is true */}
+                {isRenameEnabled && (
+                  <Box sx={{ mt: 4 }}>
+                    <Box
+                      sx={{
+                        p: 3,
+                        bgcolor: alpha(theme.palette.info.main, 0.05),
+                        border: '1px solid',
+                        borderColor: alpha(theme.palette.info.main, 0.2),
+                        borderRadius: 3,
+                        mb: 3,
+                      }}
+                    >
+                      <Typography
+                        variant="h6"
+                        fontWeight="600"
+                        sx={{
+                          color: 'info.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mb: 1,
+                        }}
+                      >
+                        ⚙️ Advanced Renaming Options
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ lineHeight: 1.4 }}
+                      >
+                        Configure MediaInfo parsing and Sonarr-compatible naming formats
+                      </Typography>
+                    </Box>
+
+                    {/* MediaInfo Parser Notice */}
+                    {!isMediainfoParserEnabled && (
+                      <Box
+                        sx={{
+                          p: 3,
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          border: '1px solid',
+                          borderColor: alpha(theme.palette.warning.main, 0.3),
+                          borderRadius: 3,
+                          mb: 3,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          color="warning.main"
+                          sx={{ fontWeight: 600, mb: 1 }}
+                        >
+                          📋 MediaInfo Parser Required
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ lineHeight: 1.4 }}
+                        >
+                          Enable "MediaInfo Parser" above to access Sonarr&Radarr-compatible naming formats and MediaInfo tags.
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {advancedSettings.length > 0 && (
+                    <Grid container spacing={3}>
+                      {advancedSettings.map((item) => (
+                        <Grid
+                          key={item.key}
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
+                          <Box
+                            sx={{
+                              p: 3,
+                              bgcolor: 'background.paper',
+                              border: '1px solid',
+                              borderColor: pendingChanges[item.key] !== undefined
+                                ? 'warning.main'
+                                : 'divider',
+                              borderRadius: 3,
+                              transition: 'all 0.2s ease-in-out',
+                              '&:hover': {
+                                borderColor: 'info.main',
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                transform: 'translateY(-1px)',
+                              },
+                            }}
+                          >
+                            <Stack spacing={2}>
+                              <Box>
+                                <Typography
+                                  variant="subtitle2"
+                                  fontWeight="600"
+                                  sx={{
+                                    color: 'text.primary',
+                                    mb: 0.5,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  {formatFieldLabel(item.key)}
+                                  {item.required && (
+                                    <Chip
+                                      label="Required"
+                                      size="small"
+                                      color="error"
+                                      variant="outlined"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  )}
+                                  {pendingChanges[item.key] !== undefined && (
+                                    <Chip
+                                      label="Modified"
+                                      size="small"
+                                      color="warning"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  )}
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  sx={{ mb: 2, lineHeight: 1.4 }}
+                                >
+                                  {item.description}
+                                </Typography>
+                              </Box>
+                              <FormField
+                                label=""
+                                value={getFieldValue(item)}
+                                onChange={(value) => handleFieldChange(item.key, value)}
+                                type={getFieldType(item)}
+                                required={item.required}
+                                options={getFieldOptions(item)}
+                                multiline={item.type === 'array' || item.key.includes('TAGS')}
+                                rows={item.type === 'array' ? 2 : 1}
+                                beta={item.beta}
+                                disabled={item.disabled}
+                                disabledReason={item.disabled ? "This feature is currently in beta testing and is disabled for usage." : undefined}
+                                locked={item.locked}
+                                lockedBy={item.lockedBy}
+                                showTokenHelper={shouldShowTokenHelper(item)}
+                                onTokenHelperClick={() => handleTokenHelperClick(item.key)}
+                              />
+                            </Stack>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            );
+          }
+
           // Special layout for Resolution Mappings category
           if (currentCategory === 'Resolution Folder Mappings Configuration') {
             // Separate items into movies, shows, and structure settings
@@ -1632,6 +2015,25 @@ const Settings: React.FC = () => {
         confirmText="Save Changes"
         type="info"
         loading={saving}
+      />
+
+      {/* Sonarr Token Dialog */}
+      <SonarrTokenDialog
+        open={tokenDialog.open}
+        onClose={handleTokenDialogClose}
+        formatType={tokenDialog.formatType}
+        title={tokenDialog.title}
+        currentValue={tokenDialog.currentValue}
+        onValueChange={handleTokenValueChange}
+      />
+
+      {/* Radarr Token Dialog */}
+      <RadarrTokenDialog
+        open={radarrDialog.open}
+        onClose={handleRadarrDialogClose}
+        title={radarrDialog.title}
+        currentValue={radarrDialog.currentValue}
+        onValueChange={handleRadarrValueChange}
       />
       {/* Snackbars */}
       <Snackbar
