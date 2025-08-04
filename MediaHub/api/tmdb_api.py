@@ -16,6 +16,7 @@ from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.api.media_cover import process_tmdb_covers
+from MediaHub.utils.file_utils import normalize_unicode_characters
 
 # Thread-safe caches
 _api_cache = {}
@@ -422,6 +423,8 @@ def perform_search(params, url):
         year = params.get('first_air_date_year') or params.get('primary_release_year')
         if isinstance(query, tuple):
             query = query[0]
+
+        query = normalize_unicode_characters(query)
         query = query.lower()
 
         params['query'] = query

@@ -16,6 +16,7 @@ from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.api.media_cover import process_tmdb_covers
+from MediaHub.utils.file_utils import normalize_unicode_characters
 
 _api_cache = {}
 
@@ -541,17 +542,19 @@ def calculate_score(result, query, year=None):
     float: Match score between 0 and 150 (increased to accommodate better exact match bonuses)
     """
     score = 0
-    query = query.lower().strip()
+
+    # Normalize and lowercase the query
+    query = normalize_unicode_characters(query).lower().strip()
 
     # Check if we're dealing with a movie or TV show result
     if 'title' in result:
-        title = result.get('title', '').lower().strip()
-        original_title = result.get('original_title', '').lower().strip()
+        title = normalize_unicode_characters(result.get('title', '')).lower().strip()
+        original_title = normalize_unicode_characters(result.get('original_title', '')).lower().strip()
         release_date = result.get('release_date', '')
         result_year = release_date.split('-')[0] if release_date else None
     else:
-        title = result.get('name', '').lower().strip()
-        original_title = result.get('original_name', '').lower().strip()
+        title = normalize_unicode_characters(result.get('name', '')).lower().strip()
+        original_title = normalize_unicode_characters(result.get('original_name', '')).lower().strip()
         first_air_date = result.get('first_air_date', '')
         result_year = first_air_date.split('-')[0] if first_air_date else None
 
