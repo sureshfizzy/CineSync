@@ -775,6 +775,8 @@ def process_file(args, force=False, batch_apply=False):
             sport_name = sport_round = sport_location = sport_session = sport_venue = sport_date = None
     else:
         show_metadata = None
+        is_sports_content = False
+
         if is_show or is_anime_show:
             metadata_to_pass = None
             if file_result and file_result.get('episode_identifier'):
@@ -827,11 +829,14 @@ def process_file(args, force=False, batch_apply=False):
                 save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
                                   media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
                 return
+
+            show_processed = True
         else:
             # Check for sports content before falling back to movie processing
             is_sports_content = is_sports_file(file)
+            show_processed = False
 
-        if is_sports_content:
+        if not show_processed and is_sports_content:
             log_message(f"No TV show patterns found, detected sports content: {file}", level="INFO")
             sports_metadata = {'is_sports': True}
             result = process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, sports_metadata=sports_metadata, manual_search=manual_search)
@@ -852,7 +857,8 @@ def process_file(args, force=False, batch_apply=False):
                 is_sports_processed = True
             else:
                 log_message(f"Sports processing failed for {file}, falling back to movie processing", level="WARNING")
-                result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
+                # Don't pass TV show TMDB ID to movie processor
+                result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=file_result, manual_search=manual_search)
 
                 # Check if movie processing failed
                 if result is None or result[0] is None:
@@ -867,7 +873,7 @@ def process_file(args, force=False, batch_apply=False):
 
                 # Handle movie processor return format
                 dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
-        else:
+        elif not show_processed:
             # Not sports content, process as movie
             result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
 

@@ -848,7 +848,9 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     new_episode_number = None
 
     if force_extra:
-        is_extra=False
+        # When force_extra is True, ensure content is processed as extra
+        is_extra = True
+        log_message(f"Processing extra content file: {file}", level="INFO")
     elif is_extra:
         log_message(f"Processing extra content file: {file}", level="INFO")
 

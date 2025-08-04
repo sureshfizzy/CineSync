@@ -88,13 +88,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         else:
             log_message(f"Using file-based extraction: {show_name}", level="DEBUG")
     elif force_extra and file_result.get('title', '').strip():
-        if file_result.get('is_extra', False) or not (file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))):
-            folder_result = clean_query(parent_folder_name)
-            show_name = folder_result.get('title', '')
-            log_message(f"using folder-based extraction for extra: {show_name}", level="DEBUG")
-        else:
-            show_name = file_result.get('title', '')
-            log_message(f"using file-based extraction: {show_name}", level="DEBUG")
+        # For extra content, always use folder-based extraction to get the correct show name
+        folder_result = clean_query(parent_folder_name)
+        show_name = folder_result.get('title', '')
+        log_message(f"using folder-based extraction for extra: {show_name}", level="DEBUG")
 
         episode_identifier = file_result.get('episode_identifier')
         if original_season_number is None:
@@ -278,7 +275,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
                 imdb_id = None
                 tvdb_id = None
-            episode_identifier = f"S{season_number}E{episode_number}"
+            # Handle episode identifier for valid season/episode numbers
+            if season_number is not None and episode_number is not None:
+                episode_identifier = f"S{season_number}E{episode_number}"
+            else:
+                episode_identifier = None
 
             # Get TMDB language as fallback if not available from file metadata
             if not language and tmdb_id:
@@ -287,12 +288,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 if show_data:
                     language = show_data.get('original_language')
 
-            if season_number is not None and episode_number is not None:
-                if force_extra:
-                    is_extra = False
-                    create_extras_folder = False
-                    create_season_folder = True
-                elif not is_extra:
+            # Handle extra content logic regardless of season/episode info
+            if force_extra:
+                # For extra content, ensure it's processed as extra regardless of episode info
+                is_extra = True
+                create_extras_folder = True
+                create_season_folder = False
+            elif season_number is not None and episode_number is not None:
+                if not is_extra:
                     create_extras_folder = False
                     create_season_folder = True
         else:
