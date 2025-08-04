@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
-from MediaHub.utils.parser.patterns import FILE_EXTENSION_PATTERNS
+from MediaHub.utils.parser.patterns import FILE_EXTENSION_PATTERNS, SPORTS_PATTERNS, SPORTS_SESSION_PATTERNS
 from MediaHub.utils.parser.parse_year import is_valid_year, extract_year, find_all_years_in_filename, should_include_year_in_title, _determine_year_context
 from MediaHub.utils.parser.utils import clean_title_string
 from MediaHub.utils.parser.parse_anime import is_anime_filename, extract_anime_title
@@ -98,6 +98,19 @@ class MediaMetadata:
     # TV-specific
     season: Optional[int] = None
     episode: Optional[int] = None
+
+    # Sports-specific
+    is_sports: bool = False
+    sport_name: Optional[str] = None
+    sport_year: Optional[int] = None
+    sport_round: Optional[int] = None
+    sport_location: Optional[str] = None
+    sport_session: Optional[str] = None
+    # Detailed F1 information
+    sport_country: Optional[str] = None
+    sport_grand_prix_name: Optional[str] = None
+    sport_venue: Optional[str] = None
+    sport_city: Optional[str] = None
     episode_title: Optional[str] = None
 
     # Content type flags
@@ -161,15 +174,28 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         if re.search(year_pattern, title):
             title = re.sub(year_pattern, '', title).strip()
 
+    # Check for sports content first
+    is_sports, sport_name, sport_year, sport_round, sport_location, sport_session, sport_details = _extract_sports_info_from_parsed(parsed)
+
     # Determine content type
-    is_tv = _is_tv_show(parsed)
-    episode = _extract_episode_from_parsed(parsed)
+    if is_sports:
+        is_tv = False
+        is_movie = False
+        episode = None
+        # Override title with sports-specific title if detected
+        if sport_name:
+            title = sport_name
+        if sport_year and not year:
+            year = sport_year
+    else:
+        is_tv = _is_tv_show(parsed)
+        episode = _extract_episode_from_parsed(parsed)
 
-    # If we found an episode number
-    if episode is not None:
-        is_tv = True
+        # If we found an episode number
+        if episode is not None:
+            is_tv = True
 
-    is_movie = not is_tv and bool(title)
+        is_movie = not is_tv and bool(title)
 
     metadata = MediaMetadata(
         title=title,
@@ -196,6 +222,17 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         is_proper=_extract_proper_flag_from_parsed(parsed),
         container=_extract_container_from_parsed(parsed),
         is_anime=_extract_anime_flag_from_parsed(parsed),
+        is_sports=is_sports,
+        sport_name=sport_name,
+        sport_year=sport_year,
+        sport_round=sport_round,
+        sport_location=sport_location,
+        sport_session=sport_session,
+        # Add detailed F1 information
+        sport_country=sport_details.get('country') if sport_details else None,
+        sport_grand_prix_name=sport_details.get('grand_prix_name') if sport_details else None,
+        sport_venue=sport_details.get('venue') if sport_details else None,
+        sport_city=sport_details.get('city') if sport_details else None,
     )
 
     # Cache the result to avoid redundant parsing
@@ -225,6 +262,138 @@ def _remove_website_patterns(filename: str) -> str:
         return cleaned_filename
 
     return filename
+
+def _normalize_f1_session(session_text):
+    """Normalize F1 session names to standard format"""
+    if not session_text:
+        return None
+
+    session_lower = session_text.lower().replace('.', ' ').replace('_', ' ')
+
+    # Practice sessions
+    if 'practice' in session_lower:
+        if 'one' in session_lower or '1' in session_lower:
+            return 'FP1'
+        elif 'two' in session_lower or '2' in session_lower:
+            return 'FP2'
+        elif 'three' in session_lower or '3' in session_lower:
+            return 'FP3'
+        else:
+            return 'Practice'
+
+    # Qualifying
+    if 'qualifying' in session_lower or 'quali' in session_lower:
+        return 'Qualifying'
+
+    # Sprint sessions
+    if 'sprint' in session_lower:
+        if 'qualifying' in session_lower or 'quali' in session_lower:
+            return 'Sprint Qualifying'
+        else:
+            return 'Sprint'
+
+    # Race
+    if 'race' in session_lower:
+        return 'Race'
+
+    # Warm Up sessions
+    if 'warm' in session_lower and 'up' in session_lower:
+        return 'Warm Up'
+
+    # Return original if no match
+    return session_text
+
+def _extract_sports_info_from_parsed(parsed: ParsedFilename) -> Tuple[bool, Optional[str], Optional[int], Optional[int], Optional[str], Optional[str], Optional[dict]]:
+    """
+    Extract sports information from parsed filename.
+
+    Returns:
+        Tuple of (is_sports, sport_name, year, round_number, location, session_type, detailed_info)
+        detailed_info: For F1, contains country, grand_prix_name, venue, city
+    """
+    filename = parsed.original
+
+    # Check each sports pattern
+    for pattern_name, pattern in SPORTS_PATTERNS.items():
+        match = pattern.search(filename)
+        if match:
+            groups = match.groups()
+
+            if pattern_name == 'formula1':
+                sport_name = 'Formula 1'
+                year = int(groups[1]) if groups[1] else None
+                # Handle both round-based and race name formats
+                # Pattern: (sport, year, round_number, location, race_name)
+                if groups[2]:
+                    round_number = int(groups[2])
+                    raw_location = groups[3] if len(groups) > 3 and groups[3] else None
+                    if raw_location:
+                        location = raw_location.replace('.', ' ').replace('_', ' ').title()
+                elif len(groups) > 4 and groups[4]:
+                    raw_location = groups[4]
+                    location = raw_location.replace('.', ' ').replace('_', ' ').title()
+                    round_number = None
+                else:
+                    round_number = None
+                    location = None
+            elif pattern_name == 'motogp':
+                sport_name = 'MotoGP'
+                year = int(groups[1]) if groups[1] else None
+                round_number = int(groups[2]) if len(groups) > 2 and groups[2] else None
+                location = groups[3] if len(groups) > 3 and groups[3] else None
+            elif pattern_name == 'ufc':
+                sport_name = 'UFC'
+                year = None
+                round_number = int(groups[1]) if groups[1] else None
+                location = groups[2] if len(groups) > 2 and groups[2] else None
+            else:
+                sport_name = groups[0] if groups[0] else 'Unknown Sport'
+                year = int(groups[1]) if len(groups) > 1 and groups[1] and groups[1].isdigit() else None
+                round_number = int(groups[2]) if len(groups) > 2 and groups[2] and groups[2].isdigit() else None
+                location = groups[3] if len(groups) > 3 and groups[3] else None
+
+            # Extract session type
+            session_type = None
+            for session_pattern_name, session_pattern in SPORTS_SESSION_PATTERNS.items():
+                session_match = session_pattern.search(filename)
+                if session_match:
+                    session_type = session_match.group(1)
+                    break
+
+            # Normalize F1 session types
+            if pattern_name == 'formula1' and session_type:
+                session_type = _normalize_f1_session(session_type)
+
+            # Clean up location name
+            if location:
+                location = location.replace('_', ' ').replace('.', ' ').strip()
+                # Remove common technical terms from location
+                location = re.sub(r'\b(FP[1-3]|Qualifying|Race|Sprint|1080p|720p|WEB-DL|x264|x265)\b', '', location, flags=re.IGNORECASE).strip()
+                location = re.sub(r'\s+', ' ', location).strip()
+
+            # For Formula 1, include detailed location information
+            f1_details = None
+            if pattern_name == 'formula1':
+                # Check if we have location info (either from round-based or race name format)
+                if (len(groups) > 4 and groups[4]) or (groups[2] and len(groups) > 3 and groups[3]):
+                    # Determine which location to use
+                    if len(groups) > 4 and groups[4]:
+                        # Race name format: formula1.2025.belgian.grand.prix
+                        raw_location = groups[4]
+                    elif groups[2] and len(groups) > 3 and groups[3]:
+                        # Round-based format: Formula1.2025.Round13.Belgium
+                        raw_location = groups[3]
+                    else:
+                        raw_location = None
+
+                    if raw_location:
+                        location = raw_location.replace('.', ' ').replace('_', ' ').title()
+                        # F1 details will be provided by SportsDB API
+                        f1_details = None
+
+            return True, sport_name, year, round_number, location, session_type, f1_details
+
+    return False, None, None, None, None, None, None
 
 def _parse_filename_structure(filename: str) -> ParsedFilename:
     """

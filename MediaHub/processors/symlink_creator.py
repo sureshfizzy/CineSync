@@ -35,6 +35,9 @@ from MediaHub.utils.file_utils import clean_query, resolve_symlink_to_source
 from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
 from MediaHub.processors.db_utils import track_force_recreation
 from MediaHub.processors.source_files_db import *
+from MediaHub.processors.sports_processor import process_sports
+from MediaHub.utils.file_utils import parse_media_file
+from MediaHub.processors.sports_processor import is_sports_file
 
 log_imported_db = False
 db_initialized = False
@@ -612,8 +615,6 @@ def process_file(args, force=False, batch_apply=False):
                 'parent_parent_dir': os.path.dirname(os.path.dirname(existing_symlink_path))
             }
 
-            # .tmdb file handling removed - using database instead
-
             log_message(f"Force mode: Will process {file} and cleanup old symlink after successful creation", level="INFO")
 
     existing_dest_path = get_destination_path(src_file)
@@ -683,19 +684,17 @@ def process_file(args, force=False, batch_apply=False):
     file_result = None
     parent_result = None
 
+    # Parse file first for TV/Movie detection
+    file_result = clean_query(file)
+
     if force_show:
         is_show = True
         force_extra = True
         log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
-        file_result = clean_query(file)
     elif force_movie:
         is_show = False
         log_message(f"Processing as movie based on Force Movie flag: {file}", level="INFO")
-        file_result = clean_query(file)
     else:
-        # Parse file first
-        file_result = clean_query(file)
-
         # Check if file has episode information (standard TV format or anime episode number)
         has_episode_info = file_result.get('episode_identifier') or file_result.get('episode')
 
@@ -767,76 +766,124 @@ def process_file(args, force=False, batch_apply=False):
                 _api_cache.clear()
             log_message(f"Cleared TMDB cache for independent selection: {file}", level="DEBUG")
 
-    # Determine whether to process as show or movie
-    show_metadata = None
-    if is_show or is_anime_show:
-        metadata_to_pass = None
-        if file_result and file_result.get('episode_identifier'):
-            metadata_to_pass = file_result
-        elif parent_result:
-            metadata_to_pass = parent_result
-
-        if force_extra and metadata_to_pass:
-            if not (metadata_to_pass.get('episode_identifier') or (metadata_to_pass.get('season_number') and metadata_to_pass.get('episode_number'))):
-                metadata_to_pass['is_extra'] = True
-
-        result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass, manual_search=manual_search)
-
-        # Cache the first selection if batch_apply is enabled and this is the first manual selection
-        if batch_apply and not first_selection_cache['is_cached'] and result and len(result) >= 2:
-            result_tmdb_id = result[1]
-            if result_tmdb_id:
-                show_name = metadata_to_pass.get('title') if metadata_to_pass else None
-                cache_first_selection(result_tmdb_id, show_name)
-        if result is None or result[0] is None:
-            log_message(f"Show processing failed for {file}. Skipping symlink creation.", level="WARNING")
-            if not is_file_processed(src_file):
-                reason = "Show processing failed"
-                log_message(f"Adding failed show processing to database: {src_file} (reason: {reason})", level="DEBUG")
-                save_processed_file(src_file, None, tmdb_id, season_number, reason)
-            if force and 'old_symlink_info' in locals():
-                _cleanup_old_symlink(old_symlink_info)
-            return
-
-        # Handle show processor return format
-        if len(result) >= 14:
-            # New format with TVDB ID
-            dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id = result
+    # Check if sports was processed successfully
+    if 'is_sports_processed' in locals() and is_sports_processed and result and result[0]:
+        if len(result) >= 17:
+            dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
         else:
-            # Legacy format without TVDB ID
-            dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
-            tvdb_id = None
-        # Convert string episode number back to int if needed
-        if episode_number_str:
-            try:
-                episode_number = int(episode_number_str)
-            except (ValueError, TypeError):
-                episode_number = None
-
-        # Skip symlink creation for extras unless skipped from env or user explicitly requested force_extra
-        if is_extra and not user_requested_force_extra and is_skip_extras_folder_enabled():
-            log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
-            reason = "Extra/Special Content"
-            log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
-            save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
-            return
+            dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+            sport_name = sport_round = sport_location = sport_session = sport_venue = sport_date = None
     else:
-        result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
+        show_metadata = None
+        if is_show or is_anime_show:
+            metadata_to_pass = None
+            if file_result and file_result.get('episode_identifier'):
+                metadata_to_pass = file_result
+            elif parent_result:
+                metadata_to_pass = parent_result
 
-        # Check if result is None or the first item (dest_file) is None
-        if result is None or result[0] is None:
-            log_message(f"Movie processing failed for {file}. Skipping symlink creation.", level="WARNING")
-            if not is_file_processed(src_file):
-                reason = "Movie processing failed"
-                log_message(f"Adding failed movie processing to database: {src_file} (reason: {reason})", level="DEBUG")
-                save_processed_file(src_file, None, tmdb_id, season_number, reason)
-            if force and 'old_symlink_info' in locals():
-                _cleanup_old_symlink(old_symlink_info)
-            return
+            if force_extra and metadata_to_pass:
+                if not (metadata_to_pass.get('episode_identifier') or (metadata_to_pass.get('season_number') and metadata_to_pass.get('episode_number'))):
+                    metadata_to_pass['is_extra'] = True
 
-        # Handle movie processor return format
-        dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+            result = process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_anime_show=is_anime_show, force_extra=force_extra, file_metadata=metadata_to_pass, manual_search=manual_search)
+
+            # Cache the first selection if batch_apply is enabled and this is the first manual selection
+            if batch_apply and not first_selection_cache['is_cached'] and result and len(result) >= 2:
+                result_tmdb_id = result[1]
+                if result_tmdb_id:
+                    show_name = metadata_to_pass.get('title') if metadata_to_pass else None
+                    cache_first_selection(result_tmdb_id, show_name)
+            if result is None or result[0] is None:
+                log_message(f"Show processing failed for {file}. Skipping symlink creation.", level="WARNING")
+                if not is_file_processed(src_file):
+                    reason = "Show processing failed"
+                    log_message(f"Adding failed show processing to database: {src_file} (reason: {reason})", level="DEBUG")
+                    save_processed_file(src_file, None, tmdb_id, season_number, reason)
+                if force and 'old_symlink_info' in locals():
+                    _cleanup_old_symlink(old_symlink_info)
+                return
+
+            # Handle show processor return format
+            if len(result) >= 14:
+                # New format with TVDB ID
+                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id = result
+            else:
+                # Legacy format without TVDB ID
+                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+                tvdb_id = None
+            # Convert string episode number back to int if needed
+            if episode_number_str:
+                try:
+                    episode_number = int(episode_number_str)
+                except (ValueError, TypeError):
+                    episode_number = None
+
+            # Skip symlink creation for extras unless skipped from env or user explicitly requested force_extra
+            if is_extra and not user_requested_force_extra and is_skip_extras_folder_enabled():
+                log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
+                reason = "Extra/Special Content"
+                log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
+                save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
+                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                return
+        else:
+            # Check for sports content before falling back to movie processing
+            is_sports_content = is_sports_file(file)
+
+        if is_sports_content:
+            log_message(f"No TV show patterns found, detected sports content: {file}", level="INFO")
+            sports_metadata = {'is_sports': True}
+            result = process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, sports_metadata=sports_metadata, manual_search=manual_search)
+
+            if result and result[0]:
+                if len(result) >= 19:
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
+                elif len(result) >= 18:
+                    dest_file, sportsdb_event_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, sportsdb_event_id_dup, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
+                    # Use sportsdb_event_id as tmdb_id for sports content (legacy format)
+                    tmdb_id = sportsdb_event_id
+                    league_id = None
+                elif len(result) >= 17:
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
+                else:
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+                    sport_name = sport_round = sport_location = sport_session = sport_venue = sport_date = None
+                is_sports_processed = True
+            else:
+                log_message(f"Sports processing failed for {file}, falling back to movie processing", level="WARNING")
+                result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
+
+                # Check if movie processing failed
+                if result is None or result[0] is None:
+                    log_message(f"Movie processing failed for {file}. Skipping symlink creation.", level="WARNING")
+                    if not is_file_processed(src_file):
+                        reason = "Movie processing failed"
+                        log_message(f"Adding failed movie processing to database: {src_file} (reason: {reason})", level="DEBUG")
+                        save_processed_file(src_file, None, tmdb_id, season_number, reason)
+                    if force and 'old_symlink_info' in locals():
+                        _cleanup_old_symlink(old_symlink_info)
+                    return
+
+                # Handle movie processor return format
+                dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+        else:
+            # Not sports content, process as movie
+            result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
+
+            # Check if result is None or the first item (dest_file) is None
+            if result is None or result[0] is None:
+                log_message(f"Movie processing failed for {file}. Skipping symlink creation.", level="WARNING")
+                if not is_file_processed(src_file):
+                    reason = "Movie processing failed"
+                    log_message(f"Adding failed movie processing to database: {src_file} (reason: {reason})", level="DEBUG")
+                    save_processed_file(src_file, None, tmdb_id, season_number, reason)
+                if force and 'old_symlink_info' in locals():
+                    _cleanup_old_symlink(old_symlink_info)
+                return
+
+            # Handle movie processor return format
+            dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -852,7 +899,6 @@ def process_file(args, force=False, batch_apply=False):
     # Comprehensive check for existing symlinks in the destination directory
     dest_dir = os.path.dirname(dest_file)
     existing_symlink_for_source = None
-    # normalized_src_file already defined above
 
     if os.path.exists(dest_dir):
         log_message(f"Checking destination directory for existing symlinks: {dest_dir}", level="DEBUG")
@@ -875,13 +921,25 @@ def process_file(args, force=False, batch_apply=False):
     if os.path.islink(dest_file):
         existing_src = normalize_file_path(os.readlink(dest_file))
         if existing_src == normalized_src_file:
-            has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+            # For sports content, check SportsDB event ID instead of TMDB ID
+            if media_type == 'Sports':
+                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)  # tmdb_id contains sportsdb_event_id for sports
+            else:
+                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
 
             if has_complete_metadata:
                 log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
                 log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-                save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
+
+                # Include sports metadata if this is a sports file
+                if media_type == 'Sports' and 'sport_name' in locals():
+                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                      league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+                else:
+                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                      None, None)  # league_id, sportsdb_event_id (None for non-sports content)
                 return
             else:
                 log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -903,13 +961,24 @@ def process_file(args, force=False, batch_apply=False):
                 os.remove(existing_symlink_for_source)
             else:
                 # If rename is not enabled, keep the existing symlink
-                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+                # For sports content, check SportsDB event ID instead of TMDB ID
+                if media_type == 'Sports':
+                    has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)  # tmdb_id contains sportsdb_event_id for sports
+                else:
+                    has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
 
                 if has_complete_metadata:
                     log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
                     log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
-                    save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
+                    # Include sports metadata if this is a sports file
+                    if media_type == 'Sports' and 'sport_name' in locals():
+                        save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
+                                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                          league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+                    else:
+                        save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
+                                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                          None, None)  # league_id, sportsdb_event_id (None for non-sports content)
                     return
                 else:
                     log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
@@ -918,13 +987,18 @@ def process_file(args, force=False, batch_apply=False):
             log_message(f"Force mode: Removing existing symlink {existing_symlink_for_source} to create new one at {dest_file}", level="INFO")
             os.remove(existing_symlink_for_source)
     elif existing_symlink_for_source == dest_file:
-        has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+        # For sports content, check SportsDB event ID instead of TMDB ID
+        if media_type == 'Sports':
+            has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)  # tmdb_id contains sportsdb_event_id for sports
+        else:
+            has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
 
         if has_complete_metadata:
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
+
             save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality)
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, None, None)
             return
         else:
             log_message(f"Symlink exists but metadata incomplete (fallback) - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -984,8 +1058,16 @@ def process_file(args, force=False, batch_apply=False):
             log_message(f"Error sending symlink notification: {e}", level="DEBUG")
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-        save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id)
+
+        # Include sports metadata if this is a sports file
+        if media_type == 'Sports' and 'sport_name' in locals():
+            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                              league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+        else:
+            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                              None, None)  # league_id, sportsdb_event_id (None for non-sports content)
 
         # Handle cache updates for force mode vs normal mode
         if force and 'old_symlink_info' in locals() and old_symlink_info:
@@ -1023,6 +1105,9 @@ def process_file(args, force=False, batch_apply=False):
 
     except FileExistsError:
         log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="DEBUG")
+
+
+
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info, dest_file)
     except OSError as e:

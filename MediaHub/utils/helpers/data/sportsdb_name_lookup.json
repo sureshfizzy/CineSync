@@ -1,0 +1,3956 @@
+{
+  "american major league soccer": {
+    "id": 4346,
+    "name": "American Major League Soccer",
+    "sport": "soccer",
+    "slug": "american-major-league-soccer"
+  },
+  "dutch eredivisie": {
+    "id": 4337,
+    "name": "Dutch Eredivisie",
+    "sport": "soccer",
+    "slug": "dutch-eredivisie"
+  },
+  "english premier league": {
+    "id": 4328,
+    "name": "English Premier League",
+    "sport": "soccer",
+    "slug": "english-premier-league"
+  },
+  "premier league": {
+    "id": 4328,
+    "name": "English Premier League",
+    "sport": "soccer",
+    "slug": "english-premier-league"
+  },
+  "epl": {
+    "id": 4328,
+    "name": "English Premier League",
+    "sport": "soccer",
+    "slug": "english-premier-league"
+  },
+  "german bundesliga": {
+    "id": 4331,
+    "name": "German Bundesliga",
+    "sport": "soccer",
+    "slug": "german-bundesliga"
+  },
+  "italian serie a": {
+    "id": 4332,
+    "name": "Italian Serie A",
+    "sport": "soccer",
+    "slug": "italian-serie-a"
+  },
+  "spanish la liga": {
+    "id": 4335,
+    "name": "Spanish La Liga",
+    "sport": "soccer",
+    "slug": "spanish-la-liga"
+  },
+  "afc challenge league": {
+    "id": 5485,
+    "name": "AFC Challenge League",
+    "sport": "soccer",
+    "slug": "afc-challenge-league"
+  },
+  "albanian superliga": {
+    "id": 4617,
+    "name": "Albanian Superliga",
+    "sport": "soccer",
+    "slug": "albanian-superliga"
+  },
+  "algerian ligue 1": {
+    "id": 4753,
+    "name": "Algerian Ligue 1",
+    "sport": "soccer",
+    "slug": "algerian-ligue-1"
+  },
+  "american nwsl": {
+    "id": 4521,
+    "name": "American NWSL",
+    "sport": "soccer",
+    "slug": "american-nwsl"
+  },
+  "andorran 1a divisió": {
+    "id": 4618,
+    "name": "Andorran 1a Divisió",
+    "sport": "soccer",
+    "slug": "andorran-1a-divisi%c3%b3"
+  },
+  "angolan girabola": {
+    "id": 5229,
+    "name": "Angolan Girabola",
+    "sport": "soccer",
+    "slug": "angolan-girabola"
+  },
+  "argentinian primera division": {
+    "id": 4406,
+    "name": "Argentinian Primera Division",
+    "sport": "soccer",
+    "slug": "argentinian-primera-division"
+  },
+  "armenian premier league": {
+    "id": 4619,
+    "name": "Armenian Premier League",
+    "sport": "soccer",
+    "slug": "armenian-premier-league"
+  },
+  "aruban division di honor": {
+    "id": 5230,
+    "name": "Aruban Division di Honor",
+    "sport": "soccer",
+    "slug": "aruban-division-di-honor"
+  },
+  "australian a-league": {
+    "id": 4356,
+    "name": "Australian A-League",
+    "sport": "soccer",
+    "slug": "australian-a-league"
+  },
+  "australian a-league women": {
+    "id": 4805,
+    "name": "Australian A-League Women",
+    "sport": "soccer",
+    "slug": "australian-a-league-women"
+  },
+  "austrian bundesliga": {
+    "id": 4621,
+    "name": "Austrian Bundesliga",
+    "sport": "soccer",
+    "slug": "austrian-bundesliga"
+  },
+  "azerbaijani premier league": {
+    "id": 4693,
+    "name": "Azerbaijani Premier League",
+    "sport": "soccer",
+    "slug": "azerbaijani-premier-league"
+  },
+  "bahrain premier league": {
+    "id": 4826,
+    "name": "Bahrain Premier League",
+    "sport": "soccer",
+    "slug": "bahrain-premier-league"
+  },
+  "bangladesh premier league": {
+    "id": 5529,
+    "name": "Bangladesh Premier League",
+    "sport": "cricket",
+    "slug": "bangladesh-premier-league"
+  },
+  "belarus vyscha liga": {
+    "id": 4622,
+    "name": "Belarus Vyscha Liga",
+    "sport": "soccer",
+    "slug": "belarus-vyscha-liga"
+  },
+  "belgian pro league": {
+    "id": 4338,
+    "name": "Belgian Pro League",
+    "sport": "soccer",
+    "slug": "belgian-pro-league"
+  },
+  "benin championnat national": {
+    "id": 5231,
+    "name": "Benin Championnat National",
+    "sport": "soccer",
+    "slug": "benin-championnat-national"
+  },
+  "bermuda premier league": {
+    "id": 5232,
+    "name": "Bermuda Premier League",
+    "sport": "soccer",
+    "slug": "bermuda-premier-league"
+  },
+  "bolivian primera división": {
+    "id": 4685,
+    "name": "Bolivian Primera División",
+    "sport": "soccer",
+    "slug": "bolivian-primera-divisi%c3%b3n"
+  },
+  "bosnian premier liga": {
+    "id": 4624,
+    "name": "Bosnian Premier Liga",
+    "sport": "soccer",
+    "slug": "bosnian-premier-liga"
+  },
+  "botswana premier league": {
+    "id": 5233,
+    "name": "Botswana Premier League",
+    "sport": "soccer",
+    "slug": "botswana-premier-league"
+  },
+  "brazil brasileiro women": {
+    "id": 5201,
+    "name": "Brazil Brasileiro Women",
+    "sport": "soccer",
+    "slug": "brazil-brasileiro-women"
+  },
+  "brazilian serie a": {
+    "id": 4351,
+    "name": "Brazilian Serie A",
+    "sport": "soccer",
+    "slug": "brazilian-serie-a"
+  },
+  "bulgarian first league": {
+    "id": 4626,
+    "name": "Bulgarian First League",
+    "sport": "soccer",
+    "slug": "bulgarian-first-league"
+  },
+  "burkina faso 1ere division": {
+    "id": 5234,
+    "name": "Burkina Faso 1ere Division",
+    "sport": "soccer",
+    "slug": "burkina-faso-1ere-division"
+  },
+  "burundi ligue a": {
+    "id": 5235,
+    "name": "Burundi Ligue A",
+    "sport": "soccer",
+    "slug": "burundi-ligue-a"
+  },
+  "cambodia c-league": {
+    "id": 4793,
+    "name": "Cambodia C-League",
+    "sport": "soccer",
+    "slug": "cambodia-c-league"
+  },
+  "canadian northern super league": {
+    "id": 5602,
+    "name": "Canadian Northern Super League",
+    "sport": "soccer",
+    "slug": "canadian-northern-super-league"
+  },
+  "canadian premier league": {
+    "id": 4820,
+    "name": "Canadian Premier League",
+    "sport": "soccer",
+    "slug": "canadian-premier-league"
+  },
+  "chile primera division": {
+    "id": 4627,
+    "name": "Chile Primera Division",
+    "sport": "soccer",
+    "slug": "chile-primera-division"
+  },
+  "chinese super league": {
+    "id": 4359,
+    "name": "Chinese Super League",
+    "sport": "soccer",
+    "slug": "chinese-super-league"
+  },
+  "colombia categoría primera a": {
+    "id": 4497,
+    "name": "Colombia Categoría Primera A",
+    "sport": "soccer",
+    "slug": "colombia-categor%c3%ada-primera-a"
+  },
+  "costa-rica liga fpd": {
+    "id": 4815,
+    "name": "Costa-Rica Liga FPD",
+    "sport": "soccer",
+    "slug": "costa-rica-liga-fpd"
+  },
+  "croatian first football league": {
+    "id": 4629,
+    "name": "Croatian First Football League",
+    "sport": "soccer",
+    "slug": "croatian-first-football-league"
+  },
+  "cypriot first division": {
+    "id": 4630,
+    "name": "Cypriot First Division",
+    "sport": "soccer",
+    "slug": "cypriot-first-division"
+  },
+  "czech first league": {
+    "id": 4631,
+    "name": "Czech First League",
+    "sport": "soccer",
+    "slug": "czech-first-league"
+  },
+  "danish superliga": {
+    "id": 4340,
+    "name": "Danish Superliga",
+    "sport": "soccer",
+    "slug": "danish-superliga"
+  },
+  "denmark elitedivisionen": {
+    "id": 5202,
+    "name": "Denmark Elitedivisionen",
+    "sport": "soccer",
+    "slug": "denmark-elitedivisionen"
+  },
+  "dominican ldf": {
+    "id": 4956,
+    "name": "Dominican LDF",
+    "sport": "soccer",
+    "slug": "dominican-ldf"
+  },
+  "dr congo ligue 1": {
+    "id": 4955,
+    "name": "DR Congo Ligue 1",
+    "sport": "soccer",
+    "slug": "dr-congo-ligue-1"
+  },
+  "ecuadorian serie a": {
+    "id": 4686,
+    "name": "Ecuadorian Serie A",
+    "sport": "soccer",
+    "slug": "ecuadorian-serie-a"
+  },
+  "egyptian premier league": {
+    "id": 4829,
+    "name": "Egyptian Premier League",
+    "sport": "soccer",
+    "slug": "egyptian-premier-league"
+  },
+  "el salvador primera division": {
+    "id": 4816,
+    "name": "El Salvador Primera Division",
+    "sport": "soccer",
+    "slug": "el-salvador-primera-division"
+  },
+  "english womens super league": {
+    "id": 4849,
+    "name": "English Womens Super League",
+    "sport": "soccer",
+    "slug": "english-womens-super-league"
+  },
+  "formula 1": {
+    "id": 4370,
+    "name": "Formula 1",
+    "sport": "motorsport",
+    "slug": "formula-1"
+  },
+  "formula1": {
+    "id": 4370,
+    "name": "Formula 1",
+    "sport": "motorsport",
+    "slug": "formula-1"
+  },
+  "f1": {
+    "id": 4370,
+    "name": "Formula 1",
+    "sport": "motorsport",
+    "slug": "formula-1"
+  },
+  "formula one": {
+    "id": 4370,
+    "name": "Formula 1",
+    "sport": "motorsport",
+    "slug": "formula-1"
+  },
+  "formula e": {
+    "id": 4371,
+    "name": "Formula E",
+    "sport": "motorsport",
+    "slug": "formula-e"
+  },
+  "nascar cup series": {
+    "id": 4393,
+    "name": "NASCAR Cup Series",
+    "sport": "motorsport",
+    "slug": "nascar-cup-series"
+  },
+  "nascar": {
+    "id": 4393,
+    "name": "NASCAR Cup Series",
+    "sport": "motorsport",
+    "slug": "nascar-cup-series"
+  },
+  "ama supercross": {
+    "id": 4468,
+    "name": "AMA Supercross",
+    "sport": "motorsport",
+    "slug": "ama-supercross"
+  },
+  "british gt championship": {
+    "id": 4410,
+    "name": "British GT Championship",
+    "sport": "motorsport",
+    "slug": "british-gt-championship"
+  },
+  "british speedway premiership": {
+    "id": 5600,
+    "name": "British Speedway Premiership",
+    "sport": "motorsport",
+    "slug": "british-speedway-premiership"
+  },
+  "british superbike championship": {
+    "id": 5264,
+    "name": "British Superbike Championship",
+    "sport": "motorsport",
+    "slug": "british-superbike-championship"
+  },
+  "btcc": {
+    "id": 4372,
+    "name": "BTCC",
+    "sport": "motorsport",
+    "slug": "btcc"
+  },
+  "dakar rally": {
+    "id": 4447,
+    "name": "Dakar Rally",
+    "sport": "motorsport",
+    "slug": "dakar-rally"
+  },
+  "dtm": {
+    "id": 4438,
+    "name": "DTM",
+    "sport": "motorsport",
+    "slug": "dtm"
+  },
+  "f1 academy": {
+    "id": 5382,
+    "name": "F1 Academy",
+    "sport": "motorsport",
+    "slug": "f1-academy"
+  },
+  "ferrari challenge north america": {
+    "id": 4872,
+    "name": "Ferrari Challenge North America",
+    "sport": "motorsport",
+    "slug": "ferrari-challenge-north-america"
+  },
+  "fim endurance world championship": {
+    "id": 5491,
+    "name": "FIM Endurance World Championship",
+    "sport": "motorsport",
+    "slug": "fim-endurance-world-championship"
+  },
+  "gt series endurance cup": {
+    "id": 4439,
+    "name": "GT Series Endurance Cup",
+    "sport": "motorsport",
+    "slug": "gt-series-endurance-cup"
+  },
+  "gt world challenge europe sprint cup": {
+    "id": 4440,
+    "name": "GT World Challenge Europe Sprint Cup",
+    "sport": "motorsport",
+    "slug": "gt-world-challenge-europe-sprint-cup"
+  },
+  "imsa pilot challenge": {
+    "id": 4869,
+    "name": "IMSA Pilot Challenge",
+    "sport": "motorsport",
+    "slug": "imsa-pilot-challenge"
+  },
+  "imsa sportscar championship": {
+    "id": 4488,
+    "name": "IMSA SportsCar Championship",
+    "sport": "motorsport",
+    "slug": "imsa-sportscar-championship"
+  },
+  "indycar series": {
+    "id": 4373,
+    "name": "IndyCar Series",
+    "sport": "motorsport",
+    "slug": "indycar-series"
+  },
+  "indycar": {
+    "id": 4373,
+    "name": "IndyCar Series",
+    "sport": "motorsport",
+    "slug": "indycar-series"
+  },
+  "indy car": {
+    "id": 4373,
+    "name": "IndyCar Series",
+    "sport": "motorsport",
+    "slug": "indycar-series"
+  },
+  "isle of man tt": {
+    "id": 4732,
+    "name": "Isle of Man TT",
+    "sport": "motorsport",
+    "slug": "isle-of-man-tt"
+  },
+  "lamborghini super trofeo north america": {
+    "id": 4871,
+    "name": "Lamborghini Super Trofeo North America",
+    "sport": "motorsport",
+    "slug": "lamborghini-super-trofeo-north-america"
+  },
+  "motoe world championship": {
+    "id": 4588,
+    "name": "MotoE World Championship",
+    "sport": "motorsport",
+    "slug": "motoe-world-championship"
+  },
+  "motogp": {
+    "id": 4407,
+    "name": "MotoGP",
+    "sport": "motorsport",
+    "slug": "motogp"
+  },
+  "moto gp": {
+    "id": 4407,
+    "name": "MotoGP",
+    "sport": "motorsport",
+    "slug": "motogp"
+  },
+  "mxgp": {
+    "id": 4587,
+    "name": "MXGP",
+    "sport": "motorsport",
+    "slug": "mxgp"
+  },
+  "nascar arca series": {
+    "id": 5094,
+    "name": "NASCAR ARCA Series",
+    "sport": "motorsport",
+    "slug": "nascar-arca-series"
+  },
+  "nascar truck series": {
+    "id": 5093,
+    "name": "NASCAR Truck Series",
+    "sport": "motorsport",
+    "slug": "nascar-truck-series"
+  },
+  "nascar xfinity series": {
+    "id": 4573,
+    "name": "NASCAR Xfinity Series",
+    "sport": "motorsport",
+    "slug": "nascar-xfinity-series"
+  },
+  "nhra drag racing": {
+    "id": 5309,
+    "name": "NHRA Drag Racing",
+    "sport": "motorsport",
+    "slug": "nhra-drag-racing"
+  },
+  "pro motocross": {
+    "id": 4469,
+    "name": "Pro Motocross",
+    "sport": "motorsport",
+    "slug": "pro-motocross"
+  },
+  "sbk": {
+    "id": 4454,
+    "name": "SBK",
+    "sport": "motorsport",
+    "slug": "sbk"
+  },
+  "super gt series": {
+    "id": 4412,
+    "name": "Super GT series",
+    "sport": "motorsport",
+    "slug": "super-gt-series"
+  },
+  "supermotocross": {
+    "id": 5412,
+    "name": "SuperMotocross",
+    "sport": "motorsport",
+    "slug": "supermotocross"
+  },
+  "v8 supercars": {
+    "id": 4489,
+    "name": "V8 Supercars",
+    "sport": "motorsport",
+    "slug": "v8-supercars"
+  },
+  "wec": {
+    "id": 4413,
+    "name": "WEC",
+    "sport": "motorsport",
+    "slug": "wec"
+  },
+  "world rallycross championship": {
+    "id": 4730,
+    "name": "World Rallycross Championship",
+    "sport": "motorsport",
+    "slug": "world-rallycross-championship"
+  },
+  "wrc": {
+    "id": 4409,
+    "name": "WRC",
+    "sport": "motorsport",
+    "slug": "wrc"
+  },
+  "world rally championship": {
+    "id": 4409,
+    "name": "WRC",
+    "sport": "motorsport",
+    "slug": "wrc"
+  },
+  "formula 2": {
+    "id": 4486,
+    "name": "Formula 2",
+    "sport": "motorsport",
+    "slug": "formula-2"
+  },
+  "moto2": {
+    "id": 4436,
+    "name": "Moto2",
+    "sport": "motorsport",
+    "slug": "moto2"
+  },
+  "formula 3": {
+    "id": 4487,
+    "name": "Formula 3",
+    "sport": "motorsport",
+    "slug": "formula-3"
+  },
+  "moto3": {
+    "id": 4437,
+    "name": "Moto3",
+    "sport": "motorsport",
+    "slug": "moto3"
+  },
+  "_defunct motorsport teams": {
+    "id": 4522,
+    "name": "_Defunct Motorsport Teams",
+    "sport": "motorsport",
+    "slug": "_defunct-motorsport-teams"
+  },
+  "_no league motorsports": {
+    "id": 4835,
+    "name": "_No League Motorsports",
+    "sport": "motorsport",
+    "slug": "_no-league-motorsports"
+  },
+  "electric gt championship": {
+    "id": 4466,
+    "name": "Electric GT Championship",
+    "sport": "motorsport",
+    "slug": "electric-gt-championship"
+  },
+  "extreme e": {
+    "id": 4712,
+    "name": "Extreme E",
+    "sport": "motorsport",
+    "slug": "extreme-e"
+  },
+  "imsa prototype challenge series": {
+    "id": 4868,
+    "name": "IMSA Prototype Challenge Series",
+    "sport": "motorsport",
+    "slug": "imsa-prototype-challenge-series"
+  },
+  "international race of champions": {
+    "id": 4564,
+    "name": "International Race of Champions",
+    "sport": "motorsport",
+    "slug": "international-race-of-champions"
+  },
+  "jaguar i-pace etrophy": {
+    "id": 4848,
+    "name": "Jaguar I-Pace eTrophy",
+    "sport": "motorsport",
+    "slug": "jaguar-i-pace-etrophy"
+  },
+  "porsche gt3 cup challenge": {
+    "id": 4870,
+    "name": "Porsche GT3 Cup Challenge",
+    "sport": "motorsport",
+    "slug": "porsche-gt3-cup-challenge"
+  },
+  "srx": {
+    "id": 5306,
+    "name": "SRX",
+    "sport": "motorsport",
+    "slug": "srx"
+  },
+  "wtcc": {
+    "id": 4411,
+    "name": "WTCC",
+    "sport": "motorsport",
+    "slug": "wtcc"
+  },
+  "wtcr": {
+    "id": 4576,
+    "name": "WTCR",
+    "sport": "motorsport",
+    "slug": "wtcr"
+  },
+  "boxing": {
+    "id": 4445,
+    "name": "Boxing",
+    "sport": "fighting",
+    "slug": "boxing"
+  },
+  "cage warriors": {
+    "id": 4492,
+    "name": "Cage Warriors",
+    "sport": "fighting",
+    "slug": "cage-warriors"
+  },
+  "invicta fc": {
+    "id": 4493,
+    "name": "Invicta FC",
+    "sport": "fighting",
+    "slug": "invicta-fc"
+  },
+  "kok": {
+    "id": 5379,
+    "name": "KOK",
+    "sport": "fighting",
+    "slug": "kok"
+  },
+  "ksw": {
+    "id": 4709,
+    "name": "KSW",
+    "sport": "fighting",
+    "slug": "ksw"
+  },
+  "one": {
+    "id": 4495,
+    "name": "ONE",
+    "sport": "fighting",
+    "slug": "one"
+  },
+  "professional fighters league": {
+    "id": 5430,
+    "name": "Professional Fighters League",
+    "sport": "fighting",
+    "slug": "professional-fighters-league"
+  },
+  "ufc": {
+    "id": 4443,
+    "name": "UFC",
+    "sport": "fighting",
+    "slug": "ufc"
+  },
+  "ultimate fighting championship": {
+    "id": 4443,
+    "name": "UFC",
+    "sport": "fighting",
+    "slug": "ufc"
+  },
+  "wwe": {
+    "id": 4444,
+    "name": "WWE",
+    "sport": "fighting",
+    "slug": "wwe"
+  },
+  "world wrestling entertainment": {
+    "id": 4444,
+    "name": "WWE",
+    "sport": "fighting",
+    "slug": "wwe"
+  },
+  "world wrestling": {
+    "id": 4444,
+    "name": "WWE",
+    "sport": "fighting",
+    "slug": "wwe"
+  },
+  "aaa": {
+    "id": 4593,
+    "name": "AAA",
+    "sport": "fighting",
+    "slug": "aaa"
+  },
+  "aaw pro": {
+    "id": 4978,
+    "name": "AAW Pro",
+    "sport": "fighting",
+    "slug": "aaw-pro"
+  },
+  "aca": {
+    "id": 4494,
+    "name": "ACA",
+    "sport": "fighting",
+    "slug": "aca"
+  },
+  "adcc": {
+    "id": 4852,
+    "name": "ADCC",
+    "sport": "fighting",
+    "slug": "adcc"
+  },
+  "aew": {
+    "id": 4563,
+    "name": "AEW",
+    "sport": "fighting",
+    "slug": "aew"
+  },
+  "all elite wrestling": {
+    "id": 4563,
+    "name": "AEW",
+    "sport": "fighting",
+    "slug": "aew"
+  },
+  "all elite": {
+    "id": 4563,
+    "name": "AEW",
+    "sport": "fighting",
+    "slug": "aew"
+  },
+  "aiw wrestling": {
+    "id": 4987,
+    "name": "AIW Wrestling",
+    "sport": "fighting",
+    "slug": "aiw-wrestling"
+  },
+  "ajpw": {
+    "id": 4594,
+    "name": "AJPW",
+    "sport": "fighting",
+    "slug": "ajpw"
+  },
+  "bjw": {
+    "id": 4609,
+    "name": "BJW",
+    "sport": "fighting",
+    "slug": "bjw"
+  },
+  "bkfc": {
+    "id": 4567,
+    "name": "BKFC",
+    "sport": "fighting",
+    "slug": "bkfc"
+  },
+  "cmll": {
+    "id": 4595,
+    "name": "CMLL",
+    "sport": "fighting",
+    "slug": "cmll"
+  },
+  "combat zone wrestling": {
+    "id": 4989,
+    "name": "Combat Zone Wrestling",
+    "sport": "fighting",
+    "slug": "combat-zone-wrestling"
+  },
+  "commonwealth games boxing": {
+    "id": 5360,
+    "name": "Commonwealth Games Boxing",
+    "sport": "fighting",
+    "slug": "commonwealth-games-boxing"
+  },
+  "commonwealth games judo": {
+    "id": 5368,
+    "name": "Commonwealth Games Judo",
+    "sport": "fighting",
+    "slug": "commonwealth-games-judo"
+  },
+  "commonwealth games wrestling": {
+    "id": 5374,
+    "name": "Commonwealth Games Wrestling",
+    "sport": "fighting",
+    "slug": "commonwealth-games-wrestling"
+  },
+  "ddt pro": {
+    "id": 5289,
+    "name": "DDT Pro",
+    "sport": "fighting",
+    "slug": "ddt-pro"
+  },
+  "deep": {
+    "id": 4602,
+    "name": "DEEP",
+    "sport": "fighting",
+    "slug": "deep"
+  },
+  "dradition": {
+    "id": 4857,
+    "name": "Dradition",
+    "sport": "fighting",
+    "slug": "dradition"
+  },
+  "dragon gate": {
+    "id": 5288,
+    "name": "Dragon Gate",
+    "sport": "fighting",
+    "slug": "dragon-gate"
+  },
+  "freedoms": {
+    "id": 4697,
+    "name": "FREEDOMS",
+    "sport": "fighting",
+    "slug": "freedoms"
+  },
+  "frontier martial-arts wrestling": {
+    "id": 5062,
+    "name": "Frontier Martial-Arts Wrestling",
+    "sport": "fighting",
+    "slug": "frontier-martial-arts-wrestling"
+  },
+  "gatoh move": {
+    "id": 5295,
+    "name": "Gatoh Move",
+    "sport": "fighting",
+    "slug": "gatoh-move"
+  },
+  "gcw": {
+    "id": 4611,
+    "name": "GCW",
+    "sport": "fighting",
+    "slug": "gcw"
+  },
+  "gleat": {
+    "id": 4846,
+    "name": "GLEAT",
+    "sport": "fighting",
+    "slug": "gleat"
+  },
+  "glory": {
+    "id": 4798,
+    "name": "Glory",
+    "sport": "fighting",
+    "slug": "glory"
+  },
+  "house of hardcore": {
+    "id": 5059,
+    "name": "House of Hardcore",
+    "sport": "fighting",
+    "slug": "house-of-hardcore"
+  },
+  "ice ribbon": {
+    "id": 5296,
+    "name": "Ice Ribbon",
+    "sport": "fighting",
+    "slug": "ice-ribbon"
+  },
+  "icw": {
+    "id": 5291,
+    "name": "ICW",
+    "sport": "fighting",
+    "slug": "icw"
+  },
+  "ifl": {
+    "id": 4859,
+    "name": "IFL",
+    "sport": "fighting",
+    "slug": "ifl"
+  },
+  "ilfj": {
+    "id": 4843,
+    "name": "ILFJ",
+    "sport": "fighting",
+    "slug": "ilfj"
+  },
+  "jungle fight": {
+    "id": 4604,
+    "name": "Jungle Fight",
+    "sport": "fighting",
+    "slug": "jungle-fight"
+  },
+  "k-1": {
+    "id": 4605,
+    "name": "K-1",
+    "sport": "fighting",
+    "slug": "k-1"
+  },
+  "kjp": {
+    "id": 4878,
+    "name": "KJP",
+    "sport": "fighting",
+    "slug": "kjp"
+  },
+  "ko": {
+    "id": 4863,
+    "name": "KO",
+    "sport": "fighting",
+    "slug": "ko"
+  },
+  "kopw": {
+    "id": 4855,
+    "name": "KOPW",
+    "sport": "fighting",
+    "slug": "kopw"
+  },
+  "kotc": {
+    "id": 4881,
+    "name": "KOTC",
+    "sport": "fighting",
+    "slug": "kotc"
+  },
+  "legacy fighting alliance": {
+    "id": 5429,
+    "name": "Legacy Fighting Alliance",
+    "sport": "fighting",
+    "slug": "legacy-fighting-alliance"
+  },
+  "michinoku pro": {
+    "id": 4703,
+    "name": "Michinoku Pro",
+    "sport": "fighting",
+    "slug": "michinoku-pro"
+  },
+  "mlw": {
+    "id": 4991,
+    "name": "MLW",
+    "sport": "fighting",
+    "slug": "mlw"
+  },
+  "ncaa fighting": {
+    "id": 4883,
+    "name": "NCAA Fighting",
+    "sport": "fighting",
+    "slug": "ncaa-fighting"
+  },
+  "njpw": {
+    "id": 4449,
+    "name": "NJPW",
+    "sport": "fighting",
+    "slug": "njpw"
+  },
+  "new japan pro wrestling": {
+    "id": 4449,
+    "name": "NJPW",
+    "sport": "fighting",
+    "slug": "njpw"
+  },
+  "new japan": {
+    "id": 4449,
+    "name": "NJPW",
+    "sport": "fighting",
+    "slug": "njpw"
+  },
+  "noah": {
+    "id": 4596,
+    "name": "NOAH",
+    "sport": "fighting",
+    "slug": "noah"
+  },
+  "nwa": {
+    "id": 4453,
+    "name": "NWA",
+    "sport": "fighting",
+    "slug": "nwa"
+  },
+  "korean kbo league": {
+    "id": 4830,
+    "name": "Korean KBO League",
+    "sport": "baseball",
+    "slug": "korean-kbo-league"
+  },
+  "mlb": {
+    "id": 4424,
+    "name": "MLB",
+    "sport": "baseball",
+    "slug": "mlb"
+  },
+  "major league baseball": {
+    "id": 4424,
+    "name": "MLB",
+    "sport": "baseball",
+    "slug": "mlb"
+  },
+  "nippon baseball league": {
+    "id": 4591,
+    "name": "Nippon Baseball League",
+    "sport": "baseball",
+    "slug": "nippon-baseball-league"
+  },
+  "australian baseball league": {
+    "id": 5107,
+    "name": "Australian Baseball League",
+    "sport": "baseball",
+    "slug": "australian-baseball-league"
+  },
+  "chinese professional baseball league": {
+    "id": 5111,
+    "name": "Chinese Professional Baseball League",
+    "sport": "baseball",
+    "slug": "chinese-professional-baseball-league"
+  },
+  "cuban national series": {
+    "id": 5108,
+    "name": "Cuban National Series",
+    "sport": "baseball",
+    "slug": "cuban-national-series"
+  },
+  "honkbal hoofdklasse": {
+    "id": 5110,
+    "name": "Honkbal Hoofdklasse",
+    "sport": "baseball",
+    "slug": "honkbal-hoofdklasse"
+  },
+  "liga mexicana de béisbol": {
+    "id": 5064,
+    "name": "Liga Mexicana de Béisbol",
+    "sport": "baseball",
+    "slug": "liga-mexicana-de-b%c3%a9isbol"
+  },
+  "mexican pacific league": {
+    "id": 5109,
+    "name": "Mexican Pacific League",
+    "sport": "baseball",
+    "slug": "mexican-pacific-league"
+  },
+  "venezuelan professional baseball league": {
+    "id": 5112,
+    "name": "Venezuelan Professional Baseball League",
+    "sport": "baseball",
+    "slug": "venezuelan-professional-baseball-league"
+  },
+  "frontier league": {
+    "id": 4428,
+    "name": "Frontier League",
+    "sport": "baseball",
+    "slug": "frontier-league"
+  },
+  "international league": {
+    "id": 5085,
+    "name": "International League",
+    "sport": "baseball",
+    "slug": "international-league"
+  },
+  "pacific coast league": {
+    "id": 5065,
+    "name": "Pacific Coast League",
+    "sport": "baseball",
+    "slug": "pacific-coast-league"
+  },
+  "baseball all-star games": {
+    "id": 5437,
+    "name": "Baseball All-Star Games",
+    "sport": "baseball",
+    "slug": "baseball-all-star-games"
+  },
+  "olympics baseball": {
+    "id": 5018,
+    "name": "Olympics Baseball",
+    "sport": "baseball",
+    "slug": "olympics-baseball"
+  },
+  "olympics softball": {
+    "id": 5019,
+    "name": "Olympics SoftBall",
+    "sport": "baseball",
+    "slug": "olympics-softball"
+  },
+  "_defunct baseball teams": {
+    "id": 4592,
+    "name": "_Defunct Baseball Teams",
+    "sport": "baseball",
+    "slug": "_defunct-baseball-teams"
+  },
+  "_no league baseball": {
+    "id": 4837,
+    "name": "_No League Baseball",
+    "sport": "baseball",
+    "slug": "_no-league-baseball"
+  },
+  "can-am": {
+    "id": 4427,
+    "name": "Can-Am",
+    "sport": "baseball",
+    "slug": "can-am"
+  },
+  "euroleague basketball": {
+    "id": 4546,
+    "name": "EuroLeague Basketball",
+    "sport": "basketball",
+    "slug": "euroleague-basketball"
+  },
+  "fiba basketball world cup": {
+    "id": 4549,
+    "name": "FIBA Basketball World Cup",
+    "sport": "basketball",
+    "slug": "fiba-basketball-world-cup"
+  },
+  "fiba eurobasket": {
+    "id": 4831,
+    "name": "FIBA EuroBasket",
+    "sport": "basketball",
+    "slug": "fiba-eurobasket"
+  },
+  "nba": {
+    "id": 4387,
+    "name": "NBA",
+    "sport": "basketball",
+    "slug": "nba"
+  },
+  "national basketball association": {
+    "id": 4387,
+    "name": "NBA",
+    "sport": "basketball",
+    "slug": "nba"
+  },
+  "olympics basketball": {
+    "id": 5020,
+    "name": "Olympics Basketball",
+    "sport": "basketball",
+    "slug": "olympics-basketball"
+  },
+  "spanish liga acb": {
+    "id": 4408,
+    "name": "Spanish Liga ACB",
+    "sport": "basketball",
+    "slug": "spanish-liga-acb"
+  },
+  "adriatic aba league": {
+    "id": 4477,
+    "name": "Adriatic ABA League",
+    "sport": "basketball",
+    "slug": "adriatic-aba-league"
+  },
+  "argentine lnb": {
+    "id": 4734,
+    "name": "Argentine LNB",
+    "sport": "basketball",
+    "slug": "argentine-lnb"
+  },
+  "australian nbl": {
+    "id": 4434,
+    "name": "Australian NBL",
+    "sport": "basketball",
+    "slug": "australian-nbl"
+  },
+  "australian wnbl": {
+    "id": 5113,
+    "name": "Australian WNBL",
+    "sport": "basketball",
+    "slug": "australian-wnbl"
+  },
+  "austrian basketball superliga": {
+    "id": 5265,
+    "name": "Austrian Basketball Superliga",
+    "sport": "basketball",
+    "slug": "austrian-basketball-superliga"
+  },
+  "basketball africa league": {
+    "id": 5269,
+    "name": "Basketball Africa League",
+    "sport": "basketball",
+    "slug": "basketball-africa-league"
+  },
+  "basketball champions league asia": {
+    "id": 5633,
+    "name": "Basketball Champions League Asia",
+    "sport": "basketball",
+    "slug": "basketball-champions-league-asia"
+  },
+  "basketball championship of bosnia and herzegovina": {
+    "id": 5130,
+    "name": "Basketball Championship of Bosnia and Herzegovina",
+    "sport": "basketball",
+    "slug": "basketball-championship-of-bosnia-and-herzegovina"
+  },
+  "basketball league of serbia": {
+    "id": 5121,
+    "name": "Basketball League of Serbia",
+    "sport": "basketball",
+    "slug": "basketball-league-of-serbia"
+  },
+  "bnxt league": {
+    "id": 5270,
+    "name": "BNXT League",
+    "sport": "basketball",
+    "slug": "bnxt-league"
+  },
+  "bulgarian nbl": {
+    "id": 5128,
+    "name": "Bulgarian NBL",
+    "sport": "basketball",
+    "slug": "bulgarian-nbl"
+  },
+  "canadian elite basketball league": {
+    "id": 5266,
+    "name": "Canadian Elite Basketball League",
+    "sport": "basketball",
+    "slug": "canadian-elite-basketball-league"
+  },
+  "chinese cba": {
+    "id": 4442,
+    "name": "Chinese CBA",
+    "sport": "basketball",
+    "slug": "chinese-cba"
+  },
+  "chinese wcba": {
+    "id": 5131,
+    "name": "Chinese WCBA",
+    "sport": "basketball",
+    "slug": "chinese-wcba"
+  },
+  "commonwealth games 3x3 basketball": {
+    "id": 5358,
+    "name": "Commonwealth Games 3x3 Basketball",
+    "sport": "basketball",
+    "slug": "commonwealth-games-3x3-basketball"
+  },
+  "cyprus basketball division a": {
+    "id": 5129,
+    "name": "Cyprus Basketball Division A",
+    "sport": "basketball",
+    "slug": "cyprus-basketball-division-a"
+  },
+  "czech nbl": {
+    "id": 5405,
+    "name": "Czech NBL",
+    "sport": "basketball",
+    "slug": "czech-nbl"
+  },
+  "danish basketligaen": {
+    "id": 5114,
+    "name": "Danish Basketligaen",
+    "sport": "basketball",
+    "slug": "danish-basketligaen"
+  },
+  "estonian korvpalli meistriliiga": {
+    "id": 5115,
+    "name": "Estonian Korvpalli Meistriliiga",
+    "sport": "basketball",
+    "slug": "estonian-korvpalli-meistriliiga"
+  },
+  "fiba west asia super league": {
+    "id": 5599,
+    "name": "FIBA West Asia Super League",
+    "sport": "basketball",
+    "slug": "fiba-west-asia-super-league"
+  },
+  "finnish korisliiga": {
+    "id": 5116,
+    "name": "Finnish Korisliiga",
+    "sport": "basketball",
+    "slug": "finnish-korisliiga"
+  },
+  "french lnb": {
+    "id": 4423,
+    "name": "French LNB",
+    "sport": "basketball",
+    "slug": "french-lnb"
+  },
+  "german bbl": {
+    "id": 4441,
+    "name": "German BBL",
+    "sport": "basketball",
+    "slug": "german-bbl"
+  },
+  "greek basket league": {
+    "id": 4452,
+    "name": "Greek Basket League",
+    "sport": "basketball",
+    "slug": "greek-basket-league"
+  },
+  "hungarian nemzeti bajnokság ia": {
+    "id": 4580,
+    "name": "Hungarian Nemzeti Bajnokság IA",
+    "sport": "basketball",
+    "slug": "hungarian-nemzeti-bajnoks%c3%a1g-ia"
+  },
+  "icelandic úrvalsdeild karla": {
+    "id": 5117,
+    "name": "Icelandic Úrvalsdeild karla",
+    "sport": "basketball",
+    "slug": "icelandic-%c3%9arvalsdeild-karla"
+  },
+  "israeli basketball premier league": {
+    "id": 4474,
+    "name": "Israeli Basketball Premier League",
+    "sport": "basketball",
+    "slug": "israeli-basketball-premier-league"
+  },
+  "italian lega basket": {
+    "id": 4433,
+    "name": "Italian Lega Basket",
+    "sport": "basketball",
+    "slug": "italian-lega-basket"
+  },
+  "japanese b1 league": {
+    "id": 4977,
+    "name": "Japanese B1 League",
+    "sport": "basketball",
+    "slug": "japanese-b1-league"
+  },
+  "korean basketball league": {
+    "id": 5124,
+    "name": "Korean Basketball League",
+    "sport": "basketball",
+    "slug": "korean-basketball-league"
+  },
+  "kosovo basketball superleague": {
+    "id": 5118,
+    "name": "Kosovo Basketball Superleague",
+    "sport": "basketball",
+    "slug": "kosovo-basketball-superleague"
+  },
+  "lega basket femminile": {
+    "id": 5596,
+    "name": "Lega Basket Femminile",
+    "sport": "basketball",
+    "slug": "lega-basket-femminile"
+  },
+  "ligue féminine de basketball": {
+    "id": 5623,
+    "name": "Ligue Féminine de Basketball",
+    "sport": "basketball",
+    "slug": "ligue-f%c3%a9minine-de-basketball"
+  },
+  "lithuanian lkl": {
+    "id": 4478,
+    "name": "Lithuanian LKL",
+    "sport": "basketball",
+    "slug": "lithuanian-lkl"
+  },
+  "macedonian superleague": {
+    "id": 5120,
+    "name": "Macedonian Superleague",
+    "sport": "basketball",
+    "slug": "macedonian-superleague"
+  },
+  "mexican lnbp": {
+    "id": 5119,
+    "name": "Mexican LNBP",
+    "sport": "basketball",
+    "slug": "mexican-lnbp"
+  },
+  "ncaa division i basketball mens": {
+    "id": 4607,
+    "name": "NCAA Division I Basketball Mens",
+    "sport": "basketball",
+    "slug": "ncaa-division-i-basketball-mens"
+  },
+  "new zealand nbl": {
+    "id": 5066,
+    "name": "New Zealand NBL",
+    "sport": "basketball",
+    "slug": "new-zealand-nbl"
+  },
+  "polish basketball league": {
+    "id": 4578,
+    "name": "Polish Basketball League",
+    "sport": "basketball",
+    "slug": "polish-basketball-league"
+  },
+  "russian vtb united league": {
+    "id": 4476,
+    "name": "Russian VTB United League",
+    "sport": "basketball",
+    "slug": "russian-vtb-united-league"
+  },
+  "slovak basketball league": {
+    "id": 5122,
+    "name": "Slovak Basketball League",
+    "sport": "basketball",
+    "slug": "slovak-basketball-league"
+  },
+  "slovenian basketball league": {
+    "id": 5123,
+    "name": "Slovenian Basketball League",
+    "sport": "basketball",
+    "slug": "slovenian-basketball-league"
+  },
+  "spanish liga femenina de baloncesto": {
+    "id": 5486,
+    "name": "Spanish Liga Femenina de Baloncesto",
+    "sport": "basketball",
+    "slug": "spanish-liga-femenina-de-baloncesto"
+  },
+  "super league basketball": {
+    "id": 4431,
+    "name": "Super League Basketball",
+    "sport": "basketball",
+    "slug": "super-league-basketball"
+  },
+  "super league basketball women": {
+    "id": 5127,
+    "name": "Super League Basketball Women",
+    "sport": "basketball",
+    "slug": "super-league-basketball-women"
+  },
+  "nfl": {
+    "id": 4391,
+    "name": "NFL",
+    "sport": "american-football",
+    "slug": "nfl"
+  },
+  "national football league": {
+    "id": 4391,
+    "name": "NFL",
+    "sport": "american-football",
+    "slug": "nfl"
+  },
+  "cfl": {
+    "id": 4405,
+    "name": "CFL",
+    "sport": "american-football",
+    "slug": "cfl"
+  },
+  "european league of football": {
+    "id": 5063,
+    "name": "European League of Football",
+    "sport": "american-football",
+    "slug": "european-league-of-football"
+  },
+  "gfl": {
+    "id": 5336,
+    "name": "GFL",
+    "sport": "american-football",
+    "slug": "gfl"
+  },
+  "ncaa division 1": {
+    "id": 4479,
+    "name": "NCAA Division 1",
+    "sport": "american-football",
+    "slug": "ncaa-division-1"
+  },
+  "ufl": {
+    "id": 5434,
+    "name": "UFL",
+    "sport": "american-football",
+    "slug": "ufl"
+  },
+  "arena football league": {
+    "id": 4470,
+    "name": "Arena Football League",
+    "sport": "american-football",
+    "slug": "arena-football-league"
+  },
+  "indoor football league": {
+    "id": 4471,
+    "name": "Indoor Football League",
+    "sport": "american-football",
+    "slug": "indoor-football-league"
+  },
+  "national arena league": {
+    "id": 4473,
+    "name": "National Arena League",
+    "sport": "american-football",
+    "slug": "national-arena-league"
+  },
+  "u sports football league": {
+    "id": 5350,
+    "name": "U Sports Football League",
+    "sport": "american-football",
+    "slug": "u-sports-football-league"
+  },
+  "american football all-star games": {
+    "id": 5154,
+    "name": "American Football All-Star Games",
+    "sport": "american-football",
+    "slug": "american-football-all-star-games"
+  },
+  "_defunct american football teams": {
+    "id": 4809,
+    "name": "_Defunct American Football Teams",
+    "sport": "american-football",
+    "slug": "_defunct-american-football-teams"
+  },
+  "_no league american football": {
+    "id": 4839,
+    "name": "_No League American Football",
+    "sport": "american-football",
+    "slug": "_no-league-american-football"
+  },
+  "aaf": {
+    "id": 4552,
+    "name": "AAF",
+    "sport": "american-football",
+    "slug": "aaf"
+  },
+  "american football league": {
+    "id": 5482,
+    "name": "American Football League",
+    "sport": "american-football",
+    "slug": "american-football-league"
+  },
+  "united states football league": {
+    "id": 5262,
+    "name": "United States Football League",
+    "sport": "american-football",
+    "slug": "united-states-football-league"
+  },
+  "xfl": {
+    "id": 4718,
+    "name": "XFL",
+    "sport": "american-football",
+    "slug": "xfl"
+  },
+  "finnish liiga": {
+    "id": 4931,
+    "name": "Finnish Liiga",
+    "sport": "ice-hockey",
+    "slug": "finnish-liiga"
+  },
+  "german del": {
+    "id": 4925,
+    "name": "German DEL",
+    "sport": "ice-hockey",
+    "slug": "german-del"
+  },
+  "ncaa division 1 ice hockey": {
+    "id": 5346,
+    "name": "NCAA Division 1 Ice Hockey",
+    "sport": "ice-hockey",
+    "slug": "ncaa-division-1-ice-hockey"
+  },
+  "nhl": {
+    "id": 4380,
+    "name": "NHL",
+    "sport": "ice-hockey",
+    "slug": "nhl"
+  },
+  "national hockey league": {
+    "id": 4380,
+    "name": "NHL",
+    "sport": "ice-hockey",
+    "slug": "nhl"
+  },
+  "swedish hockey league": {
+    "id": 4419,
+    "name": "Swedish Hockey League",
+    "sport": "ice-hockey",
+    "slug": "swedish-hockey-league"
+  },
+  "swiss national league": {
+    "id": 4934,
+    "name": "Swiss National League",
+    "sport": "ice-hockey",
+    "slug": "swiss-national-league"
+  },
+  "austrian ice hockey league": {
+    "id": 4933,
+    "name": "Austrian ICE Hockey League",
+    "sport": "ice-hockey",
+    "slug": "austrian-ice-hockey-league"
+  },
+  "belarusian extraleague": {
+    "id": 4924,
+    "name": "Belarusian Extraleague",
+    "sport": "ice-hockey",
+    "slug": "belarusian-extraleague"
+  },
+  "bene league": {
+    "id": 5276,
+    "name": "BeNe League",
+    "sport": "ice-hockey",
+    "slug": "bene-league"
+  },
+  "czech extraliga": {
+    "id": 4923,
+    "name": "Czech Extraliga",
+    "sport": "ice-hockey",
+    "slug": "czech-extraliga"
+  },
+  "danish metal ligaen": {
+    "id": 4930,
+    "name": "Danish Metal Ligaen",
+    "sport": "ice-hockey",
+    "slug": "danish-metal-ligaen"
+  },
+  "estonian hokiliiga": {
+    "id": 5155,
+    "name": "Estonian Hokiliiga",
+    "sport": "ice-hockey",
+    "slug": "estonian-hokiliiga"
+  },
+  "french ligue magnus": {
+    "id": 4927,
+    "name": "French Ligue Magnus",
+    "sport": "ice-hockey",
+    "slug": "french-ligue-magnus"
+  },
+  "hungarian erste liga": {
+    "id": 5156,
+    "name": "Hungarian Erste Liga",
+    "sport": "ice-hockey",
+    "slug": "hungarian-erste-liga"
+  },
+  "international friendlies ice hockey": {
+    "id": 5376,
+    "name": "International Friendlies Ice Hockey",
+    "sport": "ice-hockey",
+    "slug": "international-friendlies-ice-hockey"
+  },
+  "latvian optibet hockey league": {
+    "id": 4921,
+    "name": "Latvian Optibet Hockey League",
+    "sport": "ice-hockey",
+    "slug": "latvian-optibet-hockey-league"
+  },
+  "new zealand ice hockey league": {
+    "id": 5068,
+    "name": "New Zealand Ice Hockey League",
+    "sport": "ice-hockey",
+    "slug": "new-zealand-ice-hockey-league"
+  },
+  "norwegian fjordkraft-ligaen": {
+    "id": 4926,
+    "name": "Norwegian Fjordkraft-ligaen",
+    "sport": "ice-hockey",
+    "slug": "norwegian-fjordkraft-ligaen"
+  },
+  "olympics ice hockey": {
+    "id": 5137,
+    "name": "Olympics Ice Hockey",
+    "sport": "ice-hockey",
+    "slug": "olympics-ice-hockey"
+  },
+  "polish hockey league": {
+    "id": 4928,
+    "name": "Polish Hockey League",
+    "sport": "ice-hockey",
+    "slug": "polish-hockey-league"
+  },
+  "russian khl": {
+    "id": 4920,
+    "name": "Russian KHL",
+    "sport": "ice-hockey",
+    "slug": "russian-khl"
+  },
+  "slovak extraliga": {
+    "id": 4932,
+    "name": "Slovak Extraliga",
+    "sport": "ice-hockey",
+    "slug": "slovak-extraliga"
+  },
+  "swedish womens hockey league": {
+    "id": 5158,
+    "name": "Swedish Womens Hockey League",
+    "sport": "ice-hockey",
+    "slug": "swedish-womens-hockey-league"
+  },
+  "uk elite ice hockey league": {
+    "id": 4381,
+    "name": "UK Elite Ice Hockey League",
+    "sport": "ice-hockey",
+    "slug": "uk-elite-ice-hockey-league"
+  },
+  "ukrainian uhl": {
+    "id": 4922,
+    "name": "Ukrainian UHL",
+    "sport": "ice-hockey",
+    "slug": "ukrainian-uhl"
+  },
+  "american ahl": {
+    "id": 4738,
+    "name": "American AHL",
+    "sport": "ice-hockey",
+    "slug": "american-ahl"
+  },
+  "british nihl": {
+    "id": 5601,
+    "name": "British NIHL",
+    "sport": "ice-hockey",
+    "slug": "british-nihl"
+  },
+  "canadian ohl": {
+    "id": 5159,
+    "name": "Canadian OHL",
+    "sport": "ice-hockey",
+    "slug": "canadian-ohl"
+  },
+  "canadian qmjhl": {
+    "id": 5161,
+    "name": "Canadian QMJHL",
+    "sport": "ice-hockey",
+    "slug": "canadian-qmjhl"
+  },
+  "canadian whl": {
+    "id": 5160,
+    "name": "Canadian WHL",
+    "sport": "ice-hockey",
+    "slug": "canadian-whl"
+  },
+  "finnish mestis": {
+    "id": 4935,
+    "name": "Finnish Mestis",
+    "sport": "ice-hockey",
+    "slug": "finnish-mestis"
+  },
+  "german del 2": {
+    "id": 4936,
+    "name": "German DEL 2",
+    "sport": "ice-hockey",
+    "slug": "german-del-2"
+  },
+  "russian vhl": {
+    "id": 4919,
+    "name": "Russian VHL",
+    "sport": "ice-hockey",
+    "slug": "russian-vhl"
+  },
+  "slovak hockey league": {
+    "id": 4929,
+    "name": "Slovak Hockey League",
+    "sport": "ice-hockey",
+    "slug": "slovak-hockey-league"
+  },
+  "swedish hockey allsvenskan": {
+    "id": 5162,
+    "name": "Swedish Hockey Allsvenskan",
+    "sport": "ice-hockey",
+    "slug": "swedish-hockey-allsvenskan"
+  },
+  "swiss league": {
+    "id": 5163,
+    "name": "Swiss League",
+    "sport": "ice-hockey",
+    "slug": "swiss-league"
+  },
+  "american echl": {
+    "id": 4916,
+    "name": "American ECHL",
+    "sport": "ice-hockey",
+    "slug": "american-echl"
+  },
+  "american fphl": {
+    "id": 4918,
+    "name": "American FPHL",
+    "sport": "ice-hockey",
+    "slug": "american-fphl"
+  },
+  "american sphl": {
+    "id": 5164,
+    "name": "American SPHL",
+    "sport": "ice-hockey",
+    "slug": "american-sphl"
+  },
+  "american ushl": {
+    "id": 4917,
+    "name": "American USHL",
+    "sport": "ice-hockey",
+    "slug": "american-ushl"
+  },
+  "canada cup": {
+    "id": 5510,
+    "name": "Canada Cup",
+    "sport": "ice-hockey",
+    "slug": "canada-cup"
+  },
+  "canadian memorial cup": {
+    "id": 5643,
+    "name": "Canadian Memorial Cup",
+    "sport": "ice-hockey",
+    "slug": "canadian-memorial-cup"
+  },
+  "champions hockey league": {
+    "id": 5277,
+    "name": "Champions Hockey League",
+    "sport": "ice-hockey",
+    "slug": "champions-hockey-league"
+  },
+  "ice hockey all-star games": {
+    "id": 5152,
+    "name": "Ice Hockey All-Star Games",
+    "sport": "ice-hockey",
+    "slug": "ice-hockey-all-star-games"
+  },
+  "mens ice hockey world championships": {
+    "id": 4976,
+    "name": "Mens Ice Hockey World Championships",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships"
+  },
+  "mens ice hockey world championships division ia": {
+    "id": 5467,
+    "name": "Mens Ice Hockey World Championships Division IA",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-ia"
+  },
+  "mens ice hockey world championships division ib": {
+    "id": 5468,
+    "name": "Mens Ice Hockey World Championships Division IB",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-ib"
+  },
+  "mens ice hockey world championships division iia": {
+    "id": 5469,
+    "name": "Mens Ice Hockey World Championships Division IIA",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-iia"
+  },
+  "mens ice hockey world championships division iib": {
+    "id": 5470,
+    "name": "Mens Ice Hockey World Championships Division IIB",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-iib"
+  },
+  "mens ice hockey world championships division iiia": {
+    "id": 5471,
+    "name": "Mens Ice Hockey World Championships Division IIIA",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-iiia"
+  },
+  "mens ice hockey world championships division iiib": {
+    "id": 5472,
+    "name": "Mens Ice Hockey World Championships Division IIIB",
+    "sport": "ice-hockey",
+    "slug": "mens-ice-hockey-world-championships-division-iiib"
+  },
+  "asian tour": {
+    "id": 4762,
+    "name": "Asian Tour",
+    "sport": "golf",
+    "slug": "asian-tour"
+  },
+  "european tour": {
+    "id": 4426,
+    "name": "European Tour",
+    "sport": "golf",
+    "slug": "european-tour"
+  },
+  "japan golf tour": {
+    "id": 4760,
+    "name": "Japan Golf Tour",
+    "sport": "golf",
+    "slug": "japan-golf-tour"
+  },
+  "liv golf": {
+    "id": 5329,
+    "name": "LIV Golf",
+    "sport": "golf",
+    "slug": "liv-golf"
+  },
+  "lpga tour": {
+    "id": 4553,
+    "name": "LPGA Tour",
+    "sport": "golf",
+    "slug": "lpga-tour"
+  },
+  "pga tour": {
+    "id": 4425,
+    "name": "PGA Tour",
+    "sport": "golf",
+    "slug": "pga-tour"
+  },
+  "all thailand golf tour": {
+    "id": 4775,
+    "name": "All Thailand Golf Tour",
+    "sport": "golf",
+    "slug": "all-thailand-golf-tour"
+  },
+  "korean tour": {
+    "id": 4766,
+    "name": "Korean Tour",
+    "sport": "golf",
+    "slug": "korean-tour"
+  },
+  "ladies european tour": {
+    "id": 5438,
+    "name": "Ladies European Tour",
+    "sport": "golf",
+    "slug": "ladies-european-tour"
+  },
+  "pga tour champions": {
+    "id": 4864,
+    "name": "PGA Tour Champions",
+    "sport": "golf",
+    "slug": "pga-tour-champions"
+  },
+  "pga tour of australasia": {
+    "id": 4761,
+    "name": "PGA Tour of Australasia",
+    "sport": "golf",
+    "slug": "pga-tour-of-australasia"
+  },
+  "south african sunshine tour": {
+    "id": 4740,
+    "name": "South African Sunshine Tour",
+    "sport": "golf",
+    "slug": "south-african-sunshine-tour"
+  },
+  "asian development tour": {
+    "id": 4767,
+    "name": "Asian Development Tour",
+    "sport": "golf",
+    "slug": "asian-development-tour"
+  },
+  "big easy tour": {
+    "id": 4773,
+    "name": "Big Easy Tour",
+    "sport": "golf",
+    "slug": "big-easy-tour"
+  },
+  "china tour": {
+    "id": 5557,
+    "name": "China Tour",
+    "sport": "golf",
+    "slug": "china-tour"
+  },
+  "european challenge tour": {
+    "id": 4758,
+    "name": "European Challenge Tour",
+    "sport": "golf",
+    "slug": "european-challenge-tour"
+  },
+  "japan challenge tour": {
+    "id": 4777,
+    "name": "Japan Challenge Tour",
+    "sport": "golf",
+    "slug": "japan-challenge-tour"
+  },
+  "korn ferry tour": {
+    "id": 4763,
+    "name": "Korn Ferry Tour",
+    "sport": "golf",
+    "slug": "korn-ferry-tour"
+  },
+  "professional golf tour of india": {
+    "id": 4776,
+    "name": "Professional Golf Tour of India",
+    "sport": "golf",
+    "slug": "professional-golf-tour-of-india"
+  },
+  "alps tour": {
+    "id": 4768,
+    "name": "Alps Tour",
+    "sport": "golf",
+    "slug": "alps-tour"
+  },
+  "nordic golf league": {
+    "id": 4769,
+    "name": "Nordic Golf League",
+    "sport": "golf",
+    "slug": "nordic-golf-league"
+  },
+  "pga tour americas": {
+    "id": 5556,
+    "name": "PGA Tour Americas",
+    "sport": "golf",
+    "slug": "pga-tour-americas"
+  },
+  "progolf tour": {
+    "id": 4771,
+    "name": "ProGolf Tour",
+    "sport": "golf",
+    "slug": "progolf-tour"
+  },
+  "olympics golf": {
+    "id": 5032,
+    "name": "Olympics Golf",
+    "sport": "golf",
+    "slug": "olympics-golf"
+  },
+  "_defunct golf teams": {
+    "id": 5591,
+    "name": "_Defunct Golf Teams",
+    "sport": "golf",
+    "slug": "_defunct-golf-teams"
+  },
+  "mena golf tour": {
+    "id": 4772,
+    "name": "MENA Golf Tour",
+    "sport": "golf",
+    "slug": "mena-golf-tour"
+  },
+  "pga europro tour": {
+    "id": 4770,
+    "name": "PGA EuroPro Tour",
+    "sport": "golf",
+    "slug": "pga-europro-tour"
+  },
+  "pga tour canada": {
+    "id": 4765,
+    "name": "PGA Tour Canada",
+    "sport": "golf",
+    "slug": "pga-tour-canada"
+  },
+  "pga tour china": {
+    "id": 4774,
+    "name": "PGA Tour China",
+    "sport": "golf",
+    "slug": "pga-tour-china"
+  },
+  "pga tour latinoamérica": {
+    "id": 4764,
+    "name": "PGA Tour Latinoamérica",
+    "sport": "golf",
+    "slug": "pga-tour-latinoam%c3%a9rica"
+  },
+  "australian national rugby league": {
+    "id": 4416,
+    "name": "Australian National Rugby League",
+    "sport": "rugby",
+    "slug": "australian-national-rugby-league"
+  },
+  "english premiership rugby": {
+    "id": 4414,
+    "name": "English Premiership Rugby",
+    "sport": "rugby",
+    "slug": "english-premiership-rugby"
+  },
+  "english rugby league super league": {
+    "id": 4415,
+    "name": "English Rugby League Super League",
+    "sport": "rugby",
+    "slug": "english-rugby-league-super-league"
+  },
+  "french top 14": {
+    "id": 4430,
+    "name": "French Top 14",
+    "sport": "rugby",
+    "slug": "french-top-14"
+  },
+  "super rugby": {
+    "id": 4551,
+    "name": "Super Rugby",
+    "sport": "rugby",
+    "slug": "super-rugby"
+  },
+  "united rugby championship": {
+    "id": 4446,
+    "name": "United Rugby Championship",
+    "sport": "rugby",
+    "slug": "united-rugby-championship"
+  },
+  "commonwealth games 7s rugby": {
+    "id": 5370,
+    "name": "Commonwealth Games 7s Rugby",
+    "sport": "rugby",
+    "slug": "commonwealth-games-7s-rugby"
+  },
+  "currie cup": {
+    "id": 5069,
+    "name": "Currie Cup",
+    "sport": "rugby",
+    "slug": "currie-cup"
+  },
+  "english premier 15s": {
+    "id": 5166,
+    "name": "English Premier 15s",
+    "sport": "rugby",
+    "slug": "english-premier-15s"
+  },
+  "japan rugby league one": {
+    "id": 5167,
+    "name": "Japan Rugby League One",
+    "sport": "rugby",
+    "slug": "japan-rugby-league-one"
+  },
+  "major league rugby": {
+    "id": 5070,
+    "name": "Major League Rugby",
+    "sport": "rugby",
+    "slug": "major-league-rugby"
+  },
+  "romanian superliga": {
+    "id": 5168,
+    "name": "Romanian SuperLiga",
+    "sport": "rugby",
+    "slug": "romanian-superliga"
+  },
+  "rugby union club friendlies": {
+    "id": 5480,
+    "name": "Rugby Union Club Friendlies",
+    "sport": "rugby",
+    "slug": "rugby-union-club-friendlies"
+  },
+  "rugby union international friendlies": {
+    "id": 5479,
+    "name": "Rugby Union International Friendlies",
+    "sport": "rugby",
+    "slug": "rugby-union-international-friendlies"
+  },
+  "spanish división de honor": {
+    "id": 5170,
+    "name": "Spanish División de Honor",
+    "sport": "rugby",
+    "slug": "spanish-divisi%c3%b3n-de-honor"
+  },
+  "super liga americana": {
+    "id": 5169,
+    "name": "Super Liga Americana",
+    "sport": "rugby",
+    "slug": "super-liga-americana"
+  },
+  "urba top 13": {
+    "id": 5165,
+    "name": "URBA Top 13",
+    "sport": "rugby",
+    "slug": "urba-top-13"
+  },
+  "australian shute shield": {
+    "id": 5171,
+    "name": "Australian Shute Shield",
+    "sport": "rugby",
+    "slug": "australian-shute-shield"
+  },
+  "english rfl championship": {
+    "id": 4589,
+    "name": "English RFL Championship",
+    "sport": "rugby",
+    "slug": "english-rfl-championship"
+  },
+  "english rfu championship": {
+    "id": 4722,
+    "name": "English RFU Championship",
+    "sport": "rugby",
+    "slug": "english-rfu-championship"
+  },
+  "french pro d2": {
+    "id": 5172,
+    "name": "French Pro D2",
+    "sport": "rugby",
+    "slug": "french-pro-d2"
+  },
+  "japanese league one d2": {
+    "id": 5559,
+    "name": "Japanese League One D2",
+    "sport": "rugby",
+    "slug": "japanese-league-one-d2"
+  },
+  "new zealand national provincial championship": {
+    "id": 5278,
+    "name": "New Zealand National Provincial Championship",
+    "sport": "rugby",
+    "slug": "new-zealand-national-provincial-championship"
+  },
+  "scottish premiership": {
+    "id": 5173,
+    "name": "Scottish Premiership",
+    "sport": "rugby",
+    "slug": "scottish-premiership"
+  },
+  "french nationale": {
+    "id": 5558,
+    "name": "French Nationale",
+    "sport": "rugby",
+    "slug": "french-nationale"
+  },
+  "japanese league one d3": {
+    "id": 5560,
+    "name": "Japanese League One D3",
+    "sport": "rugby",
+    "slug": "japanese-league-one-d3"
+  },
+  "autumn nations cup": {
+    "id": 4984,
+    "name": "Autumn Nations Cup",
+    "sport": "rugby",
+    "slug": "autumn-nations-cup"
+  },
+  "british and irish lions tours": {
+    "id": 5512,
+    "name": "British and Irish Lions Tours",
+    "sport": "rugby",
+    "slug": "british-and-irish-lions-tours"
+  },
+  "european rugby challenge cup": {
+    "id": 5418,
+    "name": "European Rugby Challenge Cup",
+    "sport": "rugby",
+    "slug": "european-rugby-challenge-cup"
+  },
+  "european rugby champions cup": {
+    "id": 4550,
+    "name": "European Rugby Champions Cup",
+    "sport": "rugby",
+    "slug": "european-rugby-champions-cup"
+  },
+  "olympics 7s rugby": {
+    "id": 5037,
+    "name": "Olympics 7s Rugby",
+    "sport": "rugby",
+    "slug": "olympics-7s-rugby"
+  },
+  "pacific nations cup": {
+    "id": 4985,
+    "name": "Pacific Nations Cup",
+    "sport": "rugby",
+    "slug": "pacific-nations-cup"
+  },
+  "rugby championship": {
+    "id": 4986,
+    "name": "Rugby Championship",
+    "sport": "rugby",
+    "slug": "rugby-championship"
+  },
+  "rugby europe championship": {
+    "id": 4983,
+    "name": "Rugby Europe Championship",
+    "sport": "rugby",
+    "slug": "rugby-europe-championship"
+  },
+  "rugby world cup": {
+    "id": 4574,
+    "name": "Rugby World Cup",
+    "sport": "rugby",
+    "slug": "rugby-world-cup"
+  },
+  "six nations championship": {
+    "id": 4714,
+    "name": "Six Nations Championship",
+    "sport": "rugby",
+    "slug": "six-nations-championship"
+  },
+  "six nations under 20s championship": {
+    "id": 5082,
+    "name": "Six Nations Under 20s Championship",
+    "sport": "rugby",
+    "slug": "six-nations-under-20s-championship"
+  },
+  "six nations women": {
+    "id": 5563,
+    "name": "Six Nations Women",
+    "sport": "rugby",
+    "slug": "six-nations-women"
+  },
+  "_defunct rugby teams": {
+    "id": 5562,
+    "name": "_Defunct Rugby Teams",
+    "sport": "rugby",
+    "slug": "_defunct-rugby-teams"
+  },
+  "_no league rugby": {
+    "id": 5447,
+    "name": "_No League Rugby",
+    "sport": "rugby",
+    "slug": "_no-league-rugby"
+  },
+  "australian national rugby championship": {
+    "id": 4417,
+    "name": "Australian National Rugby Championship",
+    "sport": "rugby",
+    "slug": "australian-national-rugby-championship"
+  },
+  "north american rugby league": {
+    "id": 4981,
+    "name": "North American Rugby League",
+    "sport": "rugby",
+    "slug": "north-american-rugby-league"
+  },
+  "atp world tour": {
+    "id": 4464,
+    "name": "ATP World Tour",
+    "sport": "tennis",
+    "slug": "atp-world-tour"
+  },
+  "wta tour": {
+    "id": 4517,
+    "name": "WTA Tour",
+    "sport": "tennis",
+    "slug": "wta-tour"
+  },
+  "davis cup": {
+    "id": 5347,
+    "name": "Davis Cup",
+    "sport": "tennis",
+    "slug": "davis-cup"
+  },
+  "fed cup": {
+    "id": 5348,
+    "name": "Fed Cup",
+    "sport": "tennis",
+    "slug": "fed-cup"
+  },
+  "hopman cup": {
+    "id": 5349,
+    "name": "Hopman Cup",
+    "sport": "tennis",
+    "slug": "hopman-cup"
+  },
+  "laver cup": {
+    "id": 4581,
+    "name": "Laver Cup",
+    "sport": "tennis",
+    "slug": "laver-cup"
+  },
+  "olympics tennis": {
+    "id": 5040,
+    "name": "Olympics Tennis",
+    "sport": "tennis",
+    "slug": "olympics-tennis"
+  },
+  "_defunct tennis teams": {
+    "id": 5592,
+    "name": "_Defunct Tennis Teams",
+    "sport": "tennis",
+    "slug": "_defunct-tennis-teams"
+  },
+  "australian big bash league": {
+    "id": 4461,
+    "name": "Australian Big Bash League",
+    "sport": "cricket",
+    "slug": "australian-big-bash-league"
+  },
+  "english t20 blast": {
+    "id": 4463,
+    "name": "English t20 Blast",
+    "sport": "cricket",
+    "slug": "english-t20-blast"
+  },
+  "indian premier league": {
+    "id": 4460,
+    "name": "Indian Premier League",
+    "sport": "cricket",
+    "slug": "indian-premier-league"
+  },
+  "caribbean premier league": {
+    "id": 5176,
+    "name": "Caribbean Premier League",
+    "sport": "cricket",
+    "slug": "caribbean-premier-league"
+  },
+  "commonwealth games cricket": {
+    "id": 5361,
+    "name": "Commonwealth Games Cricket",
+    "sport": "cricket",
+    "slug": "commonwealth-games-cricket"
+  },
+  "english county championship division 1": {
+    "id": 4458,
+    "name": "English County Championship Division 1",
+    "sport": "cricket",
+    "slug": "english-county-championship-division-1"
+  },
+  "international league t20": {
+    "id": 5490,
+    "name": "International League T20",
+    "sport": "cricket",
+    "slug": "international-league-t20"
+  },
+  "international test match series": {
+    "id": 4844,
+    "name": "International Test Match Series",
+    "sport": "cricket",
+    "slug": "international-test-match-series"
+  },
+  "lanka premier league": {
+    "id": 5175,
+    "name": "Lanka Premier League",
+    "sport": "cricket",
+    "slug": "lanka-premier-league"
+  },
+  "major league cricket": {
+    "id": 5401,
+    "name": "Major League Cricket",
+    "sport": "cricket",
+    "slug": "major-league-cricket"
+  },
+  "nepal premier league": {
+    "id": 5533,
+    "name": "Nepal Premier League",
+    "sport": "cricket",
+    "slug": "nepal-premier-league"
+  },
+  "new zealand super smash": {
+    "id": 5174,
+    "name": "New Zealand Super Smash",
+    "sport": "cricket",
+    "slug": "new-zealand-super-smash"
+  },
+  "one day international series": {
+    "id": 4801,
+    "name": "One Day International Series",
+    "sport": "cricket",
+    "slug": "one-day-international-series"
+  },
+  "pakistan super league": {
+    "id": 5067,
+    "name": "Pakistan Super League",
+    "sport": "cricket",
+    "slug": "pakistan-super-league"
+  },
+  "sa20": {
+    "id": 5532,
+    "name": "SA20",
+    "sport": "cricket",
+    "slug": "sa20"
+  },
+  "sheffield shield": {
+    "id": 5530,
+    "name": "Sheffield Shield",
+    "sport": "cricket",
+    "slug": "sheffield-shield"
+  },
+  "shpageeza cricket league": {
+    "id": 5534,
+    "name": "Shpageeza Cricket League",
+    "sport": "cricket",
+    "slug": "shpageeza-cricket-league"
+  },
+  "south african t20 challenge": {
+    "id": 4462,
+    "name": "South African T20 Challenge",
+    "sport": "cricket",
+    "slug": "south-african-t20-challenge"
+  },
+  "the hundred": {
+    "id": 5177,
+    "name": "The Hundred",
+    "sport": "cricket",
+    "slug": "the-hundred"
+  },
+  "twenty20 international series": {
+    "id": 4979,
+    "name": "Twenty20 International Series",
+    "sport": "cricket",
+    "slug": "twenty20-international-series"
+  },
+  "zimbabwean domestic twenty20": {
+    "id": 5535,
+    "name": "Zimbabwean Domestic Twenty20",
+    "sport": "cricket",
+    "slug": "zimbabwean-domestic-twenty20"
+  },
+  "english county championship division 2": {
+    "id": 4459,
+    "name": "English County Championship Division 2",
+    "sport": "cricket",
+    "slug": "english-county-championship-division-2"
+  },
+  "cricket ireland inter-provincial t20 trophy": {
+    "id": 5606,
+    "name": "Cricket Ireland Inter-Provincial T20 Trophy",
+    "sport": "cricket",
+    "slug": "cricket-ireland-inter-provincial-t20-trophy"
+  },
+  "cricket world cup": {
+    "id": 4575,
+    "name": "Cricket World Cup",
+    "sport": "cricket",
+    "slug": "cricket-world-cup"
+  },
+  "global super league": {
+    "id": 5531,
+    "name": "Global Super League",
+    "sport": "cricket",
+    "slug": "global-super-league"
+  },
+  "icc champions trophy": {
+    "id": 5587,
+    "name": "ICC Champions Trophy",
+    "sport": "cricket",
+    "slug": "icc-champions-trophy"
+  },
+  "icc mens t20 world cup": {
+    "id": 5103,
+    "name": "ICC Mens T20 World Cup",
+    "sport": "cricket",
+    "slug": "icc-mens-t20-world-cup"
+  },
+  "icc womens t20 world cup": {
+    "id": 5104,
+    "name": "ICC Womens T20 World Cup",
+    "sport": "cricket",
+    "slug": "icc-womens-t20-world-cup"
+  },
+  "icc world test championship": {
+    "id": 5100,
+    "name": "ICC World Test Championship",
+    "sport": "cricket",
+    "slug": "icc-world-test-championship"
+  },
+  "womens cricket world cup": {
+    "id": 5102,
+    "name": "Womens Cricket World Cup",
+    "sport": "cricket",
+    "slug": "womens-cricket-world-cup"
+  },
+  "_defunct cricket teams": {
+    "id": 4808,
+    "name": "_Defunct Cricket Teams",
+    "sport": "cricket",
+    "slug": "_defunct-cricket-teams"
+  },
+  "_no league cricket": {
+    "id": 4841,
+    "name": "_No League Cricket",
+    "sport": "cricket",
+    "slug": "_no-league-cricket"
+  },
+  "uci world tour": {
+    "id": 4465,
+    "name": "UCI World Tour",
+    "sport": "cycling",
+    "slug": "uci-world-tour"
+  },
+  "commonwealth games mountain bike": {
+    "id": 5362,
+    "name": "Commonwealth Games Mountain Bike",
+    "sport": "cycling",
+    "slug": "commonwealth-games-mountain-bike"
+  },
+  "commonwealth games road cycling": {
+    "id": 5363,
+    "name": "Commonwealth Games Road Cycling",
+    "sport": "cycling",
+    "slug": "commonwealth-games-road-cycling"
+  },
+  "commonwealth games track cycling": {
+    "id": 5364,
+    "name": "Commonwealth Games Track Cycling",
+    "sport": "cycling",
+    "slug": "commonwealth-games-track-cycling"
+  },
+  "uci womens world tour": {
+    "id": 5312,
+    "name": "UCI Womens World Tour",
+    "sport": "cycling",
+    "slug": "uci-womens-world-tour"
+  },
+  "uci proseries": {
+    "id": 5330,
+    "name": "UCI ProSeries",
+    "sport": "cycling",
+    "slug": "uci-proseries"
+  },
+  "uci africa tour": {
+    "id": 5331,
+    "name": "UCI Africa Tour",
+    "sport": "cycling",
+    "slug": "uci-africa-tour"
+  },
+  "uci america tour": {
+    "id": 5332,
+    "name": "UCI America Tour",
+    "sport": "cycling",
+    "slug": "uci-america-tour"
+  },
+  "uci asia tour": {
+    "id": 5333,
+    "name": "UCI Asia Tour",
+    "sport": "cycling",
+    "slug": "uci-asia-tour"
+  },
+  "uci europe tour": {
+    "id": 5334,
+    "name": "UCI Europe Tour",
+    "sport": "cycling",
+    "slug": "uci-europe-tour"
+  },
+  "uci oceania tour": {
+    "id": 5335,
+    "name": "UCI Oceania Tour",
+    "sport": "cycling",
+    "slug": "uci-oceania-tour"
+  },
+  "olympics mountain bike": {
+    "id": 5022,
+    "name": "Olympics Mountain Bike",
+    "sport": "cycling",
+    "slug": "olympics-mountain-bike"
+  },
+  "olympics road cycling": {
+    "id": 5025,
+    "name": "Olympics Road Cycling",
+    "sport": "cycling",
+    "slug": "olympics-road-cycling"
+  },
+  "olympics track cycling": {
+    "id": 5026,
+    "name": "Olympics Track Cycling",
+    "sport": "cycling",
+    "slug": "olympics-track-cycling"
+  },
+  "_defunct cycling teams": {
+    "id": 4851,
+    "name": "_Defunct Cycling Teams",
+    "sport": "cycling",
+    "slug": "_defunct-cycling-teams"
+  },
+  "warning": {
+    "id": 5448,
+    "name": "Warning",
+    "sport": "cycling",
+    "slug": "_no-league-cycling"
+  },
+  "afl womens": {
+    "id": 5311,
+    "name": "AFL Womens",
+    "sport": "australian-football",
+    "slug": "afl-womens"
+  },
+  "australian afl": {
+    "id": 4456,
+    "name": "Australian AFL",
+    "sport": "australian-football",
+    "slug": "australian-afl"
+  },
+  "_defunct australian football teams": {
+    "id": 5451,
+    "name": "_Defunct Australian Football Teams",
+    "sport": "australian-football",
+    "slug": "_defunct-australian-football-teams"
+  },
+  "_no league australian football": {
+    "id": 5449,
+    "name": "_No League Australian Football",
+    "sport": "australian-football",
+    "slug": "_no-league-australian-football"
+  },
+  "blast premier": {
+    "id": 5426,
+    "name": "Blast Premier",
+    "sport": "esports",
+    "slug": "blast-premier"
+  },
+  "call of duty league": {
+    "id": 4715,
+    "name": "Call of Duty League",
+    "sport": "esports",
+    "slug": "call-of-duty-league"
+  },
+  "esl pro league": {
+    "id": 5425,
+    "name": "ESL Pro League",
+    "sport": "esports",
+    "slug": "esl-pro-league"
+  },
+  "league of legends emea championship": {
+    "id": 4530,
+    "name": "League of Legends EMEA Championship",
+    "sport": "esports",
+    "slug": "league-of-legends-emea-championship"
+  },
+  "league of legends pro league": {
+    "id": 4528,
+    "name": "League of Legends Pro League",
+    "sport": "esports",
+    "slug": "league-of-legends-pro-league"
+  },
+  "league of the americas": {
+    "id": 5631,
+    "name": "League of The Americas",
+    "sport": "esports",
+    "slug": "league-of-the-americas"
+  },
+  "apex legends global series": {
+    "id": 5423,
+    "name": "Apex Legends Global Series",
+    "sport": "esports",
+    "slug": "apex-legends-global-series"
+  },
+  "enascar iracing series": {
+    "id": 4874,
+    "name": "eNASCAR iRacing Series",
+    "sport": "esports",
+    "slug": "enascar-iracing-series"
+  },
+  "esl one": {
+    "id": 5446,
+    "name": "ESL One",
+    "sport": "esports",
+    "slug": "esl-one"
+  },
+  "fc pro world championship": {
+    "id": 5427,
+    "name": "FC Pro World Championship",
+    "sport": "esports",
+    "slug": "fc-pro-world-championship"
+  },
+  "fifa eworld cup series": {
+    "id": 4568,
+    "name": "FIFA eWorld Cup Series",
+    "sport": "esports",
+    "slug": "fifa-eworld-cup-series"
+  },
+  "fortnite": {
+    "id": 4515,
+    "name": "Fortnite",
+    "sport": "esports",
+    "slug": "fortnite"
+  },
+  "halo championship series": {
+    "id": 5424,
+    "name": "Halo Championship Series",
+    "sport": "esports",
+    "slug": "halo-championship-series"
+  },
+  "league of legends champions korea": {
+    "id": 4529,
+    "name": "League of Legends Champions Korea",
+    "sport": "esports",
+    "slug": "league-of-legends-champions-korea"
+  },
+  "league of legends pacific championship series": {
+    "id": 4532,
+    "name": "League of Legends Pacific Championship Series",
+    "sport": "esports",
+    "slug": "league-of-legends-pacific-championship-series"
+  },
+  "rocket league championship series": {
+    "id": 5421,
+    "name": "Rocket League Championship Series",
+    "sport": "esports",
+    "slug": "rocket-league-championship-series"
+  },
+  "valorant champions tour": {
+    "id": 5422,
+    "name": "Valorant Champions Tour",
+    "sport": "esports",
+    "slug": "valorant-champions-tour"
+  },
+  "league of legends world championship": {
+    "id": 4514,
+    "name": "League of Legends World Championship",
+    "sport": "esports",
+    "slug": "league-of-legends-world-championship"
+  },
+  "call of duty world league": {
+    "id": 5450,
+    "name": "Call of Duty World League",
+    "sport": "esports",
+    "slug": "_no-league-esports"
+  },
+  "league of legends championship series": {
+    "id": 4531,
+    "name": "League of Legends Championship Series",
+    "sport": "esports",
+    "slug": "league-of-legends-championship-series"
+  },
+  "overwatch league": {
+    "id": 4717,
+    "name": "Overwatch League",
+    "sport": "esports",
+    "slug": "overwatch-league"
+  },
+  "cev challenge cup": {
+    "id": 5614,
+    "name": "CEV Challenge Cup",
+    "sport": "volleyball",
+    "slug": "cev-challenge-cup"
+  },
+  "cev champions league": {
+    "id": 5616,
+    "name": "CEV Champions League",
+    "sport": "volleyball",
+    "slug": "cev-champions-league"
+  },
+  "cev cup": {
+    "id": 5615,
+    "name": "CEV Cup",
+    "sport": "volleyball",
+    "slug": "cev-cup"
+  },
+  "commonwealth games beach volleyball": {
+    "id": 5359,
+    "name": "Commonwealth Games Beach Volleyball",
+    "sport": "volleyball",
+    "slug": "commonwealth-games-beach-volleyball"
+  },
+  "fivb volleyball mens world championship": {
+    "id": 5344,
+    "name": "FIVB Volleyball Mens World Championship",
+    "sport": "volleyball",
+    "slug": "fivb-volleyball-mens-world-championship"
+  },
+  "fivb volleyball womens world championship": {
+    "id": 5345,
+    "name": "FIVB Volleyball Womens World Championship",
+    "sport": "volleyball",
+    "slug": "fivb-volleyball-womens-world-championship"
+  },
+  "french ligue a mens volleyball": {
+    "id": 4582,
+    "name": "French Ligue A Mens Volleyball",
+    "sport": "volleyball",
+    "slug": "french-ligue-a-mens-volleyball"
+  },
+  "french ligue a womens volleyball": {
+    "id": 4583,
+    "name": "French Ligue A Womens Volleyball",
+    "sport": "volleyball",
+    "slug": "french-ligue-a-womens-volleyball"
+  },
+  "german 1. bundesliga": {
+    "id": 5618,
+    "name": "German 1. Bundesliga",
+    "sport": "volleyball",
+    "slug": "german-1.-bundesliga"
+  },
+  "greek a1 ethniki": {
+    "id": 4542,
+    "name": "Greek A1 Ethniki",
+    "sport": "volleyball",
+    "slug": "greek-a1-ethniki"
+  },
+  "italian volleyball league": {
+    "id": 4544,
+    "name": "Italian Volleyball League",
+    "sport": "volleyball",
+    "slug": "italian-volleyball-league"
+  },
+  "italian womens volleyball league": {
+    "id": 4584,
+    "name": "Italian Womens Volleyball League",
+    "sport": "volleyball",
+    "slug": "italian-womens-volleyball-league"
+  },
+  "mens challenger cup": {
+    "id": 5609,
+    "name": "Mens Challenger Cup",
+    "sport": "volleyball",
+    "slug": "mens-challenger-cup"
+  },
+  "mens european volleyball championship": {
+    "id": 5613,
+    "name": "Mens European Volleyball Championship",
+    "sport": "volleyball",
+    "slug": "mens-european-volleyball-championship"
+  },
+  "league incomplete": {
+    "id": 5495,
+    "name": "League Incomplete",
+    "sport": "weightlifting",
+    "slug": "_no-league-weightlifting"
+  },
+  "polish plusliga": {
+    "id": 5619,
+    "name": "Polish PlusLiga",
+    "sport": "volleyball",
+    "slug": "polish-plusliga"
+  },
+  "russian volleyball super league": {
+    "id": 4545,
+    "name": "Russian Volleyball Super League",
+    "sport": "volleyball",
+    "slug": "russian-volleyball-super-league"
+  },
+  "turkish volleyball league": {
+    "id": 4543,
+    "name": "Turkish Volleyball League",
+    "sport": "volleyball",
+    "slug": "turkish-volleyball-league"
+  },
+  "volleyliga belgium": {
+    "id": 5617,
+    "name": "Volleyliga Belgium",
+    "sport": "volleyball",
+    "slug": "volleyliga-belgium"
+  },
+  "womens challenger cup": {
+    "id": 5608,
+    "name": "Womens Challenger Cup",
+    "sport": "volleyball",
+    "slug": "womens-challenger-cup"
+  },
+  "womens european volleyball championship": {
+    "id": 5612,
+    "name": "Womens European Volleyball Championship",
+    "sport": "volleyball",
+    "slug": "womens-european-volleyball-championship"
+  },
+  "fivb volleyball mens nations league": {
+    "id": 5083,
+    "name": "FIVB Volleyball Mens Nations League",
+    "sport": "volleyball",
+    "slug": "fivb-volleyball-mens-nations-league"
+  },
+  "fivb volleyball womens nations league": {
+    "id": 5084,
+    "name": "FIVB Volleyball Womens Nations League",
+    "sport": "volleyball",
+    "slug": "fivb-volleyball-womens-nations-league"
+  },
+  "olympics beach volleyball": {
+    "id": 5041,
+    "name": "Olympics Beach Volleyball",
+    "sport": "volleyball",
+    "slug": "olympics-beach-volleyball"
+  },
+  "olympics volleyball": {
+    "id": 5042,
+    "name": "Olympics Volleyball",
+    "sport": "volleyball",
+    "slug": "olympics-volleyball"
+  },
+  "olympics volleyball women": {
+    "id": 5411,
+    "name": "Olympics Volleyball Women",
+    "sport": "volleyball",
+    "slug": "olympics-volleyball-women"
+  },
+  "australian super netball league": {
+    "id": 4540,
+    "name": "Australian Super Netball League",
+    "sport": "netball",
+    "slug": "australian-super-netball-league"
+  },
+  "commonwealth games netball": {
+    "id": 5369,
+    "name": "Commonwealth Games Netball",
+    "sport": "netball",
+    "slug": "commonwealth-games-netball"
+  },
+  "new zealand netball league": {
+    "id": 4538,
+    "name": "New Zealand Netball League",
+    "sport": "netball",
+    "slug": "new-zealand-netball-league"
+  },
+  "uk netball superleague": {
+    "id": 4539,
+    "name": "UK Netball Superleague",
+    "sport": "netball",
+    "slug": "uk-netball-superleague"
+  },
+  "_defunct netball teams": {
+    "id": 4541,
+    "name": "_Defunct Netball Teams",
+    "sport": "netball",
+    "slug": "_defunct-netball-teams"
+  },
+  "_no league netball": {
+    "id": 4842,
+    "name": "_No League Netball",
+    "sport": "netball",
+    "slug": "_no-league-netball"
+  },
+  "danish mens handball league": {
+    "id": 5135,
+    "name": "Danish Mens Handball League",
+    "sport": "handball",
+    "slug": "danish-mens-handball-league"
+  },
+  "french lnh division 1": {
+    "id": 4536,
+    "name": "French LNH Division 1",
+    "sport": "handball",
+    "slug": "french-lnh-division-1"
+  },
+  "german handball-bundesliga": {
+    "id": 4533,
+    "name": "German Handball-Bundesliga",
+    "sport": "handball",
+    "slug": "german-handball-bundesliga"
+  },
+  "hungarian nemzeti bajnokság i": {
+    "id": 4535,
+    "name": "Hungarian Nemzeti Bajnokság I",
+    "sport": "handball",
+    "slug": "hungarian-nemzeti-bajnoks%c3%a1g-i"
+  },
+  "international friendlies handball": {
+    "id": 5483,
+    "name": "International Friendlies Handball",
+    "sport": "handball",
+    "slug": "international-friendlies-handball"
+  },
+  "international friendlies handball women": {
+    "id": 5484,
+    "name": "International Friendlies Handball Women",
+    "sport": "handball",
+    "slug": "international-friendlies-handball-women"
+  },
+  "polish handball superliga": {
+    "id": 4537,
+    "name": "Polish Handball Superliga",
+    "sport": "handball",
+    "slug": "polish-handball-superliga"
+  },
+  "spanish liga asobal": {
+    "id": 4534,
+    "name": "Spanish Liga ASOBAL",
+    "sport": "handball",
+    "slug": "spanish-liga-asobal"
+  },
+  "swedish handbollsligan": {
+    "id": 5136,
+    "name": "Swedish Handbollsligan",
+    "sport": "handball",
+    "slug": "swedish-handbollsligan"
+  },
+  "ehf champions league": {
+    "id": 4980,
+    "name": "EHF Champions League",
+    "sport": "handball",
+    "slug": "ehf-champions-league"
+  },
+  "ehf euro cup": {
+    "id": 5594,
+    "name": "EHF Euro Cup",
+    "sport": "handball",
+    "slug": "ehf-euro-cup"
+  },
+  "ehf european league": {
+    "id": 5275,
+    "name": "EHF European League",
+    "sport": "handball",
+    "slug": "ehf-european-league"
+  },
+  "european mens handball championship": {
+    "id": 4894,
+    "name": "European Mens Handball Championship",
+    "sport": "handball",
+    "slug": "european-mens-handball-championship"
+  },
+  "european womens handball championship": {
+    "id": 4893,
+    "name": "European Womens Handball Championship",
+    "sport": "handball",
+    "slug": "european-womens-handball-championship"
+  },
+  "olympics handball": {
+    "id": 5035,
+    "name": "Olympics Handball",
+    "sport": "handball",
+    "slug": "olympics-handball"
+  },
+  "olympics handball women": {
+    "id": 5476,
+    "name": "Olympics Handball Women",
+    "sport": "handball",
+    "slug": "olympics-handball-women"
+  },
+  "womens ehf champions league": {
+    "id": 5274,
+    "name": "Womens EHF Champions League",
+    "sport": "handball",
+    "slug": "womens-ehf-champions-league"
+  },
+  "world mens handball championship": {
+    "id": 4895,
+    "name": "World Mens Handball Championship",
+    "sport": "handball",
+    "slug": "world-mens-handball-championship"
+  },
+  "world womens handball championship": {
+    "id": 4896,
+    "name": "World Womens Handball Championship",
+    "sport": "handball",
+    "slug": "world-womens-handball-championship"
+  },
+  "_no league": {
+    "id": 5497,
+    "name": "_No League",
+    "sport": "handball",
+    "slug": "_no-league"
+  },
+  "world snooker": {
+    "id": 4555,
+    "name": "World Snooker",
+    "sport": "snooker",
+    "slug": "world-snooker"
+  },
+  "_defunct snooker teams": {
+    "id": 5589,
+    "name": "_Defunct Snooker Teams",
+    "sport": "snooker",
+    "slug": "_defunct-snooker-teams"
+  },
+  "euro hockey league": {
+    "id": 4559,
+    "name": "Euro Hockey League",
+    "sport": "field-hockey",
+    "slug": "euro-hockey-league"
+  },
+  "commonwealth games field hockey": {
+    "id": 5367,
+    "name": "Commonwealth Games Field Hockey",
+    "sport": "field-hockey",
+    "slug": "commonwealth-games-field-hockey"
+  },
+  "mens fih pro league": {
+    "id": 4558,
+    "name": "Mens FIH Pro League",
+    "sport": "field-hockey",
+    "slug": "mens-fih-pro-league"
+  },
+  "fih nations cup": {
+    "id": 5645,
+    "name": "FIH Nations Cup",
+    "sport": "field-hockey",
+    "slug": "fih-nations-cup"
+  },
+  "hockey world cup": {
+    "id": 4560,
+    "name": "Hockey World Cup",
+    "sport": "field-hockey",
+    "slug": "hockey-world-cup"
+  },
+  "olympics field hockey": {
+    "id": 4585,
+    "name": "Olympics Field Hockey",
+    "sport": "field-hockey",
+    "slug": "olympics-field-hockey"
+  },
+  "olympics field hockey women": {
+    "id": 5477,
+    "name": "Olympics Field Hockey Women",
+    "sport": "field-hockey",
+    "slug": "olympics-field-hockey-women"
+  },
+  "pdc darts": {
+    "id": 4554,
+    "name": "PDC Darts",
+    "sport": "darts",
+    "slug": "pdc-darts"
+  },
+  "_defunct darts teams": {
+    "id": 5588,
+    "name": "_Defunct Darts Teams",
+    "sport": "darts",
+    "slug": "_defunct-darts-teams"
+  },
+  "bdo darts": {
+    "id": 4561,
+    "name": "BDO Darts",
+    "sport": "darts",
+    "slug": "bdo-darts"
+  },
+  "diamond league": {
+    "id": 5282,
+    "name": "Diamond League",
+    "sport": "athletics",
+    "slug": "diamond-league"
+  },
+  "olympics athletics": {
+    "id": 4994,
+    "name": "Olympics Athletics",
+    "sport": "athletics",
+    "slug": "olympics-athletics"
+  },
+  "world athletics championships": {
+    "id": 5007,
+    "name": "World Athletics Championships",
+    "sport": "athletics",
+    "slug": "world-athletics-championships"
+  },
+  "grand slam track": {
+    "id": 5644,
+    "name": "Grand Slam Track",
+    "sport": "athletics",
+    "slug": "grand-slam-track"
+  },
+  "world athletics continental tour gold": {
+    "id": 5302,
+    "name": "World Athletics Continental Tour Gold",
+    "sport": "athletics",
+    "slug": "world-athletics-continental-tour-gold"
+  },
+  "world athletics indoor championships": {
+    "id": 5283,
+    "name": "World Athletics Indoor Championships",
+    "sport": "athletics",
+    "slug": "world-athletics-indoor-championships"
+  },
+  "world athletics relays": {
+    "id": 5305,
+    "name": "World Athletics Relays",
+    "sport": "athletics",
+    "slug": "world-athletics-relays"
+  },
+  "world athletics road races platinum": {
+    "id": 5443,
+    "name": "World Athletics Road Races Platinum",
+    "sport": "athletics",
+    "slug": "world-athletics-road-races-platinum"
+  },
+  "asian athletics championships": {
+    "id": 5343,
+    "name": "Asian Athletics Championships",
+    "sport": "athletics",
+    "slug": "asian-athletics-championships"
+  },
+  "asian games athletics": {
+    "id": 5287,
+    "name": "Asian Games Athletics",
+    "sport": "athletics",
+    "slug": "asian-games-athletics"
+  },
+  "commonwealth games athletics": {
+    "id": 5008,
+    "name": "Commonwealth Games Athletics",
+    "sport": "athletics",
+    "slug": "commonwealth-games-athletics"
+  },
+  "european athletics championships": {
+    "id": 5285,
+    "name": "European Athletics Championships",
+    "sport": "athletics",
+    "slug": "european-athletics-championships"
+  },
+  "european athletics indoor championships": {
+    "id": 5286,
+    "name": "European Athletics Indoor Championships",
+    "sport": "athletics",
+    "slug": "european-athletics-indoor-championships"
+  },
+  "pan american games athletics": {
+    "id": 5284,
+    "name": "Pan American Games Athletics",
+    "sport": "athletics",
+    "slug": "pan-american-games-athletics"
+  },
+  "world athletics continental tour silver": {
+    "id": 5303,
+    "name": "World Athletics Continental Tour Silver",
+    "sport": "athletics",
+    "slug": "world-athletics-continental-tour-silver"
+  },
+  "world athletics road races elite": {
+    "id": 5445,
+    "name": "World Athletics Road Races Elite",
+    "sport": "athletics",
+    "slug": "world-athletics-road-races-elite"
+  },
+  "world athletics road races gold": {
+    "id": 5442,
+    "name": "World Athletics Road Races Gold",
+    "sport": "athletics",
+    "slug": "world-athletics-road-races-gold"
+  },
+  "world athletics continental tour bronze": {
+    "id": 5304,
+    "name": "World Athletics Continental Tour Bronze",
+    "sport": "athletics",
+    "slug": "world-athletics-continental-tour-bronze"
+  },
+  "world athletics road races label": {
+    "id": 5444,
+    "name": "World Athletics Road Races Label",
+    "sport": "athletics",
+    "slug": "world-athletics-road-races-label"
+  },
+  "_defunct athletics teams": {
+    "id": 5307,
+    "name": "_Defunct Athletics Teams",
+    "sport": "athletics",
+    "slug": "_defunct-athletics-teams"
+  },
+  "bwf world tour": {
+    "id": 5646,
+    "name": "BWF World Tour",
+    "sport": "badminton",
+    "slug": "bwf-world-tour"
+  },
+  "commonwealth games badminton": {
+    "id": 5357,
+    "name": "Commonwealth Games Badminton",
+    "sport": "badminton",
+    "slug": "commonwealth-games-badminton"
+  },
+  "olympics badminton": {
+    "id": 4996,
+    "name": "Olympics Badminton",
+    "sport": "badminton",
+    "slug": "olympics-badminton"
+  },
+  "olympics climbing": {
+    "id": 4997,
+    "name": "Olympics Climbing",
+    "sport": "climbing",
+    "slug": "olympics-climbing"
+  },
+  "olympics equestrian": {
+    "id": 4998,
+    "name": "Olympics Equestrian",
+    "sport": "equestrian",
+    "slug": "olympics-equestrian"
+  },
+  "commonwealth games artistic gymnastics": {
+    "id": 5365,
+    "name": "Commonwealth Games Artistic Gymnastics",
+    "sport": "gymnastics",
+    "slug": "commonwealth-games-artistic-gymnastics"
+  },
+  "commonwealth games rhythmic gymnastics": {
+    "id": 5366,
+    "name": "Commonwealth Games Rhythmic Gymnastics",
+    "sport": "gymnastics",
+    "slug": "commonwealth-games-rhythmic-gymnastics"
+  },
+  "olympics artistic gymnastics": {
+    "id": 5033,
+    "name": "Olympics Artistic Gymnastics",
+    "sport": "gymnastics",
+    "slug": "olympics-artistic-gymnastics"
+  },
+  "olympics rhythmic gymnastics": {
+    "id": 5034,
+    "name": "Olympics Rhythmic Gymnastics",
+    "sport": "gymnastics",
+    "slug": "olympics-rhythmic-gymnastics"
+  },
+  "olympics trampoline": {
+    "id": 5052,
+    "name": "Olympics Trampoline",
+    "sport": "gymnastics",
+    "slug": "olympics-trampoline"
+  },
+  "_no league gymnastics": {
+    "id": 5537,
+    "name": "_No League Gymnastics",
+    "sport": "gymnastics",
+    "slug": "-_no-league-gymnastics"
+  },
+  "olympics archery": {
+    "id": 5038,
+    "name": "Olympics Archery",
+    "sport": "shooting",
+    "slug": "olympics-archery"
+  },
+  "olympics shooting": {
+    "id": 5001,
+    "name": "Olympics Shooting",
+    "sport": "shooting",
+    "slug": "olympics-shooting"
+  },
+  "olympics bmx freestyle": {
+    "id": 5023,
+    "name": "Olympics BMX Freestyle",
+    "sport": "extreme-sports",
+    "slug": "olympics-bmx-freestyle"
+  },
+  "olympics bmx racing": {
+    "id": 5024,
+    "name": "Olympics BMX Racing",
+    "sport": "extreme-sports",
+    "slug": "olympics-bmx-racing"
+  },
+  "olympics breaking": {
+    "id": 5466,
+    "name": "Olympics Breaking",
+    "sport": "extreme-sports",
+    "slug": "olympics-breaking"
+  },
+  "olympics skateboarding": {
+    "id": 5009,
+    "name": "Olympics Skateboarding",
+    "sport": "extreme-sports",
+    "slug": "olympics-skateboarding"
+  },
+  "commonwealth games table tennis": {
+    "id": 5371,
+    "name": "Commonwealth Games Table Tennis",
+    "sport": "table-tennis",
+    "slug": "commonwealth-games-table-tennis"
+  },
+  "olympics table tennis": {
+    "id": 5003,
+    "name": "Olympics Table Tennis",
+    "sport": "table-tennis",
+    "slug": "olympics-table-tennis"
+  },
+  "world table tennis": {
+    "id": 5641,
+    "name": "World Table Tennis",
+    "sport": "table-tennis",
+    "slug": "world-table-tennis"
+  },
+  "commonwealth games triathlon": {
+    "id": 5372,
+    "name": "Commonwealth Games Triathlon",
+    "sport": "multi-sports",
+    "slug": "commonwealth-games-triathlon"
+  },
+  "olympics modern pentathlon": {
+    "id": 5004,
+    "name": "Olympics Modern Pentathlon",
+    "sport": "multi-sports",
+    "slug": "olympics-modern-pentathlon"
+  },
+  "olympics triathlon": {
+    "id": 5036,
+    "name": "Olympics Triathlon",
+    "sport": "multi-sports",
+    "slug": "olympics-triathlon"
+  },
+  "commonwealth games diving": {
+    "id": 5356,
+    "name": "Commonwealth Games Diving",
+    "sport": "watersports",
+    "slug": "commonwealth-games-diving"
+  },
+  "commonwealth games swimming": {
+    "id": 5355,
+    "name": "Commonwealth Games Swimming",
+    "sport": "watersports",
+    "slug": "commonwealth-games-swimming"
+  },
+  "olympics artistic swimming": {
+    "id": 5043,
+    "name": "Olympics Artistic Swimming",
+    "sport": "watersports",
+    "slug": "olympics-artistic-swimming"
+  },
+  "olympics canoe slalom": {
+    "id": 5044,
+    "name": "Olympics Canoe Slalom",
+    "sport": "watersports",
+    "slug": "olympics-canoe-slalom"
+  },
+  "olympics canoe sprint": {
+    "id": 5045,
+    "name": "Olympics Canoe Sprint",
+    "sport": "watersports",
+    "slug": "olympics-canoe-sprint"
+  },
+  "olympics diving": {
+    "id": 5046,
+    "name": "Olympics Diving",
+    "sport": "watersports",
+    "slug": "olympics-diving"
+  },
+  "olympics marathon swimming": {
+    "id": 5047,
+    "name": "Olympics Marathon Swimming",
+    "sport": "watersports",
+    "slug": "olympics-marathon-swimming"
+  },
+  "olympics rowing": {
+    "id": 5048,
+    "name": "Olympics Rowing",
+    "sport": "watersports",
+    "slug": "olympics-rowing"
+  },
+  "olympics sailing": {
+    "id": 5049,
+    "name": "Olympics Sailing",
+    "sport": "watersports",
+    "slug": "olympics-sailing"
+  },
+  "olympics surfing": {
+    "id": 5050,
+    "name": "Olympics Surfing",
+    "sport": "watersports",
+    "slug": "olympics-surfing"
+  },
+  "olympics swimming": {
+    "id": 5051,
+    "name": "Olympics Swimming",
+    "sport": "watersports",
+    "slug": "olympics-swimming"
+  },
+  "olympics water polo": {
+    "id": 5053,
+    "name": "Olympics Water Polo",
+    "sport": "watersports",
+    "slug": "olympics-water-polo"
+  },
+  "world swimming championships": {
+    "id": 5308,
+    "name": "World Swimming Championships",
+    "sport": "watersports",
+    "slug": "world-swimming-championships"
+  },
+  "world swimming championships sc": {
+    "id": 5352,
+    "name": "World Swimming Championships SC",
+    "sport": "watersports",
+    "slug": "world-swimming-championships-sc"
+  },
+  "european swimming championships": {
+    "id": 5353,
+    "name": "European Swimming Championships",
+    "sport": "watersports",
+    "slug": "european-swimming-championships"
+  },
+  "european swimming championships sc": {
+    "id": 5354,
+    "name": "European Swimming Championships SC",
+    "sport": "watersports",
+    "slug": "european-swimming-championships-sc"
+  },
+  "water polo world cup": {
+    "id": 5393,
+    "name": "Water Polo World Cup",
+    "sport": "watersports",
+    "slug": "water-polo-world-cup"
+  },
+  "water polo world cup women": {
+    "id": 5394,
+    "name": "Water Polo World Cup Women",
+    "sport": "watersports",
+    "slug": "water-polo-world-cup-women"
+  },
+  "world artistic swimming championships": {
+    "id": 5389,
+    "name": "World Artistic Swimming Championships",
+    "sport": "watersports",
+    "slug": "world-artistic-swimming-championships"
+  },
+  "world diving championships": {
+    "id": 5390,
+    "name": "World Diving Championships",
+    "sport": "watersports",
+    "slug": "world-diving-championships"
+  },
+  "world high diving championships": {
+    "id": 5391,
+    "name": "World High Diving Championships",
+    "sport": "watersports",
+    "slug": "world-high-diving-championships"
+  },
+  "world open water swimming championships": {
+    "id": 5388,
+    "name": "World Open Water Swimming Championships",
+    "sport": "watersports",
+    "slug": "world-open-water-swimming-championships"
+  },
+  "world water polo championships": {
+    "id": 5392,
+    "name": "World Water Polo Championships",
+    "sport": "watersports",
+    "slug": "world-water-polo-championships"
+  },
+  "world water polo championships women": {
+    "id": 5402,
+    "name": "World Water Polo Championships Women",
+    "sport": "watersports",
+    "slug": "world-water-polo-championships-women"
+  },
+  "_defunct watersports teams": {
+    "id": 5375,
+    "name": "_Defunct Watersports Teams",
+    "sport": "watersports",
+    "slug": "_defunct-watersports-teams"
+  },
+  "_no league watersports": {
+    "id": 5475,
+    "name": "_no league Watersports",
+    "sport": "watersports",
+    "slug": "_no-league-watersports"
+  },
+  "commonwealth games weightlifting": {
+    "id": 5373,
+    "name": "Commonwealth Games Weightlifting",
+    "sport": "weightlifting",
+    "slug": "commonwealth-games-weightlifting"
+  },
+  "olympics weightlifting": {
+    "id": 5006,
+    "name": "Olympics Weightlifting",
+    "sport": "weightlifting",
+    "slug": "olympics-weightlifting"
+  },
+  "worlds strongest man": {
+    "id": 5528,
+    "name": "Worlds Strongest Man",
+    "sport": "weightlifting",
+    "slug": "worlds-strongest-man"
+  },
+  "biathlon world cup": {
+    "id": 5342,
+    "name": "Biathlon World Cup",
+    "sport": "skiing",
+    "slug": "biathlon-world-cup"
+  },
+  "fis alpine world ski championships": {
+    "id": 5624,
+    "name": "FIS Alpine World Ski Championships",
+    "sport": "skiing",
+    "slug": "fis-alpine-world-ski-championships"
+  },
+  "olympics alpine skiing": {
+    "id": 5138,
+    "name": "Olympics Alpine Skiing",
+    "sport": "skiing",
+    "slug": "olympics-alpine-skiing"
+  },
+  "olympics biathlon": {
+    "id": 5139,
+    "name": "Olympics Biathlon",
+    "sport": "skiing",
+    "slug": "olympics-biathlon"
+  },
+  "olympics cross-country skiing": {
+    "id": 5140,
+    "name": "Olympics Cross-country Skiing",
+    "sport": "skiing",
+    "slug": "olympics-cross-country-skiing"
+  },
+  "olympics freestyle skiing": {
+    "id": 5141,
+    "name": "Olympics Freestyle Skiing",
+    "sport": "skiing",
+    "slug": "olympics-freestyle-skiing"
+  },
+  "olympics nordic combined": {
+    "id": 5142,
+    "name": "Olympics Nordic Combined",
+    "sport": "skiing",
+    "slug": "olympics-nordic-combined"
+  },
+  "olympics ski jumping": {
+    "id": 5143,
+    "name": "Olympics Ski Jumping",
+    "sport": "skiing",
+    "slug": "olympics-ski-jumping"
+  },
+  "olympics snowboarding": {
+    "id": 5144,
+    "name": "Olympics Snowboarding",
+    "sport": "skiing",
+    "slug": "olympics-snowboarding"
+  },
+  "fis alpine ski world cup": {
+    "id": 5625,
+    "name": "FIS Alpine Ski World Cup",
+    "sport": "skiing",
+    "slug": "fis-alpine-ski-world-cup"
+  },
+  "olympics figure skating": {
+    "id": 5145,
+    "name": "Olympics Figure Skating",
+    "sport": "skating",
+    "slug": "olympics-figure-skating"
+  },
+  "olympics short track speed skating": {
+    "id": 5146,
+    "name": "Olympics Short Track Speed Skating",
+    "sport": "skating",
+    "slug": "olympics-short-track-speed-skating"
+  },
+  "olympics speed skating": {
+    "id": 5147,
+    "name": "Olympics Speed Skating",
+    "sport": "skating",
+    "slug": "olympics-speed-skating"
+  },
+  "olympics bobsleigh": {
+    "id": 5148,
+    "name": "Olympics Bobsleigh",
+    "sport": "wintersports",
+    "slug": "olympics-bobsleigh"
+  },
+  "olympics curling": {
+    "id": 5150,
+    "name": "Olympics Curling",
+    "sport": "wintersports",
+    "slug": "olympics-curling"
+  },
+  "olympics luge": {
+    "id": 5151,
+    "name": "Olympics Luge",
+    "sport": "wintersports",
+    "slug": "olympics-luge"
+  },
+  "olympics skeleton": {
+    "id": 5149,
+    "name": "Olympics Skeleton",
+    "sport": "wintersports",
+    "slug": "olympics-skeleton"
+  },
+  "scotties tournament of hearts": {
+    "id": 5436,
+    "name": "Scotties Tournament of Hearts",
+    "sport": "wintersports",
+    "slug": "scotties-tournament-of-hearts"
+  },
+  "world juniors curling": {
+    "id": 5435,
+    "name": "World Juniors Curling",
+    "sport": "wintersports",
+    "slug": "world-juniors-curling"
+  },
+  "world mens curling championship": {
+    "id": 5597,
+    "name": "World Mens Curling Championship",
+    "sport": "wintersports",
+    "slug": "world-mens-curling-championship"
+  },
+  "world womens curling championship": {
+    "id": 5598,
+    "name": "World Womens Curling Championship",
+    "sport": "wintersports",
+    "slug": "world-womens-curling-championship"
+  },
+  "national lacrosse league": {
+    "id": 5338,
+    "name": "National Lacrosse League",
+    "sport": "lacrosse",
+    "slug": "national-lacrosse-league"
+  },
+  "premier lacrosse league": {
+    "id": 5337,
+    "name": "Premier Lacrosse League",
+    "sport": "lacrosse",
+    "slug": "premier-lacrosse-league"
+  },
+  "asia pacific poker tour": {
+    "id": 5465,
+    "name": "Asia Pacific Poker Tour",
+    "sport": "gambling",
+    "slug": "asia-pacific-poker-tour"
+  },
+  "pokergo tour": {
+    "id": 5464,
+    "name": "PokerGO Tour",
+    "sport": "gambling",
+    "slug": "pokergo-tour"
+  },
+  "wsop": {
+    "id": 5452,
+    "name": "WSOP",
+    "sport": "gambling",
+    "slug": "wsop"
+  },
+  "wsop europe": {
+    "id": 5453,
+    "name": "WSOP Europe",
+    "sport": "gambling",
+    "slug": "wsop-europe"
+  },
+  "wsop online": {
+    "id": 5456,
+    "name": "WSOP Online",
+    "sport": "gambling",
+    "slug": "wsop-online"
+  },
+  "wsop paradise": {
+    "id": 5454,
+    "name": "WSOP Paradise",
+    "sport": "gambling",
+    "slug": "wsop-paradise"
+  },
+  "poker masters": {
+    "id": 5459,
+    "name": "Poker Masters",
+    "sport": "gambling",
+    "slug": "poker-masters"
+  },
+  "poker superstars": {
+    "id": 5458,
+    "name": "Poker Superstars",
+    "sport": "gambling",
+    "slug": "poker-superstars"
+  },
+  "pokergo cup": {
+    "id": 5461,
+    "name": "PokerGO Cup",
+    "sport": "gambling",
+    "slug": "pokergo-cup"
+  },
+  "super bowl of poker": {
+    "id": 5457,
+    "name": "Super Bowl of Poker",
+    "sport": "gambling",
+    "slug": "super-bowl-of-poker"
+  },
+  "us poker open": {
+    "id": 5460,
+    "name": "US Poker Open",
+    "sport": "gambling",
+    "slug": "us-poker-open"
+  },
+  "world championship of online poker": {
+    "id": 5462,
+    "name": "World Championship of Online Poker",
+    "sport": "gambling",
+    "slug": "world-championship-of-online-poker"
+  },
+  "full tilt online poker series": {
+    "id": 5463,
+    "name": "Full Tilt Online Poker Series",
+    "sport": "gambling",
+    "slug": "full-tilt-online-poker-series"
+  },
+  "wsop asia pacific": {
+    "id": 5455,
+    "name": "WSOP Asia Pacific",
+    "sport": "gambling",
+    "slug": "wsop-asia-pacific"
+  },
+  "national football league division 1": {
+    "id": 5577,
+    "name": "National Football League Division 1",
+    "sport": "gaelic",
+    "slug": "national-football-league-division-1"
+  },
+  "national hurling league division 1a": {
+    "id": 5578,
+    "name": "National Hurling League Division 1A",
+    "sport": "gaelic",
+    "slug": "national-hurling-league-division-1a"
+  },
+  "national hurling league division 1b": {
+    "id": 5579,
+    "name": "National Hurling League Division 1B",
+    "sport": "gaelic",
+    "slug": "national-hurling-league-division-1b"
+  },
+  "national football league division 2": {
+    "id": 5581,
+    "name": "National Football League Division 2",
+    "sport": "gaelic",
+    "slug": "national-football-league-division-2"
+  },
+  "national hurling league division 2": {
+    "id": 5580,
+    "name": "National Hurling League Division 2",
+    "sport": "gaelic",
+    "slug": "national-hurling-league-division-2"
+  },
+  "national football league division 3": {
+    "id": 5582,
+    "name": "National Football League Division 3",
+    "sport": "gaelic",
+    "slug": "national-football-league-division-3"
+  },
+  "national hurling league division 3": {
+    "id": 5583,
+    "name": "National Hurling League Division 3",
+    "sport": "gaelic",
+    "slug": "national-hurling-league-division-3"
+  },
+  "national football league division 4": {
+    "id": 5586,
+    "name": "National Football League Division 4",
+    "sport": "gaelic",
+    "slug": "national-football-league-division-4"
+  },
+  "national hurling league division 4": {
+    "id": 5584,
+    "name": "National Hurling League Division 4",
+    "sport": "gaelic",
+    "slug": "national-hurling-league-division-4"
+  },
+  "all-ireland senior football championship": {
+    "id": 5564,
+    "name": "All-Ireland Senior Football Championship",
+    "sport": "gaelic",
+    "slug": "all-ireland-senior-football-championship"
+  },
+  "all-ireland senior hurling championship": {
+    "id": 5565,
+    "name": "All-Ireland Senior Hurling Championship",
+    "sport": "gaelic",
+    "slug": "all-ireland-senior-hurling-championship"
+  },
+  "christy ring cup": {
+    "id": 5573,
+    "name": "Christy Ring Cup",
+    "sport": "gaelic",
+    "slug": "christy-ring-cup"
+  },
+  "connacht senior football championship": {
+    "id": 5566,
+    "name": "Connacht Senior Football Championship",
+    "sport": "gaelic",
+    "slug": "connacht-senior-football-championship"
+  },
+  "joe mcdonagh cup": {
+    "id": 5572,
+    "name": "Joe McDonagh Cup",
+    "sport": "gaelic",
+    "slug": "joe-mcdonagh-cup"
+  },
+  "leinster senior football championship": {
+    "id": 5567,
+    "name": "Leinster Senior Football Championship",
+    "sport": "gaelic",
+    "slug": "leinster-senior-football-championship"
+  },
+  "leinster senior hurling championship": {
+    "id": 5571,
+    "name": "Leinster Senior Hurling Championship",
+    "sport": "gaelic",
+    "slug": "leinster-senior-hurling-championship"
+  },
+  "lory meagher cup": {
+    "id": 5575,
+    "name": "Lory Meagher Cup",
+    "sport": "gaelic",
+    "slug": "lory-meagher-cup"
+  },
+  "munster senior football championship": {
+    "id": 5568,
+    "name": "Munster Senior Football Championship",
+    "sport": "gaelic",
+    "slug": "munster-senior-football-championship"
+  },
+  "munster senior hurling championship": {
+    "id": 5570,
+    "name": "Munster Senior Hurling Championship",
+    "sport": "gaelic",
+    "slug": "munster-senior-hurling-championship"
+  },
+  "nicky rackard cup": {
+    "id": 5574,
+    "name": "Nicky Rackard Cup",
+    "sport": "gaelic",
+    "slug": "nicky-rackard-cup"
+  },
+  "tailteann cup": {
+    "id": 5576,
+    "name": "Tailteann Cup",
+    "sport": "gaelic",
+    "slug": "tailteann-cup"
+  },
+  "ulster senior football championship": {
+    "id": 5569,
+    "name": "Ulster Senior Football Championship",
+    "sport": "gaelic",
+    "slug": "ulster-senior-football-championship"
+  }
+}

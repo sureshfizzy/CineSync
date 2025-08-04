@@ -224,14 +224,21 @@ def initialize_db(conn):
             "is_anime_genre": "INTEGER",
             "language": "TEXT",
             "quality": "TEXT",
-            "tvdb_id": "TEXT"
+            "tvdb_id": "TEXT",
+            "league_id": "TEXT",
+            "sportsdb_event_id": "TEXT",
+            "sport_name": "TEXT",
+            "sport_round": "INTEGER",
+            "sport_location": "TEXT",
+            "sport_session": "TEXT",
+            "sport_venue": "TEXT",
+            "sport_date": "TEXT"
         }
 
         # Add missing columns
         for column_name, column_type in required_columns.items():
             if column_name not in columns:
                 cursor.execute(f"ALTER TABLE processed_files ADD COLUMN {column_name} {column_type}")
-                log_message(f"Added {column_name} column to processed_files table.", level="INFO")
 
                 # Special handling for processed_at column
                 if column_name == "processed_at":
@@ -260,6 +267,14 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_imdb_id ON processed_files(imdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_anime_genre ON processed_files(is_anime_genre)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tvdb_id ON processed_files(tvdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_league_id ON processed_files(league_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sportsdb_event_id ON processed_files(sportsdb_event_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_name ON processed_files(sport_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_round ON processed_files(sport_round)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_location ON processed_files(sport_location)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_session ON processed_files(sport_session)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_venue ON processed_files(sport_venue)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_date ON processed_files(sport_date)")
 
         conn.commit()
 
@@ -269,7 +284,9 @@ def initialize_db(conn):
 
         expected_columns = {"file_path", "destination_path", "base_path", "tmdb_id", "season_number",
                           "reason", "file_size", "error_message", "processed_at", "media_type",
-                          "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"}
+                          "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre",
+                          "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id", "sport_name",
+                          "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"}
 
         missing_columns = expected_columns - set(final_columns)
         if missing_columns:
@@ -397,7 +414,7 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_date=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -429,8 +446,21 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         has_new_columns = all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
         has_language_quality = all(col in columns for col in ["language", "quality"])
         has_tvdb_id = "tvdb_id" in columns
+        has_league_id = "league_id" in columns
+        has_sportsdb_event_id = "sportsdb_event_id" in columns
+        has_sports_columns = all(col in columns for col in ["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
 
-        if has_processed_at and has_error_message and has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
+        if has_processed_at and has_error_message and has_new_columns and has_base_path and has_language_quality and has_tvdb_id and has_league_id and has_sportsdb_event_id and has_sports_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date))
+        elif has_processed_at and has_error_message and has_new_columns and has_base_path and has_language_quality and has_tvdb_id and has_sports_columns:
+            cursor.execute("""
+                INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, language, quality, tvdb_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (source_path, dest_path, base_path, tmdb_id, season_number, reason, file_size, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, language, quality, tvdb_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date))
+        elif has_processed_at and has_error_message and has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
             cursor.execute("""
                 INSERT OR REPLACE INTO processed_files (file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size, error_message, processed_at, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, language, quality, tvdb_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1503,8 +1533,29 @@ def search_database(conn, pattern):
         has_base_path = "base_path" in columns
         has_language_quality = all(col in columns for col in ["language", "quality"])
         has_tvdb_id = "tvdb_id" in columns
+        has_league_id = "league_id" in columns
+        has_sportsdb_event_id = "sportsdb_event_id" in columns
+        has_sports_columns = all(col in columns for col in ["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
 
-        if has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
+        if has_new_columns and has_base_path and has_language_quality and has_tvdb_id and has_league_id and has_sportsdb_event_id and has_sports_columns:
+            cursor.execute("""
+                SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
+                       media_type, proper_name, year, episode_number, imdb_id,
+                       is_anime_genre, error_message, processed_at, language, quality, tvdb_id, league_id, sportsdb_event_id
+                FROM processed_files
+                WHERE file_path LIKE ?
+                OR destination_path LIKE ?
+                OR base_path LIKE ?
+                OR tmdb_id LIKE ?
+                OR proper_name LIKE ?
+                OR imdb_id LIKE ?
+                OR language LIKE ?
+                OR quality LIKE ?
+                OR tvdb_id LIKE ?
+                OR league_id LIKE ?
+                OR sportsdb_event_id LIKE ?
+            """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern))
+        elif has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
             cursor.execute("""
                 SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason, file_size,
                        media_type, proper_name, year, episode_number, imdb_id,
@@ -1591,10 +1642,15 @@ def search_database(conn, pattern):
             for row in results:
 
 
-                if has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
+                if has_new_columns and has_base_path and has_language_quality and has_tvdb_id and has_league_id and has_sportsdb_event_id and has_sports_columns:
+                    (file_path, dest_path, base_path, tmdb_id, season_number, reason, file_size,
+                     media_type, proper_name, year, episode_number, imdb_id,
+                     is_anime_genre, error_message, processed_at, language, quality, tvdb_id, league_id, sportsdb_event_id) = row
+                elif has_new_columns and has_base_path and has_language_quality and has_tvdb_id:
                     (file_path, dest_path, base_path, tmdb_id, season_number, reason, file_size,
                      media_type, proper_name, year, episode_number, imdb_id,
                      is_anime_genre, error_message, processed_at, language, quality, tvdb_id) = row
+                    league_id = sportsdb_event_id = None
                 elif has_new_columns and has_base_path and has_language_quality:
                     (file_path, dest_path, base_path, tmdb_id, season_number, reason, file_size,
                      media_type, proper_name, year, episode_number, imdb_id,
@@ -1612,7 +1668,11 @@ def search_database(conn, pattern):
                 if file_size:
                     log_message(f"File Size: {format_file_size(file_size)}", level="INFO")
                 if tmdb_id:
-                    log_message(f"TMDB ID: {tmdb_id}", level="INFO")
+                    # Display appropriate ID label based on media type
+                    if 'media_type' in locals() and media_type == 'Sports':
+                        log_message(f"League ID: {tmdb_id}", level="INFO")
+                    else:
+                        log_message(f"TMDB ID: {tmdb_id}", level="INFO")
 
                 # Display additional information if available
                 if has_new_columns:
@@ -1620,6 +1680,9 @@ def search_database(conn, pattern):
                         log_message(f"IMDB ID: {imdb_id}", level="INFO")
                     if tvdb_id:
                         log_message(f"TVDB ID: {tvdb_id}", level="INFO")
+                    # Display SportsDB Event ID for sports content
+                    if 'sportsdb_event_id' in locals() and sportsdb_event_id:
+                        log_message(f"SportsDB Event ID: {sportsdb_event_id}", level="INFO")
                     if media_type:
                         log_message(f"Media Type: {media_type}", level="INFO")
                     if proper_name:

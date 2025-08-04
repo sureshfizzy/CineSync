@@ -188,6 +188,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "CUSTOM_4KMOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for 4K movies"},
 		{Key: "CUSTOM_ANIME_MOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for anime movies"},
 		{Key: "CUSTOM_KIDS_MOVIE_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for kids/family movies"},
+		{Key: "CUSTOM_SPORTS_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for sports content"},
 		{Key: "CUSTOM_KIDS_SHOW_FOLDER", Category: "Media Folders Configuration", Type: "string", Required: false, Description: "Custom folder name for kids/family TV shows"},
 
 		// Resolution Folder Mappings Configuration

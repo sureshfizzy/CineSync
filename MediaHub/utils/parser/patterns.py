@@ -33,6 +33,37 @@ YEAR_PATTERNS = {
     'end': re.compile(r'(\d{4})$'),
 }
 
+# Sports patterns
+SPORTS_PATTERNS = {
+    'formula1': re.compile(r'\b(Formula[_\s]*1?|F1)\.?(\d{4})\.?(?:(?:Round|R)(\d+)\.?([^.]+)|([^.]+?)\.?(?:grand[._\s]*prix|gp))', re.IGNORECASE),
+    'motogp': re.compile(r'\b(MotoGP)\.?(\d{4})\.?(?:Round|R)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'nascar': re.compile(r'\b(NASCAR)\.?(\d{4})\.?(?:Round|R|Race)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'indycar': re.compile(r'\b(IndyCar|Indy[_\s]*Car)\.?(\d{4})\.?(?:Round|R|Race)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'wrc': re.compile(r'\b(WRC|World[_\s]*Rally[_\s]*Championship)\.?(\d{4})\.?(?:Round|R|Rally)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'premier_league': re.compile(r'\b(Premier[_\s]*League)\.?(\d{4})\.?(?:Week|Round|Matchday)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'champions_league': re.compile(r'\b(Champions[_\s]*League|UCL)\.?(\d{4})\.?(?:Round|R|Matchday)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'world_cup': re.compile(r'\b(World[_\s]*Cup|FIFA[_\s]*World[_\s]*Cup)\.?(\d{4})\.?(?:Round|R|Group|Match)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'olympics': re.compile(r'\b(Olympics?|Olympic[_\s]*Games)\.?(\d{4})\.?(?:Day)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'super_bowl': re.compile(r'\b(Super[_\s]*Bowl)\.?(\d{4}|[IVXLCDM]+)\.?([^.]*)', re.IGNORECASE),
+    'nba': re.compile(r'\b(NBA)\.?(\d{4})\.?(?:Game|Round|Playoffs)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'nfl': re.compile(r'\b(NFL)\.?(\d{4})\.?(?:Week|Game)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'mlb': re.compile(r'\b(MLB)\.?(\d{4})\.?(?:Game)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'nhl': re.compile(r'\b(NHL)\.?(\d{4})\.?(?:Game)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'ufc': re.compile(r'\b(UFC)\.?(\d+)\.?([^.]*)', re.IGNORECASE),
+    'boxing': re.compile(r'\b(Boxing)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'tennis': re.compile(r'\b(Tennis|Wimbledon|US[_\s]*Open|French[_\s]*Open|Australian[_\s]*Open)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'golf': re.compile(r'\b(Golf|PGA|Masters|US[_\s]*Open[_\s]*Golf)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'generic_sports': re.compile(r'\b(?:Round|R)(\d+)\.?([^.]+)\.?(\d{4})', re.IGNORECASE),
+    'grand_prix': re.compile(r'\b(Grand[_\s]*Prix|GP)\.?(\d{4})\.?(?:Round|R)?(\d+)?\.?([^.]*)', re.IGNORECASE)
+}
+
+# Sports session types (for Formula 1, MotoGP, etc.)
+SPORTS_SESSION_PATTERNS = {
+    'f1_sessions': re.compile(r'\b(FP[1-3]|Free[_\s]*Practice[_\s]*[1-3]|Practice[._\s]*(?:One|Two|Three|1|2|3)|Qualifying|Q[1-3]|Race|Sprint|Formation[_\s]*Lap|Weekend[._\s]*Warm[._\s]*Up|Warm[._\s]*Up)', re.IGNORECASE),
+    'motogp_sessions': re.compile(r'\b(FP[1-4]|Free[_\s]*Practice[_\s]*[1-4]|Qualifying|Q[1-2]|Race|Sprint|Warm[_\s]*Up)', re.IGNORECASE),
+    'general_sessions': re.compile(r'\b(Practice|Qualifying|Race|Final|Semi[_\s]*Final|Quarter[_\s]*Final)', re.IGNORECASE)
+}
+
 def _build_quality_patterns():
     """Build quality patterns data."""
     patterns = {

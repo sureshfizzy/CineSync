@@ -186,6 +186,10 @@ def custom_kids_show_layout():
     token = os.getenv('CUSTOM_KIDS_SHOW_FOLDER', None)
     return token
 
+def custom_sports_layout():
+    token = os.getenv('CUSTOM_SPORTS_FOLDER', None)
+    return token
+
 def get_mediainfo_radarr_tags():
     """Get mediainfo radarr tags from environment variable and properly clean them"""
     tags_env = os.getenv('MEDIAINFO_RADARR_TAGS', '')

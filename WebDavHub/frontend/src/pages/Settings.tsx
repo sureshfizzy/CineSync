@@ -574,7 +574,7 @@ const Settings: React.FC = () => {
       }}
     >
       <Container maxWidth="lg" sx={{ py: { xs: 1, sm: 2, md: 2 }, px: { xs: 1, sm: 2 } }}>
-        {/* Clean Professional Header */}
+        {/* Clean Header */}
         <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
           <Stack
             direction="row"
