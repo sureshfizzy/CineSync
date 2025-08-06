@@ -234,12 +234,14 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     if tmdb_id_match:
         show_id = tmdb_id_match.group(1)
 
-    if is_tmdb_folder_id_enabled():
-        show_name = proper_show_name
-    elif is_imdb_folder_id_enabled():
-        show_name = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
-    else:
-        show_name = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
+    show_name = proper_show_name
+
+    if not is_imdb_folder_id_enabled():
+        show_name = re.sub(r' \{imdb-[^}]+\}', '', show_name)
+    if not is_tvdb_folder_id_enabled():
+        show_name = re.sub(r' \{tvdb-[^}]+\}', '', show_name)
+    if not is_tmdb_folder_id_enabled():
+        show_name = re.sub(r' \{tmdb-[^}]+\}', '', show_name)
 
     new_name = file
     episode_name = None

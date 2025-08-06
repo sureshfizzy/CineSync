@@ -317,12 +317,14 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         # Store the original proper_show_name with all IDs
         proper_show_name_with_ids = proper_show_name
 
-        if is_tmdb_folder_id_enabled():
-            show_folder = proper_show_name
-        elif is_imdb_folder_id_enabled():
-            show_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_show_name)
-        else:
-            show_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_show_name)
+        show_folder = proper_show_name
+
+        if not is_imdb_folder_id_enabled():
+            show_folder = re.sub(r' \{imdb-[^}]+\}', '', show_folder)
+        if not is_tvdb_folder_id_enabled():
+            show_folder = re.sub(r' \{tvdb-[^}]+\}', '', show_folder)
+        if not is_tmdb_folder_id_enabled():
+            show_folder = re.sub(r' \{tmdb-[^}]+\}', '', show_folder)
 
     show_folder = show_folder.replace('/', '')
 

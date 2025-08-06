@@ -261,12 +261,14 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
         else:
-            if tmdb_folder_id_enabled:
-                movie_folder = proper_movie_name
-            elif is_imdb_folder_id_enabled():
-                movie_folder = re.sub(r' \{tmdb-.*?\}$', '', proper_movie_name)
-            else:
-                movie_folder = re.sub(r' \{(?:tmdb|imdb)-.*?\}$', '', proper_movie_name)
+            movie_folder = proper_movie_name
+
+            if not is_imdb_folder_id_enabled():
+                movie_folder = re.sub(r' \{imdb-[^}]+\}', '', movie_folder)
+            if not is_tvdb_folder_id_enabled():
+                movie_folder = re.sub(r' \{tvdb-[^}]+\}', '', movie_folder)
+            if not tmdb_folder_id_enabled:
+                movie_folder = re.sub(r' \{tmdb-[^}]+\}', '', movie_folder)
 
             movie_folder = movie_folder.replace('/', '')
 
