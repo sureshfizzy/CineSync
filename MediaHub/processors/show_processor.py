@@ -275,6 +275,12 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
                 imdb_id = None
                 tvdb_id = None
+
+            if season_number is not None:
+                season_number = str(season_number).zfill(2)
+            if episode_number is not None:
+                episode_number = str(episode_number).zfill(2)
+
             # Handle episode identifier for valid season/episode numbers
             if season_number is not None and episode_number is not None:
                 episode_identifier = f"S{season_number}E{episode_number}"
@@ -545,7 +551,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     )
             else:
                 if episode_name:
-                    base_name = f"{show_name} - {episode_name}".replace(' - -', ' -')
+                    base_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}".replace(' - -', ' -')
                     log_message(f"Renaming {file}", level="INFO")
                 else:
                     base_name = f"{show_name} - S{season_number}E{episode_number}" if season_number and episode_number else f"{show_name} - {episode_identifier}"
