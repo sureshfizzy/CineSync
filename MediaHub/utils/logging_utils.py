@@ -12,8 +12,7 @@ import unicodedata
 
 def _normalize_for_logging(text: str) -> str:
     """
-    Simple Unicode normalization for logging to prevent encoding errors.
-    Handles the most common problematic characters without circular imports.
+    Unicode normalization for logging to prevent encoding errors.
     """
     if not isinstance(text, str) or not text:
         return str(text) if text is not None else ""
@@ -34,8 +33,24 @@ def _normalize_for_logging(text: str) -> str:
     for unicode_char, replacement in replacements.items():
         text = text.replace(unicode_char, replacement)
 
-    # Encode to ASCII with replacement for any remaining problematic characters
-    return text.encode('ascii', errors='replace').decode('ascii')
+    # Avoid Ciruclar Imports
+    from MediaHub.utils.file_utils import remove_accents
+    text = remove_accents(text)
+    try:
+        text.encode('ascii')
+        return text
+    except UnicodeEncodeError:
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+    # Remove empty parentheses that result from removing non-ASCII content
+    import re
+    text = re.sub(r'\(\s*\)', '', text)  # Remove empty parentheses
+    text = re.sub(r'\[\s*\]', '', text)  # Remove empty brackets
+    text = re.sub(r'\{\s*\}', '', text)  # Remove empty braces
+    text = re.sub(r'\s+', ' ', text)     # Clean up multiple spaces
+    text = text.strip()                  # Remove leading/trailing spaces
+
+    return text
 
 # Suppress urllib3 connection pool warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

@@ -309,6 +309,25 @@ def clean_query(query: str) -> Dict[str, Any]:
 # UNICODE AND CHARACTER NORMALIZATION FUNCTIONS
 # ============================================================================
 
+def remove_accents(input_str: str) -> str:
+    """
+    Removes accented characters from a string by normalizing it to NFD form
+    and then filtering out combining characters.
+
+    Args:
+        input_str: The string from which to remove accents.
+
+    Returns:
+        The string with accents removed.
+    """
+    if not isinstance(input_str, str):
+        return input_str
+
+    # Normalize the string to NFD (Normalization Form Canonical Decomposition).
+    # This separates base characters from their diacritical marks (accents).
+    nfkd_form = unicodedata.normalize('NFD', input_str)
+    return "".join([char for char in nfkd_form if not unicodedata.combining(char)])
+
 def normalize_unicode_characters(text: str) -> str:
     """
     Normalize Unicode characters to their ASCII equivalents for better TMDB matching and logging.
@@ -386,26 +405,28 @@ def normalize_unicode_characters(text: str) -> str:
     for unicode_char, replacement in character_replacements.items():
         text = text.replace(unicode_char, replacement)
 
-    # Apply Unicode normalization (NFD = decomposed form)
-    # This separates combined characters into base + combining characters
-    text = unicodedata.normalize('NFD', text)
-
-    # Remove combining characters (accents, etc.) and keep only ASCII
-    # This converts characters like é -> e, ñ -> n, etc.
-    ascii_text = ''.join(
-        char for char in text
-        if unicodedata.category(char) != 'Mn'  # Mn = Nonspacing_Mark (combining chars)
-    )
+    # Use the improved remove_accents function for accent removal
+    text = remove_accents(text)
 
     # Final cleanup: ensure we have clean ASCII
     try:
         # Try to encode as ASCII to catch any remaining problematic characters
-        ascii_text.encode('ascii')
-        return ascii_text
+        text.encode('ascii')
+        return text
     except UnicodeEncodeError:
         # If there are still non-ASCII characters, use transliteration
         # This is a more aggressive approach for stubborn characters
-        return unicodedata.normalize('NFKD', ascii_text).encode('ascii', 'ignore').decode('ascii')
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+    # Remove empty parentheses that result from removing non-ASCII content
+    import re
+    text = re.sub(r'\(\s*\)', '', text)  # Remove empty parentheses
+    text = re.sub(r'\[\s*\]', '', text)  # Remove empty brackets
+    text = re.sub(r'\{\s*\}', '', text)  # Remove empty braces
+    text = re.sub(r'\s+', ' ', text)     # Clean up multiple spaces
+    text = text.strip()                  # Remove leading/trailing spaces
+
+    return text
 
 # ============================================================================
 # SYMLINK RESOLUTION FUNCTIONS

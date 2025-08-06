@@ -16,7 +16,7 @@ from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.api.media_cover import process_tmdb_covers
-from MediaHub.utils.file_utils import normalize_unicode_characters
+from MediaHub.utils.file_utils import normalize_unicode_characters, remove_accents
 
 _api_cache = {}
 
