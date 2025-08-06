@@ -184,6 +184,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     original_show_name = show_name
     show_id = None
     is_anime_genre = False
+    imdb_id = None
+    tvdb_id = None
 
     # Retry logic for anime show name extraction
     max_retries = 2
@@ -209,8 +211,15 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         log_message(f"TMDB search failed for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
         track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for anime show: {show_name} ({year})")
         return None
-    elif isinstance(search_result, tuple):
-        proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = search_result
+    elif isinstance(search_result, tuple) and len(search_result) >= 7:
+        if len(search_result) >= 9:
+            # New format with external IDs
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id = search_result
+        else:
+            # Legacy format without external IDs
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = search_result
+            imdb_id = None
+            tvdb_id = None
     else:
         log_message(f"TMDB search returned unexpected result type for anime show: {show_name} ({year}). Skipping anime show processing.", level="ERROR")
         track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for anime show: {show_name} ({year})")
@@ -335,6 +344,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'is_anime_genre': is_anime_genre,
         'is_extra': is_extra,
         'tmdb_id': tmdb_id,
+        'imdb_id': imdb_id,
+        'tvdb_id': tvdb_id,
         'language': language,
         'quality': quality
     }
