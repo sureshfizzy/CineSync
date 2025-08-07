@@ -546,6 +546,15 @@ def calculate_score(result, query, year=None):
     # Normalize and lowercase the query
     query = normalize_unicode_characters(query).lower().strip()
 
+    # Normalize punctuation for matching
+    def normalize_for_matching(text):
+        """Remove punctuation that shouldn't affect matching"""
+        normalized = re.sub(r'[:\.\-_\(\)\[\]]+', ' ', text)
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        return normalized
+
+    query_normalized = normalize_for_matching(query)
+
     # Check if we're dealing with a movie or TV show result
     if 'title' in result:
         title = normalize_unicode_characters(result.get('title', '')).lower().strip()
@@ -558,22 +567,26 @@ def calculate_score(result, query, year=None):
         first_air_date = result.get('first_air_date', '')
         result_year = first_air_date.split('-')[0] if first_air_date else None
 
+    # Normalize titles for matching
+    title_normalized = normalize_for_matching(title)
+    original_title_normalized = normalize_for_matching(original_title)
+
     # Title matching
     exact_match_bonus = 0
-    if query == title:
+    if query_normalized == title_normalized:
         score += 60
         exact_match_bonus = 25
-    elif query == original_title:
+    elif query_normalized == original_title_normalized:
         score += 45
         exact_match_bonus = 15
-    elif query in title or title in query:
+    elif query_normalized in title_normalized or title_normalized in query_normalized:
         score += 25
-    elif query in original_title or original_title in query:
+    elif query_normalized in original_title_normalized or original_title_normalized in query_normalized:
         score += 30
 
     # Title similarity calculation (20 points)
-    title_similarity = difflib.SequenceMatcher(None, query, title).ratio() * 20
-    original_title_similarity = difflib.SequenceMatcher(None, query, original_title).ratio() * 20
+    title_similarity = difflib.SequenceMatcher(None, query_normalized, title_normalized).ratio() * 20
+    original_title_similarity = difflib.SequenceMatcher(None, query_normalized, original_title_normalized).ratio() * 20
     score += max(title_similarity, original_title_similarity)
 
     # Year match scoring (20 points)
