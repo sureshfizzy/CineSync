@@ -341,11 +341,47 @@ def _extract_sports_info_from_parsed(parsed: ParsedFilename) -> Tuple[bool, Opti
                 year = int(groups[1]) if groups[1] else None
                 round_number = int(groups[2]) if len(groups) > 2 and groups[2] else None
                 location = groups[3] if len(groups) > 3 and groups[3] else None
+            elif pattern_name == 'wrc':
+                # wrc pattern: (sport, year, location, stage_number, additional)
+                sport_name = 'WRC'
+                year = int(groups[1]) if groups[1] else None
+                location = groups[2] if len(groups) > 2 and groups[2] else None
+                round_number = int(groups[3]) if len(groups) > 3 and groups[3] else None  # SS number
             elif pattern_name == 'ufc':
                 sport_name = 'UFC'
                 year = None
                 round_number = int(groups[1]) if groups[1] else None
                 location = groups[2] if len(groups) > 2 and groups[2] else None
+            elif pattern_name == 'cycling':
+                # cycling pattern: (sport, year, event_name, stage, additional)
+                sport_name = 'Cycling'
+                year = int(groups[1]) if groups[1] else None
+                event_name = groups[2] if len(groups) > 2 and groups[2] else None  # Tour de France, etc.
+                round_number = int(groups[3]) if len(groups) > 3 and groups[3] else None  # Stage number
+                location = event_name  # Use event name as location
+            elif pattern_name == 'cycling_general':
+                # cycling_general pattern: (sport, year, location)
+                sport_name = 'Cycling'
+                year = int(groups[1]) if groups[1] else None
+                round_number = None
+                location = groups[2] if len(groups) > 2 and groups[2] else None
+            elif pattern_name == 'wrestling':
+                # wrestling pattern: (promotion, year, month, day, event)
+                sport_name = groups[0] if groups[0] else 'Wrestling'
+                year = int(groups[1]) if groups[1] else None
+                month = groups[2] if groups[2] else None
+                day = groups[3] if groups[3] else None
+                event_name = groups[4] if len(groups) > 4 and groups[4] else None
+                location = event_name
+                round_number = None
+            elif pattern_name == 'wrestling_ppv':
+                # wrestling_ppv pattern: (promotion, event, year, additional)
+                sport_name = groups[0] if groups[0] else 'Wrestling'
+                event_name = groups[1] if groups[1] else None
+                year = int(groups[2]) if groups[2] else None
+                additional = groups[3] if len(groups) > 3 and groups[3] else None
+                location = event_name
+                round_number = None
             else:
                 sport_name = groups[0] if groups[0] else 'Unknown Sport'
                 year = int(groups[1]) if len(groups) > 1 and groups[1] and groups[1].isdigit() else None

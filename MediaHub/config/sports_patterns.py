@@ -7,56 +7,56 @@ from filenames. Patterns are organized by sport category for easy maintenance.
 
 # Motorsports patterns
 MOTORSPORTS_PATTERNS = [
-    r'Formula[_\s]*1',
-    r'F1[_\s]*\d{4}',
-    r'MotoGP',
-    r'NASCAR',
-    r'IndyCar',
-    r'WRC',
-    r'GP\d{4}',
-    r'Formula[_\s]*1.*Grand[_\s]*Prix',
-    r'F1.*Grand[_\s]*Prix',
-    r'MotoGP.*Grand[_\s]*Prix'
+    r'\bFormula[_\s]*1\b',
+    r'\bF1[_\s]*\d{4}',
+    r'\bMotoGP\b',
+    r'\bNASCAR\b',
+    r'\bIndyCar\b',
+    r'\bWRC\b',
+    r'\bGP\d{4}',
+    r'\bFormula[_\s]*1.*Grand[_\s]*Prix\b',
+    r'\bF1.*Grand[_\s]*Prix\b',
+    r'\bMotoGP.*Grand[_\s]*Prix\b'
 ]
 
 # Football/Soccer patterns
 FOOTBALL_PATTERNS = [
-    r'Premier[_\s]*League',
-    r'Champions[_\s]*League',
-    r'World[_\s]*Cup',
-    r'UEFA',
-    r'FIFA'
+    r'\bPremier[_\s]*League\b',
+    r'\bChampions[_\s]*League\b',
+    r'\bWorld[_\s]*Cup\b',
+    r'\bUEFA\b',
+    r'\bFIFA\b'
 ]
 
 # American Sports patterns
 AMERICAN_SPORTS_PATTERNS = [
-    r'NBA[_\s]*\d{4}',
-    r'NFL[_\s]*\d{4}',
-    r'MLB[_\s]*\d{4}',
-    r'NHL[_\s]*\d{4}',
-    r'Super[_\s]*Bowl'
+    r'\bNBA[_\s]*\d{4}',
+    r'\bNFL[_\s]*\d{4}',
+    r'\bMLB[_\s]*\d{4}',
+    r'\bNHL[_\s]*\d{4}',
+    r'\bSuper[_\s]*Bowl\b'
 ]
 
 # Combat Sports patterns
 COMBAT_SPORTS_PATTERNS = [
-    r'UFC[_\s]*\d+',
-    r'Boxing',
-    r'MMA'
+    r'\bUFC[_\s]*\d+',
+    r'\bBoxing\b',
+    r'\bMMA\b'
 ]
 
 # Wrestling patterns
 WRESTLING_PATTERNS = [
-    r'Pay[_\s\.]*Per[_\s\.]*View',
-    r'AEW',
-    r'CZW',
-    r'WWE',
-    r'WCW',
-    r'ECW',
-    r'ROH',
-    r'NJPW',
-    r'WWF',
-    r'TNA',
-    r'XPW',
+    r'\bPay[_\s\.]*Per[_\s\.]*View\b',
+    r'\bAEW\b',
+    r'\bCZW\b',
+    r'\bWWE\b',
+    r'\bWCW\b',
+    r'\bECW\b',
+    r'\bROH\b',
+    r'\bNJPW\b',
+    r'\bWWF\b',
+    r'\bTNA\b',
+    r'\bXPW\b',
 
     # Full Organization Names
     r'All[_\s\.]*Elite[_\s\.]*Wrestling',
@@ -115,8 +115,8 @@ WRESTLING_PATTERNS = [
     r'ANGLE[_\s\.]*2023',
 
     # Generic Wrestling Terms
-    r'Wrestling',
-    r'PPV',
+    r'\bWrestling\b',
+    r'\bPPV\b',
 
     # ROH Specific with Date Range
     r'ROH[_\s]*-[_\s]*200[2-8]',
@@ -126,18 +126,18 @@ WRESTLING_PATTERNS = [
 
 # Olympic and International Sports patterns
 OLYMPIC_PATTERNS = [
-    r'Olympics?',
-    r'Paralympic',
-    r'Commonwealth[_\s]*Games'
+    r'\bOlympics?\b',
+    r'\bParalympic\b',
+    r'\bCommonwealth[_\s]*Games\b'
 ]
 
 # Individual Sports patterns
 INDIVIDUAL_SPORTS_PATTERNS = [
-    r'Tennis[_\s]*\d{4}',
-    r'Golf[_\s]*\d{4}',
-    r'Athletics',
-    r'Swimming',
-    r'Cycling'
+    r'\bTennis[_\s]*\d{4}',
+    r'\bGolf[_\s]*\d{4}',
+    r'\bAthletics\b',
+    r'\bSwimming\b',
+    r'\bCycling\b'
 ]
 
 # Combine all patterns into a single list

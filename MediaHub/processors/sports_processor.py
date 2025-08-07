@@ -167,7 +167,20 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
         
         # Create detailed folder structure with all available information
         sport_folder = sanitize_windows_filename(sport_name)
-        season_folder = f"Season {season_year}" if season_year else "Unknown Season"
+
+        # Use sport-specific folder structure
+        if sport_name.upper() == 'UFC':
+            # UFC uses event numbers, not seasons
+            if round_number:
+                season_folder = f"UFC Events {(round_number // 50) * 50 + 1}-{(round_number // 50 + 1) * 50}"
+            else:
+                season_folder = "UFC Events"
+        elif sport_name.upper() in ['WWE', 'AEW', 'TNA', 'NJPW']:
+            # Wrestling uses years, not seasons
+            season_folder = str(season_year) if season_year else "Unknown Year"
+        else:
+            # Traditional seasonal sports (F1, MotoGP, etc.)
+            season_folder = f"Season {season_year}" if season_year else "Unknown Season"
 
         # Get detailed F1 information from parsed data
         grand_prix_name = parsed_data.get('sport_grand_prix_name')
@@ -198,18 +211,37 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
             dest_path = os.path.join(dest_path, event_folder)
         
         if rename_enabled:
+            # Determine year/identifier for filename based on sport type
+            if sport_name.upper() == 'UFC':
+                # For UFC, use the event number as the identifier
+                year_identifier = str(round_number) if round_number else "Unknown"
+            elif sport_name.upper() in ['WWE', 'AEW', 'TNA', 'NJPW']:
+                # For wrestling, use year if available
+                year_identifier = str(season_year) if season_year else "Unknown"
+            else:
+                # For seasonal sports, use year
+                year_identifier = str(season_year) if season_year else "Unknown"
+
             if round_number and location:
                 location_name = country if country else location
 
-                if session_type:
-                    clean_name = f"{sport_name} {season_year} R{round_number:02d} {location_name} {session_type}"
+                if sport_name.upper() == 'UFC':
+                    # UFC naming: "UFC 318 Holloway vs Poirier 3"
+                    if session_type:
+                        clean_name = f"{sport_name} {round_number} {location_name} {session_type}"
+                    else:
+                        clean_name = f"{sport_name} {round_number} {location_name}"
                 else:
-                    clean_name = f"{sport_name} {season_year} R{round_number:02d} {location_name}"
+                    # Traditional sports naming with round numbers
+                    if session_type:
+                        clean_name = f"{sport_name} {year_identifier} R{round_number:02d} {location_name} {session_type}"
+                    else:
+                        clean_name = f"{sport_name} {year_identifier} R{round_number:02d} {location_name}"
             else:
                 if session_type:
-                    clean_name = f"{sport_name} {season_year} {location} {session_type}"
+                    clean_name = f"{sport_name} {year_identifier} {location} {session_type}"
                 else:
-                    clean_name = f"{sport_name} {season_year} {location}"
+                    clean_name = f"{sport_name} {year_identifier} {location}"
 
             # Add resolution if available
             if resolution and resolution != 'Unknown':

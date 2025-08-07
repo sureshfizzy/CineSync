@@ -39,7 +39,7 @@ SPORTS_PATTERNS = {
     'motogp': re.compile(r'\b(MotoGP)\.?(\d{4})\.?(?:Round|R)?(\d+)?\.?([^.]*)', re.IGNORECASE),
     'nascar': re.compile(r'\b(NASCAR)\.?(\d{4})\.?(?:Round|R|Race)?(\d+)?\.?([^.]*)', re.IGNORECASE),
     'indycar': re.compile(r'\b(IndyCar|Indy[_\s]*Car)\.?(\d{4})\.?(?:Round|R|Race)?(\d+)?\.?([^.]*)', re.IGNORECASE),
-    'wrc': re.compile(r'\b(WRC|World[_\s]*Rally[_\s]*Championship)\.?(\d{4})\.?(?:Round|R|Rally)?(\d+)?\.?([^.]*)', re.IGNORECASE),
+    'wrc': re.compile(r'\b(WRC|World[_\s]*Rally[_\s]*Championship)\.?.*?(\d{4})\.?([^.]+?)\.?(?:SS|Stage|Special[_\s]*Stage)?(\d+)?\.?([^.]*)', re.IGNORECASE),
     'premier_league': re.compile(r'\b(Premier[_\s]*League)\.?(\d{4})\.?(?:Week|Round|Matchday)?(\d+)?\.?([^.]*)', re.IGNORECASE),
     'champions_league': re.compile(r'\b(Champions[_\s]*League|UCL)\.?(\d{4})\.?(?:Round|R|Matchday)?(\d+)?\.?([^.]*)', re.IGNORECASE),
     'world_cup': re.compile(r'\b(World[_\s]*Cup|FIFA[_\s]*World[_\s]*Cup)\.?(\d{4})\.?(?:Round|R|Group|Match)?(\d+)?\.?([^.]*)', re.IGNORECASE),
@@ -53,6 +53,10 @@ SPORTS_PATTERNS = {
     'boxing': re.compile(r'\b(Boxing)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
     'tennis': re.compile(r'\b(Tennis|Wimbledon|US[_\s]*Open|French[_\s]*Open|Australian[_\s]*Open)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
     'golf': re.compile(r'\b(Golf|PGA|Masters|US[_\s]*Open[_\s]*Golf)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'cycling': re.compile(r'\b(cycling|uci)\.?.*?(\d{4})\.?(.*?)\.?(?:stage|etape)[_\s\.]*(\d+)\.?([^.]*)', re.IGNORECASE),
+    'cycling_general': re.compile(r'\b(Cycling|UCI)\.?.*?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'wrestling': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW|WCW|ECW|WWF)\.?.*?(\d{4})\.?(\d{2})\.?(\d{2})\.?([^.]*)', re.IGNORECASE),
+    'wrestling_ppv': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW)\.?([^.]*?)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
     'generic_sports': re.compile(r'\b(?:Round|R)(\d+)\.?([^.]+)\.?(\d{4})', re.IGNORECASE),
     'grand_prix': re.compile(r'\b(Grand[_\s]*Prix|GP)\.?(\d{4})\.?(?:Round|R)?(\d+)?\.?([^.]*)', re.IGNORECASE)
 }

@@ -155,14 +155,18 @@ def get_league_seasons(league_id):
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
 def get_season_events(league_id, season_name):
     """Get all events for a specific season using v1 API with free key and rate limiting"""
-    cache_key = f"events_{league_id}_{season_name}"
+    cache_key = f"events_{league_id}_{season_name or 'all'}"
     cached_result = get_cached_result(cache_key)
     if cached_result:
         return cached_result
 
     try:
-        url = f"{BASE_URL}/eventsseason.php"
-        params = {'id': league_id, 's': season_name}
+        if season_name:
+            url = f"{BASE_URL}/eventsseason.php"
+            params = {'id': league_id, 's': season_name}
+        else:
+            url = f"{BASE_URL}/eventslast.php"
+            params = {'id': league_id}
 
         response = cached_get(url, params=params)
         response.raise_for_status()
@@ -264,12 +268,14 @@ def search_sports_content(sport_name, year=None, round_number=None, event_name=N
             log_message(f"League not found for sport: {sport_name}", level="WARNING")
             return None
 
-        if not year:
-            log_message(f"Year is required for sports content search", level="WARNING")
-            return None
-
         league_id = league_result['league_id']
-        season_name = str(year)
+
+        if year:
+            season_name = str(year)
+            log_message(f"Searching {sport_name} events for year {year}", level="DEBUG")
+        else:
+            season_name = None
+            log_message(f"Searching {sport_name} events without year filter", level="DEBUG")
 
         # Get events for the season
         events = get_season_events(league_id, season_name)
