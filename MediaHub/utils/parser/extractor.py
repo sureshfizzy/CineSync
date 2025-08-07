@@ -174,28 +174,36 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         if re.search(year_pattern, title):
             title = re.sub(year_pattern, '', title).strip()
 
-    # Check for sports content first
-    is_sports, sport_name, sport_year, sport_round, sport_location, sport_session, sport_details = _extract_sports_info_from_parsed(parsed)
+    # Check for TV show patterns first (prioritize over sports when clear season/episode patterns exist)
+    is_tv = _is_tv_show(parsed)
+    episode = _extract_episode_from_parsed(parsed)
 
-    # Determine content type
-    if is_sports:
-        is_tv = False
-        is_movie = False
-        episode = None
-        # Override title with sports-specific title if detected
-        if sport_name:
-            title = sport_name
-        if sport_year and not year:
-            year = sport_year
+    # If we found an episode number
+    if episode is not None:
+        is_tv = True
+
+    # Check for sports content
+    if is_tv:
+        is_sports = False
+        sport_name = None
+        sport_year = None
+        sport_round = None
+        sport_location = None
+        sport_session = None
+        sport_details = None
     else:
-        is_tv = _is_tv_show(parsed)
-        episode = _extract_episode_from_parsed(parsed)
+        # No clear TV show patterns, check for sports content
+        is_sports, sport_name, sport_year, sport_round, sport_location, sport_session, sport_details = _extract_sports_info_from_parsed(parsed)
 
-        # If we found an episode number
-        if episode is not None:
-            is_tv = True
+        # Determine content type
+        if is_sports:
+            # Override title with sports-specific title if detected
+            if sport_name:
+                title = sport_name
+            if sport_year and not year:
+                year = sport_year
 
-        is_movie = not is_tv and bool(title)
+    is_movie = not is_tv and not is_sports and bool(title)
 
     metadata = MediaMetadata(
         title=title,
@@ -1044,6 +1052,16 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 title_end = i
                 break
 
+            # Special handling for anniversary editions
+            if clean_part.lower() == 'anniversary' and i > 0:
+                prev_part = parts[i-1].strip().rstrip('.')
+                if re.match(r'^\d+(?:st|nd|rd|th)$', prev_part, re.IGNORECASE):
+                    title_end = i - 1
+                    break
+                else:
+                    title_end = i
+                    break
+
             if not is_likely_title_word and (
                 re.match(r'^\d{3,4}x\d{3,4}$', clean_part, re.IGNORECASE) or
                 clean_part.lower() in technical_keywords or
@@ -1086,6 +1104,16 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 from MediaHub.utils.parser.parse_year import extract_year
                 extracted_year = extract_year(parsed.original)
                 if extracted_year == year_at_position['value']:
+                    tech_start = i
+                    break
+
+            # Special handling for anniversary editions
+            if clean_part.lower() == 'anniversary' and i > 0:
+                prev_part = parts[i-1].strip().rstrip('.')
+                if re.match(r'^\d+(?:st|nd|rd|th)$', prev_part, re.IGNORECASE):
+                    tech_start = i - 1
+                    break
+                else:
                     tech_start = i
                     break
 
@@ -1187,6 +1215,15 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                     break
         else:
             if clean_part.startswith('(') or clean_part.startswith('['):
+                break
+
+            # Special handling for anniversary editions
+            if clean_part.lower() == 'anniversary':
+                # Check if we should exclude preceding ordinal number
+                if i > 0 and title_parts:
+                    prev_part = title_parts[-1]
+                    if re.match(r'^\d+(?:st|nd|rd|th)$', prev_part, re.IGNORECASE):
+                        title_parts.pop()
                 break
 
             tech_at_position = next((t for t in technical_terms if t['position'] == i), None)
