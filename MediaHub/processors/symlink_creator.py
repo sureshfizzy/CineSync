@@ -669,16 +669,24 @@ def process_file(args, force=False, batch_apply=False):
     is_anime_show = False
     episode_match = None
 
-    # Skip hash filenames unless they have valid media patterns
+    # Skip hash filenames unless they have valid media patterns or folder name can be parsed
     hash_pattern = re.compile(r'^[a-f0-9]{32}(\.[^.]+$|\[.+?\]\.)', re.IGNORECASE)
     is_hash_name = hash_pattern.search(file) is not None
 
     if is_hash_name and not tmdb_id and not imdb_id:
-        log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
-        reason = "Missing media identifiers on hash file"
-        log_message(f"Adding hash file without identifiers to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason)
-        return
+        # Try to extract media information from parent folder name
+        folder_name = os.path.basename(os.path.dirname(src_file))
+        folder_result = clean_query(folder_name)
+        folder_title = folder_result.get('title', '').strip()
+
+        if folder_title and len(folder_title) > 2:
+            log_message(f"Hash file {file} will use folder name for identification: {folder_title}", level="INFO")
+        else:
+            log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
+            reason = "Missing media identifiers on hash file"
+            log_message(f"Adding hash file without identifiers to database: {src_file} (reason: {reason})", level="DEBUG")
+            save_processed_file(src_file, None, tmdb_id, season_number, reason)
+            return
 
     # Initialize file_result to ensure it's always available
     file_result = None
@@ -686,6 +694,11 @@ def process_file(args, force=False, batch_apply=False):
 
     # Parse file first for TV/Movie detection
     file_result = clean_query(file)
+
+    # For hash files, always parse parent folder and prioritize its results
+    if is_hash_name:
+        parent_result = clean_query(os.path.basename(os.path.dirname(src_file)))
+        log_message(f"Hash file detected, using folder metadata: {os.path.basename(os.path.dirname(src_file))}", level="DEBUG")
 
     if force_show:
         is_show = True
@@ -698,9 +711,10 @@ def process_file(args, force=False, batch_apply=False):
         # Check if file has episode information (standard TV format or anime episode number)
         has_episode_info = file_result.get('episode_identifier') or file_result.get('episode')
 
-        # Only parse parent directory if file doesn't have episode info
-        if not has_episode_info:
-            parent_result = clean_query(os.path.basename(src_file))
+        # Parse parent directory if file doesn't have episode info
+        if not has_episode_info or is_hash_name:
+            if not parent_result:
+                parent_result = clean_query(os.path.basename(src_file))
             has_episode_info = parent_result.get('episode_identifier') or parent_result.get('episode')
 
         # Check for anime patterns using intelligent detection
@@ -858,7 +872,8 @@ def process_file(args, force=False, batch_apply=False):
             else:
                 log_message(f"Sports processing failed for {file}, falling back to movie processing", level="WARNING")
                 # Don't pass TV show TMDB ID to movie processor
-                result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=file_result, manual_search=manual_search)
+                metadata_for_movie = parent_result if is_hash_name and parent_result else file_result
+                result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=None, imdb_id=None, file_metadata=metadata_for_movie, manual_search=manual_search)
 
                 # Check if movie processing failed
                 if result is None or result[0] is None:
@@ -875,7 +890,9 @@ def process_file(args, force=False, batch_apply=False):
                 dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
         elif not show_processed:
             # Not sports content, process as movie
-            result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=file_result, manual_search=manual_search)
+            # For hash files, use parent folder metadata instead of file metadata
+            metadata_for_movie = parent_result if is_hash_name and parent_result else file_result
+            result = process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id=tmdb_id, imdb_id=imdb_id, file_metadata=metadata_for_movie, manual_search=manual_search)
 
             # Check if result is None or the first item (dest_file) is None
             if result is None or result[0] is None:
