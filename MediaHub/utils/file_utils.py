@@ -394,6 +394,27 @@ def normalize_unicode_characters(text: str) -> str:
         '\u2032': "'",  # PRIME -> APOSTROPHE
         '\u2033': '"',  # DOUBLE PRIME -> QUOTATION MARK
 
+        # Fraction characters
+        '\u00bc': '1/4',  # FRACTION ONE QUARTER -> 1/4
+        '\u00bd': '1/2',  # FRACTION ONE HALF -> 1/2
+        '\u00be': '3/4',  # FRACTION THREE QUARTERS -> 3/4
+        '\u2153': '1/3',  # FRACTION ONE THIRD -> 1/3
+        '\u2154': '2/3',  # FRACTION TWO THIRDS -> 2/3
+        '\u2155': '1/5',  # FRACTION ONE FIFTH -> 1/5
+        '\u2156': '2/5',  # FRACTION TWO FIFTHS -> 2/5
+        '\u2157': '3/5',  # FRACTION THREE FIFTHS -> 3/5
+        '\u2158': '4/5',  # FRACTION FOUR FIFTHS -> 4/5
+        '\u2159': '1/6',  # FRACTION ONE SIXTH -> 1/6
+        '\u215a': '5/6',  # FRACTION FIVE SIXTHS -> 5/6
+        '\u215b': '1/8',  # FRACTION ONE EIGHTH -> 1/8
+        '\u215c': '3/8',  # FRACTION THREE EIGHTHS -> 3/8
+        '\u215d': '5/8',  # FRACTION FIVE EIGHTHS -> 5/8
+        '\u215e': '7/8',  # FRACTION SEVEN EIGHTHS -> 7/8
+        '\u2150': '1/7',  # FRACTION ONE SEVENTH -> 1/7
+        '\u2151': '1/9',  # FRACTION ONE NINTH -> 1/9
+        '\u2152': '1/10', # FRACTION ONE TENTH -> 1/10
+        '\u2189': '0/3',  # FRACTION ZERO THIRDS -> 0/3
+
         # Other common problematic characters
         '\u2026': '...',  # HORIZONTAL ELLIPSIS -> THREE DOTS
         '\u00b7': '.',    # MIDDLE DOT -> PERIOD
@@ -401,9 +422,19 @@ def normalize_unicode_characters(text: str) -> str:
         '\u00d7': 'x',    # MULTIPLICATION SIGN -> x
     }
 
-    # Apply specific character replacements
+    # Apply specific character replacements with proper spacing for fractions
     for unicode_char, replacement in character_replacements.items():
-        text = text.replace(unicode_char, replacement)
+        if unicode_char in ['\u00bc', '\u00bd', '\u00be', '\u2153', '\u2154', '\u2155',
+                           '\u2156', '\u2157', '\u2158', '\u2159', '\u215a', '\u215b',
+                           '\u215c', '\u215d', '\u215e', '\u2150', '\u2151', '\u2152', '\u2189']:
+            # For fraction characters, add space before if preceded by a digit
+            import re
+            pattern = r'(\d)(' + re.escape(unicode_char) + r')'
+            text = re.sub(pattern, r'\1 ' + replacement, text)
+            # Handle any remaining fraction characters without preceding digits
+            text = text.replace(unicode_char, replacement)
+        else:
+            text = text.replace(unicode_char, replacement)
 
     # Use the improved remove_accents function for accent removal
     text = remove_accents(text)

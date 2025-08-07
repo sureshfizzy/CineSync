@@ -179,7 +179,8 @@ def clean_title_string(title: str) -> str:
 
     title = re.sub(r'^0\d\s+', '', title).strip()
 
-    title = re.sub(r'^[^\w\s.!?]+|[^\w\s.!?]+$', '', title).strip()
+    # Remove unwanted characters from start/end, but preserve Unicode fraction characters
+    title = re.sub(r'^[^\w\s.!?\u00BC-\u00BE\u2150-\u215E\u2189]+|[^\w\s.!?\u00BC-\u00BE\u2150-\u215E\u2189]+$', '', title).strip()
 
     return title
 
