@@ -657,6 +657,7 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
         r'^S\d{1,2}-S\d{1,2}$',
         r'Season\s+\d+',
         r'\bEpisode\s+\d+',
+        r'\bEpisode\d+',    # Episode07, Episode1, etc.
         r'\bepisode\.\d+',  # episode.1, episode.2, etc.
         r'\bEP\d+',
         r'S\d{1,2}\s*-\s*E\d{1,4}',
@@ -897,6 +898,8 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 re.match(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}-S\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'E\d{1,4}', clean_part, re.IGNORECASE) or
+                re.match(r'Episode\s+\d{1,4}', clean_part, re.IGNORECASE) or
+                re.match(r'Episode\d{1,4}', clean_part, re.IGNORECASE) or
                 re.match(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                 re.match(r'\d{1,2}x\d{1,4}(?:-\d{1,4})?', clean_part, re.IGNORECASE)):
                 break
@@ -1136,6 +1139,8 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                       re.match(r'S\d{1,2}E\d{1,4}', clean_part, re.IGNORECASE) or
                       re.match(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
                       re.match(r'E\d{1,4}', clean_part, re.IGNORECASE) or
+                      re.match(r'Episode\s+\d{1,4}', clean_part, re.IGNORECASE) or
+                      re.match(r'Episode\d{1,4}', clean_part, re.IGNORECASE) or
                       re.match(r'episode\.\d+', clean_part, re.IGNORECASE) or
                       re.match(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                       re.match(r'\d{1,2}x\d{1,4}(?:-\d{1,4})?', clean_part, re.IGNORECASE) or
@@ -1671,6 +1676,11 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         if match:
             return int(match.group(1))
 
+        # Handle "EpisodeX" format (no separator)
+        match = re.match(r'Episode(\d{1,4})', clean_part, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
         # Handle "episode.X" format
         match = re.match(r'episode\.(\d{1,4})', clean_part, re.IGNORECASE)
         if match:
@@ -1760,6 +1770,8 @@ def _extract_episode_title_from_parsed(parsed: ParsedFilename) -> Optional[str]:
         if (re.match(r'S\d{1,2}\.E\d{1,3}', clean_part, re.IGNORECASE) or
             re.match(r'S\d{1,2}E\d{1,3}', clean_part, re.IGNORECASE) or
             re.match(r'E\d{1,3}', clean_part, re.IGNORECASE) or
+            re.match(r'Episode\s+\d{1,3}', clean_part, re.IGNORECASE) or
+            re.match(r'Episode\d{1,3}', clean_part, re.IGNORECASE) or
             re.match(r'episode\.\d+', clean_part, re.IGNORECASE)):
             episode_position = i
             break
@@ -1816,6 +1828,7 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
 
         # Episode indicators
         r'Episode\s+(\d{1,4})',
+        r'Episode(\d{1,4})',    # Episode07, Episode1, etc.
         r'EP(\d{1,4})',
         r'S\d{1,2}E(\d{1,3})',
 
