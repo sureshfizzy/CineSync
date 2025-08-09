@@ -52,7 +52,7 @@ WRESTLING_PATTERNS = [
     r'\bWWE\b',
     r'\bWCW\b',
     r'\bECW\b',
-    r'\bROH\b',
+    r'\bROH[\s\._-]',
     r'\bNJPW\b',
     r'\bWWF\b',
     r'\bTNA\b',
@@ -70,7 +70,7 @@ WRESTLING_PATTERNS = [
     r'World[_\s\.]*Wrestling[_\s\.]*Entertainment',
     r'World[_\s\.]*Wrestling[_\s\.]*Federation',
     r'New[_\s\.]*Japan[_\s\.]*Pro[_\s\.]*Wrestling',
-    r'Ring[_\s\.]*of[_\s\.]*Honor',
+    r'\bRing[_\s\.]*of[_\s\.]*Honor\b',
 
     # WWE Shows and Events
     r'Monday[_\s]*Raw',
@@ -115,13 +115,14 @@ WRESTLING_PATTERNS = [
     r'ANGLE[_\s\.]*2023',
 
     # Generic Wrestling Terms
-    r'\bWrestling\b',
+    r'\bWrestling[\s\._-]+(Championship|Federation|Entertainment|Show|Event|Match|PPV)\b',
+    r'\bPro[\s\._-]*Wrestling\b',
     r'\bPPV\b',
 
     # ROH Specific with Date Range
-    r'ROH[_\s]*-[_\s]*200[2-8]',
-    r'ROH[_\s]*-[_\s]*19[0-9]{2}',
-    r'ROH[_\s]*-[_\s]*20[0-9]{2}'
+    r'\bROH[_\s]*-[_\s]*200[2-8]\b',
+    r'\bROH[_\s]*-[_\s]*19[0-9]{2}\b',
+    r'\bROH[_\s]*-[_\s]*20[0-9]{2}\b'
 ]
 
 # Olympic and International Sports patterns

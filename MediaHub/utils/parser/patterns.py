@@ -55,8 +55,8 @@ SPORTS_PATTERNS = {
     'golf': re.compile(r'\b(Golf|PGA|Masters|US[_\s]*Open[_\s]*Golf)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
     'cycling': re.compile(r'\b(cycling|uci)\.?.*?(\d{4})\.?(.*?)\.?(?:stage|etape)[_\s\.]*(\d+)\.?([^.]*)', re.IGNORECASE),
     'cycling_general': re.compile(r'\b(Cycling|UCI)\.?.*?(\d{4})\.?([^.]*)', re.IGNORECASE),
-    'wrestling': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW|WCW|ECW|WWF)\.?.*?(\d{4})\.?(\d{2})\.?(\d{2})\.?([^.]*)', re.IGNORECASE),
-    'wrestling_ppv': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW)\.?([^.]*?)\.?(\d{4})\.?([^.]*)', re.IGNORECASE),
+    'wrestling': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW|WCW|ECW|WWF)[\s\._-].*?(\d{4})[\s\._-](\d{2})[\s\._-](\d{2})[\s\._-]([^.]*)', re.IGNORECASE),
+    'wrestling_ppv': re.compile(r'\b(WWE|AEW|TNA|ROH|NJPW)[\s\._-]([^.]*?)[\s\._-](\d{4})[\s\._-]([^.]*)', re.IGNORECASE),
     'generic_sports': re.compile(r'\b(?:Round|R)(\d+)\.?([^.]+)\.?(\d{4})', re.IGNORECASE),
     'grand_prix': re.compile(r'\b(Grand[_\s]*Prix|GP)\.?(\d{4})\.?(?:Round|R)?(\d+)?\.?([^.]*)', re.IGNORECASE)
 }
