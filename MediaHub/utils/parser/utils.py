@@ -121,9 +121,12 @@ def clean_title_string(title: str) -> str:
     all_keywords = _get_all_keywords()
     for keyword in all_keywords:
         if keyword.upper() == 'DC':
-            pattern = r'(?<![A-Za-z.])DC(?![\w\'.])'
-        elif keyword == "Final Show":
-            pattern = r'(?<!\w)Final\s+Show(?!-\w|\w)'
+            pattern = r'(?<![A-Za-z.-])DC(?![\w\'-.])'
+        elif keyword in ["Final Show", "Okko"]:
+            if keyword == "Final Show":
+                pattern = r'(?<!\w)Final\s+Show(?![\w-])'
+            else:
+                pattern = r'(?<![A-Za-z])Okko(?![A-Za-z\'-]|-[A-Za-z])'
         else:
             pattern = r'\b' + re.escape(keyword) + r'\b'
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
@@ -171,7 +174,7 @@ def clean_title_string(title: str) -> str:
     title = re.sub(r'\b\d{3,4}p\b', '', title, flags=re.IGNORECASE)
 
     for keyword in technical_keywords:
-        if isinstance(keyword, str) and keyword != "Final Show":
+        if isinstance(keyword, str) and keyword not in ["Final Show", "Okko"]:
             pattern = r'\b' + re.escape(keyword) + r'\b'
             title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
