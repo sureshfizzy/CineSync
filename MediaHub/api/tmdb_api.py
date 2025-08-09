@@ -697,7 +697,7 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                     movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
                     tmdb_id = chosen_movie.get('id')
 
-                    movie_data = get_complete_movie_data(tmdb_id)
+                    movie_data = get_movie_data(tmdb_id)
                     imdb_id = movie_data.get('imdb_id', '')
                     is_anime_genre = movie_data.get('is_anime_genre', False)
                     is_kids_content = movie_data.get('is_kids_content', False)
