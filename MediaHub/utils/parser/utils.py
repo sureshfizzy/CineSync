@@ -24,7 +24,6 @@ def _load_keywords():
         _keywords_cache = json.load(f)
         return _keywords_cache
 
-
 def _load_mediainfo():
     """Load mediainfo from mediainfo.json file."""
     global _mediainfo_cache
@@ -49,7 +48,6 @@ def _get_all_keywords():
 
     # Return all keywords as a set for faster lookup
     return set(all_keywords)
-
 
 def extract_alternative_title(title: str) -> str:
     """Extract alternative title from AKA patterns in title string."""
@@ -124,6 +122,8 @@ def clean_title_string(title: str) -> str:
     for keyword in all_keywords:
         if keyword.upper() == 'DC':
             pattern = r'(?<![A-Za-z.])DC(?![\w\'.])'
+        elif keyword == "Final Show":
+            pattern = r'(?<!\w)Final\s+Show(?!-\w|\w)'
         else:
             pattern = r'\b' + re.escape(keyword) + r'\b'
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
@@ -171,7 +171,7 @@ def clean_title_string(title: str) -> str:
     title = re.sub(r'\b\d{3,4}p\b', '', title, flags=re.IGNORECASE)
 
     for keyword in technical_keywords:
-        if isinstance(keyword, str):
+        if isinstance(keyword, str) and keyword != "Final Show":
             pattern = r'\b' + re.escape(keyword) + r'\b'
             title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
