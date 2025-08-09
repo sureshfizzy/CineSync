@@ -316,6 +316,11 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     results = fetch_results(query, year)
 
+    # Try and/& substitution if no results
+    if not results and (' and ' in query.lower() or ' & ' in query):
+        and_query = query.replace(' and ', ' & ') if ' and ' in query.lower() else query.replace(' & ', ' and ')
+        results = fetch_results(and_query, year)
+
     if not results and episode_match and file:
         log_message(f"Primary search failed, attempting with cleaned query from filename", "DEBUG", "stdout")
         cleaned_result = clean_query(file)
@@ -652,6 +657,11 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         return response
 
     results = fetch_results(query, year)
+
+    # Try and/& substitution if no results
+    if not results and (' and ' in query.lower() or ' & ' in query):
+        and_query = query.replace(' and ', ' & ') if ' and ' in query.lower() else query.replace(' & ', ' and ')
+        results = fetch_results(and_query, year)
 
     if not results and file:
         log_message("Primary search failed. Attempting search with cleaned movie name from filename.", "DEBUG", "stdout")
