@@ -7,13 +7,17 @@ interface SkipConfirmationDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   filePath?: string;
+  bulkFilePaths?: string[];
+  isBulkMode?: boolean;
 }
 
 const SkipConfirmationDialog: React.FC<SkipConfirmationDialogProps> = ({
   open,
   onConfirm,
   onCancel,
-  filePath
+  filePath,
+  bulkFilePaths,
+  isBulkMode = false
 }) => {
 
   const actions = [
@@ -37,20 +41,29 @@ const SkipConfirmationDialog: React.FC<SkipConfirmationDialogProps> = ({
     }
   ];
 
+  const fileCount = isBulkMode && bulkFilePaths ? bulkFilePaths.length : 1;
+  const isPlural = fileCount > 1;
+
   return (
     <BaseConfirmationDialog
       open={open}
       onConfirm={onConfirm}
       onCancel={onCancel}
       filePath={filePath}
-      title="Skip Processing Confirmation"
+      title={isBulkMode ? `Skip Processing ${fileCount} Files` : "Skip Processing Confirmation"}
       titleIcon={<WarningIcon sx={{ color: 'warning.main', fontSize: '28px' }} />}
       alertSeverity="warning"
       alertIcon={<BlockIcon />}
-      alertTitle="This action will permanently skip this file"
-      alertDescription="Skip processing will remove any existing symlinks and prevent future automatic processing."
+      alertTitle={isBulkMode
+        ? `This action will permanently skip ${fileCount} files`
+        : "This action will permanently skip this file"
+      }
+      alertDescription={isBulkMode
+        ? `Skip processing will remove any existing symlinks for all ${fileCount} files and prevent future automatic processing.`
+        : "Skip processing will remove any existing symlinks and prevent future automatic processing."
+      }
       actions={actions}
-      confirmButtonText="Skip This File"
+      confirmButtonText={isBulkMode ? `Skip ${fileCount} Files` : "Skip This File"}
       confirmButtonColor="warning"
       titleGradient="linear-gradient(135deg, rgba(255, 152, 0, 0.15) 0%, rgba(255, 193, 7, 0.12) 100%)"
     />

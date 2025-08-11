@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DialogTitle, DialogContent, DialogActions, Tabs, Typography, useTheme, IconButton } from '@mui/material';
+import { DialogTitle, DialogContent, DialogActions, Tabs, Typography, useTheme, IconButton, Box, LinearProgress, Chip } from '@mui/material';
 import BuildIcon from '@mui/icons-material/Build';
 import CloseIcon from '@mui/icons-material/Close';
 import { searchTmdb, getTmdbPosterUrlDirect, fetchSeasonsFromTmdb, fetchEpisodesFromTmdb } from '../../api/tmdbApi';
@@ -16,7 +16,7 @@ import EpisodeSelectionDialog from './EpisodeSelectionDialog';
 import { ModifyDialogProps, ModifyOption, IDOption } from './types';
 
 const ModifyDialog: React.FC<ModifyDialogProps> = ({
-  open, onClose, currentFilePath, onNavigateBack,
+  open, onClose, currentFilePath, bulkFilePaths, onNavigateBack,
   useBatchApply: propUseBatchApply = false, useManualSearch: propUseManualSearch = false
 }) => {
   const [selectedOption, setSelectedOption] = useState('');
@@ -37,9 +37,18 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
   const [skipResultOpen, setSkipResultOpen] = useState(false);
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
   const [useBatchApply, setUseBatchApply] = useState(false);
+  const [bulkForceProcessing, setBulkForceProcessing] = useState(false);
+  const [bulkForceFirstFileComplete, setBulkForceFirstFileComplete] = useState(false);
+  const [capturedSelection, setCapturedSelection] = useState<{tmdbId: string, showName?: string} | null>(null);
   const [lastSelectedOption, setLastSelectedOption] = useState<string | null>(null);
   const [manualSearchEnabled, setManualSearchEnabled] = useState(false);
   const [selectionInProgress, setSelectionInProgress] = useState(false);
+
+  // Bulk processing states
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkProcessingProgress, setBulkProcessingProgress] = useState(0);
+  const [bulkProcessingTotal, setBulkProcessingTotal] = useState(0);
+  const [bulkProcessingCurrent, setBulkProcessingCurrent] = useState('');
 
   // Season/Episode selection states
   const [seasonOptions, setSeasonOptions] = useState<any[]>([]);
@@ -103,6 +112,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     setUseBatchApply(false);
     setLastSelectedOption(null);
     setManualSearchEnabled(false);
+    setBulkForceProcessing(false);
+    setBulkForceFirstFileComplete(false);
+    setCapturedSelection(null);
     setSelectionInProgress(false);
     setSeasonOptions([]);
     setEpisodeOptions([]);
@@ -111,6 +123,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     selectedSeasonRef.current = null;
     setSeasonDialogOpen(false);
     setEpisodeDialogOpen(false);
+    setIsBulkMode(false);
+    setBulkProcessingProgress(0);
+    setBulkProcessingTotal(0);
+    setBulkProcessingCurrent('');
     clearTimeouts();
   };
 
@@ -184,14 +200,144 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     setOperationSuccess(false);
     setIsClosing(false);
     setManualSearchEnabled(false);
-    setExecOpen(true);
 
+    // Handle bulk processing
+    if (isBulkMode && bulkFilePaths && bulkFilePaths.length > 1) {
+      // Check if IDs are provided (which makes bulk processing compatible)
+      const hasIds = Object.values(selectedIds).some(v => v);
+
+      // For bulk processing, force auto-select mode for interactive operations
+      const isBulkCompatibleOption = ['auto-select', 'force', 'force-show', 'force-movie', 'force-extra'].includes(selectedOption);
+
+      if (!isBulkCompatibleOption && !hasIds) {
+        setExecOutput('⚠️ This option requires individual file processing. Please use "Auto-Select First Result" for bulk operations or provide IDs in the "Set IDs" tab.\n');
+        setExecOpen(true);
+        return;
+      }
+
+      processBulkFiles();
+      return;
+    }
+
+    // Handle single file processing
+    setExecOpen(true);
     const shouldUseBatchApply = propUseBatchApply;
     if (shouldUseBatchApply) {
       setUseBatchApply(true);
     }
 
     startPythonCommand(shouldUseBatchApply);
+  };
+
+  const processBulkFiles = async () => {
+    if (!bulkFilePaths || bulkFilePaths.length === 0) return;
+
+    setBulkProcessingProgress(0);
+    setExecOpen(true);
+    setExecOutput('Starting bulk processing...\n');
+
+    for (let i = 0; i < bulkFilePaths.length; i++) {
+      const filePath = bulkFilePaths[i];
+      const fileName = filePath.split('/').pop() || filePath;
+
+      setBulkProcessingCurrent(fileName);
+      setExecOutput(prev => prev + `\nProcessing ${i + 1}/${bulkFilePaths.length}: ${fileName}\n`);
+
+      try {
+        // For bulk processing, ensure auto-select is enabled for interactive operations
+        const hasIds = Object.values(selectedIds).some(v => v);
+        const shouldAutoSelect = selectedOption === 'auto-select' ||
+                                ['force-show', 'force-movie'].includes(selectedOption) ||
+                                hasIds; // Auto-select when IDs are provided
+
+        const requestPayload = {
+          sourcePath: filePath,
+          disableMonitor: true,
+          selectedOption: selectedOption || undefined,
+          selectedIds: Object.keys(selectedIds).length > 0 ? selectedIds : undefined,
+          batchApply: true,
+          manualSearch: false,
+          autoSelect: shouldAutoSelect
+        };
+
+        // Use streaming response handling for interactive operations
+        const response = await fetch('/api/python-bridge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+          },
+          body: JSON.stringify(requestPayload),
+        });
+
+        if (!response.body) {
+          setExecOutput(prev => prev + `❌ No response body for: ${fileName}\n`);
+          continue;
+        }
+
+        // Process streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        let fileCompleted = false;
+
+        while (!done && !fileCompleted) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const data = JSON.parse(line);
+
+                  if (data.type === 'output') {
+                    setExecOutput(prev => prev + data.content);
+                  } else if (data.type === 'done') {
+                    setExecOutput(prev => prev + `✅ Successfully processed: ${fileName}\n`);
+                    fileCompleted = true;
+                    break;
+                  } else if (data.type === 'error') {
+                    setExecOutput(prev => prev + `❌ Error processing ${fileName}: ${data.content}\n`);
+                    fileCompleted = true;
+                    break;
+                  }
+                } catch (e) {
+                  // Handle non-JSON output
+                  setExecOutput(prev => prev + line + '\n');
+                }
+              }
+            }
+          }
+        }
+
+        if (!fileCompleted) {
+          setExecOutput(prev => prev + `⚠️ Processing incomplete for: ${fileName}\n`);
+        }
+
+      } catch (error) {
+        setExecOutput(prev => prev + `❌ Error processing ${fileName}: ${error}\n`);
+      }
+
+      setBulkProcessingProgress(i + 1);
+    }
+
+    setExecOutput(prev => prev + `\n🎉 Bulk processing completed! Processed ${bulkFilePaths.length} files.\n`);
+    setOperationComplete(true);
+    setOperationSuccess(true);
+    setBulkProcessingCurrent('');
+
+    // Auto-close after 3 seconds for bulk processing
+    setTimeout(() => {
+      setIsClosing(true);
+      setTimeout(() => {
+        handleExecClose();
+        handleClose();
+      }, 300);
+    }, 3000);
   };
 
   const startPythonCommand = async (batchApplyOverride?: boolean) => {
@@ -332,14 +478,17 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
                   setOperationSuccess(true);
 
                   // Auto-close after 2 seconds of successful completion
-                  autoCloseTimeoutRef.current = setTimeout(() => {
-                    setIsClosing(true);
-                    // Give time for closing animation, then actually close
-                    setTimeout(() => {
-                      handleExecClose();
-                      handleClose();
-                    }, 300);
-                  }, 2000);
+                  // In bulk mode, don't auto-close to prevent dialog reopening
+                  if (!isBulkMode) {
+                    autoCloseTimeoutRef.current = setTimeout(() => {
+                      setIsClosing(true);
+                      // Give time for closing animation, then actually close
+                      setTimeout(() => {
+                        handleExecClose();
+                        handleClose();
+                      }, 300);
+                    }, 2000);
+                  }
                 } else {
                   console.log('Backend sent done but still have active UI state - ignoring completion signal');
                   console.log('Has active options:', hasActiveOptions, 'Waiting for input:', isWaitingForUserInput);
@@ -657,6 +806,18 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     (window as any).lastSelectionTime = Date.now();
     (window as any).selectionBlocked = true;
 
+    // Capture selection for bulk force processing
+    if (bulkForceProcessing && !bulkForceFirstFileComplete) {
+      const selectedOption = movieOptions.find(option => option.number === optionNumber);
+      if (selectedOption) {
+        setCapturedSelection({
+          tmdbId: selectedOption.tmdbId,
+          showName: selectedOption.title
+        });
+        setExecOutput(prev => prev + `\n✅ Selection captured: ${selectedOption.title} (TMDB ID: ${selectedOption.tmdbId})\n`);
+      }
+    }
+
     setMovieOptions([]);
     setIsLoadingNewOptions(false);
     setPreviousOptions([]);
@@ -714,6 +875,65 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
 
   const handleSkipConfirm = async () => {
     setSkipConfirmOpen(false);
+
+    // Handle bulk skip processing
+    if (isBulkMode && bulkFilePaths && bulkFilePaths.length > 1) {
+      setExecOpen(true);
+      setExecOutput('Starting bulk skip processing...\n');
+      setBulkProcessingProgress(0);
+
+      for (let i = 0; i < bulkFilePaths.length; i++) {
+        const filePath = bulkFilePaths[i];
+        const fileName = filePath.split('/').pop() || filePath;
+
+        setBulkProcessingCurrent(fileName);
+        setExecOutput(prev => prev + `\nSkipping ${i + 1}/${bulkFilePaths.length}: ${fileName}\n`);
+
+        try {
+          const requestPayload = {
+            sourcePath: filePath,
+            disableMonitor: true,
+            selectedOption: 'skip'
+          };
+
+          const response = await fetch('/api/python-bridge', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+            },
+            body: JSON.stringify(requestPayload)
+          });
+
+          if (response.ok) {
+            setExecOutput(prev => prev + `✅ Successfully skipped: ${fileName}\n`);
+          } else {
+            setExecOutput(prev => prev + `❌ Failed to skip: ${fileName}\n`);
+          }
+        } catch (error) {
+          setExecOutput(prev => prev + `❌ Error skipping ${fileName}: ${error}\n`);
+        }
+
+        setBulkProcessingProgress(i + 1);
+      }
+
+      setExecOutput(prev => prev + `\n🎉 Bulk skip processing completed! Skipped ${bulkFilePaths.length} files.\n`);
+      setOperationComplete(true);
+      setOperationSuccess(true);
+      setBulkProcessingCurrent('');
+
+      // Auto-close after 3 seconds for bulk skip processing
+      setTimeout(() => {
+        setIsClosing(true);
+        setTimeout(() => {
+          handleExecClose();
+          handleClose();
+        }, 300);
+      }, 3000);
+      return;
+    }
+
+    // Handle single file skip processing
     setSkipResultOpen(true);
 
     if (!currentFilePath) {
@@ -771,6 +991,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     setForceConfirmOpen(false);
     await terminatePythonBridge();
 
+    // Reset states
     setExecOutput('');
     setMovieOptions([]);
     setIsLoadingNewOptions(false);
@@ -779,14 +1000,92 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     setOperationSuccess(false);
     setIsClosing(false);
     setManualSearchEnabled(false);
-    setExecOpen(true);
 
+    // Handle bulk force processing - process first file interactively
+    if (isBulkMode && bulkFilePaths && bulkFilePaths.length > 1) {
+      // Set up for bulk force processing
+      setBulkForceProcessing(true);
+      setBulkForceFirstFileComplete(false);
+      setCapturedSelection(null);
+      setBulkProcessingProgress(0);
+      setBulkProcessingCurrent(bulkFilePaths[0].split('/').pop() || bulkFilePaths[0]);
+      setExecOutput(`Starting bulk force processing...\nProcessing first file interactively: ${bulkFilePaths[0].split('/').pop() || bulkFilePaths[0]}\n`);
+      setExecOpen(true);
+
+      // Process first file with interactive selection
+      // The selection will be captured and applied to remaining files
+      startPythonCommand(false); // Don't use batch apply for first file - we want interactive selection
+      return;
+    }
+
+    // Handle single file force processing
+    setExecOpen(true);
     const shouldUseBatchApply = propUseBatchApply;
     if (shouldUseBatchApply) {
       setUseBatchApply(true);
     }
 
     startPythonCommand(shouldUseBatchApply);
+  };
+
+  const processRemainingBulkForceFiles = async () => {
+    if (!bulkFilePaths || !capturedSelection || bulkFilePaths.length <= 1) return;
+
+    const remainingFiles = bulkFilePaths.slice(1); // Skip first file (already processed)
+    setExecOutput(prev => prev + `\n🔄 Applying selection to remaining ${remainingFiles.length} files...\n`);
+
+    for (let i = 0; i < remainingFiles.length; i++) {
+      const filePath = remainingFiles[i];
+      const fileName = filePath.split('/').pop() || filePath;
+
+      setBulkProcessingCurrent(fileName);
+      setBulkProcessingProgress(i + 2); // +2 because first file is already complete
+      setExecOutput(prev => prev + `\nProcessing ${i + 2}/${bulkFilePaths.length}: ${fileName}\n`);
+
+      try {
+        const requestPayload = {
+          sourcePath: filePath,
+          disableMonitor: true,
+          selectedOption: 'force',
+          selectedIds: { tmdb: capturedSelection.tmdbId },
+          batchApply: true, // Enable batch apply to use the provided TMDB ID
+          manualSearch: false,
+          autoSelect: true // Enable auto-select when TMDB ID is provided
+        };
+
+        const response = await fetch('/api/python-bridge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+          },
+          body: JSON.stringify(requestPayload)
+        });
+
+        if (response.ok) {
+          setExecOutput(prev => prev + `✅ Successfully processed: ${fileName}\n`);
+        } else {
+          setExecOutput(prev => prev + `❌ Failed to process: ${fileName}\n`);
+        }
+      } catch (error) {
+        setExecOutput(prev => prev + `❌ Error processing ${fileName}: ${error}\n`);
+      }
+    }
+
+    setExecOutput(prev => prev + `\n🎉 Bulk force processing completed! Processed ${bulkFilePaths.length} files.\n`);
+    setOperationComplete(true);
+    setOperationSuccess(true);
+    setBulkProcessingCurrent('');
+    setBulkForceProcessing(false);
+
+    // Auto-close after 3 seconds
+    setTimeout(() => {
+      setIsClosing(true);
+      setTimeout(() => {
+        handleExecClose();
+        handleClose();
+      }, 300);
+    }, 3000);
   };
 
   const handleForceCancel = () => setForceConfirmOpen(false);
@@ -818,8 +1117,15 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
   };
 
   useEffect(() => {
-    if (open) resetAllStates();
-  }, [open]);
+    if (open) {
+      resetAllStates();
+      // Detect bulk mode
+      if (bulkFilePaths && bulkFilePaths.length > 1) {
+        setIsBulkMode(true);
+        setBulkProcessingTotal(bulkFilePaths.length);
+      }
+    }
+  }, [open, bulkFilePaths]);
 
   useEffect(() => {
     return clearTimeouts;
@@ -831,6 +1137,14 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
       setEpisodeDialogOpen(false);
     }
   }, [operationSuccess]);
+
+  // Handle bulk force processing completion of first file
+  useEffect(() => {
+    if (bulkForceProcessing && operationSuccess && !bulkForceFirstFileComplete && capturedSelection) {
+      setBulkForceFirstFileComplete(true);
+      processRemainingBulkForceFiles();
+    }
+  }, [bulkForceProcessing, operationSuccess, bulkForceFirstFileComplete, capturedSelection]);
 
   return (
     <>
@@ -874,7 +1188,12 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
               })
             }}
           >
-            {Object.values(selectedIds).some(v => v) ? '🆔 ID-Based Processing' : 'Process Media File'}
+            {isBulkMode
+              ? `📦 Bulk Process ${bulkProcessingTotal} Files`
+              : Object.values(selectedIds).some(v => v)
+                ? '🆔 ID-Based Processing'
+                : 'Process Media File'
+            }
           </Typography>
           <IconButton
             onClick={handleClose}
@@ -908,6 +1227,62 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
             <StyledTab label="Actions" value="actions" />
             <StyledTab label="Set IDs" value="ids" />
           </Tabs>
+
+          {/* Bulk Processing Info */}
+          {isBulkMode && !execOpen && (
+            <Box sx={{
+              mb: 3,
+              p: 2,
+              borderRadius: 2,
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.1)' : 'rgba(33, 150, 243, 0.05)',
+              border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.3)' : 'rgba(33, 150, 243, 0.2)'}`
+            }}>
+              <Typography variant="body2" color="primary.main" fontWeight={600} sx={{ mb: 1 }}>
+                💡 Bulk Processing Mode
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                For operations requiring user selection (Force as TV Show/Movie), the first available match will be automatically selected for each file.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Bulk Processing Progress */}
+          {isBulkMode && (bulkProcessingProgress > 0 || execOpen) && (
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {bulkProcessingProgress === 0
+                    ? `Preparing to process ${bulkProcessingTotal} files...`
+                    : `Processing files (${bulkProcessingProgress}/${bulkProcessingTotal})`
+                  }
+                </Typography>
+                <Chip
+                  label={`${Math.round((bulkProcessingProgress / bulkProcessingTotal) * 100)}%`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(bulkProcessingProgress / bulkProcessingTotal) * 100}
+                sx={{
+                  height: 6,
+                  borderRadius: 3,
+                  bgcolor: theme.palette.action.hover,
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 3,
+                    background: 'linear-gradient(90deg, #6366F1 0%, #8B5CF6 100%)',
+                  }
+                }}
+              />
+              {bulkProcessingCurrent && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  Current: {bulkProcessingCurrent}
+                </Typography>
+              )}
+            </Box>
+          )}
 
           {activeTab === 'actions' && (
             <ActionOptions
@@ -985,6 +1360,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         onConfirm={handleSkipConfirm}
         onCancel={handleSkipCancel}
         filePath={currentFilePath}
+        bulkFilePaths={bulkFilePaths}
+        isBulkMode={isBulkMode}
       />
 
       <SkipResultDialog
@@ -1000,6 +1377,8 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         onConfirm={handleForceConfirm}
         onCancel={handleForceCancel}
         filePath={currentFilePath}
+        bulkFilePaths={bulkFilePaths}
+        isBulkMode={isBulkMode}
       />
 
       <SeasonSelectionDialog

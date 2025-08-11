@@ -7,25 +7,36 @@ interface ForceConfirmationDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   filePath?: string;
+  bulkFilePaths?: string[];
+  isBulkMode?: boolean;
 }
 
 const ForceConfirmationDialog: React.FC<ForceConfirmationDialogProps> = ({
   open,
   onConfirm,
   onCancel,
-  filePath
+  filePath,
+  bulkFilePaths,
+  isBulkMode = false
 }) => {
+  const fileCount = isBulkMode && bulkFilePaths ? bulkFilePaths.length : 1;
+  const isPlural = fileCount > 1;
+
   const actions = [
     {
       icon: <DeleteSweepIcon />,
       title: 'Remove existing symlinks',
-      description: 'Any current symlinks for this file will be deleted',
+      description: isPlural
+        ? `Any current symlinks for all ${fileCount} files will be deleted`
+        : 'Any current symlinks for this file will be deleted',
       color: 'warning.main'
     },
     {
       icon: <LinkIcon />,
       title: 'Create new symlinks',
-      description: 'Fresh symlinks will be created with updated metadata and organization',
+      description: isPlural
+        ? `Fresh symlinks will be created for all ${fileCount} files with updated metadata and organization`
+        : 'Fresh symlinks will be created with updated metadata and organization',
       color: 'primary.main'
     },
     {
@@ -42,14 +53,20 @@ const ForceConfirmationDialog: React.FC<ForceConfirmationDialogProps> = ({
       onConfirm={onConfirm}
       onCancel={onCancel}
       filePath={filePath}
-      title="Force Recreate Symlinks"
+      title={isBulkMode ? `Force Recreate Symlinks for ${fileCount} Files` : "Force Recreate Symlinks"}
       titleIcon={<RefreshIcon sx={{ color: 'primary.main', fontSize: '28px' }} />}
       alertSeverity="info"
       alertIcon={<RefreshIcon />}
-      alertTitle="This will recreate symlinks for this file"
-      alertDescription="Force recreate will remove existing symlinks and create new ones, even if they already exist."
+      alertTitle={isBulkMode
+        ? `This will recreate symlinks for ${fileCount} files`
+        : "This will recreate symlinks for this file"
+      }
+      alertDescription={isBulkMode
+        ? `Force recreate will remove existing symlinks and create new ones for all ${fileCount} files, even if they already exist.`
+        : "Force recreate will remove existing symlinks and create new ones, even if they already exist."
+      }
       actions={actions}
-      confirmButtonText="Force Recreate Symlinks"
+      confirmButtonText={isBulkMode ? `Force Recreate Symlinks for ${fileCount} Files` : "Force Recreate Symlinks"}
       confirmButtonColor="primary"
     />
   );

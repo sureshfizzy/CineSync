@@ -2,6 +2,7 @@ export interface ModifyDialogProps {
   open: boolean;
   onClose: () => void;
   currentFilePath?: string;
+  bulkFilePaths?: string[];
   onNavigateBack?: () => void;
   useBatchApply?: boolean;
   useManualSearch?: boolean;
