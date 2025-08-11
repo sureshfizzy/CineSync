@@ -301,9 +301,11 @@ const components = {
   },
   MuiDialog: {
     styleOverrides: {
-      paper: {
+      paper: ({ theme }) => ({
         borderRadius: 12,
-      },
+        backgroundColor: theme.palette.background.paper,
+        backgroundImage: 'none',
+      }),
     },
   },
   MuiDivider: {

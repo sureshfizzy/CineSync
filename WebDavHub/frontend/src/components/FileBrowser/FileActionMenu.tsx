@@ -1,7 +1,7 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense, useEffect } from 'react';
 import {
   Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent,
-  DialogActions, Button, Typography, TextField, Box, Tooltip
+  DialogActions, Button, Typography, TextField, Box, Tooltip, Avatar, useTheme
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -10,6 +10,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import axios from 'axios';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import { upsertFileDetail, deleteFileDetail } from './fileApi';
@@ -68,6 +69,7 @@ function getRelativePath(absPath: string): string {
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
 const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu', onNavigateBack }) => {
+  const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -77,11 +79,23 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameLoading, setRenameLoading] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
+
+  // Auto-close success dialog after 3 seconds
+  useEffect(() => {
+    if (successDialogOpen) {
+      const timer = setTimeout(() => {
+        setSuccessDialogOpen(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successDialogOpen]);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -208,6 +222,8 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       });
       setRenameDialogOpen(false);
       setRenameLoading(false);
+      setSuccessMessage(`${file.type === 'directory' ? 'Folder' : 'File'} renamed to "${renameValue.trim()}" successfully`);
+      setSuccessDialogOpen(true);
       if (onRename) onRename(file);
     } catch (error: any) {
       setRenameError(error.response?.data || error.message || 'Failed to rename file');
@@ -242,6 +258,8 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       await deleteFileDetail(relPath);
       setDeleteDialogOpen(false);
       setDeleting(false);
+      setSuccessMessage(`${file.type === 'directory' ? 'Folder' : 'File'} "${file.name}" deleted successfully`);
+      setSuccessDialogOpen(true);
       if (onDeleted) onDeleted();
     } catch (error) {
       console.error('Failed to delete file:', error);
@@ -306,7 +324,32 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             />
           </Suspense>
         )}
-        <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose}>
+        <Dialog
+          open={renameDialogOpen}
+          onClose={handleRenameDialogClose}
+          sx={{
+            '& .MuiDialog-paper': {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+                : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+            }
+          }}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+                : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+            }
+          }}
+        >
           <DialogTitle>Rename File</DialogTitle>
           <DialogContent>
             <TextField autoFocus margin="dense" label="New Name" fullWidth value={renameValue} onChange={e => setRenameValue(e.target.value)} />
@@ -317,7 +360,32 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             <Button onClick={handleRenameSubmit} variant="contained" disabled={renameLoading}>Rename</Button>
           </DialogActions>
         </Dialog>
-        <Dialog open={deleteDialogOpen} onClose={handleDeleteConfirmClose}>
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={handleDeleteConfirmClose}
+          sx={{
+            '& .MuiDialog-paper': {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+                : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+            }
+          }}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+                : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+            }
+          }}
+        >
           <DialogTitle>Delete File</DialogTitle>
           <DialogContent>
             <Typography>Are you sure you want to delete <b>{file.name}</b>?</Typography>
@@ -326,6 +394,74 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           <DialogActions>
             <Button onClick={handleDeleteConfirmClose}>Cancel</Button>
             <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>Delete</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={successDialogOpen}
+          onClose={() => setSuccessDialogOpen(false)}
+          maxWidth="xs"
+          fullWidth
+          sx={{
+            '& .MuiDialog-paper': {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              minWidth: 400,
+            }
+          }}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              minWidth: 400,
+            }
+          }}
+        >
+          <DialogTitle sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            color: '#4caf50',
+            fontWeight: 'bold'
+          }}>
+            <Avatar sx={{ bgcolor: '#4caf50', width: 32, height: 32 }}>
+              <CheckCircleIcon sx={{ color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+            </Avatar>
+            Operation Complete
+          </DialogTitle>
+          <DialogContent sx={{ pb: 1 }}>
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <Avatar sx={{
+                bgcolor: '#4caf50',
+                width: 80,
+                height: 80,
+                margin: '0 auto 16px auto'
+              }}>
+                <CheckCircleIcon sx={{ fontSize: 40, color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+              </Avatar>
+              <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 'bold', mb: 1 }}>
+                {successMessage}
+              </Typography>
+              <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? '#aaa' : '#666' }}>
+                This dialog will close automatically in a few seconds...
+              </Typography>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+            <Button
+              onClick={() => setSuccessDialogOpen(false)}
+              variant="contained"
+              sx={{
+                backgroundColor: '#2196f3',
+                '&:hover': { backgroundColor: '#1976d2' },
+                minWidth: 100
+              }}
+            >
+              Close
+            </Button>
           </DialogActions>
         </Dialog>
       </Box>
@@ -379,7 +515,34 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           />
         </Suspense>
       )}
-      <Dialog open={deleteDialogOpen} onClose={handleDeleteConfirmClose} maxWidth="xs" fullWidth>
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteConfirmClose}
+        maxWidth="xs"
+        fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+              : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+          }
+        }}
+        PaperProps={{
+          sx: {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+              : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+          }
+        }}
+      >
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete <b>{file.name}</b>? This action cannot be undone.</Typography>
@@ -392,7 +555,28 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={renameDialogOpen} onClose={handleRenameDialogClose} maxWidth="xs" fullWidth>
+      <Dialog
+        open={renameDialogOpen}
+        onClose={handleRenameDialogClose}
+        maxWidth="xs"
+        fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+          }
+        }}
+        PaperProps={{
+          sx: {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+          }
+        }}
+      >
         <DialogTitle>Rename File</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>Enter a new name for <b>{file.name}</b>:</Typography>
@@ -429,6 +613,80 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           currentFilePath={file.fullPath || file.sourcePath || joinPaths(currentPath, file.name)}
         />
       )}
+      <Dialog
+        open={successDialogOpen}
+        onClose={() => setSuccessDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+            minWidth: 400,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+              : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+          }
+        }}
+        PaperProps={{
+          sx: {
+            bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+            backgroundImage: 'none',
+            borderRadius: 2,
+            minWidth: 400,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
+              : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: '#4caf50',
+          fontWeight: 'bold'
+        }}>
+          <Avatar sx={{ bgcolor: '#4caf50', width: 32, height: 32 }}>
+            <CheckCircleIcon sx={{ color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+          </Avatar>
+          Operation Complete
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <Avatar sx={{
+              bgcolor: '#4caf50',
+              width: 80,
+              height: 80,
+              margin: '0 auto 16px auto'
+            }}>
+              <CheckCircleIcon sx={{ fontSize: 40, color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+            </Avatar>
+            <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 'bold', mb: 1 }}>
+              {successMessage}
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? '#aaa' : '#666' }}>
+              This dialog will close automatically in a few seconds...
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+          <Button
+            onClick={() => setSuccessDialogOpen(false)}
+            variant="contained"
+            sx={{
+              backgroundColor: '#2196f3',
+              '&:hover': { backgroundColor: '#1976d2' },
+              minWidth: 100
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
