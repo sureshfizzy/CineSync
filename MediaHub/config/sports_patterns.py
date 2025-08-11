@@ -110,7 +110,6 @@ WRESTLING_PATTERNS = [
     r'Straight[_\s]*Outta[_\s]*Dudleyville[_\s]*The[_\s]*Legacy[_\s]*Of[_\s]*The[_\s]*Dudley[_\s]*Boyz',
     r'American[_\s\.]*Nightmare[_\s\.]*Becoming[_\s\.]*Cody[_\s\.]*Rhodes',
     r'The[_\s]*American[_\s]*Dream[_\s]*The[_\s]*Dusty[_\s]*Rhodes[_\s]*Story',
-    r'Beyond[_\s\.]*The[_\s\.]*Mat',
     r'Woooooo[_\s]*Becoming[_\s]*Ric[_\s]*Flair',
     r'ANGLE[_\s\.]*2023',
 
