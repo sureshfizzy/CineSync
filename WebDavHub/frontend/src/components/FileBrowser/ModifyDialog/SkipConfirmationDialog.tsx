@@ -42,7 +42,6 @@ const SkipConfirmationDialog: React.FC<SkipConfirmationDialogProps> = ({
   ];
 
   const fileCount = isBulkMode && bulkFilePaths ? bulkFilePaths.length : 1;
-  const isPlural = fileCount > 1;
 
   return (
     <BaseConfirmationDialog

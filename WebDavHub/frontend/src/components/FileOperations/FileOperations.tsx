@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch, RadioGroup, FormControlLabel, Radio } from '@mui/material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch } from '@mui/material';
 import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -2064,7 +2064,7 @@ function FileOperations() {
                     size="medium"
                     startIcon={<PlayArrowIcon />}
                     onClick={() => handleSourceBulkAction()}
-                    disabled={selectedSourceFiles.size === 0 || sourceBulkActionLoading}
+                    disabled={selectedSourceFiles.size === 0 || bulkActionLoading}
                     sx={{
                       bgcolor: theme.palette.primary.main,
                       color: '#fff',
@@ -2091,7 +2091,7 @@ function FileOperations() {
                       transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     }}
                   >
-                    {sourceBulkActionLoading ? 'Processing...' : 'Reprocess Selected'}
+                    {bulkActionLoading ? 'Processing...' : 'Reprocess Selected'}
                   </Button>
                 ) : tabValue === 4 ? (
                   // Deleted Tab - Only Delete Action (no reprocess)
