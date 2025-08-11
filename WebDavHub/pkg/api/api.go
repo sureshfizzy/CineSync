@@ -1624,17 +1624,25 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 
 		path = filepath.Join(rootDir, cleanPath)
 
-		var err error
-		absPath, err = filepath.Abs(path)
-		if err != nil {
-			logger.Warn("Error: failed to get absolute path: %v", err)
+		// Try to resolve the actual directory path
+		// Convert Windows path separators to forward slashes for API path
+		apiPath := strings.ReplaceAll(cleanPath, "\\", "/")
+		resolvedPath, err := resolveActualDirectoryPath(path, apiPath)
+		if err == nil {
+			path = resolvedPath
+		}
+
+		var absErr error
+		absPath, absErr = filepath.Abs(path)
+		if absErr != nil {
+			logger.Warn("Error: failed to get absolute path: %v", absErr)
 			http.Error(w, "Invalid path", http.StatusBadRequest)
 			return
 		}
 
-		absRoot, err := filepath.Abs(rootDir)
-		if err != nil {
-			logger.Warn("Error: failed to get absolute root path: %v", err)
+		absRoot, absErr := filepath.Abs(rootDir)
+		if absErr != nil {
+			logger.Warn("Error: failed to get absolute root path: %v", absErr)
 			http.Error(w, "Server configuration error", http.StatusInternalServerError)
 			return
 		}
@@ -1660,10 +1668,19 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	}
 
 	// Also delete from database if the record exists
-	deleteFromDatabase(relativePath)
+	// Use the resolved path for database cleanup since that's what's actually stored
+	deleteFromDatabase(relativePath, path)
+
+	// Clean up WebDavHub database tables
+	cleanupWebDavHubDatabase(relativePath, path)
 
 	// Clean up empty parent directories and .tmdb files
 	cleanupEmptyDirectories(path)
+
+	// Invalidate folder cache to ensure frontend refreshes
+	db.InvalidateFolderCache()
+	db.NotifyDashboardStatsChanged()
+	db.NotifyFileOperationChanged()
 
 	logger.Info("Success: deleted %s", path)
 	w.Header().Set("Content-Type", "application/json")
@@ -1728,6 +1745,14 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 
 			path = filepath.Join(rootDir, cleanPath)
 
+			// Try to resolve the actual directory path
+			// Convert Windows path separators to forward slashes for API path
+			apiPath := strings.ReplaceAll(cleanPath, "\\", "/")
+			resolvedPath, resolveErr := resolveActualDirectoryPath(path, apiPath)
+			if resolveErr == nil {
+				path = resolvedPath
+			}
+
 			var err error
 			absPath, err = filepath.Abs(path)
 			if err != nil {
@@ -1759,13 +1784,24 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 		}
 
 		// Also delete from database if the record exists
-		deleteFromDatabase(relativePath)
+		// Use the resolved path for database cleanup
+		deleteFromDatabase(relativePath, path)
+
+		// Clean up WebDavHub database tables
+		cleanupWebDavHubDatabase(relativePath, path)
 
 		// Clean up empty parent directories
 		cleanupEmptyDirectories(path)
 
 		logger.Info("Success: deleted %s", path)
 		deletedCount++
+	}
+
+	// Invalidate folder cache to ensure frontend refreshes
+	if deletedCount > 0 {
+		db.InvalidateFolderCache()
+		db.NotifyDashboardStatsChanged()
+		db.NotifyFileOperationChanged()
 	}
 
 	// Determine overall success
@@ -1793,7 +1829,7 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 }
 
 // deleteFromDatabase removes a file record from the MediaHub database if it exists
-func deleteFromDatabase(filePath string) {
+func deleteFromDatabase(relativePath, resolvedPath string) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		logger.Warn("Failed to get database connection for cleanup: %v", err)
@@ -1801,10 +1837,42 @@ func deleteFromDatabase(filePath string) {
 	}
 
 	// Try to delete the record from processed_files table
-	deleteQuery := `DELETE FROM processed_files WHERE file_path = ? OR destination_path = ?`
-	result, err := mediaHubDB.Exec(deleteQuery, filePath, filePath)
+	// Determine if this is a file or directory deletion
+	isDirectory := false
+	if info, err := os.Stat(resolvedPath); err == nil {
+		isDirectory = info.IsDir()
+	} else {
+		isDirectory = filepath.Ext(relativePath) == ""
+	}
+
+	var deleteQuery string
+	var args []interface{}
+
+	if isDirectory {
+		deleteQuery = `DELETE FROM processed_files WHERE
+			file_path = ? OR destination_path = ? OR
+			file_path = ? OR destination_path = ? OR
+			destination_path LIKE ? OR destination_path LIKE ?`
+
+		args = []interface{}{
+			relativePath, relativePath,
+			resolvedPath, resolvedPath,
+			resolvedPath + "\\%", resolvedPath + "/%",
+		}
+	} else {
+		deleteQuery = `DELETE FROM processed_files WHERE
+			file_path = ? OR destination_path = ? OR
+			file_path = ? OR destination_path = ?`
+
+		args = []interface{}{
+			relativePath, relativePath,
+			resolvedPath, resolvedPath,
+		}
+	}
+
+	result, err := mediaHubDB.Exec(deleteQuery, args...)
 	if err != nil {
-		logger.Warn("Failed to delete database record for %s: %v", filePath, err)
+		logger.Warn("Failed to delete database record for %s: %v", relativePath, err)
 		return
 	}
 
@@ -1814,14 +1882,108 @@ func deleteFromDatabase(filePath string) {
 		return
 	}
 
-	if removeErr := db.RemoveRecentMediaByPath(filePath); removeErr != nil {
-		logger.Warn("Failed to remove recent media for path %s: %v", filePath, removeErr)
+	if removeErr := db.RemoveRecentMediaByPath(relativePath); removeErr != nil {
+		logger.Warn("Failed to remove recent media for path %s: %v", relativePath, removeErr)
 	}
 
 	if rowsAffected > 0 {
 		// Notify about the database change
 		db.NotifyDashboardStatsChanged()
 		db.NotifyFileOperationChanged()
+	} else {
+		logger.Warn("No database records found to delete for: %s", relativePath)
+	}
+}
+
+// cleanupWebDavHubDatabase removes records from WebDavHub's own database tables
+func cleanupWebDavHubDatabase(relativePath, fullPath string) {
+	isDirectory := false
+	if info, err := os.Stat(fullPath); err == nil {
+		isDirectory = info.IsDir()
+	} else {
+		isDirectory = filepath.Ext(relativePath) == ""
+	}
+
+	// Clean up file_details table
+	if err := db.DeleteFileDetail(relativePath); err != nil {
+		logger.Warn("Failed to delete file detail for %s: %v", relativePath, err)
+	}
+
+	// Also try with full path in case it was stored differently
+	if fullPath != relativePath {
+		if err := db.DeleteFileDetail(fullPath); err != nil {
+			logger.Debug("Failed to delete file detail for full path %s: %v", fullPath, err)
+		}
+	}
+
+	if isDirectory {
+		cleanupChildFiles(relativePath, fullPath)
+	}
+
+	// Clean up recent_media table
+	if err := db.RemoveRecentMediaByPath(relativePath); err != nil {
+		logger.Warn("Failed to remove recent media for %s: %v", relativePath, err)
+	}
+
+	// Also try with full path
+	if fullPath != relativePath {
+		if err := db.RemoveRecentMediaByPath(fullPath); err != nil {
+			logger.Debug("Failed to remove recent media for full path %s: %v", fullPath, err)
+		}
+	}
+
+	// Clean up source_files table if it exists
+	cleanupSourceFiles(relativePath, fullPath, isDirectory)
+
+	logger.Debug("Cleaned up WebDavHub database records for: %s", relativePath)
+}
+
+// cleanupChildFiles removes all child file records when a directory is deleted
+func cleanupChildFiles(relativePath, fullPath string) {
+	childFiles, err := db.ListFileDetails(relativePath + "/")
+	if err != nil {
+		logger.Debug("Failed to list child file details for %s: %v", relativePath, err)
+	} else {
+		for _, childFile := range childFiles {
+			if err := db.DeleteFileDetail(childFile.Path); err != nil {
+				logger.Debug("Failed to delete child file detail %s: %v", childFile.Path, err)
+			}
+		}
+		if len(childFiles) > 0 {
+			logger.Debug("Cleaned up %d child file details for directory: %s", len(childFiles), relativePath)
+		}
+	}
+}
+
+// cleanupSourceFiles removes records from source_files table
+func cleanupSourceFiles(relativePath, fullPath string, isDirectory bool) {
+	sourceDB, err := db.GetSourceDatabaseConnection()
+	if err != nil {
+		logger.Debug("Failed to get source database connection for cleanup: %v", err)
+		return
+	}
+
+	var deleteQuery string
+	var args []interface{}
+
+	if isDirectory {
+		// For directories, delete all files that start with the directory path
+		deleteQuery = `DELETE FROM source_files WHERE file_path = ? OR file_path = ? OR file_path LIKE ? OR file_path LIKE ?`
+		args = []interface{}{relativePath, fullPath, relativePath + "/%", fullPath + "/%"}
+	} else {
+		// For files, delete exact matches
+		deleteQuery = `DELETE FROM source_files WHERE file_path = ? OR file_path = ?`
+		args = []interface{}{relativePath, fullPath}
+	}
+
+	result, err := sourceDB.Exec(deleteQuery, args...)
+	if err != nil {
+		logger.Debug("Failed to delete source file records: %v", err)
+		return
+	}
+
+	if rowsAffected, err := result.RowsAffected(); err == nil && rowsAffected > 0 {
+		logger.Debug("Removed %d source file records for: %s", rowsAffected, relativePath)
 	}
 }
 
@@ -1911,6 +2073,15 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	oldFullPath := filepath.Join(rootDir, cleanOldPath)
+
+	// Try to resolve the actual directory path
+	// Convert Windows path separators to forward slashes for API path
+	apiPath := strings.ReplaceAll(cleanOldPath, "\\", "/")
+	resolvedOldPath, err := resolveActualDirectoryPath(oldFullPath, apiPath)
+	if err == nil {
+		oldFullPath = resolvedOldPath
+	}
+
 	newFullPath := filepath.Join(filepath.Dir(oldFullPath), req.NewName)
 
 	absOld, err := filepath.Abs(oldFullPath)
