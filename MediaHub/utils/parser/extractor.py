@@ -662,7 +662,9 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
         r'^S\d{1,2}\.E\d{1,4}$',  # Dot-separated season/episode format like S01.E01, S01.E1024
         r'^S\d{1,2}E\d{1,4}$',
         r'^S(\d{1,2})(?!E)$',  # Standalone season patterns S01-S99, must be the entire part
-        r'^S\d{1,2}-S\d{1,2}$',
+        r'^S\d{1,2}-S\d{1,2}$',  # Season ranges like S01-S08
+        r'^S\d{1,2}-\d{1,2}$',   # Season ranges like S1-25, S01-25
+        r'^\d{1,2}-\d{1,2}$',    # Plain number ranges like 1-25, 01-25
         r'Season\s+\d+',
         r'\bEpisode\s+\d+',
         r'\bEpisode\d+',    # Episode07, Episode1, etc.
@@ -905,6 +907,8 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 re.match(r'S\d{1,2}E\d{1,4}', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
                 re.match(r'S\d{1,2}-S\d{1,2}', clean_part, re.IGNORECASE) or
+                re.match(r'S\d{1,2}-\d{1,2}', clean_part, re.IGNORECASE) or  # S1-25, S01-25
+                re.match(r'^\d{1,2}-\d{1,2}$', clean_part, re.IGNORECASE) or  # 1-25, 01-25
                 re.match(r'E\d{1,4}', clean_part, re.IGNORECASE) or
                 re.match(r'Episode\s+\d{1,4}', clean_part, re.IGNORECASE) or
                 re.match(r'Episode\d{1,4}', clean_part, re.IGNORECASE) or
@@ -933,11 +937,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
             if (re.search(r'S\d{1,2}E\d{1,4}', clean_part, re.IGNORECASE) or
                 re.search(r'S\d{1,2}-S\d{1,2}', clean_part, re.IGNORECASE) or
+                re.search(r'S\d{1,2}-\d{1,2}', clean_part, re.IGNORECASE) or
+                re.search(r'^\d{1,2}-\d{1,2}$', clean_part, re.IGNORECASE) or
                 re.search(r'S\d{1,2}(?!E)', clean_part, re.IGNORECASE) or
                 re.search(r'E\d{1,4}', clean_part, re.IGNORECASE) or
                 re.search(r'Season\s+\d{1,2}', clean_part, re.IGNORECASE) or
                 re.search(r'\d{1,2}x\d{1,4}(?:-\d{1,4})?', clean_part, re.IGNORECASE)):
-                season_episode_match = re.search(r'(S\d{1,2}E\d{1,4}|S\d{1,2}-S\d{1,2}|S\d{1,2}(?!E)|E\d{1,4}|Season\s+\d{1,2}|\d{1,2}x\d{1,4}(?:-\d{1,4})?)', clean_part, re.IGNORECASE)
+                season_episode_match = re.search(r'(S\d{1,2}E\d{1,4}|S\d{1,2}-S\d{1,2}|S\d{1,2}-\d{1,2}|^\d{1,2}-\d{1,2}$|S\d{1,2}(?!E)|E\d{1,4}|Season\s+\d{1,2}|\d{1,2}x\d{1,4}(?:-\d{1,4})?)', clean_part, re.IGNORECASE)
                 if season_episode_match:
                     before_season = clean_part[:season_episode_match.start()].strip()
                     if before_season:
@@ -1618,6 +1624,20 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         if match:
             return int(match.group(1))
 
+        # Handle season ranges like S1-25, S01-25, S1-08 (S prefix only on first number)
+        match = re.match(r'S(\d{1,2})-(\d{1,2})', clean_part, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
+        # Handle plain number ranges like 1-25, 01-25 (when in context of seasons)
+        match = re.match(r'^(\d{1,2})-(\d{1,2})$', clean_part, re.IGNORECASE)
+        if match:
+            # Only treat as season range if the numbers are reasonable for seasons (1-50)
+            start_season = int(match.group(1))
+            end_season = int(match.group(2))
+            if 1 <= start_season <= 50 and start_season < end_season <= 50:
+                return start_season
+
         # Handle dot-separated season/episode format like S01.E01, S01.E1024
         match = re.search(r'S(\d{1,2})\.E\d{1,4}', clean_part, re.IGNORECASE)
         if match:
@@ -1646,6 +1666,9 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         r'\bS(\d{1,2})\s*-\s*\d+',
         r'\bS(\d{1,2})\s+\d+',
         r'\bS(\d{1,2})\s*$',
+        # Season range patterns
+        r'\bS(\d{1,2})-\d{1,2}\b',          # "S1-25", "S01-25"
+        r'\b(\d{1,2})-\d{1,2}\b',           # "1-25" (plain number ranges)
         # Anime-specific season patterns
         r'\bSeason\s+(\d{1,2})\s*-\s*\d+',  # "Season 2 - 03"
         r'\bSeason\s+(\d{1,2})\b',          # "Season 2" anywhere in filename

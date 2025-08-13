@@ -13,8 +13,6 @@ from MediaHub.utils.parser.parse_anime import is_anime_filename
 # Cache for parsed metadata to avoid redundant parsing
 _metadata_cache = {}
 
-
-
 # ============================================================================
 # MAIN STRUCTURED PARSING FUNCTIONS
 # ============================================================================
@@ -177,6 +175,9 @@ def _is_clean_title(query: str) -> bool:
         r'\b[A-Z]{2,}-[A-Z0-9]+\b',  # Release group patterns like "RARBG", "LOST"
         r'\bS\d{1,2}\.E\d{1,2}\b',  # Season/episode patterns like S01.E01
         r'\bS\d{1,2}E\d{1,2}\b',    # Season/episode patterns like S01E01
+        r'\bS\d{1,2}-S\d{1,2}\b',   # Season ranges like S01-S08
+        r'\bS\d{1,2}-\d{1,2}\b',    # Season ranges like S1-25, S01-25
+        r'\b\d{1,2}-\d{1,2}\b',     # Plain number ranges like 1-25, 01-25 (season ranges)
         r'\b\d{1,2}x\d{1,2}\b',     # Season x Episode patterns like 1x02
         r'\bS\d{1,2}\b',            # Season patterns like S01, S02, S03
         r'\bE\d{1,3}\b',            # Episode patterns like E01, E02

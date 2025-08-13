@@ -351,10 +351,10 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        log_message(f"Directory fallback: searching with directory name: '{dir_based_query}'", "DEBUG", "stdout")
         cleaned_dir_result = clean_query(dir_based_query)
         cleaned_dir_query = cleaned_dir_result.get('title', '')
         dir_year = cleaned_dir_result.get('year')
+        log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
         results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
@@ -687,10 +687,10 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        log_message(f"Directory fallback: searching with directory name: '{dir_based_query}'", "DEBUG", "stdout")
         cleaned_dir_result = clean_query(dir_based_query)
         cleaned_dir_query = cleaned_dir_result.get('title', '')
         dir_year = cleaned_dir_result.get('year')
+        log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
         results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:

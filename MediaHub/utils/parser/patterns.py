@@ -189,6 +189,8 @@ EPISODE_PATTERNS = {
     'episode_only': re.compile(r'\bE(\d{1,3})\b', re.IGNORECASE),
     'season_range': re.compile(r'\bS(\d{1,2})-S(\d{1,2})\b', re.IGNORECASE),
     'season_range_compact': re.compile(r'\bS(\d{1,2})S(\d{1,2})\b', re.IGNORECASE),
+    'season_range_mixed': re.compile(r'\bS(\d{1,2})-(\d{1,2})\b', re.IGNORECASE),  # S1-25, S01-25
+    'season_range_plain': re.compile(r'\b(\d{1,2})-(\d{1,2})\b', re.IGNORECASE),   # 1-25, 01-25
     'episode_range': re.compile(r'\bE(\d{1,3})-E(\d{1,3})\b', re.IGNORECASE),
     'complete': re.compile(r'\b(Complete|Collection)\b', re.IGNORECASE),
     'season_ep': re.compile(r'\bS(\d{1,2})EP(\d{1,3})\b', re.IGNORECASE),
