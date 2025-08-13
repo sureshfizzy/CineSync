@@ -2491,6 +2491,10 @@ func handleSymlinkCreated(data map[string]interface{}) {
 				newMedia.SeasonNumber = int(season)
 			} else if season, ok := seasonInterface.(int); ok {
 				newMedia.SeasonNumber = season
+			} else if seasonStr, ok := seasonInterface.(string); ok && seasonStr != "" {
+				if parsedSeason, err := strconv.Atoi(seasonStr); err == nil {
+					newMedia.SeasonNumber = parsedSeason
+				}
 			}
 		}
 
@@ -2499,6 +2503,10 @@ func handleSymlinkCreated(data map[string]interface{}) {
 				newMedia.EpisodeNumber = int(episode)
 			} else if episode, ok := episodeInterface.(int); ok {
 				newMedia.EpisodeNumber = episode
+			} else if episodeStr, ok := episodeInterface.(string); ok && episodeStr != "" {
+				if parsedEpisode, err := strconv.Atoi(episodeStr); err == nil {
+					newMedia.EpisodeNumber = parsedEpisode
+				}
 			}
 		}
 
