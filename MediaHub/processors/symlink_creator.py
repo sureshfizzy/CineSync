@@ -744,10 +744,21 @@ def process_file(args, force=False, batch_apply=False):
 
             if is_tv_folder:
                 is_show = True
-                log_message(f"Processing as show extra based on TV folder pattern: {file}", level="INFO")
+                log_message(f"Processing as show based on TV folder pattern: {file}", level="INFO")
                 if file_result:
-                    if not (file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))):
-                        file_result['is_extra'] = True
+                    # Check if file has episode info
+                    file_has_episode_info = file_result.get('episode_identifier') or (file_result.get('season_number') and file_result.get('episode_number'))
+                    if not file_has_episode_info:
+                        # Check if folder has episode information that can be inherited
+                        folder_result = clean_query(folder_name)
+                        folder_has_episode_info = folder_result.get('episode_identifier') or (folder_result.get('season_number') and folder_result.get('episode_number'))
+                        if folder_has_episode_info:
+                            log_message(f"Inheriting episode info from folder for file: {file}", level="DEBUG")
+                            file_result.update({k: v for k, v in folder_result.items()
+                                              if k in ['episode_identifier', 'season_number', 'episode_number', 'season', 'episode'] and v})
+                            file_result['is_extra'] = False
+                        else:
+                            file_result['is_extra'] = True
             else:
                 # Fallback to legacy regex patterns for edge cases
                 episode_match = re.search(r'(.*?)(S\d{1,2}\.?E\d{2}|(?<![A-Z])\bS\d{1,2}\s*\d{2}\b|S\d{2}E\d{2}|S\d{2}e\d{2}|(?<!\d{3})\b[1-9][0-9]?x[0-9]{1,2}\b(?!\d{3})|[0-9]+e[0-9]+|\bep\.?\s*\d{1,2}\b|\bEp\.?\s*\d{1,2}\b|\bEP\.?\s*\d{1,2}\b|S\d{2}\sE\d{2}|MINI[- ]SERIES|MINISERIES|\s-\s(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit|\d+\.?\d*[KMGT]B)\d{2,3}(?![Kbps\.\d]|[KMGT]B)|\s-(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit|\d+\.?\d*[KMGT]B)\d{2,3}(?![Kbps\.\d]|[KMGT]B)|\s-\s*(?!1080p|720p|480p|2160p|\d+Kbps|\d{4}|\d+bit|\d+\.?\d*[KMGT]B)\d{2,3}(?![Kbps\.\d]|[KMGT]B)|[Ee]pisode\s*\d{2}|[Ee]p\s*\d{2}|Season_-\d{2}|\bSeason\d+\b|\bE\d+\b(?![A-Z])|series\.\d+\.\d+of\d+|Episode\s+(\d+)\s+(.*?)\.(\w+)|\b\d{2}x\d{2}\b)|\(S\d{1,2}\)', file, re.IGNORECASE)
