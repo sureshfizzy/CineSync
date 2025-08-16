@@ -38,6 +38,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     source_folder = os.path.basename(source_folder)
 
+    # Check if this is an extra file and skip if it exceeds size limit
+    if is_extras_file(file, src_file, is_movie=False):
+        log_message(f"Skipping show extra file due to size limit: {file}", level="INFO")
+        return "SKIP_EXTRA", None
+
     # Use passed metadata if available, otherwise parse
     if file_metadata:
         file_result = file_metadata

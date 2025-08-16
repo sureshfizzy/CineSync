@@ -571,8 +571,18 @@ def should_skip_processing(filename: str) -> bool:
     # Skip only metadata files - allow .srt and .strm to be processed
     return filename.lower().endswith(('.sub', '.idx', '.vtt'))
 
-def is_junk_file(file: str, file_path: str) -> bool:
-    """Determine if the file is junk based on size and type."""
+def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
+    """
+    Determine if the file is an extra based on size limits.
+
+    Args:
+        file: Filename to check
+        file_path: Full path to the file
+        is_movie: True if processing movie files, False for show files
+
+    Returns:
+        bool: True if file should be skipped based on size limits
+    """
     if not isinstance(file, str) or not isinstance(file_path, str):
         return False
 
@@ -586,15 +596,22 @@ def is_junk_file(file: str, file_path: str) -> bool:
     if should_skip_processing(file):
         return False
 
-    # Never consider .srt and .strm files as junk regardless of size
+    # Never consider .srt and .strm files as extras regardless of size
     # These files are legitimately small and should always be processed
     if file.lower().endswith(('.srt', '.strm')):
         return False
 
     try:
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        junk_max_size_mb = get_junk_max_size_mb()
-        return file_size_mb <= junk_max_size_mb
+
+        # Use appropriate size limit based on content type
+        if is_movie:
+            size_limit = get_movie_extras_size_limit()
+        else:
+            size_limit = get_show_extras_size_limit()
+
+        return file_size_mb <= size_limit
+
     except (OSError, IOError) as e:
         log_message(f"Error checking file size for {file_path}: {e}", level="ERROR")
         return False

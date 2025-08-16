@@ -97,7 +97,8 @@ services:
 
       # File Handling Configuration
       - SKIP_EXTRAS_FOLDER=${SKIP_EXTRAS_FOLDER:-true}
-      - JUNK_MAX_SIZE_MB=${JUNK_MAX_SIZE_MB:-5}
+      - SHOW_EXTRAS_SIZE_LIMIT=${SHOW_EXTRAS_SIZE_LIMIT:-5}
+      - MOVIE_EXTRAS_SIZE_LIMIT=${MOVIE_EXTRAS_SIZE_LIMIT:-250}
       - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-.mp4,.mkv,.srt,.avi,.mov,.divx,.strm}
       - SKIP_ADULT_PATTERNS=${SKIP_ADULT_PATTERNS:-true}
 

@@ -256,7 +256,8 @@ func getConfigDefinitions() []ConfigValue {
 
 		// File Handling Configuration
 		{Key: "SKIP_EXTRAS_FOLDER", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable the creation and processing of extras folder files"},
-		{Key: "JUNK_MAX_SIZE_MB", Category: "File Handling Configuration", Type: "integer", Required: false, Description: "Maximum allowed file size for junks in MB"},
+		{Key: "SHOW_EXTRAS_SIZE_LIMIT", Category: "File Handling Configuration", Type: "integer", Required: false, Description: "Maximum allowed file size for show extras in MB"},
+		{Key: "MOVIE_EXTRAS_SIZE_LIMIT", Category: "File Handling Configuration", Type: "integer", Required: false, Description: "Maximum allowed file size for movie extras in MB (trailers, deleted scenes, etc.)"},
 		{Key: "ALLOWED_EXTENSIONS", Category: "File Handling Configuration", Type: "array", Required: false, Description: "Allowed file extensions for processing"},
 		{Key: "SKIP_ADULT_PATTERNS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable skipping of specific file patterns"},
 		{Key: "FILE_OPERATIONS_AUTO_MODE", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable auto-processing mode for file operations", Hidden: true},

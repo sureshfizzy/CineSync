@@ -21,7 +21,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, is_anime_file, is_junk_file, should_skip_processing
+from MediaHub.utils.file_utils import build_dest_index, is_anime_file, should_skip_processing
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.config.config import *
@@ -769,13 +769,6 @@ def process_file(args, force=False, batch_apply=False):
                     is_show = True
                     log_message(f"Processing as show based on legacy pattern detection: {src_file}", level="DEBUG")
 
-    # Check if the file should be considered an junk based on size
-    if is_junk_file(file, src_file):
-        log_message(f"Skipping Junk files: {file} based on size", level="DEBUG")
-        reason = "File skipped - size below minimum threshold"
-        log_message(f"Adding junk file to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason)
-        return
 
     # Handle batch apply logic
     if not auto_select and not tmdb_id:
@@ -829,6 +822,11 @@ def process_file(args, force=False, batch_apply=False):
                     save_processed_file(src_file, None, tmdb_id, season_number, reason)
                 if force and 'old_symlink_info' in locals():
                     _cleanup_old_symlink(old_symlink_info)
+                return
+            elif result[0] == "SKIP_EXTRA":
+                reason = "Extra file skipped - size below limit threshold"
+                log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
+                save_processed_file(src_file, None, tmdb_id, season_number, reason)
                 return
 
             # Handle show processor return format
@@ -896,7 +894,11 @@ def process_file(args, force=False, batch_apply=False):
                     if force and 'old_symlink_info' in locals():
                         _cleanup_old_symlink(old_symlink_info)
                     return
-
+                elif result[0] == "SKIP_EXTRA":
+                    reason = "Extra file skipped - size below limit threshold"
+                    log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
+                    save_processed_file(src_file, None, tmdb_id, season_number, reason)
+                    return
                 # Handle movie processor return format
                 dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
         elif not show_processed:
@@ -914,6 +916,11 @@ def process_file(args, force=False, batch_apply=False):
                     save_processed_file(src_file, None, tmdb_id, season_number, reason)
                 if force and 'old_symlink_info' in locals():
                     _cleanup_old_symlink(old_symlink_info)
+                return
+            elif result[0] == "SKIP_EXTRA":
+                reason = "Extra file skipped - size below limit threshold"
+                log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
+                save_processed_file(src_file, None, tmdb_id, season_number, reason)
                 return
 
             # Handle movie processor return format
