@@ -13,6 +13,40 @@ from MediaHub.processors.process_db import *
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 
+def _move_symlink_to_trash(symlink_path):
+	"""Move a symlink to central db/trash (next to DB files), preserving link target."""
+	try:
+		trash_dir = os.path.join(DB_DIR, 'trash')
+		os.makedirs(trash_dir, exist_ok=True)
+		base_name = os.path.basename(symlink_path)
+		name, ext = os.path.splitext(base_name)
+		candidate = os.path.join(trash_dir, base_name)
+		counter = 1
+		while os.path.lexists(candidate):
+			candidate = os.path.join(trash_dir, f"{name} ({counter}){ext}")
+			counter += 1
+		link_target = os.readlink(symlink_path)
+		os.symlink(link_target, candidate)
+		os.remove(symlink_path)
+		log_message(f"Moved symlink to trash: {symlink_path} -> {candidate}", level="INFO")
+		return True
+	except Exception as e:
+		log_message(f"Failed to move symlink to trash {symlink_path}: {e}", level="WARNING")
+		return False
+
+def _safe_delete_symlink(path):
+	try:
+		if not os.path.lexists(path):
+			return True
+		if os.path.islink(path):
+			if (os.getenv('TRASH_ENABLED', 'true').lower() in ['true','1','yes']) and _move_symlink_to_trash(path):
+				return True
+		os.remove(path)
+		return True
+	except Exception as e:
+		log_message(f"Error removing symlink {path}: {e}", level="ERROR")
+		return False
+
 def delete_broken_symlinks_batch(dest_dir, removed_paths):
     """Delete broken symlinks for multiple removed paths using parallel processing and database configurations.
 
@@ -225,7 +259,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         log_message(f"Found symlink {safe_path} pointing to: {normalized_target}", level="DEBUG")
 
                                         log_message(f"Deleting symlink: {safe_path}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
-                                        os.remove(safe_path)
+                                        _safe_delete_symlink(safe_path)
                                         symlinks_deleted = True
 
                                         # Get source path for cache update before removing from database
@@ -393,13 +427,17 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         target = os.readlink(possible_dest_path)
                                         normalized_target = normalize_file_path(target)
                                         if not os.path.exists(target) or normalized_target == removed_path:
-                                            os.remove(possible_dest_path)
+                                            _safe_delete_symlink(possible_dest_path)
                                             symlinks_deleted = True
                                             log_message(f"Deleted broken symlink: {possible_dest_path}", level="INFO")
                                             cursor1.execute("SELECT file_path, tmdb_id, season_number FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
                                             result = cursor1.fetchone()
                                             if result:
                                                 source_path, tmdb_id, season_number = result
+                                                try:
+                                                    track_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, reason="Source file removed, cleaned up broken symlink")
+                                                except Exception:
+                                                    pass
                                                 if tmdb_id:
                                                     try:
                                                         cleanup_tmdb_covers(int(tmdb_id))
@@ -439,10 +477,14 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                 normalized_target = normalize_file_path(target)
                                                 if normalized_target == removed_path or (not os.path.exists(target) and removed_path in normalized_target):
                                                     log_message(f"Found broken symlink pointing to removed file: {file_path}", level="INFO")
-                                                    os.remove(file_path)
+                                                    _safe_delete_symlink(file_path)
                                                     symlinks_deleted = True
                                                     symlinks_found = True
                                                     log_message(f"Deleted broken symlink: {file_path}", level="INFO")
+                                                    try:
+                                                        track_file_deletion(removed_path, file_path, tmdb_id, season_number, reason="Source file removed -> symlink cleanup")
+                                                    except Exception:
+                                                        pass
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))
                                                     _cleanup_empty_dirs(os.path.dirname(file_path))
@@ -510,13 +552,17 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         # Normalize the target path to remove Windows \\?\ prefix
                                         normalized_target = normalize_file_path(target)
                                         log_message(f"Deleting symlink: {safe_path} -> {normalized_target}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
-                                        os.remove(safe_path)
+                                        _safe_delete_symlink(safe_path)
                                         symlinks_deleted = True
 
                                         cursor1.execute("SELECT file_path, tmdb_id, season_number FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         result = cursor1.fetchone()
                                         if result:
                                             source_path, tmdb_id_db, season_number_db = result
+                                            try:
+                                                track_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, reason="Source file removed, cleaned up symlink")
+                                            except Exception:
+                                                pass
                                             send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Source file removed, cleaned up symlink")
 
                                         # Remove from both databases
@@ -584,6 +630,10 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     cleanup_tmdb_covers(int(tmdb_id_db))
                                                 except Exception as e:
                                                     log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id_db}: {e}", level="WARNING")
+                                            try:
+                                                track_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, reason="Symlink path not found")
+                                            except Exception:
+                                                pass
                                             send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Symlink path not found")
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))

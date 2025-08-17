@@ -181,6 +181,7 @@ def initialize_db(conn):
     else:
         log_message("Initializing database...", level="INFO")
         os.makedirs(DB_DIR, exist_ok=True)
+        os.makedirs(os.path.join(DB_DIR, 'trash'), exist_ok=True)
 
     try:
         cursor = conn.cursor()
@@ -244,6 +245,19 @@ def initialize_db(conn):
                 if column_name == "processed_at":
                     cursor.execute("UPDATE processed_files SET processed_at = datetime('now') WHERE processed_at IS NULL")
 
+        # Create the deleted_files table for tracking deletions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS deleted_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT, destination_path TEXT,
+                base_path TEXT, tmdb_id TEXT, season_number TEXT, reason TEXT, media_type TEXT,
+                proper_name TEXT, year TEXT, episode_number TEXT, imdb_id TEXT, is_anime_genre INTEGER,
+                language TEXT, quality TEXT, tvdb_id TEXT, league_id TEXT, sportsdb_event_id TEXT,
+                sport_name TEXT, sport_round INTEGER, sport_location TEXT, sport_session TEXT,
+                sport_venue TEXT, sport_date TEXT, file_size INTEGER, processed_at TEXT,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deletion_reason TEXT, trash_file_name TEXT
+            )
+        """)
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
@@ -275,6 +289,13 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_session ON processed_files(sport_session)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_venue ON processed_files(sport_venue)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_date ON processed_files(sport_date)")
+
+        # Create indexes for deleted_files table
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_file_path ON deleted_files(file_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_destination_path ON deleted_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_tmdb_id ON deleted_files(tmdb_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_at ON deleted_files(deleted_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trash_file_name ON deleted_files(trash_file_name)")
 
         conn.commit()
 
@@ -1212,9 +1233,86 @@ def track_file_addition(source_path, dest_path, tmdb_id=None, season_number=None
     except Exception as e:
         log_message(f"Error tracking file addition: {e}", level="DEBUG")
 
-def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
-    """Track file deletion in WebDavHub with availability checking"""
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def save_deleted_file(conn, source_path, dest_path, tmdb_id=None, season_number=None, deletion_reason="", trash_file_name=None):
+    """Save complete file metadata to deleted_files table before deletion"""
+    source_path = normalize_file_path(source_path)
+    if dest_path:
+        dest_path = normalize_file_path(dest_path)
+    
     try:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                   media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+                   language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+                   sport_round, sport_location, sport_session, sport_venue, sport_date,
+                   file_size, processed_at
+            FROM processed_files 
+            WHERE file_path = ? OR destination_path = ?
+        """, (source_path, dest_path))
+        
+        result = cursor.fetchone()
+        
+        if result:
+            (file_path, destination_path, base_path, tmdb_id_db, season_number_db, reason,
+             media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+             language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+             sport_round, sport_location, sport_session, sport_venue, sport_date,
+             file_size, processed_at) = result
+
+            final_tmdb_id = tmdb_id if tmdb_id else tmdb_id_db
+            final_season_number = season_number if season_number else season_number_db
+            
+        else:
+            file_path = source_path
+            destination_path = dest_path
+            base_path = None
+            final_tmdb_id = tmdb_id
+            final_season_number = season_number
+            reason = None
+            media_type = proper_name = year = episode_number = imdb_id = None
+            is_anime_genre = language = quality = tvdb_id = league_id = sportsdb_event_id = None
+            sport_name = sport_round = sport_location = sport_session = sport_venue = sport_date = None
+            file_size = processed_at = None
+        
+        # Generate trash file name if not provided
+        if not trash_file_name and dest_path:
+            trash_file_name = os.path.basename(dest_path)
+        
+        # Insert into deleted_files table
+        cursor.execute("""
+            INSERT INTO deleted_files (
+                file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+                language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+                sport_round, sport_location, sport_session, sport_venue, sport_date,
+                file_size, processed_at, deletion_reason, trash_file_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            file_path, destination_path, base_path, final_tmdb_id, final_season_number, reason,
+            media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+            language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+            sport_round, sport_location, sport_session, sport_venue, sport_date,
+            file_size, processed_at, deletion_reason, trash_file_name
+        ))
+        
+        conn.commit()
+        log_message(f"Saved deleted file metadata: {dest_path or source_path}", level="DEBUG")
+        
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error saving deleted file: {e}", level="ERROR")
+        conn.rollback()
+
+def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None, reason=""):
+    """Track file deletion by saving metadata and notifying WebDavHub"""
+    try:
+        trash_file_name = os.path.basename(dest_path) if dest_path else None
+        save_deleted_file(source_path, dest_path, tmdb_id, season_number, reason, trash_file_name)
+
         payload = {
             'operation': 'delete',
             'sourcePath': source_path,
@@ -1232,6 +1330,183 @@ def track_file_deletion(source_path, dest_path, tmdb_id=None, season_number=None
 
     except Exception as e:
         log_message(f"Error tracking file deletion: {e}", level="DEBUG")
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_deleted_files(conn, limit=None, offset=None, search_query=None):
+    """Get deleted files from the deleted_files table"""
+    try:
+        cursor = conn.cursor()
+        query = """
+            SELECT id, file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                   media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+                   language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+                   sport_round, sport_location, sport_session, sport_venue, sport_date,
+                   file_size, processed_at, deleted_at, deletion_reason, trash_file_name
+            FROM deleted_files
+        """
+        
+        params = []
+        
+        # Add search filter if provided
+        if search_query:
+            query += """ WHERE (proper_name LIKE ? OR file_path LIKE ? OR destination_path LIKE ?)"""
+            search_pattern = f"%{search_query}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
+        
+        # Add ordering
+        query += " ORDER BY deleted_at DESC"
+        
+        # Add pagination if provided
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+            if offset:
+                query += " OFFSET ?"
+                params.append(offset)
+        
+        cursor.execute(query, params)
+        return cursor.fetchall()
+        
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error getting deleted files: {e}", level="ERROR")
+        return []
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_deleted_files_count(conn, search_query=None):
+    """Get count of deleted files"""
+    try:
+        cursor = conn.cursor()
+        
+        query = "SELECT COUNT(*) FROM deleted_files"
+        params = []
+        
+        if search_query:
+            query += " WHERE (proper_name LIKE ? OR file_path LIKE ? OR destination_path LIKE ?)"
+            search_pattern = f"%{search_query}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
+        
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
+        
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error getting deleted files count: {e}", level="ERROR")
+        return 0
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def restore_deleted_file(conn, deleted_file_id):
+    """Restore a deleted file back to processed_files table"""
+    try:
+        cursor = conn.cursor()
+        
+        # Get the deleted file record
+        cursor.execute("""
+            SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                   media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+                   language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+                   sport_round, sport_location, sport_session, sport_venue, sport_date,
+                   file_size, processed_at, trash_file_name
+            FROM deleted_files 
+            WHERE id = ?
+        """, (deleted_file_id,))
+        
+        result = cursor.fetchone()
+        
+        if not result:
+            log_message(f"Deleted file with ID {deleted_file_id} not found", level="ERROR")
+            return False
+        
+        (file_path, destination_path, base_path, tmdb_id, season_number, reason,
+         media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+         language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+         sport_round, sport_location, sport_session, sport_venue, sport_date,
+         file_size, processed_at, trash_file_name) = result
+        
+        # Check if the trash file still exists
+        if trash_file_name:
+            trash_path = os.path.join(DB_DIR, 'trash', trash_file_name)
+            if not os.path.exists(trash_path):
+                log_message(f"Trash file not found for restoration: {trash_path}", level="ERROR")
+                return False
+        
+        # Insert back into processed_files (using INSERT OR REPLACE to handle duplicates)
+        cursor.execute("""
+            INSERT OR REPLACE INTO processed_files (
+                file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+                language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+                sport_round, sport_location, sport_session, sport_venue, sport_date,
+                file_size, processed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+            language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+            sport_round, sport_location, sport_session, sport_venue, sport_date,
+            file_size, processed_at
+        ))
+        
+        # Remove from deleted_files table
+        cursor.execute("DELETE FROM deleted_files WHERE id = ?", (deleted_file_id,))
+        
+        conn.commit()
+        log_message(f"Restored deleted file: {destination_path or file_path}", level="INFO")
+        
+        # Notify WebDavHub about the restoration
+        if destination_path:
+            track_file_addition(file_path, destination_path, tmdb_id, season_number)
+        
+        return True
+        
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error restoring deleted file: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def permanently_delete_file(conn, deleted_file_id):
+    """Permanently delete a file from deleted_files table and remove trash file"""
+    try:
+        cursor = conn.cursor()
+        
+        # Get the trash file name
+        cursor.execute("SELECT trash_file_name FROM deleted_files WHERE id = ?", (deleted_file_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            trash_file_name = result[0]
+            trash_path = os.path.join(DB_DIR, 'trash', trash_file_name)
+            
+            # Remove the trash file if it exists
+            if os.path.exists(trash_path):
+                try:
+                    os.remove(trash_path)
+                    log_message(f"Removed trash file: {trash_path}", level="DEBUG")
+                except (OSError, IOError) as e:
+                    log_message(f"Failed to remove trash file {trash_path}: {e}", level="WARNING")
+        
+        # Remove from deleted_files table
+        cursor.execute("DELETE FROM deleted_files WHERE id = ?", (deleted_file_id,))
+        
+        if cursor.rowcount > 0:
+            conn.commit()
+            log_message(f"Permanently deleted file with ID {deleted_file_id}", level="INFO")
+            return True
+        else:
+            log_message(f"Deleted file with ID {deleted_file_id} not found", level="ERROR")
+            return False
+        
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error permanently deleting file: {e}", level="ERROR")
+        conn.rollback()
+        return False
 
 def track_force_recreation(source_path, new_dest_path, new_tmdb_id, new_season_number, new_proper_name, new_year, new_media_type, old_dest_path=None, old_proper_name=None, old_year=None):
     """Track force recreation in WebDavHub - removes old entry and adds new entry in one operation"""

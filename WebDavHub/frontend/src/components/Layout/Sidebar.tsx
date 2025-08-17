@@ -349,9 +349,9 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
             </Typography>
           </Box>
         </Box>
+        </Box>
       </Box>
       {/* End of scrollable container */}
-    </Box>
     </Box>
   );
 }

@@ -1569,6 +1569,230 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 	handleSingleDelete(w, req.Path)
 }
 
+// HandleRestoreSymlinks restores files by calling MediaHub's restore functionality
+func HandleRestoreSymlinks(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+    
+    // Parse the request to get file IDs or paths
+    var req struct { 
+        Paths []string `json:"paths"` 
+        IDs   []string `json:"ids"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    if len(req.Paths) == 0 && len(req.IDs) == 0 {
+        http.Error(w, "No paths or IDs provided", http.StatusBadRequest)
+        return
+    }
+
+    mediaHubDB, err := db.GetDatabaseConnection()
+    if err != nil {
+        http.Error(w, "Database connection failed", http.StatusInternalServerError)
+        return
+    }
+
+    restored := 0
+    var errors []string
+
+    // Handle restoration by file IDs (preferred method)
+    if len(req.IDs) > 0 {
+        for _, idStr := range req.IDs {
+            if idStr == "" { continue }
+            
+            // Call MediaHub's restore function by communicating with MediaHub API
+            success := restoreDeletedFileByID(idStr)
+            if success {
+                restored++
+            } else {
+                errors = append(errors, fmt.Sprintf("ID %s: restore failed", idStr))
+            }
+        }
+    } else {
+        // Handle restoration by destination paths (fallback method)
+        for _, p := range req.Paths {
+            if p == "" { continue }
+            
+            // Find the deleted file by destination path in MediaHub's deleted_files table
+            var deletedID int
+            err := mediaHubDB.QueryRow(`
+                SELECT id FROM deleted_files 
+                WHERE destination_path = ? OR destination_path LIKE ? 
+                ORDER BY deleted_at DESC LIMIT 1
+            `, p, "%"+filepath.Base(p)+"%").Scan(&deletedID)
+            
+            if err != nil {
+                errors = append(errors, fmt.Sprintf("%s: not found in deleted files", p))
+                continue
+            }
+            
+            // Call MediaHub's restore function
+            success := restoreDeletedFileByID(fmt.Sprintf("%d", deletedID))
+            if success {
+                restored++
+            } else {
+                errors = append(errors, fmt.Sprintf("%s: restore failed", p))
+            }
+        }
+    }
+
+    // Return results
+    response := map[string]interface{}{
+        "success": true,
+        "restored": restored,
+        "restoredCount": restored,
+        "errors": errors,
+        "message": fmt.Sprintf("Restored %d file(s)", restored),
+    }
+
+    if restored > 0 {
+        db.InvalidateFolderCache()
+        db.NotifyDashboardStatsChanged()
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
+// restoreDeletedFileByID calls MediaHub's restore function by directly using the database
+func restoreDeletedFileByID(idStr string) bool {
+    // Convert string ID to integer
+    deletedID, err := strconv.Atoi(idStr)
+    if err != nil {
+        logger.Warn("Invalid deleted file ID: %s", idStr)
+        return false
+    }
+
+    // Get MediaHub database connection
+    mediaHubDB, err := db.GetDatabaseConnection()
+    if err != nil {
+        logger.Warn("Failed to get MediaHub database connection: %v", err)
+        return false
+    }
+
+    // Get the deleted file record
+    var filePath, destinationPath, trashFileName string
+    var basePath, tmdbID, seasonNumber, reason, mediaType, properName, year, episodeNumber, imdbID sql.NullString
+    var isAnimeGenre sql.NullInt64
+    var language, quality, tvdbID, leagueID, sportsdbEventID, sportName, sportLocation, sportSession, sportVenue, sportDate sql.NullString
+    var sportRound sql.NullInt64
+    var fileSize sql.NullInt64
+    var processedAt sql.NullString
+
+    err = mediaHubDB.QueryRow(`
+        SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
+               media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+               language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+               sport_round, sport_location, sport_session, sport_venue, sport_date,
+               file_size, processed_at, trash_file_name
+        FROM deleted_files 
+        WHERE id = ?
+    `, deletedID).Scan(
+        &filePath, &destinationPath, &basePath, &tmdbID, &seasonNumber, &reason,
+        &mediaType, &properName, &year, &episodeNumber, &imdbID, &isAnimeGenre,
+        &language, &quality, &tvdbID, &leagueID, &sportsdbEventID, &sportName,
+        &sportRound, &sportLocation, &sportSession, &sportVenue, &sportDate,
+        &fileSize, &processedAt, &trashFileName,
+    )
+
+    if err != nil {
+        logger.Warn("Deleted file with ID %d not found: %v", deletedID, err)
+        return false
+    }
+
+    // Check if the trash file still exists
+    if trashFileName != "" {
+        trashPath := filepath.Join("..", "db", "trash", trashFileName)
+        if _, err := os.Stat(trashPath); os.IsNotExist(err) {
+            logger.Warn("Trash file not found for restoration: %s", trashPath)
+            return false
+        }
+
+        // Ensure destination parent directory exists
+        if destinationPath != "" {
+            if err := os.MkdirAll(filepath.Dir(destinationPath), 0755); err != nil {
+                logger.Warn("Failed to create destination directory: %v", err)
+                return false
+            }
+
+            if trashStat, err := os.Stat(trashPath); err == nil && trashStat.IsDir() {
+                destFileName := filepath.Base(destinationPath)
+
+                var foundFile string
+                err := filepath.Walk(trashPath, func(walkPath string, info os.FileInfo, err error) error {
+                    if err != nil {
+                        return err
+                    }
+                    if filepath.Base(walkPath) == destFileName && info.Mode()&os.ModeSymlink != 0 {
+                        foundFile = walkPath
+                        return filepath.SkipDir
+                    }
+                    return nil
+                })
+                
+                if err != nil || foundFile == "" {
+                    logger.Warn("Could not find episode file %s in trash directory %s", destFileName, trashPath)
+                    return false
+                }
+
+                if err := os.Rename(foundFile, destinationPath); err != nil {
+                    logger.Warn("Failed to restore episode file from trash: %v", err)
+                    return false
+                }
+                
+                logger.Info("Restored episode file from trash: %s -> %s", foundFile, destinationPath)
+
+                if isEmpty, err := isDirectoryEffectivelyEmpty(trashPath); err == nil && isEmpty {
+                    if err := os.RemoveAll(trashPath); err != nil {
+                        logger.Warn("Failed to remove empty trash folder: %v", err)
+                    } else {
+                        logger.Info("Successfully removed empty trash folder: %s", trashPath)
+                    }
+                }
+            } else {
+                if err := os.Rename(trashPath, destinationPath); err != nil {
+                    logger.Warn("Failed to restore file from trash: %v", err)
+                    return false
+                }
+                logger.Info("Restored file from trash: %s -> %s", trashPath, destinationPath)
+            }
+        }
+    }
+
+    _, err = mediaHubDB.Exec(`
+        INSERT OR REPLACE INTO processed_files (
+            file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+            language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+            sport_round, sport_location, sport_session, sport_venue, sport_date,
+            file_size, processed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, filePath, destinationPath, basePath, tmdbID, seasonNumber, reason,
+        mediaType, properName, year, episodeNumber, imdbID, isAnimeGenre,
+        language, quality, tvdbID, leagueID, sportsdbEventID, sportName,
+        sportRound, sportLocation, sportSession, sportVenue, sportDate,
+        fileSize, processedAt)
+
+    if err != nil {
+        logger.Warn("Failed to restore to processed_files: %v", err)
+        return false
+    }
+
+    _, err = mediaHubDB.Exec("DELETE FROM deleted_files WHERE id = ?", deletedID)
+    if err != nil {
+        logger.Warn("Failed to remove from deleted_files: %v", err)
+        return false
+    }
+
+    logger.Info("Successfully restored deleted file: %s", destinationPath)
+    return true
+}
+
 // handleSingleDelete handles deletion of a single file
 func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	if relativePath == "" {
@@ -1660,13 +1884,85 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 		return
 	}
 
-	err := os.RemoveAll(path)
-	if err != nil {
-		logger.Warn("Error: failed to delete %s: %v", path, err)
-		http.Error(w, "Failed to delete file or directory", http.StatusInternalServerError)
+	// Check if this is a directory BEFORE moving to trash
+	stat, statErr := os.Stat(path)
+	isDirectory := statErr == nil && stat.IsDir()
+
+	trashedPath, moveErr := moveToTrash(path)
+	if moveErr != nil {
+		logger.Warn("Error: failed to move to trash %s: %v", path, moveErr)
+		http.Error(w, "Failed to move to trash", http.StatusInternalServerError)
 		return
 	}
 
+	if mediaHubDB, err := db.GetDatabaseConnection(); err == nil {
+		if isDirectory {
+			var symlinkFiles []string
+			err := filepath.Walk(trashedPath, func(walkPath string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+
+				if info.Mode()&os.ModeSymlink != 0 {
+					relPath, err := filepath.Rel(trashedPath, walkPath)
+					if err != nil {
+						logger.Warn("Failed to get relative path for %s: %v", walkPath, err)
+						return nil
+					}
+					originalPath := filepath.Join(path, relPath)
+					symlinkFiles = append(symlinkFiles, originalPath)
+				}
+				return nil
+			})
+			
+			if err != nil {
+				logger.Warn("Error walking directory %s: %v", trashedPath, err)
+			}
+			
+			// Process each symlink individually
+			for _, originalSymlinkPath := range symlinkFiles {
+				_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
+					file_path, destination_path, base_path, tmdb_id, season_number, reason,
+					media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+					language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+					sport_round, sport_location, sport_session, sport_venue, sport_date,
+					file_size, processed_at, deletion_reason, trash_file_name
+				) SELECT 
+					file_path, destination_path, base_path, tmdb_id, season_number, reason,
+					media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+					language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+					sport_round, sport_location, sport_session, sport_venue, sport_date,
+					file_size, processed_at, ?, ?
+				FROM processed_files 
+				WHERE destination_path = ?`, 
+					"Manual deletion via UI", filepath.Base(trashedPath), originalSymlinkPath)
+				
+				if err != nil {
+					logger.Warn("Failed to save deletion metadata for symlink %s: %v", originalSymlinkPath, err)
+				}
+			}
+		} else {
+			_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
+				file_path, destination_path, base_path, tmdb_id, season_number, reason,
+				media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+				language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+				sport_round, sport_location, sport_session, sport_venue, sport_date,
+				file_size, processed_at, deletion_reason, trash_file_name
+			) SELECT 
+				file_path, destination_path, base_path, tmdb_id, season_number, reason,
+				media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+				language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+				sport_round, sport_location, sport_session, sport_venue, sport_date,
+				file_size, processed_at, ?, ?
+			FROM processed_files 
+			WHERE destination_path = ? OR file_path = ?`, 
+				"Manual deletion via UI", filepath.Base(trashedPath), path, path)
+			
+			if err != nil {
+				logger.Warn("Failed to save deletion metadata for file: %v", err)
+			}
+		}
+	}
 	// Also delete from database if the record exists
 	// Use the resolved path for database cleanup since that's what's actually stored
 	deleteFromDatabase(relativePath, path)
@@ -1682,7 +1978,7 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	db.NotifyDashboardStatsChanged()
 	db.NotifyFileOperationChanged()
 
-	logger.Info("Success: deleted %s", path)
+	logger.Info("Success: moved to trash %s -> %s", path, trashedPath)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(DeleteResponse{Success: true})
 }
@@ -1777,10 +2073,73 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 			continue
 		}
 
-		err := os.RemoveAll(path)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Failed to delete %s: %v", path, err))
+		trashedPath, moveErr := moveToTrash(path)
+		if moveErr != nil {
+			errors = append(errors, fmt.Sprintf("Failed to move to trash %s: %v", path, moveErr))
 			continue
+		}
+
+		if mediaHubDB, err := db.GetDatabaseConnection(); err == nil {
+			if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+				var symlinkFiles []string
+				err := filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+
+					if info.Mode()&os.ModeSymlink != 0 {
+						symlinkFiles = append(symlinkFiles, walkPath)
+					}
+					return nil
+				})
+				
+				if err != nil {
+					logger.Warn("Error walking directory %s: %v", path, err)
+				}
+				
+				// Process each symlink individually
+				for _, symlinkPath := range symlinkFiles {
+					_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
+						file_path, destination_path, base_path, tmdb_id, season_number, reason,
+						media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+						language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+						sport_round, sport_location, sport_session, sport_venue, sport_date,
+						file_size, processed_at, deletion_reason, trash_file_name
+					) SELECT 
+						file_path, destination_path, base_path, tmdb_id, season_number, reason,
+						media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+						language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+						sport_round, sport_location, sport_session, sport_venue, sport_date,
+						file_size, processed_at, ?, ?
+					FROM processed_files 
+					WHERE destination_path = ?`, 
+						"Manual bulk deletion via UI", filepath.Base(trashedPath), symlinkPath)
+					
+					if err != nil {
+						logger.Warn("Failed to save deletion metadata for symlink %s: %v", symlinkPath, err)
+					}
+				}
+			} else {
+				_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
+					file_path, destination_path, base_path, tmdb_id, season_number, reason,
+					media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+					language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+					sport_round, sport_location, sport_session, sport_venue, sport_date,
+					file_size, processed_at, deletion_reason, trash_file_name
+				) SELECT 
+					file_path, destination_path, base_path, tmdb_id, season_number, reason,
+					media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
+					language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
+					sport_round, sport_location, sport_session, sport_venue, sport_date,
+					file_size, processed_at, ?, ?
+				FROM processed_files 
+				WHERE destination_path = ? OR file_path = ?`, 
+					"Manual bulk deletion via UI", filepath.Base(trashedPath), path, path)
+				
+				if err != nil {
+					logger.Warn("Failed to save deletion metadata for file: %v", err)
+				}
+			}
 		}
 
 		// Also delete from database if the record exists
@@ -1793,7 +2152,7 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 		// Clean up empty parent directories
 		cleanupEmptyDirectories(path)
 
-		logger.Info("Success: deleted %s", path)
+		logger.Info("Success: moved to trash %s -> %s", path, trashedPath)
 		deletedCount++
 	}
 
@@ -2033,6 +2392,31 @@ func isDirectoryEmpty(dirPath string) (isEmpty bool, err error) {
 	}
 
 	return len(entries) == 0, nil
+}
+
+// isDirectoryEffectivelyEmpty checks if a directory is empty or only contains empty subdirectories
+func isDirectoryEffectivelyEmpty(dirPath string) (isEmpty bool, err error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false, err
+	}
+
+	if len(entries) == 0 {
+		return true, nil
+	}
+
+	// Check if all entries are directories and if they are all empty
+	for _, entry := range entries {
+		if entry.IsDir() {
+			entryPath := filepath.Join(dirPath, entry.Name())
+			if empty, err := isDirectoryEffectivelyEmpty(entryPath); err != nil || !empty {
+				return false, err
+			}
+		} else {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // HandleRename renames a file or directory at the given relative path
@@ -2600,6 +2984,16 @@ func handleFileDeleted(data map[string]interface{}) {
 		return
 	}
 
+	// Track the deletion in file_deletions table for UI display
+	if err := db.TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason); err != nil {
+		logger.Warn("Failed to track file deletion", "error", err)
+	}
+
+	// Invalidate caches and notify about changes
+	db.InvalidateFolderCache()
+	db.NotifyDashboardStatsChanged()
+	db.NotifyFileOperationChanged()
+
 	// Broadcast the deletion event to connected clients for real-time UI updates
 	BroadcastMediaHubEvent("file_deleted", map[string]interface{}{
 		"source_path":      sourcePath,
@@ -2874,4 +3268,35 @@ func HandleRestart(w http.ResponseWriter, r *http.Request) {
 		logger.Warn("Graceful shutdown timeout, forcing exit")
 		os.Exit(0)
 	}()
+}
+
+// moveToTrash moves a file/dir under rootDir to the centralized MediaHub/db/trash folder
+func moveToTrash(fullPath string) (string, error) {
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil { return "", err }
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil { return "", err }
+	if !strings.HasPrefix(absPath, absRoot) {
+		return "", fmt.Errorf("path outside root")
+	}
+
+	trashDir := filepath.Join("..", "db", "trash")
+	if err := os.MkdirAll(trashDir, 0755); err != nil {
+		return "", err
+	}
+
+	name := filepath.Base(absPath)
+	trashed := filepath.Join(trashDir, name)
+
+	// If file already exists in trash, replace it (overwrite)
+	if _, err := os.Stat(trashed); err == nil {
+		if err := os.RemoveAll(trashed); err != nil {
+			return "", fmt.Errorf("failed to remove existing trash file: %v", err)
+		}
+	}
+
+	if err := os.Rename(absPath, trashed); err != nil {
+		return "", err
+	}
+	return trashed, nil
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch } from '@mui/material';
-import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch, Avatar } from '@mui/material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon, PlayArrow as PlayArrowIcon, Restore as RestoreIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -65,7 +65,19 @@ function FileOperations() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Auto-close success dialog after 3 seconds
+  useEffect(() => {
+    if (successDialogOpen) {
+      const timer = setTimeout(() => {
+        setSuccessDialogOpen(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successDialogOpen]);
 
   // URL-synchronized pagination for operations
   const currentPageFromUrl = parseInt(searchParams.get('page') || '1', 10);
@@ -848,15 +860,40 @@ function FileOperations() {
       // Get selected operations
       const selectedOperations = operations.filter(op => selectedFiles.has(op.id));
 
-
-
-      // Delete action (existing logic)
-      // Separate files with destination paths from those without
-      const filesWithDestination = selectedOperations.filter(op => op.destinationPath && op.destinationPath.trim() !== '');
-      const filesWithoutDestination = selectedOperations.filter(op => !op.destinationPath || op.destinationPath.trim() === '');
+      // Check if we're on the deleted tab for permanent deletion
+      const statusMap = ['created', 'failed', 'skipped', 'deleted'];
+      const statusFilter = statusMap[tabValue - 1];
+      const isDeletedTab = statusFilter === 'deleted';
 
       let totalDeleted = 0;
       let errors: string[] = [];
+
+      if (isDeletedTab) {
+        // Permanent deletion for files in deleted tab
+        try {
+          const filePaths = selectedOperations.map(op => op.id); // Use ID for deleted files
+          const response = await axios.delete('/api/file-operations/bulk', {
+            data: { filePaths }
+          });
+
+          if (response.data.success) {
+            totalDeleted = response.data.deletedCount || selectedOperations.length;
+            
+            if (response.data.errors && response.data.errors.length > 0) {
+              errors = [...errors, ...response.data.errors];
+            }
+          } else {
+            errors.push('Failed to permanently delete selected files');
+          }
+        } catch (error: any) {
+          console.error('Error permanently deleting files:', error);
+          errors.push(error.response?.data?.message || 'Failed to permanently delete files');
+        }
+      } else {
+        // Regular deletion logic for other tabs
+      // Separate files with destination paths from those without
+      const filesWithDestination = selectedOperations.filter(op => op.destinationPath && op.destinationPath.trim() !== '');
+      const filesWithoutDestination = selectedOperations.filter(op => !op.destinationPath || op.destinationPath.trim() === '');
 
       // Delete actual files for operations with destination paths
       if (filesWithDestination.length > 0) {
@@ -872,6 +909,8 @@ function FileOperations() {
             if (response.data.errors && response.data.errors.length > 0) {
               errors = [...errors, ...response.data.errors];
             }
+          } else {
+            errors.push('Failed to delete files');
           }
         } catch (error: any) {
           console.error('Failed to delete files with destination paths:', error);
@@ -893,6 +932,7 @@ function FileOperations() {
         } catch (error: any) {
           console.error('Failed to delete database records:', error);
           errors.push(`Failed to delete ${filesWithoutDestination.length} database records: ${error.response?.data?.error || error.message}`);
+          }
         }
       }
 
@@ -1371,6 +1411,79 @@ function FileOperations() {
                   </IconButton>
                 </Tooltip>
               )}
+              
+              {/* Restore button for deleted files */}
+              {file.status === 'deleted' && (
+                <Tooltip title="Restore File">
+                  <IconButton
+                    size="small"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        setBulkActionLoading(true);
+                        const path = file.destinationPath || file.filePath;
+                        
+                        if (!path) {
+                          console.error('No path available for restoration');
+                          return;
+                        }
+
+                        console.log('Restoring single file:', path);
+                        
+                        const response = await axios.post('/api/restore-symlinks', {
+                          paths: [path]
+                        });
+
+                        if (response.data.success) {
+                          setError('');
+                          setSuccessMessage(`File "${file.fileName}" restored successfully!`);
+                          setSuccessDialogOpen(true);
+
+                          setOperations(prev => prev.filter(op => op.id !== file.id));
+                          setTotalOperations(prev => prev - 1);
+
+                          setStatusCounts(prev => ({
+                            ...prev,
+                            deleted: prev.deleted - 1
+                          }));
+
+                          setTimeout(async () => {
+                            await fetchFileOperations(false);
+                          }, 1000);
+                        } else {
+                          setSuccessMessage('');
+                          setError(`Failed to restore "${file.fileName}": ${response.data.message || 'Unknown error'}`);
+                        }
+                      } catch (error: any) {
+                        setSuccessMessage('');
+                        setError(`Error restoring "${file.fileName}": ${error.response?.data?.message || error.message || 'Network error'}`);
+                      } finally {
+                        setBulkActionLoading(false);
+                      }
+                    }}
+                    disabled={bulkActionLoading}
+                    sx={{
+                      bgcolor: alpha(theme.palette.success.main, 0.1),
+                      color: 'success.main',
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.success.main, 0.2),
+                        transform: 'scale(1.1)',
+                      },
+                      '&:disabled': {
+                        bgcolor: alpha(theme.palette.success.main, 0.05),
+                        color: alpha(theme.palette.success.main, 0.5),
+                      },
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {bulkActionLoading ? 
+                      <CircularProgress size={18} sx={{ color: 'success.main' }} /> : 
+                      <RestoreIcon sx={{ fontSize: 18 }} />
+                    }
+                  </IconButton>
+                </Tooltip>
+              )}
+              
               <IconButton
                 size="small"
                 onClick={() => toggleCardExpansion(file.id)}
@@ -1610,6 +1723,7 @@ function FileOperations() {
           )}
 
           {!isMobile && (
+            <>
             <Tooltip title="Refresh">
               <IconButton
                 onClick={() => {
@@ -1635,14 +1749,53 @@ function FileOperations() {
                 <RefreshIcon sx={{ fontSize: 24 }} />
               </IconButton>
             </Tooltip>
+              
+              <Tooltip title="Recover Missing Deletions">
+                <IconButton
+                  onClick={async () => {
+                    try {
+                      setError('');
+                      const response = await axios.post('/api/recover-deletions');
+                      if (response.data.success) {
+                        setSuccessMessage('Recovery completed successfully!');
+                        setSuccessDialogOpen(true);
+                        setTimeout(async () => {
+                          await fetchFileOperations(false);
+                        }, 1000);
+                      }
+                    } catch (error: any) {
+                      setError(`Recovery failed: ${error.response?.data || error.message}`);
+                    }
+                  }}
+                  sx={{
+                    bgcolor: 'action.hover',
+                    color: 'text.secondary',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                      color: 'warning.main',
+                      transform: 'scale(1.1)'
+                    },
+                    transition: 'all 0.3s ease',
+                    p: 1
+                  }}
+                >
+                  <RestoreIcon sx={{ fontSize: 24 }} />
+                </IconButton>
+              </Tooltip>
+            </>
           )}
         </Box>
       </Box>
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          onClose={() => setError('')}
+          sx={{ mb: 3 }}
+        >
           {error}
         </Alert>
       )}
+
       {/* Main Tab Navigation */}
       <Box sx={{ mb: 4 }}>
         <Box
@@ -2094,7 +2247,72 @@ function FileOperations() {
                     {bulkActionLoading ? 'Processing...' : 'Reprocess Selected'}
                   </Button>
                 ) : tabValue === 4 ? (
-                  // Deleted Tab - Only Delete Action (no reprocess)
+                  // Deleted Tab - Delete and Restore Actions
+                  <>
+                    <Button
+                      variant="outlined"
+                      size="medium"
+                      startIcon={<RestoreIcon />}
+                      onClick={async () => {
+                        try {
+                          setBulkActionLoading(true);
+                          const selectedOps = operations.filter(op => selectedFiles.has(op.id));
+                          const paths = selectedOps.map(op => op.destinationPath || op.filePath).filter(Boolean);
+                          
+                          if (paths.length === 0) {
+                            setSuccessMessage('');
+                            setError('No valid paths found for restoration');
+                            return;
+                          }
+                          
+                          const response = await axios.post('/api/restore-symlinks', { paths });
+
+                          if (response.data.success) {
+                            setError('');
+                            const count = response.data.restoredCount;
+                            setSuccessMessage(`Successfully restored ${count} file${count !== 1 ? 's' : ''}!`);
+                            setSuccessDialogOpen(true);
+                            setSelectedFiles(new Set());
+                            setTimeout(async () => {
+                              await fetchFileOperations(false);
+                            }, 1000);
+                          } else {
+                            setSuccessMessage('');
+                            const errorMsg = response.data.errors?.join(', ') || 'Unknown error';
+                            setError(`Failed to restore files: ${errorMsg}`);
+                          }
+                        } catch (e) {
+                          setSuccessMessage('');
+                          if (axios.isAxiosError(e)) {
+                            setError(`Restore failed: ${e.response?.data?.message || e.message}`);
+                          } else {
+                            setError(`Restore failed: ${String(e)}`);
+                          }
+                        } finally {
+                          setBulkActionLoading(false);
+                        }
+                      }}
+                      disabled={selectedFiles.size === 0 || bulkActionLoading}
+                      sx={{
+                        borderColor: theme.palette.success.main,
+                        color: theme.palette.success.main,
+                        fontWeight: 600,
+                        borderRadius: 3,
+                        px: 3,
+                        py: 1,
+                        textTransform: 'none',
+                        '&:hover': {
+                          bgcolor: alpha(theme.palette.success.main, 0.1),
+                          borderColor: theme.palette.success.dark,
+                          transform: 'translateY(-1px)',
+                        },
+                        '&:active': { transform: 'translateY(0)' },
+                        '&:disabled': { borderColor: alpha(theme.palette.success.main, 0.3), color: alpha(theme.palette.success.main, 0.5) },
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      }}
+                    >
+                      Restore Selected
+                    </Button>
                   <Button
                     variant="contained"
                     size="medium"
@@ -2111,24 +2329,15 @@ function FileOperations() {
                       textTransform: 'none',
                       boxShadow: `0 4px 16px ${alpha(theme.palette.error.main, 0.3)}`,
                       border: 'none',
-                      '&:hover': {
-                        bgcolor: theme.palette.error.dark,
-                        boxShadow: `0 6px 20px ${alpha(theme.palette.error.main, 0.4)}`,
-                        transform: 'translateY(-1px)',
-                      },
-                      '&:active': {
-                        transform: 'translateY(0)',
-                      },
-                      '&:disabled': {
-                        bgcolor: alpha(theme.palette.error.main, 0.3),
-                        color: alpha('#fff', 0.5),
-                        boxShadow: 'none',
-                      },
+                        '&:hover': { bgcolor: theme.palette.error.dark, boxShadow: `0 6px 20px ${alpha(theme.palette.error.main, 0.4)}`, transform: 'translateY(-1px)' },
+                        '&:active': { transform: 'translateY(0)' },
+                        '&:disabled': { bgcolor: alpha(theme.palette.error.main, 0.3), color: alpha('#fff', 0.5), boxShadow: 'none' },
                       transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     }}
                   >
                     Delete
                   </Button>
+                  </>
                 ) : (
                   // Created/Failed/Skipped Tabs - Both Reprocess and Delete Actions
                   <>
@@ -3111,8 +3320,8 @@ function FileOperations() {
               ? `2px solid ${theme.palette.error.main}40`
               : `2px solid #fecaca`,
             boxShadow: theme.palette.mode === 'dark'
-              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
-              : '0 8px 32px rgba(0, 0, 0, 0.15)',
+                ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+                : 'none',
             backdropFilter: 'blur(10px)',
           }
         }}
@@ -3232,9 +3441,9 @@ function FileOperations() {
             border: theme.palette.mode === 'dark'
               ? `2px solid ${theme.palette.error.main}40`
               : `2px solid #fecaca`,
-            boxShadow: theme.palette.mode === 'dark'
-              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
-              : '0 8px 32px rgba(0, 0, 0, 0.15)',
+                          boxShadow: theme.palette.mode === 'dark'
+                ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+                : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
             backdropFilter: 'blur(10px)',
           }
         }}
@@ -3337,8 +3546,81 @@ function FileOperations() {
         </DialogActions>
       </Dialog>
 
-
-
+      {/* Success Dialog */}
+      <Dialog
+        open={successDialogOpen}
+        onClose={() => setSuccessDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+                  sx={{
+            '& .MuiDialog-paper': {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              minWidth: 400,
+                              boxShadow: theme.palette.mode === 'dark' 
+                  ? '0 8px 32px rgba(0, 0, 0, 0.8)' 
+                  : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
+            }
+          }}
+                  PaperProps={{
+            sx: {
+              bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
+              backgroundImage: 'none',
+              borderRadius: 2,
+              minWidth: 400,
+                              boxShadow: theme.palette.mode === 'dark' 
+                  ? '0 8px 32px rgba(0, 0, 0, 0.8)' 
+                  : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
+            }
+          }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: '#4caf50',
+          fontWeight: 'bold'
+        }}>
+                      <Avatar sx={{ bgcolor: '#4caf50', width: 32, height: 32 }}>
+              <CheckCircle sx={{ color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+            </Avatar>
+          Operation Complete
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <Avatar sx={{
+              bgcolor: '#4caf50',
+              width: 80,
+              height: 80,
+              margin: '0 auto 16px auto'
+            }}>
+              <CheckCircle sx={{ fontSize: 40, color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' }} />
+            </Avatar>
+            <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 'bold', mb: 1 }}>
+              {successMessage}
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? '#aaa' : '#666' }}>
+              This dialog will close automatically in a few seconds...
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+          <Button
+            onClick={() => setSuccessDialogOpen(false)}
+            variant="contained"
+            sx={{
+              backgroundColor: '#2196f3',
+              '&:hover': { backgroundColor: '#1976d2' },
+              minWidth: 100
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
   );

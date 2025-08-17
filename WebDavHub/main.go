@@ -173,6 +173,7 @@ func main() {
 	apiMux.HandleFunc("/api/auth/check", auth.HandleAuthCheck)
 	apiMux.HandleFunc("/api/readlink", api.HandleReadlink)
 	apiMux.HandleFunc("/api/delete", api.HandleDelete)
+	apiMux.HandleFunc("/api/restore-symlinks", api.HandleRestoreSymlinks)
 	apiMux.HandleFunc("/api/rename", api.HandleRename)
 	apiMux.HandleFunc("/api/download", api.HandleDownload)
 	apiMux.HandleFunc("/api/me", auth.HandleMe)
