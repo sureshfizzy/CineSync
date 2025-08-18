@@ -14,6 +14,7 @@ def get_ffprobe_info(file_path, probe_data):
         # MediaInfo Simple and Full
         media_info_simple = []
         media_info_full = []
+        video_audio_simple = []
 
         # Process video stream
         video_streams = [s for s in probe_data.get('streams', []) if s.get('codec_type') == 'video']
@@ -35,25 +36,27 @@ def get_ffprobe_info(file_path, probe_data):
                 video_codec = codec_map.get(codec, codec.upper())
                 media_info['MediaInfo VideoCodec'] = video_codec
                 media_info_simple.append(video_codec)
+                video_audio_simple.append(video_codec)
 
             # Get resolution
             width = video.get('width')
             height = video.get('height')
             if width and height:
-                if height >= 2160:
+                max_dimension = max(width, height)
+
+                if max_dimension >= 3840:
                     resolution = "2160p"
-                elif height >= 1080:
+                elif max_dimension >= 1440:
                     resolution = "1080p"
-                elif height >= 720:
+                elif max_dimension >= 1280:
                     resolution = "720p"
-                elif height >= 576:
+                elif max_dimension >= 720:
                     resolution = "576p"
-                elif height >= 480:
+                elif max_dimension >= 640:
                     resolution = "480p"
                 else:
-                    resolution = f"{height}p"
+                    resolution = f"{max_dimension}p"
 
-                # Quality tags
                 if "proper" in file_path.lower():
                     media_info['Quality Full'] = f"{resolution} Proper"
                     media_info['Quality Title'] = resolution
@@ -225,6 +228,7 @@ def get_ffprobe_info(file_path, probe_data):
             if audio_codec:
                 media_info['MediaInfo AudioCodec'] = audio_codec
                 media_info_simple.append(audio_codec)
+                video_audio_simple.append(audio_codec)
 
             # Get audio channels
             channels = audio.get('channels')
@@ -255,6 +259,13 @@ def get_ffprobe_info(file_path, probe_data):
                         has_atmos = True
                         media_info_simple.append('Atmos')
                         break
+
+                # Fallback: Check if this is a TrueHD stream with 7.1+ channels (likely Atmos)
+                if not has_atmos and audio_codec == 'TrueHD':
+                    channels = audio.get('channels')
+                    if channels and channels >= 8:
+                        has_atmos = True
+                        media_info_simple.append('Atmos')
 
             # Add Atmos to dynamic range if applicable
             if has_atmos and 'MediaInfo VideoDynamicRangeType' in media_info:
@@ -287,6 +298,10 @@ def get_ffprobe_info(file_path, probe_data):
         # Combine all info for MediaInfo Simple and Full
         if media_info_simple:
             media_info['MediaInfo Simple'] = ' '.join(media_info_simple)
+
+        # Create clean MediaInfo Simple (video + audio codec only)
+        if video_audio_simple:
+            media_info['MediaInfo Simple'] = ' '.join(video_audio_simple)
 
         # Build MediaInfo Full in Radarr format (including languages)
         if 'MediaInfo VideoCodec' in media_info and 'MediaInfo AudioCodec' in media_info:
@@ -344,19 +359,21 @@ def extract_movie_info_from_path(file_path, probe_data=None):
     source_detected = False
 
     # Check for explicit source indicators in filename
-    if 'remux' in filename.lower():
+    filename_lower = filename.lower()
+
+    if 'remux' in filename_lower:
         custom_formats.append('Remux')
         source_detected = True
-    if 'bluray' in filename.lower() or 'blu-ray' in filename.lower():
+    if 'bluray' in filename_lower or 'blu-ray' in filename_lower:
         custom_formats.append('Bluray')
         source_detected = True
-    if 'webdl' in filename.lower() or 'web-dl' in filename.lower():
+    if 'webdl' in filename_lower or 'web-dl' in filename_lower:
         custom_formats.append('WEBDL')
         source_detected = True
-    if 'webrip' in filename.lower():
+    if 'webrip' in filename_lower:
         custom_formats.append('WEBRip')
         source_detected = True
-    if 'hdtv' in filename.lower():
+    if 'hdtv' in filename_lower:
         custom_formats.append('HDTV')
         source_detected = True
 

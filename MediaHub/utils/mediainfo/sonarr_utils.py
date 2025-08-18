@@ -8,6 +8,7 @@ It eliminates code duplication and provides a central place for common functiona
 import re
 import os
 from datetime import datetime
+from MediaHub.utils.logging_utils import log_message
 
 def clean_title_for_filename(title):
     """
@@ -105,6 +106,16 @@ def map_ffprobe_to_sonarr_tokens(media_info, file_path, content_type="standard")
         Dictionary with Sonarr-compatible token mappings
     """
     sonarr_info = media_info.copy()
+
+    if 'MediaInfo VideoCodec' in sonarr_info:
+        video_codec = sonarr_info['MediaInfo VideoCodec']
+        if video_codec == 'x265':
+            sonarr_info['MediaInfo VideoCodec'] = 'h265'
+
+    if 'MediaInfo Simple' in sonarr_info:
+        media_simple = sonarr_info['MediaInfo Simple']
+        if 'x265' in media_simple:
+            sonarr_info['MediaInfo Simple'] = media_simple.replace('x265', 'h265')
     
     # Map Quality tokens
     if 'Quality Full' not in sonarr_info and 'Quality Title' in media_info:

@@ -97,13 +97,44 @@ def get_ffprobe_media_info(file_path):
         media_result = {**path_info, **ffprobe_info}
 
         # Final cleanup: ensure consistent data from filename if not detected otherwise
-        if 'Filename HDR' in media_result and 'MediaInfo VideoDynamicRangeType' not in media_result:
-            media_result['MediaInfo VideoDynamicRangeType'] = media_result['Filename HDR']
-            if 'MediaInfo VideoDynamicRange' not in media_result:
-                media_result['MediaInfo VideoDynamicRange'] = 'HDR'
+        if 'Filename HDR' in media_result:
+            current_dynamic_range = media_result.get('MediaInfo VideoDynamicRangeType', '')
+            filename_hdr = media_result['Filename HDR']
+            if (not current_dynamic_range or
+                'DV' in filename_hdr or
+                'HDR10+' in filename_hdr or
+                len(filename_hdr) > len(current_dynamic_range)):
+                media_result['MediaInfo VideoDynamicRangeType'] = filename_hdr
+                if 'MediaInfo VideoDynamicRange' not in media_result:
+                    media_result['MediaInfo VideoDynamicRange'] = 'HDR'
 
         if 'Filename AudioCodec' in media_result and 'MediaInfo AudioCodec' not in media_result:
             media_result['MediaInfo AudioCodec'] = media_result['Filename AudioCodec']
+
+        # Reconstruct Quality Full with source information
+        if 'Quality Title' in media_result and 'Custom Formats' in media_result:
+            resolution = media_result['Quality Title']
+            custom_formats = media_result['Custom Formats']
+
+            # Extract the primary source from custom formats
+            source = None
+            if 'Remux' in custom_formats:
+                source = 'Remux'
+            elif 'Bluray' in custom_formats:
+                source = 'Bluray'
+            elif 'WEBDL' in custom_formats:
+                source = 'WEBDL'
+            elif 'WEBRip' in custom_formats:
+                source = 'WEBRip'
+            elif 'HDTV' in custom_formats:
+                source = 'HDTV'
+
+            if source:
+                if "proper" in file_path.lower():
+                    media_result['Quality Full'] = f"{source}-{resolution} Proper"
+                else:
+                    media_result['Quality Full'] = f"{source}-{resolution}"
+                pass
 
         # Clean up temporary keys
         for key in ['Filename HDR', 'Filename AudioCodec']:

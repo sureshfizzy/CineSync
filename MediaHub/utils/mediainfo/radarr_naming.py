@@ -37,50 +37,48 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
             if not tags_to_use:
                 return f"{movie_name} ({year})"
             
+            pass
             # Build filename with Radarr tags
             filename_parts = [f"{movie_name} ({year})"]
-            other_tags = []
-            quality_info = None
-            custom_formats = None
             
             for tag in tags_to_use:
                 clean_tag = tag.strip()
-                
-                # Handle Quality tags specially
-                if clean_tag == 'Quality Full' and 'Quality Full' in media_info:
-                    quality_info = media_info['Quality Full']
+                if clean_tag == 'Movie Title':
+                    continue
+                elif clean_tag == 'Release Year':
+                    continue
+                elif clean_tag == 'Quality Full' and 'Quality Full' in media_info:
+                    value = media_info['Quality Full']
+                    filename_parts.append(value)
                 elif clean_tag == 'Quality Title' and 'Quality Title' in media_info:
-                    quality_info = media_info['Quality Title']
-                elif clean_tag == 'Custom Formats' and 'Custom Formats' in media_info:
-                    custom_formats = media_info['Custom Formats']
+                    value = media_info['Quality Title']
+                    filename_parts.append(value)
+                elif clean_tag == 'MediaInfo Simple' and 'MediaInfo Simple' in media_info:
+                    value = media_info['MediaInfo Simple']
+                    filename_parts.append(value)
+                elif clean_tag == 'MediaInfo VideoDynamicRangeType' and 'MediaInfo VideoDynamicRangeType' in media_info:
+                    value = media_info['MediaInfo VideoDynamicRangeType']
+                    filename_parts.append(value)
+                elif clean_tag == 'Edition Tags' and 'Edition Tags' in media_info:
+                    value = media_info['Edition Tags']
+                    filename_parts.append(value)
                 elif clean_tag in media_info:
                     value = media_info[clean_tag]
                     if isinstance(value, list):
                         formatted_value = '+'.join([str(item).upper() for item in value])
-                        other_tags.append(formatted_value)
+                        filename_parts.append(formatted_value)
                     else:
-                        other_tags.append(str(value))
+                        filename_parts.append(str(value))
                 else:
                     parts = clean_tag.split()
                     if len(parts) > 1 and parts[0] in media_info:
                         compound_key = clean_tag
                         value = media_info.get(compound_key, '')
                         if value:
-                            other_tags.append(str(value))
+                            filename_parts.append(str(value))
             
-            # Add other tags
-            if other_tags:
-                filename_parts.append(f"[{' '.join(other_tags)}]")
-            
-            # Add quality info
-            if quality_info:
-                filename_parts.append(f"[{quality_info}]")
-            
-            # Add custom formats
-            if custom_formats:
-                filename_parts.append(f"[{custom_formats}]")
-            
-            return ' '.join(filename_parts)
+            result = ' '.join(filename_parts)
+            return result
         
         else:
             return f"{movie_name} ({year})"

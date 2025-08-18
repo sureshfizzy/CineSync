@@ -349,19 +349,22 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         if use_media_parser:
             media_info = get_ffprobe_media_info(os.path.join(root, file))
             tags_to_use = get_mediainfo_radarr_tags()
+            clean_movie_name_for_radarr = re.sub(r' \(\d{4}\)', '', proper_movie_name)
             enhanced_movie_folder = get_radarr_movie_filename(
-                proper_movie_name, year, file, root, media_info
-            ).replace(f" ({year})", "")
+                clean_movie_name_for_radarr, year, file, root, media_info
+            )
         else:
             media_info = extract_media_info(file, keywords)
             if resolution and 'Resolution' not in media_info:
                 media_info['Resolution'] = resolution
             tags_to_use = get_rename_tags()
 
+        # Initialize variables for both parser modes
+        id_tag = ''
+        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+
         # Process legacy naming if not using MediaInfo parser
         if not use_media_parser:
-            clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
-            id_tag = ''
 
             # Handle ID tags with RENAME_TAGS
             if 'TMDB' in tags_to_use:
@@ -438,38 +441,6 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
             details_str = ' '.join(details_parts)
             enhanced_movie_folder = f"{clean_movie_name} {details_str}".strip()
-
-        else:
-            tag_strings = []
-            release_group = ""
-
-            for tag in tags_to_use:
-                tag = tag.strip()
-                if tag not in ['TMDB', 'IMDB'] and tag in media_info:
-                    value = media_info[tag]
-
-                    if tag.lower() in ['releasegroup', 'release group']:
-                        release_group = str(value)
-                    else:
-                        if isinstance(value, list):
-                            formatted_value = '+'.join([str(language).upper() for language in value])
-                            tag_strings.append(f"[{formatted_value}]")
-                        else:
-                            tag_strings.append(f"[{value}]")
-            if release_group:
-                tag_strings.append(f"-{release_group}")
-
-            details_str = ''.join(tag_strings)
-
-            # Construct new filename only if there are details or an ID tag
-            if id_tag and details_str:
-                enhanced_movie_folder = f"{clean_movie_name} {id_tag} - {details_str}".strip()
-            elif id_tag:
-                enhanced_movie_folder = f"{clean_movie_name} {id_tag}".strip()
-            elif details_str:
-                enhanced_movie_folder = f"{clean_movie_name} - {details_str}".strip()
-            else:
-                enhanced_movie_folder = clean_movie_name
 
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:
