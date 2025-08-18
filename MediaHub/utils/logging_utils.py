@@ -149,7 +149,7 @@ def log_message(message, level="INFO", output="stdout"):
         # Normalize Unicode characters upfront to prevent encoding issues
         safe_message = _normalize_for_logging(str(message))
 
-        log_entry = f"{timestamp} [{level}] {safe_message}\n"
+        log_entry = f"{timestamp} [{level}] {safe_message}"
 
         # Only apply colors if not on Windows
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
@@ -157,16 +157,16 @@ def log_message(message, level="INFO", output="stdout"):
         # Print to console with immediate flush
         try:
             if output == "stdout":
-                print(colored_message.rstrip(), flush=True)
+                print(colored_message, flush=True)
             elif output == "stderr":
-                print(colored_message.rstrip(), file=sys.stderr, flush=True)
+                print(colored_message, file=sys.stderr, flush=True)
         except (ValueError, OSError):
             pass
 
         # Write to log file
         try:
             with open(LOG_FILE, 'a', encoding='utf-8') as log_file:
-                log_file.write(log_entry)
+                log_file.write(log_entry + '\n')
         except (OSError, IOError):
             pass
 
