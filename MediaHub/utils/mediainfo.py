@@ -126,7 +126,8 @@ def extract_media_info(filepath: str, keywords: dict, root: str = None) -> dict:
 
                     detected_source = None
                     source_mappings = {
-                        r'\b(?:blu-?ray|bd|bdrip|brrip|bdremux|remux)\b': 'Bluray',
+                        r'\b(?:bdremux|remux)\b': 'Remux',
+                        r'\b(?:blu-?ray|bd|bdrip|brrip)\b': 'Bluray',
                         r'\bweb-?dl\b': 'WEBDL',
                         r'\bweb-?rip\b': 'WEBRip',
                         r'\bhdtv\b': 'HDTV',

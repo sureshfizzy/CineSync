@@ -13,6 +13,56 @@ from MediaHub.processors.process_db import *
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 
+def generate_unique_filename(dest_file, src_file=None):
+	"""Generate a unique filename by adding version numbers if conflicts occur.
+	
+	Args:
+		dest_file: The intended destination file path
+		src_file: The source file path (optional, used to check if existing symlink points to same source)
+	
+	Returns:
+		A unique file path, either the original or with version numbering
+	"""
+	if not os.path.exists(dest_file):
+		return dest_file
+	
+	# If the existing file is a symlink pointing to the same source, return original path
+	if src_file and os.path.islink(dest_file):
+		try:
+			existing_target = normalize_file_path(os.readlink(dest_file))
+			normalized_src = normalize_file_path(src_file)
+			if existing_target == normalized_src:
+				return dest_file
+		except (OSError, IOError):
+			pass
+	
+	# If the existing file is a symlink pointing to a different source, create versioned name
+	if os.path.islink(dest_file):
+		dir_path = os.path.dirname(dest_file)
+		base_name = os.path.basename(dest_file)
+		name, ext = os.path.splitext(base_name)
+		
+		counter = 2
+		while True:
+			versioned_name = f"{name} [Version {counter}]{ext}"
+			versioned_path = os.path.join(dir_path, versioned_name)
+			if not os.path.exists(versioned_path):
+				return versioned_path
+			counter += 1
+	
+	# For regular files, also create versioned name
+	dir_path = os.path.dirname(dest_file)
+	base_name = os.path.basename(dest_file)
+	name, ext = os.path.splitext(base_name)
+	
+	counter = 2
+	while True:
+		versioned_name = f"{name} [Version {counter}]{ext}"
+		versioned_path = os.path.join(dir_path, versioned_name)
+		if not os.path.exists(versioned_path):
+			return versioned_path
+		counter += 1
+
 def _move_symlink_to_trash(symlink_path):
 	"""Move a symlink to central db/trash (next to DB files), preserving link target."""
 	try:

@@ -958,36 +958,8 @@ def process_file(args, force=False, batch_apply=False):
                     log_message(f"Skipping broken symlink: {potential_symlink}", level="DEBUG")
                     continue
 
-    # Check if symlink already exists at the exact destination path
-    if os.path.islink(dest_file):
-        existing_src = normalize_file_path(os.readlink(dest_file))
-        if existing_src == normalized_src_file:
-            # For sports content, check SportsDB event ID instead of TMDB ID
-            if media_type == 'Sports':
-                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)  # tmdb_id contains sportsdb_event_id for sports
-            else:
-                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
-
-            if has_complete_metadata:
-                log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
-                log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
-
-                # Include sports metadata if this is a sports file
-                if media_type == 'Sports' and 'sport_name' in locals():
-                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                      league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
-                else:
-                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                      None, None)  # league_id, sportsdb_event_id (None for non-sports content)
-                return
-            else:
-                log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
-        else:
-            log_message(f"Updating existing symlink: {dest_file} -> {src_file} (was: {existing_src})", level="INFO")
-            os.remove(dest_file)
-    elif existing_symlink_for_source and existing_symlink_for_source != dest_file:
+    # If we found an existing symlink for the same source, handle it first
+    if existing_symlink_for_source and existing_symlink_for_source != dest_file:
         # Found existing symlink for same source but with different name (rename scenario)
         if not force:
             # If not in force mode, check if this is just a rename case
@@ -1024,9 +996,9 @@ def process_file(args, force=False, batch_apply=False):
                 else:
                     log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
         else:
-            # In force mode, remove the old symlink
-            log_message(f"Force mode: Removing existing symlink {existing_symlink_for_source} to create new one at {dest_file}", level="INFO")
-            os.remove(existing_symlink_for_source)
+            # In force mode, reuse the existing symlink path instead of creating a new one
+            log_message(f"Force mode: Reusing existing symlink path {existing_symlink_for_source} for same source", level="INFO")
+            dest_file = existing_symlink_for_source
     elif existing_symlink_for_source == dest_file:
         # For sports content, check SportsDB event ID instead of TMDB ID
         if media_type == 'Sports':
@@ -1044,9 +1016,48 @@ def process_file(args, force=False, batch_apply=False):
         else:
             log_message(f"Symlink exists but metadata incomplete (fallback) - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
 
+    # Check if symlink already exists at the exact destination path
+    if os.path.islink(dest_file):
+        existing_src = normalize_file_path(os.readlink(dest_file))
+        if existing_src == normalized_src_file:
+            # For sports content, check SportsDB event ID instead of TMDB ID
+            if media_type == 'Sports':
+                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)  # tmdb_id contains sportsdb_event_id for sports
+            else:
+                has_complete_metadata = bool(tmdb_id and media_type and proper_name and year)
+
+            if has_complete_metadata:
+                log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
+                log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
+
+                # Include sports metadata if this is a sports file
+                if media_type == 'Sports' and 'sport_name' in locals():
+                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                      league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
+                else:
+                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
+                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
+                                      None, None)  # league_id, sportsdb_event_id (None for non-sports content)
+                return
+            else:
+                log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
+        else:
+            # Instead of overwriting, create a versioned name for the new symlink
+            log_message(f"Symlink exists but points to different source, creating versioned name", level="INFO")
+            # The version numbering will be handled later in the code
+
+
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
         return
+
+    # Check for filename conflicts and generate unique filename if needed
+    original_dest_file = dest_file
+    dest_file = generate_unique_filename(dest_file, src_file)
+    
+    if dest_file != original_dest_file:
+        log_message(f"Filename conflict detected, using versioned name: {os.path.basename(dest_file)}", level="INFO")
 
     # Create symlink
     try:
