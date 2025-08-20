@@ -5,6 +5,7 @@ import platform
 from MediaHub.utils.ffprobe_parser import *
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.mediainfo import extract_media_info, keywords
+from MediaHub.api.api_utils import api_retry
 
 def get_ffprobe_path():
     """
@@ -25,6 +26,9 @@ def get_ffprobe_path():
 # Get the ffprobe path
 FFPROBE_PATH = get_ffprobe_path()
 
+extract_media_info = api_retry(max_retries=2, base_delay=1, max_delay=5)(extract_media_info)
+
+@api_retry(max_retries=3, base_delay=2, max_delay=10)
 def get_ffprobe_media_info(file_path):
     """
     Use ffprobe to extract media information from the file
