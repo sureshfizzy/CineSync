@@ -35,6 +35,9 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
             if not tags_to_use:
                 return f"{movie_name} ({year})"
 
+            # Initialize filename_parts with base movie name and year
+            filename_parts = [f"{movie_name} ({year})"]
+
             # Build filename with Radarr tags
             for tag in tags_to_use:
                 clean_tag = tag.strip()
