@@ -534,6 +534,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         log_message(f"Found episode name: {episode_name} (from: {episode_name_result})", level="DEBUG")
 
             # Check if MEDIAINFO PARSER is enabled to determine naming strategy
+            sonarr_naming_failed = False
             if mediainfo_parser():
                 # Determine content type for appropriate naming format
                 content_type = "standard"  # Default
@@ -556,7 +557,21 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         episode_number, episode_identifier, episode_name,
                         content_type=None
                     )
-            else:
+
+                # Check if Sonarr naming returned a basic legacy format
+                file_ext = os.path.splitext(file)[1]
+                legacy_formats = [
+                    f"{show_name} - {episode_identifier}{file_ext}",
+                    f"{show_name} - {episode_identifier} - {episode_name}{file_ext}" if episode_name else None
+                ]
+                legacy_formats = [fmt for fmt in expected_basic_formats if fmt]
+
+                if new_name in expected_basic_formats:
+                    log_message(f"Falling back to processor legacy naming for: {file}", level="WARNING")
+                    sonarr_naming_failed = True
+
+            # Use processor legacy naming if mediainfo parser is disabled OR if Sonarr naming failed
+            if not mediainfo_parser() or sonarr_naming_failed:
                 if episode_name:
                     base_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}".replace(' - -', ' -')
                     log_message(f"Renaming {file}", level="INFO")

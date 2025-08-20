@@ -346,6 +346,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         use_media_parser = mediainfo_parser()
 
         # Get media info and generate filename using appropriate method
+        radarr_naming_failed = False
         if use_media_parser:
             media_info = get_ffprobe_media_info(os.path.join(root, file))
             tags_to_use = get_mediainfo_radarr_tags()
@@ -353,7 +354,15 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             enhanced_movie_folder = get_radarr_movie_filename(
                 clean_movie_name_for_radarr, year, file, root, media_info
             )
-        else:
+
+            # Check if Radarr naming failed and returned basic fallback format
+            legacy_format = f"{clean_movie_name_for_radarr} ({year})"
+            if enhanced_movie_folder == legacy_format:
+                log_message(f"Falling back to legacy naming for: {file}", level="INFO")
+                radarr_naming_failed = True
+
+        # Use legacy naming if mediainfo parser is disabled OR if Radarr naming failed
+        if not use_media_parser or radarr_naming_failed:
             media_info = extract_media_info(file, keywords)
             if resolution and 'Resolution' not in media_info:
                 media_info['Resolution'] = resolution
@@ -363,9 +372,8 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         id_tag = ''
         clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
 
-        # Process legacy naming if not using MediaInfo parser
-        if not use_media_parser:
-
+        # Process legacy naming if not using MediaInfo parser OR if Radarr naming failed
+        if not use_media_parser or radarr_naming_failed:
             # Handle ID tags with RENAME_TAGS
             if 'TMDB' in tags_to_use:
                 id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
