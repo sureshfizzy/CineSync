@@ -996,9 +996,17 @@ def process_file(args, force=False, batch_apply=False):
                 else:
                     log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
         else:
-            # In force mode, reuse the existing symlink path instead of creating a new one
-            log_message(f"Force mode: Reusing existing symlink path {existing_symlink_for_source} for same source", level="INFO")
-            dest_file = existing_symlink_for_source
+            # In force mode, check if rename is enabled
+            if rename_enabled:
+                existing_name = os.path.basename(existing_symlink_for_source)
+                new_name = os.path.basename(dest_file)
+                log_message(f"Force mode with rename enabled: Found existing symlink for source with different name: {existing_name} -> {new_name}", level="INFO")
+                os.remove(existing_symlink_for_source)
+            else:
+                existing_name = os.path.basename(existing_symlink_for_source)
+                new_name = os.path.basename(dest_file)
+                log_message(f"Force mode with rename disabled: Found existing symlink for source with different name: {existing_name} -> {new_name}", level="INFO")
+                os.remove(existing_symlink_for_source)
     elif existing_symlink_for_source == dest_file:
         # For sports content, check SportsDB event ID instead of TMDB ID
         if media_type == 'Sports':
