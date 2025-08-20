@@ -188,7 +188,7 @@ def parse_sonarr_conditional_tokens(result):
 
 def parse_sonarr_media_tokens(result, media_info):
     """
-    Parse MediaInfo tokens in Sonarr format (unified for all formats)
+    Parse MediaInfo tokens in Sonarr format with TRaSH guide formatting (unified for all formats)
 
     Args:
         result: Current result string
@@ -197,44 +197,106 @@ def parse_sonarr_media_tokens(result, media_info):
     Returns:
         String with MediaInfo tokens replaced
     """
-    # MediaInfo tokens - map from ffprobe output to Sonarr tokens
-    mediainfo_mappings = {
-        'MediaInfo Simple': media_info.get('MediaInfo Simple', ''),
-        'MediaInfo Full': media_info.get('MediaInfo Full', ''),
-        'MediaInfo AudioCodec': media_info.get('MediaInfo AudioCodec', ''),
-        'MediaInfo AudioChannels': media_info.get('MediaInfo AudioChannels', ''),
-        'MediaInfo AudioLanguages': media_info.get('MediaInfo AudioLanguages', ''),
-        'MediaInfo SubtitleLanguages': media_info.get('MediaInfo SubtitleLanguages', ''),
-        'MediaInfo VideoCodec': media_info.get('MediaInfo VideoCodec', ''),
-        'MediaInfo VideoBitDepth': media_info.get('MediaInfo VideoBitDepth', ''),
-        'MediaInfo VideoDynamicRange': media_info.get('MediaInfo VideoDynamicRange', ''),
-        'MediaInfo VideoDynamicRangeType': media_info.get('MediaInfo VideoDynamicRangeType', ''),
-    }
+    import re
 
-    for token, value in mediainfo_mappings.items():
-        result = result.replace(f'{{{token}}}', str(value) if value else '')
+    # Find all tokens in the format string
+    token_pattern = r'\{([^}]+)\}'
+    tokens = re.findall(token_pattern, result)
 
-    # Custom Formats and Release Group
-    custom_formats = media_info.get('Custom Formats', '')
-    release_group = media_info.get('Release Group', '')
+    for token in tokens:
+        field_name = token.strip()
+        if field_name.startswith('[') and field_name.endswith(']'):
+            field_name = field_name[1:-1]
+        elif field_name.startswith('-'):
+            field_name = field_name[1:]
 
-    result = result.replace('{Custom Formats}', custom_formats)
-    result = result.replace('{Release Group}', release_group)
+        if field_name in ['Series Title', 'Episode Title', 'season', 'episode', 'Air-Date']:
+            continue
 
-    # Custom Format FormatName token
-    custom_format_formatname = media_info.get('Custom Format-FormatName', '')
-    result = result.replace('{Custom Format-FormatName}', custom_format_formatname)
+        # Handle Custom Formats
+        if field_name == 'Custom Formats' and 'Custom Formats' in media_info:
+            value = media_info['Custom Formats']
+            quality_full = media_info.get('Quality Full', '')
 
-    # Release Hash (for anime releases)
-    release_hash = media_info.get('Release Hash', '')
-    result = result.replace('{Release Hash}', release_hash)
+            if quality_full and any(source in quality_full.upper() for source in ['WEBDL', 'WEBRIP', 'BLURAY', 'HDTV', 'REMUX']):
+                result = result.replace(f'{{{token}}}', '')
+            else:
+                if value:
+                    result = result.replace(f'{{{token}}}', value)
+                else:
+                    result = result.replace(f'{{{token}}}', '')
 
-    # Original tokens
-    original_title = media_info.get('Original Title', '')
-    original_filename = media_info.get('Original Filename', '')
+        elif field_name == 'Quality Full' and 'Quality Full' in media_info:
+            value = media_info['Quality Full']
+            if value:
+                if '-' in value:
+                    parts = value.split('-')
+                    if len(parts) == 2:
+                        source, resolution = parts
+                        sonarr_format = f"{resolution} {source.replace('WEBDL', 'WEB-DL')}"
+                        result = result.replace(f'{{{token}}}', sonarr_format)
+                    else:
+                        result = result.replace(f'{{{token}}}', value)
+                else:
+                    result = result.replace(f'{{{token}}}', value)
+            else:
+                result = result.replace(f'{{{token}}}', '')
 
-    result = result.replace('{Original Title}', original_title)
-    result = result.replace('{Original Filename}', original_filename)
+        elif field_name in ['MediaInfo AudioCodec', 'Mediainfo AudioCodec'] and 'MediaInfo AudioCodec' in media_info:
+            value = media_info['MediaInfo AudioCodec']
+            if value:
+                if value == 'EAC3' and 'MediaInfo AudioChannels' in media_info:
+                    channels = media_info['MediaInfo AudioChannels'].replace('.', ' ')
+                    result = result.replace(f'{{{token}}}', f"DDP{channels}")
+                else:
+                    result = result.replace(f'{{{token}}}', value)
+            else:
+                result = result.replace(f'{{{token}}}', '')
+
+        # Handle MediaInfo AudioChannels - skip if already handled in AudioCodec
+        elif field_name in ['MediaInfo AudioChannels', 'Mediainfo AudioChannels'] and 'MediaInfo AudioChannels' in media_info:
+            audio_codec = media_info.get('MediaInfo AudioCodec', '')
+            if audio_codec != 'EAC3':
+                value = media_info['MediaInfo AudioChannels']
+                if value:
+                    result = result.replace(f'{{{token}}}', value.replace('.', ' '))
+                else:
+                    result = result.replace(f'{{{token}}}', '')
+            else:
+                result = result.replace(f'{{{token}}}', '')
+
+        # Handle MediaInfo VideoCodec
+        elif field_name in ['MediaInfo VideoCodec', 'Mediainfo VideoCodec'] and 'MediaInfo VideoCodec' in media_info:
+            value = media_info['MediaInfo VideoCodec']
+            if value:
+                if value.lower() == 'x264':
+                    result = result.replace(f'{{{token}}}', 'H 264')
+                elif value.lower() == 'x265':
+                    result = result.replace(f'{{{token}}}', 'H 265')
+                else:
+                    result = result.replace(f'{{{token}}}', value)
+            else:
+                result = result.replace(f'{{{token}}}', '')
+
+        # Handle Release Group
+        elif field_name == 'Release Group' and 'Release Group' in media_info:
+            value = media_info['Release Group']
+            if value:
+                result = result.replace(f'{{{token}}}', f"-{value}")
+            else:
+                result = result.replace(f'{{{token}}}', '')
+
+        # Handle other MediaInfo fields
+        elif field_name in media_info:
+            value = media_info[field_name]
+            if value:
+                if isinstance(value, list):
+                    formatted_value = '+'.join([str(item).upper() for item in value])
+                    result = result.replace(f'{{{token}}}', formatted_value)
+                else:
+                    result = result.replace(f'{{{token}}}', str(value))
+            else:
+                result = result.replace(f'{{{token}}}', '')
 
     return result
 

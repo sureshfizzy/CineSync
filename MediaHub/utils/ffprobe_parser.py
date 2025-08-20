@@ -350,7 +350,8 @@ def extract_movie_info_from_path(file_path, probe_data=None):
         info['Edition Tags'] = ' '.join(edition_tags)
 
     # Look for release group
-    release_group_match = re.search(r'-([A-Za-z0-9]+)$', os.path.splitext(filename)[0])
+    filename_without_ext = os.path.splitext(filename)[0]
+    release_group_match = re.search(r'-([A-Za-z0-9\.]+(?:\.[A-Za-z0-9]+)*)$', filename_without_ext)
     if release_group_match:
         info['Release Group'] = release_group_match.group(1)
 
