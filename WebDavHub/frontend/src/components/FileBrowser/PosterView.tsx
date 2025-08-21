@@ -14,8 +14,8 @@ import ModifyDialog from './ModifyDialog/ModifyDialog';
 import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
-import { getTmdbPosterUrl } from '../api/tmdbApi';
 import CategoryPosterDisplay from './CategoryPosterDisplay';
+import PosterImage from './PosterImage';
 import './poster-optimizations.css';
 
 interface PosterViewProps {
@@ -120,6 +120,7 @@ const PosterView = memo(({
           const tmdb = tmdbData[file.name];
           const loaded = imgLoadedMap[file.name] || false;
           const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
+          const tmdbId = file.tmdbId || (tmdb && tmdb.id);
           const hasPosterPath = !!posterPath;
 
           return (
@@ -200,9 +201,11 @@ const PosterView = memo(({
                         )}
 
                         {hasPosterPath && !loaded && (
-                          <img
+                          <PosterImage
+                            tmdbId={tmdbId}
+                            posterPath={posterPath}
+                            size="w92"
                             className="poster-image"
-                            src={getTmdbPosterUrl(posterPath, 'w92') || ''}
                             alt={`${title} (loading)`}
                             style={{
                               width: '100%',
@@ -218,28 +221,51 @@ const PosterView = memo(({
                           />
                         )}
 
-                        <img
-                          className="poster-image"
-                          src={hasPosterPath ? getTmdbPosterUrl(posterPath) || '' : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='}
-                          alt={title}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            position: 'absolute',
-                            inset: 0,
-                            opacity: loaded && hasPosterPath ? 1 : 0,
-                            transition: 'opacity 0.2s ease-out',
-                            zIndex: 1,
-                            imageRendering: 'auto',
-                            backfaceVisibility: 'hidden',
-                            transform: 'translateZ(0)',
-                          }}
-                          onLoad={() => onImageLoad(file.name)}
-                          onError={() => onImageLoad(file.name)}
-                          loading="lazy"
-                          decoding="async"
-                        />
+                        {hasPosterPath ? (
+                          <PosterImage
+                            tmdbId={tmdbId}
+                            posterPath={posterPath}
+                            className="poster-image"
+                            alt={title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              position: 'absolute',
+                              inset: 0,
+                              opacity: loaded ? 1 : 0,
+                              transition: 'opacity 0.2s ease-out',
+                              zIndex: 1,
+                              imageRendering: 'auto',
+                              backfaceVisibility: 'hidden',
+                              transform: 'translateZ(0)',
+                            }}
+                            onLoad={() => onImageLoad(file.name)}
+                            onError={() => onImageLoad(file.name)}
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <img
+                            className="poster-image"
+                            src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+                            alt={title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              position: 'absolute',
+                              inset: 0,
+                              opacity: 0,
+                              transition: 'opacity 0.2s ease-out',
+                              zIndex: 1,
+                            }}
+                            onLoad={() => onImageLoad(file.name)}
+                            onError={() => onImageLoad(file.name)}
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        )}
 
                         {!hasPosterPath && loaded && (
                           <Box sx={{

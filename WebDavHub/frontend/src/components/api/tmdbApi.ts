@@ -239,6 +239,33 @@ export function getTmdbBackdropUrl(backdropPath: string | null, size: string = '
   return `/api/image-cache?poster=${encodeURIComponent(backdropPath)}&size=${size}${tokenParam}`;
 }
 
+// Get MediaCover poster URL (Radarr/Sonarr local images)
+export function getMediaCoverPosterUrl(tmdbId: string | number): string | null {
+  if (!tmdbId) return null;
+  return `/api/mediacover/${tmdbId}/poster.jpg`;
+}
+
+// Get MediaCover fanart URL (Radarr/Sonarr local images)
+export function getMediaCoverFanartUrl(tmdbId: string | number): string | null {
+  if (!tmdbId) return null;
+  return `/api/mediacover/${tmdbId}/fanart.jpg`;
+}
+
+// Get poster URL with MediaCover priority, TMDB fallback
+export function getPosterUrlWithFallback(tmdbId: string | number | null, posterPath: string | null, size: string = 'w342'): string | null {
+  // First try MediaCover if we have a TMDB ID
+  if (tmdbId) {
+    return getMediaCoverPosterUrl(tmdbId);
+  }
+
+  // Fallback to TMDB poster
+  if (posterPath) {
+    return getTmdbPosterUrl(posterPath, size);
+  }
+
+  return null;
+}
+
 // Direct TMDB URL function (fallback)
 export function getTmdbPosterUrlDirect(posterPath: string | null, size: string = 'w342'): string | null {
   if (!posterPath) return null;

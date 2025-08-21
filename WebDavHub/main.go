@@ -218,6 +218,7 @@ func main() {
 	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 	apiMux.HandleFunc("/api/image-cache", api.HandleImageCache)
+	apiMux.HandleFunc("/api/mediacover/", spoofing.HandleMediaCover)
 
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)

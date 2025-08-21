@@ -457,9 +457,19 @@ func HandleSpoofedLanguage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(languages)
 }
 
-// HandleMediaCover serves poster and fanart images for Bazarr
+// HandleMediaCover serves poster and fanart images for Bazarr and WebDavHub
 func HandleMediaCover(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v3/MediaCover/")
+	// Handle both old and new paths
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/v3/MediaCover/") {
+		path = strings.TrimPrefix(path, "/api/v3/MediaCover/")
+	} else if strings.HasPrefix(path, "/api/mediacover/") {
+		path = strings.TrimPrefix(path, "/api/mediacover/")
+	} else {
+		http.NotFound(w, r)
+		return
+	}
+
 	parts := strings.Split(path, "/")
 	if len(parts) != 2 {
 		http.NotFound(w, r)

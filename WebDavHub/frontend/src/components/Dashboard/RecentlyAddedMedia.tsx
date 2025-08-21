@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Box, Card, CardContent, Typography, useTheme, alpha, Skeleton, Chip, IconButton, Dialog, DialogTitle, DialogContent, List, ListItemButton, ListItemText, Divider, Button, DialogActions } from '@mui/material';
 import { Movie as MovieIcon, Tv as TvIcon, AccessTime as TimeIcon, ChevronLeft, ChevronRight, PlaylistPlay as PlaylistIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { searchTmdb, getTmdbPosterUrl } from '../api/tmdbApi';
+import { searchTmdb } from '../api/tmdbApi';
+import PosterImage from '../FileBrowser/PosterImage';
 import axios from 'axios';
 import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
@@ -22,7 +23,8 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
 const MediaCard = React.memo(({
   media,
   index,
-  posterUrl,
+  tmdbId,
+  posterPath,
   displayTitle,
   subtitle,
   description,
@@ -33,7 +35,8 @@ const MediaCard = React.memo(({
 }: {
   media: RecentMedia;
   index: number;
-  posterUrl?: string;
+  tmdbId?: string | number;
+  posterPath?: string;
   displayTitle: string;
   subtitle: string | null;
   description?: string;
@@ -85,14 +88,14 @@ const MediaCard = React.memo(({
         overflow: 'hidden',
       }}
     >
-      {/* TMDB Poster */}
-      {posterUrl && (
-        <Box
-          component="img"
-          className="poster-image"
-          src={posterUrl}
+      {/* TMDB Poster with MediaCover fallback */}
+      {(tmdbId || posterPath) && (
+        <PosterImage
+          tmdbId={tmdbId}
+          posterPath={posterPath}
           alt={displayTitle}
-          sx={{
+          className="poster-image"
+          style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
@@ -100,8 +103,7 @@ const MediaCard = React.memo(({
             inset: 0,
             transition: 'transform 0.3s ease',
           }}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
+          onError={() => {
           }}
         />
       )}
@@ -267,7 +269,7 @@ const RecentlyAddedMedia: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [posterUrls, setPosterUrls] = useState<Record<string, string>>({});
+  const [posterPaths, setPosterPaths] = useState<Record<string, string>>({});
   const [tmdbTitles, setTmdbTitles] = useState<Record<string, string>>({});
   const [tmdbDescriptions, setTmdbDescriptions] = useState<Record<string, string>>({});
   const [episodeDialogOpen, setEpisodeDialogOpen] = useState(false);
@@ -385,7 +387,7 @@ const RecentlyAddedMedia: React.FC = () => {
             const cacheKey = `${media.tmdbId}-${media.type}`;
             uniqueMedia.set(cacheKey, media);
 
-            const hasPoster = posterUrls[cacheKey];
+            const hasPoster = posterPaths[cacheKey];
             const hasTitle = tmdbTitles[cacheKey];
             const hasDescription = tmdbDescriptions[cacheKey];
             const isCurrentlyFetching = fetchingIds.current.has(cacheKey);
@@ -417,7 +419,7 @@ const RecentlyAddedMedia: React.FC = () => {
         const results = await Promise.allSettled(promises);
 
         // Process results and batch state updates
-        const newPosterUrls: Record<string, string> = {};
+        const newPosterPaths: Record<string, string> = {};
         const newTmdbTitles: Record<string, string> = {};
         const newTmdbDescriptions: Record<string, string> = {};
 
@@ -426,8 +428,7 @@ const RecentlyAddedMedia: React.FC = () => {
             const { cacheKey, result } = promiseResult.value;
             if (result) {
               if (result.poster_path) {
-                const posterUrl = getTmdbPosterUrl(result.poster_path, 'w342');
-                if (posterUrl) newPosterUrls[cacheKey] = posterUrl;
+                newPosterPaths[cacheKey] = result.poster_path;
               }
               if (result.title) newTmdbTitles[cacheKey] = result.title;
               if (result.overview) newTmdbDescriptions[cacheKey] = result.overview;
@@ -436,11 +437,11 @@ const RecentlyAddedMedia: React.FC = () => {
         });
 
         // Single batch update to minimize re-renders
-        if (Object.keys(newPosterUrls).length > 0 ||
+        if (Object.keys(newPosterPaths).length > 0 ||
             Object.keys(newTmdbTitles).length > 0 ||
             Object.keys(newTmdbDescriptions).length > 0) {
 
-          setPosterUrls(prev => ({ ...prev, ...newPosterUrls }));
+          setPosterPaths(prev => ({ ...prev, ...newPosterPaths }));
           setTmdbTitles(prev => ({ ...prev, ...newTmdbTitles }));
           setTmdbDescriptions(prev => ({ ...prev, ...newTmdbDescriptions }));
         }
@@ -515,7 +516,7 @@ const RecentlyAddedMedia: React.FC = () => {
   useEffect(() => {
     const timeoutId = setTimeout(checkScrollPosition, 200);
     return () => clearTimeout(timeoutId);
-  }, [posterUrls, tmdbTitles, tmdbDescriptions, checkScrollPosition]);
+  }, [posterPaths, tmdbTitles, tmdbDescriptions, checkScrollPosition]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -895,7 +896,8 @@ const RecentlyAddedMedia: React.FC = () => {
                 key={`${group.media.path}-${group.media.updatedAt}`}
                 media={group.media}
                 index={index}
-                posterUrl={posterUrls[cacheKey]}
+                tmdbId={group.media.tmdbId}
+                posterPath={posterPaths[cacheKey]}
                 displayTitle={getDisplayTitle(group.media)}
                 subtitle={getSubtitle(group.media, group.episodeCount)}
                 description={tmdbDescriptions[cacheKey]}
