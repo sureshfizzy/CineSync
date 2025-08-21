@@ -676,7 +676,7 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keep connection alive with periodic pings
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	done := make(chan struct{})
@@ -684,7 +684,7 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer close(done)
 		for {
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, _, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
@@ -731,7 +731,7 @@ func handleSignalRSSE(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(versionMessage))
 	flusher.Flush()
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	timeout := time.After(5 * time.Minute)
@@ -1027,6 +1027,18 @@ func BroadcastEpisodeFileDeleted(episodeFileId int, seriesId int, seriesTitle st
 	}
 
 	broadcastSignalRMessage(message)
+}
+
+func IsSignalRConnected() bool {
+	signalRMutex.RLock()
+	defer signalRMutex.RUnlock()
+	return len(signalRConnections) > 0
+}
+
+func GetSignalRConnectionCount() int {
+	signalRMutex.RLock()
+	defer signalRMutex.RUnlock()
+	return len(signalRConnections)
 }
 
 // broadcastSignalRMessage sends a SignalR message to all connected clients
