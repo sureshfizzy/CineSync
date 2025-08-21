@@ -74,8 +74,15 @@ func HandlerWrapper(handler http.HandlerFunc, timeoutSeconds int) http.HandlerFu
 	})
 }
 
-// handleErrorResponse sends a standardized error response
 func handleErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	if _, ok := w.(http.Hijacker); ok {
+		defer func() {
+			if r := recover(); r != nil {
+				return
+			}
+		}()
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
@@ -87,8 +94,6 @@ func handleErrorResponse(w http.ResponseWriter, message string, statusCode int) 
 
 	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
 		logger.Error("Failed to encode error response: %v", err)
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "Error: %s", message)
 	}
 }
 
@@ -833,13 +838,13 @@ func HandleSignalRMessages(w http.ResponseWriter, r *http.Request) {
 	handleSignalRSSE(w, r)
 }
 
-// handleSignalRWebSocket handles WebSocket connections for SignalR
 func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("WebSocket upgrade failed: %v", err)
 		return
 	}
+
 	defer func() {
 		signalRMutex.Lock()
 		delete(signalRConnections, conn)
@@ -847,12 +852,10 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
-	// Add connection to tracking
 	signalRMutex.Lock()
 	signalRConnections[conn] = true
 	signalRMutex.Unlock()
 
-	// Send handshake response immediately
 	handshakeResponse := `{"error":null}` + "\x1e"
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(handshakeResponse)); err != nil {
 		logger.Error("Failed to send handshake response: %v", err)
@@ -925,13 +928,15 @@ func handleSignalRSSE(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(30 * time.Minute)
 
 	for {
 		select {
 		case <-ticker.C:
 			pingMessage := `{"type":6}`+"\x1e"
-			w.Write([]byte(pingMessage))
+			if _, err := w.Write([]byte(pingMessage)); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-timeout:
 			return

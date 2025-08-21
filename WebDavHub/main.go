@@ -453,9 +453,9 @@ func main() {
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      globalPanicRecoveryMiddleware(rootMux),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  300 * time.Second,
 	}
 
 	log.Fatal(server.ListenAndServe())

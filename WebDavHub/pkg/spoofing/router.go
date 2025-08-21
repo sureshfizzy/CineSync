@@ -139,9 +139,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc(path, AuthMiddleware(resilientHandler))
 	}
 
-	// Register SignalR endpoints with SignalR-specific auth and resilience
 	for path, handler := range signalREndpoints {
-		resilientHandler := HandlerWrapper(handler, 60)
+		resilientHandler := PanicRecoveryMiddleware(handler)
 		mux.HandleFunc(path, SignalRAuthMiddleware(resilientHandler))
 	}
 }
