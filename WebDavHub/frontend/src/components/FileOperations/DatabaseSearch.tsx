@@ -178,21 +178,60 @@ const DatabaseSearch: React.FC = () => {
     setBulkActionLoading(true);
     setError(null);
     try {
-      const filePaths = Array.from(selectedFiles);
-      const response = await axios.delete('/api/file-operations/bulk', {
-        data: { filePaths }
-      });
+      const selectedRecords = records.filter(record => selectedFiles.has(record.file_path));
+      const filesWithDestination = selectedRecords.filter(record => record.destination_path && record.destination_path.trim() !== '');
+      const filesWithoutDestination = selectedRecords.filter(record => !record.destination_path || record.destination_path.trim() === '');
 
-      if (response.data.success) {
+      let totalDeleted = 0;
+      let errors: string[] = [];
+      if (filesWithDestination.length > 0) {
+        try {
+          const destinationPaths = filesWithDestination.map(record => record.destination_path);
+          const response = await axios.post('/api/delete', {
+            paths: destinationPaths
+          });
+
+          if (response.data.success) {
+            totalDeleted += response.data.deletedCount || filesWithDestination.length;
+
+            if (response.data.errors && response.data.errors.length > 0) {
+              errors = [...errors, ...response.data.errors];
+            }
+          } else {
+            errors.push('Failed to delete files');
+          }
+        } catch (error: any) {
+          console.error('Failed to delete files with destination paths:', error);
+          errors.push(`Failed to delete ${filesWithDestination.length} files: ${error.response?.data?.error || error.message}`);
+        }
+      }
+
+      if (filesWithoutDestination.length > 0) {
+        try {
+          const filePaths = filesWithoutDestination.map(record => record.file_path);
+          const response = await axios.delete('/api/file-operations/bulk', {
+            data: { filePaths }
+          });
+
+          if (response.data.success) {
+            totalDeleted += response.data.deletedCount || filesWithoutDestination.length;
+          }
+        } catch (error: any) {
+          console.error('Failed to delete database records:', error);
+          errors.push(`Failed to delete ${filesWithoutDestination.length} database records: ${error.response?.data?.error || error.message}`);
+        }
+      }
+
+      if (totalDeleted > 0) {
         // Remove deleted records from the current view
         setRecords(prev => prev.filter(record => !selectedFiles.has(record.file_path)));
-        setTotalRecords(prev => prev - (response.data.deletedCount || selectedFiles.size));
+        setTotalRecords(prev => prev - totalDeleted);
 
         // Update stats
         if (stats) {
           setStats(prev => prev ? {
             ...prev,
-            totalRecords: prev.totalRecords - (response.data.deletedCount || selectedFiles.size)
+            totalRecords: prev.totalRecords - totalDeleted
           } : null);
         }
 
@@ -201,6 +240,8 @@ const DatabaseSearch: React.FC = () => {
 
         // Refresh data to ensure consistency
         fetchDatabaseRecords();
+      } else if (errors.length > 0) {
+        setError(`Failed to delete any files. ${errors.length} errors occurred.`);
       }
     } catch (error: any) {
       console.error('Failed to delete selected files:', error.response?.data?.error || error.message);
@@ -1268,12 +1309,12 @@ const DatabaseSearch: React.FC = () => {
       >
         <DialogTitle>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Delete Selected Records
+            Delete Selected Files
           </Typography>
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
-            Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected database records?
+            Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected files?
           </DialogContentText>
           <DialogContentText sx={{
             color: 'text.primary',
@@ -1283,7 +1324,7 @@ const DatabaseSearch: React.FC = () => {
             borderLeft: `4px solid ${theme.palette.error.main}`,
             border: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.error.main, 0.2)}` : 'none',
           }}>
-            This action will permanently remove the selected file records from the database. The original files will remain untouched in their source locations.
+            This action will move processed files to trash (can be restored) and remove failed file records from the database. Source files will remain untouched.
           </DialogContentText>
           {error && (
             <DialogContentText sx={{
@@ -1317,7 +1358,7 @@ const DatabaseSearch: React.FC = () => {
               px: 3,
             }}
           >
-            {bulkActionLoading ? 'Deleting...' : `Delete ${selectedFiles.size} Records`}
+            {bulkActionLoading ? 'Deleting...' : `Delete ${selectedFiles.size} Files`}
           </Button>
         </DialogActions>
       </Dialog>
