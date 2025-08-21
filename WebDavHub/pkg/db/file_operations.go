@@ -14,6 +14,14 @@ import (
 	"time"
 )
 
+type FileOperationNotifier func(operation, filePath string)
+
+var fileOperationNotifier FileOperationNotifier
+
+func SetFileOperationNotifier(notifier FileOperationNotifier) {
+	fileOperationNotifier = notifier
+}
+
 // FileOperation represents a file operation record
 type FileOperation struct {
 	ID              string `json:"id"`
@@ -177,6 +185,10 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 			UpdateFolderCacheForNewFile(req.DestinationPath, req.ProperName, req.Year, req.TmdbID, req.MediaType, seasonNumber)
 		} else {
 			UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
+		}
+
+		if fileOperationNotifier != nil && req.DestinationPath != "" {
+			fileOperationNotifier("add", req.DestinationPath)
 		}
 
 	case "delete":
@@ -1680,6 +1692,8 @@ func getDeletedFilesCountFromMediaHub(db *sql.DB, searchQuery string) (int, erro
 		}
 		return 0, fmt.Errorf("failed to count deleted files: %w", err)
 	}
-	
+
 	return count, nil
 }
+
+

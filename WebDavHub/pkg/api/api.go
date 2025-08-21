@@ -5,6 +5,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/config"
+	"cinesync/pkg/spoofing"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -92,6 +93,8 @@ func SetRootDir(dir string) {
 			}
 		}()
 	}
+
+	db.SetFileOperationNotifier(handleFileOperationNotification)
 }
 
 // UpdateRootDir updates the root directory when configuration changes
@@ -1973,6 +1976,9 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	// Clean up empty parent directories and .tmdb files
 	cleanupEmptyDirectories(path)
 
+	// Broadcast SignalR events for file deletion
+	broadcastFileDeletionEvents(path)
+
 	// Invalidate folder cache to ensure frontend refreshes
 	db.InvalidateFolderCache()
 	db.NotifyDashboardStatsChanged()
@@ -2154,6 +2160,23 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 
 		logger.Info("Success: moved to trash %s -> %s", path, trashedPath)
 		deletedCount++
+	}
+
+	// Broadcast SignalR events for bulk deletion
+	for _, relativePath := range paths {
+		if relativePath == "" {
+			continue
+		}
+
+		var fullPath string
+		if filepath.IsAbs(relativePath) {
+			fullPath = relativePath
+		} else {
+			cleanPath := filepath.Clean(relativePath)
+			fullPath = filepath.Join(rootDir, cleanPath)
+		}
+
+		broadcastFileDeletionEvents(fullPath)
 	}
 
 	// Invalidate folder cache to ensure frontend refreshes
@@ -2504,6 +2527,9 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to rename file or directory", http.StatusInternalServerError)
 		return
 	}
+
+	// Broadcast SignalR events for file rename
+	broadcastFileRenameEvents(oldFullPath, newFullPath)
 
 	logger.Info("Success: renamed %s to %s", oldFullPath, newFullPath)
 	w.Header().Set("Content-Type", "application/json")
@@ -2989,6 +3015,11 @@ func handleFileDeleted(data map[string]interface{}) {
 		logger.Warn("Failed to track file deletion", "error", err)
 	}
 
+	// Broadcast SignalR events for external file deletion to notify Bazarr
+	if destinationPath != "" {
+		broadcastFileDeletionEvents(destinationPath)
+	}
+
 	// Invalidate caches and notify about changes
 	db.InvalidateFolderCache()
 	db.NotifyDashboardStatsChanged()
@@ -3299,4 +3330,329 @@ func moveToTrash(fullPath string) (string, error) {
 		return "", err
 	}
 	return trashed, nil
+}
+
+// broadcastFileRenameEvents broadcasts SignalR events when files are renamed
+func broadcastFileRenameEvents(oldPath, newPath string) {
+	if isMovieFile(oldPath) || isMovieFile(newPath) {
+		if movieFile := getMovieFileFromPath(newPath); movieFile != nil {
+			spoofing.BroadcastMovieFileUpdated(movieFile)
+		}
+	} else if isTVFile(oldPath) || isTVFile(newPath) {
+		if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
+			spoofing.BroadcastEpisodeFileUpdated(episodeFile)
+		}
+	}
+}
+
+// isMovieFile determines if a file path represents a movie file
+func isMovieFile(filePath string) bool {
+	pathLower := strings.ToLower(filePath)
+	return strings.Contains(pathLower, "movie") ||
+		   strings.Contains(pathLower, "film") ||
+		   (!strings.Contains(pathLower, "season") && !strings.Contains(pathLower, "episode"))
+}
+
+// isTVFile determines if a file path represents a TV show file
+func isTVFile(filePath string) bool {
+	pathLower := strings.ToLower(filePath)
+	return strings.Contains(pathLower, "season") ||
+		   strings.Contains(pathLower, "episode") ||
+		   strings.Contains(pathLower, "tv") ||
+		   strings.Contains(pathLower, "show")
+}
+
+// getMovieFileFromPath creates a MovieFile object from a file path
+func getMovieFileFromPath(filePath string) *spoofing.MovieFile {
+	if filePath == "" {
+		return nil
+	}
+
+	// Query database for movie information based on file path
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for movie file lookup: %v", err)
+		return nil
+	}
+
+	var properName, tmdbIDStr, language, quality string
+	var year int
+	var fileSize int64
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, 0) as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
+		FROM processed_files
+		WHERE destination_path = ?
+		AND UPPER(media_type) = 'MOVIE'
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, filePath).Scan(&properName, &year, &tmdbIDStr, &fileSize, &language, &quality)
+	if err != nil {
+		logger.Warn("Movie file not found in database: %s", filePath)
+		return nil
+	}
+
+	tmdbID, _ := strconv.Atoi(tmdbIDStr)
+	if tmdbID == 0 {
+		return nil
+	}
+
+	fileName := filepath.Base(filePath)
+	fileInfo, _ := os.Stat(filePath)
+	modTime := time.Now()
+	if fileInfo != nil {
+		modTime = fileInfo.ModTime()
+		if fileSize == 0 {
+			fileSize = fileInfo.Size()
+		}
+	}
+
+	// Create MovieFile with database information
+	movieFile := &spoofing.MovieFile{
+		ID:           tmdbID,
+		MovieId:      tmdbID,
+		RelativePath: fileName,
+		Path:         filePath,
+		Size:         fileSize,
+		DateAdded:    modTime,
+		SceneName:    "",
+		ReleaseGroup: "",
+	}
+
+	return movieFile
+}
+
+// getEpisodeFileFromPath creates an episode file object from a file path
+func getEpisodeFileFromPath(filePath string) map[string]interface{} {
+	if filePath == "" {
+		return nil
+	}
+
+	// Query database for episode information based on file path
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for episode file lookup: %v", err)
+		return nil
+	}
+
+	var properName, tmdbIDStr, seasonNumber, episodeNumber, language, quality string
+	var year int
+	var fileSize int64
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, 0) as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(episode_number, '') as episode_number,
+			COALESCE(file_size, 0) as file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality
+		FROM processed_files
+		WHERE destination_path = ?
+		AND UPPER(media_type) = 'TV'
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, filePath).Scan(&properName, &year, &tmdbIDStr, &seasonNumber, &episodeNumber, &fileSize, &language, &quality)
+	if err != nil {
+		logger.Warn("Episode file not found in database: %s", filePath)
+		return nil
+	}
+
+	tmdbID, _ := strconv.Atoi(tmdbIDStr)
+	seasonNum, _ := strconv.Atoi(seasonNumber)
+	episodeNum, _ := strconv.Atoi(episodeNumber)
+
+	if tmdbID == 0 || seasonNum == 0 || episodeNum == 0 {
+		return nil
+	}
+
+	fileName := filepath.Base(filePath)
+	fileInfo, _ := os.Stat(filePath)
+	modTime := time.Now()
+	if fileInfo != nil {
+		modTime = fileInfo.ModTime()
+		if fileSize == 0 {
+			fileSize = fileInfo.Size()
+		}
+	}
+
+	// Generate unique IDs based on TMDB ID and episode info
+	seriesID := tmdbID * 1000
+	episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+
+	// Create episode file with database information
+	episodeFile := map[string]interface{}{
+		"id":           episodeFileID,
+		"seriesId":     seriesID,
+		"seasonNumber": seasonNum,
+		"relativePath": fileName,
+		"path":         filePath,
+		"size":         fileSize,
+		"dateAdded":    modTime.Format("2006-01-02T15:04:05Z"),
+	}
+
+	return episodeFile
+}
+
+// broadcastFileDeletionEvents broadcasts SignalR events when files are deleted
+func broadcastFileDeletionEvents(filePath string) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for deletion event: %v", err)
+		return
+	}
+
+	var properName, tmdbIDStr, mediaType, seasonNumber, episodeNumber string
+	var year int
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, 0) as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(media_type, '') as media_type,
+			COALESCE(season_number, '') as season_number,
+			COALESCE(episode_number, '') as episode_number
+		FROM processed_files
+		WHERE destination_path = ?
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, filePath).Scan(&properName, &year, &tmdbIDStr, &mediaType, &seasonNumber, &episodeNumber)
+	if err != nil {
+		logger.Warn("File not found in database for deletion event: %s", filePath)
+		return
+	}
+
+	tmdbID, _ := strconv.Atoi(tmdbIDStr)
+	if tmdbID == 0 {
+		return
+	}
+
+	if strings.ToUpper(mediaType) == "MOVIE" {
+		spoofing.BroadcastMovieFileDeleted(tmdbID, tmdbID, properName)
+	} else if strings.ToUpper(mediaType) == "TV" {
+		seasonNum, _ := strconv.Atoi(seasonNumber)
+		episodeNum, _ := strconv.Atoi(episodeNumber)
+		seriesID := tmdbID * 1000
+		episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+		spoofing.BroadcastEpisodeFileDeleted(episodeFileID, seriesID, properName)
+	}
+}
+
+// extractTitleFromPath extracts title from file path
+func extractTitleFromPath(filePath string) string {
+	if filePath == "" {
+		return ""
+	}
+
+	dir := filepath.Dir(filePath)
+	baseName := filepath.Base(dir)
+	if idx := strings.LastIndex(baseName, "("); idx > 0 {
+		return strings.TrimSpace(baseName[:idx])
+	}
+
+	return baseName
+}
+
+func handleFileOperationNotification(operation, filePath string) {
+	if operation == "add" && filePath != "" {
+		broadcastFileAdditionEvents(filePath)
+	}
+}
+
+func broadcastFileAdditionEvents(filePath string) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return
+	}
+
+	var properName, tmdbIDStr, mediaType, seasonNumber, episodeNumber string
+	var year int
+
+	query := `SELECT COALESCE(proper_name, ''), COALESCE(year, 0), COALESCE(tmdb_id, ''),
+		COALESCE(media_type, ''), COALESCE(season_number, ''), COALESCE(episode_number, '')
+		FROM processed_files WHERE destination_path = ? LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, filePath).Scan(&properName, &year, &tmdbIDStr, &mediaType, &seasonNumber, &episodeNumber)
+	if err != nil {
+		return
+	}
+
+	tmdbID, _ := strconv.Atoi(tmdbIDStr)
+	if tmdbID == 0 {
+		return
+	}
+
+	if strings.ToUpper(mediaType) == "MOVIE" {
+		if movieFile := createMovieFileFromDB(filePath, tmdbID, properName, year); movieFile != nil {
+			spoofing.BroadcastMovieFileUpdated(movieFile)
+		}
+	} else if strings.ToUpper(mediaType) == "TV" {
+		if episodeFile := createEpisodeFileFromDB(filePath, tmdbID, properName, seasonNumber, episodeNumber); episodeFile != nil {
+			spoofing.BroadcastEpisodeFileUpdated(episodeFile)
+		}
+	}
+}
+
+func createMovieFileFromDB(filePath string, tmdbID int, properName string, year int) *spoofing.MovieFile {
+	fileName := filepath.Base(filePath)
+	fileInfo, _ := os.Stat(filePath)
+	modTime := time.Now()
+	var fileSize int64
+
+	if fileInfo != nil {
+		modTime = fileInfo.ModTime()
+		fileSize = fileInfo.Size()
+	}
+
+	return &spoofing.MovieFile{
+		ID:           tmdbID,
+		MovieId:      tmdbID,
+		RelativePath: fileName,
+		Path:         filePath,
+		Size:         fileSize,
+		DateAdded:    modTime,
+		SceneName:    "",
+		ReleaseGroup: "",
+	}
+}
+
+func createEpisodeFileFromDB(filePath string, tmdbID int, properName string, seasonNumber, episodeNumber string) map[string]interface{} {
+	seasonNum, _ := strconv.Atoi(seasonNumber)
+	episodeNum, _ := strconv.Atoi(episodeNumber)
+
+	if seasonNum == 0 || episodeNum == 0 {
+		return nil
+	}
+
+	fileName := filepath.Base(filePath)
+	fileInfo, _ := os.Stat(filePath)
+	modTime := time.Now()
+	var fileSize int64
+
+	if fileInfo != nil {
+		modTime = fileInfo.ModTime()
+		fileSize = fileInfo.Size()
+	}
+
+	seriesID := tmdbID * 1000
+	episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+
+	return map[string]interface{}{
+		"id":           episodeFileID,
+		"seriesId":     seriesID,
+		"seasonNumber": seasonNum,
+		"relativePath": fileName,
+		"path":         filePath,
+		"size":         fileSize,
+		"dateAdded":    modTime.Format("2006-01-02T15:04:05Z"),
+	}
 }

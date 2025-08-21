@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cinesync/pkg/logger"
@@ -626,6 +627,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// Global variables to track SignalR connections
+var (
+	signalRConnections = make(map[*websocket.Conn]bool)
+	signalRMutex       sync.RWMutex
+)
+
 // HandleSignalRMessages handles SignalR message requests
 func HandleSignalRMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Upgrade") == "websocket" {
@@ -642,7 +649,17 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 		logger.Error("WebSocket upgrade failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		signalRMutex.Lock()
+		delete(signalRConnections, conn)
+		signalRMutex.Unlock()
+		conn.Close()
+	}()
+
+	// Add connection to tracking
+	signalRMutex.Lock()
+	signalRConnections[conn] = true
+	signalRMutex.Unlock()
 
 	// Send handshake response immediately
 	handshakeResponse := `{"error":null}` + "\x1e"
@@ -934,4 +951,131 @@ func HandleSpoofedMovieFileByID(w http.ResponseWriter, r *http.Request, movieFil
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(movieFile)
+}
+
+// SignalR Event Broadcasting Functions
+
+// BroadcastMovieFileUpdated broadcasts a movie file updated event to all connected SignalR clients
+func BroadcastMovieFileUpdated(movieFile *MovieFile) {
+	if movieFile == nil {
+		return
+	}
+
+	message := map[string]interface{}{
+		"name": "movieFileUpdated",
+		"body": map[string]interface{}{
+			"movieFile": movieFile,
+			"movie": map[string]interface{}{
+				"id":    movieFile.MovieId,
+				"title": extractTitleFromPath(movieFile.Path),
+			},
+		},
+	}
+
+	broadcastSignalRMessage(message)
+}
+
+// BroadcastMovieFileDeleted broadcasts a movie file deleted event to all connected SignalR clients
+func BroadcastMovieFileDeleted(movieFileId int, movieId int, movieTitle string) {
+	message := map[string]interface{}{
+		"name": "movieFileDeleted",
+		"body": map[string]interface{}{
+			"movieFile": map[string]interface{}{
+				"id":      movieFileId,
+				"movieId": movieId,
+			},
+			"movie": map[string]interface{}{
+				"id":    movieId,
+				"title": movieTitle,
+			},
+		},
+	}
+
+	broadcastSignalRMessage(message)
+}
+
+// BroadcastEpisodeFileUpdated broadcasts an episode file updated event to all connected SignalR clients
+func BroadcastEpisodeFileUpdated(episodeFile map[string]interface{}) {
+	if episodeFile == nil {
+		return
+	}
+
+	message := map[string]interface{}{
+		"name": "episodeFileUpdated",
+		"body": map[string]interface{}{
+			"episodeFile": episodeFile,
+		},
+	}
+
+	broadcastSignalRMessage(message)
+}
+
+// BroadcastEpisodeFileDeleted broadcasts an episode file deleted event to all connected SignalR clients
+func BroadcastEpisodeFileDeleted(episodeFileId int, seriesId int, seriesTitle string) {
+	message := map[string]interface{}{
+		"name": "episodeFileDeleted",
+		"body": map[string]interface{}{
+			"episodeFile": map[string]interface{}{
+				"id":       episodeFileId,
+				"seriesId": seriesId,
+			},
+			"series": map[string]interface{}{
+				"id":    seriesId,
+				"title": seriesTitle,
+			},
+		},
+	}
+
+	broadcastSignalRMessage(message)
+}
+
+// broadcastSignalRMessage sends a SignalR message to all connected clients
+func broadcastSignalRMessage(message map[string]interface{}) {
+	signalRMutex.RLock()
+	defer signalRMutex.RUnlock()
+
+	if len(signalRConnections) == 0 {
+		return
+	}
+
+	// Create SignalR message format
+	signalRMessage := map[string]interface{}{
+		"type":      1,
+		"target":    "receiveMessage",
+		"arguments": []interface{}{message},
+	}
+
+	messageBytes, err := json.Marshal(signalRMessage)
+	if err != nil {
+		logger.Error("Failed to marshal SignalR message: %v", err)
+		return
+	}
+
+	// Add SignalR message terminator
+	messageData := string(messageBytes) + "\x1e"
+
+	// Send to all connected clients
+	for conn := range signalRConnections {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(messageData)); err != nil {
+			logger.Warn("Failed to send SignalR message to client: %v", err)
+			// Remove failed connection
+			delete(signalRConnections, conn)
+		}
+	}
+}
+
+// extractTitleFromPath extracts movie/series title from file path
+func extractTitleFromPath(filePath string) string {
+	if filePath == "" {
+		return ""
+	}
+
+	dir := filepath.Dir(filePath)
+	baseName := filepath.Base(dir)
+
+	if idx := strings.LastIndex(baseName, "("); idx > 0 {
+		return strings.TrimSpace(baseName[:idx])
+	}
+
+	return baseName
 }
