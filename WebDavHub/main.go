@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +28,39 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
+// globalPanicRecoveryMiddleware provides top-level panic recovery for the entire server
+func globalPanicRecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Error("Global panic recovered for %s %s: %v", r.Method, r.URL.Path, err)
+
+				buf := make([]byte, 1024)
+				for {
+					n := runtime.Stack(buf, false)
+					if n < len(buf) {
+						buf = buf[:n]
+						break
+					}
+					buf = make([]byte, 2*len(buf))
+				}
+				logger.Error("Stack trace: %s", string(buf))
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				response := map[string]interface{}{
+					"error":   "Internal Server Error",
+					"message": "Service temporarily unavailable",
+					"status":  500,
+				}
+				json.NewEncoder(w).Encode(response)
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 // getNetworkIP returns the local network IP address
 func getNetworkIP() string {
@@ -414,5 +449,14 @@ func main() {
 		logger.Warn("Authentication is disabled")
 	}
 
-	log.Fatal(http.ListenAndServe(addr, rootMux))
+	// Wrap the root mux with global panic recovery
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      globalPanicRecoveryMiddleware(rootMux),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	log.Fatal(server.ListenAndServe())
 }

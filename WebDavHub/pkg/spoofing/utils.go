@@ -9,40 +9,142 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cinesync/pkg/db"
+	"cinesync/pkg/logger"
 )
 
 // Common utilities for spoofing operations
 
-// executeWithRetry executes a database operation with retry logic for SQLITE_BUSY errors
-func executeWithRetry(operation func() error) error {
-	maxRetries := 10
-	baseDelay := 100 * time.Millisecond
+// CircuitBreaker implements a simple circuit breaker pattern
+type CircuitBreaker struct {
+	mutex         sync.RWMutex
+	failureCount  int
+	lastFailTime  time.Time
+	state         CircuitState
+	failureThreshold int
+	recoveryTimeout  time.Duration
+}
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := operation()
-		if err == nil {
-			return nil
+type CircuitState int
+
+const (
+	CircuitClosed CircuitState = iota
+	CircuitOpen
+	CircuitHalfOpen
+)
+
+var (
+	dbCircuitBreaker = &CircuitBreaker{
+		failureThreshold: 5,
+		recoveryTimeout:  30 * time.Second,
+		state:           CircuitClosed,
+	}
+)
+
+// Execute runs the operation through the circuit breaker
+func (cb *CircuitBreaker) Execute(operation func() error) error {
+	cb.mutex.RLock()
+	state := cb.state
+	cb.mutex.RUnlock()
+
+	switch state {
+	case CircuitOpen:
+		cb.mutex.Lock()
+		if time.Since(cb.lastFailTime) > cb.recoveryTimeout {
+			cb.state = CircuitHalfOpen
+			cb.mutex.Unlock()
+		} else {
+			cb.mutex.Unlock()
+			return fmt.Errorf("circuit breaker is open - service temporarily unavailable")
 		}
+	case CircuitHalfOpen:
+	case CircuitClosed:
+	}
 
-		// Check if it's a SQLite busy error
-		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
-			if attempt < maxRetries-1 {
-				delay := baseDelay * time.Duration(1<<uint(attempt))
-				if delay > 5*time.Second {
-					delay = 5*time.Second
-				}
-				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
-				time.Sleep(delay + jitter)
-				continue
-			}
+	// Execute the operation
+	err := operation()
+
+	cb.mutex.Lock()
+	defer cb.mutex.Unlock()
+
+	if err != nil {
+		cb.failureCount++
+		cb.lastFailTime = time.Now()
+
+		if cb.failureCount >= cb.failureThreshold {
+			cb.state = CircuitOpen
+			logger.Warn("Circuit breaker opened due to %d consecutive failures", cb.failureCount)
 		}
 		return err
 	}
 
-	return fmt.Errorf("operation failed after %d retries", maxRetries)
+	// Success - reset circuit breaker
+	if cb.state == CircuitHalfOpen || cb.failureCount > 0 {
+		cb.failureCount = 0
+		cb.state = CircuitClosed
+		logger.Info("Circuit breaker closed - service recovered")
+	}
+
+	return nil
+}
+
+// getCircuitBreakerStatus returns the current status of the circuit breaker
+func getCircuitBreakerStatus() map[string]interface{} {
+	dbCircuitBreaker.mutex.RLock()
+	defer dbCircuitBreaker.mutex.RUnlock()
+
+	var stateStr string
+	switch dbCircuitBreaker.state {
+	case CircuitClosed:
+		stateStr = "closed"
+	case CircuitOpen:
+		stateStr = "open"
+	case CircuitHalfOpen:
+		stateStr = "half-open"
+	}
+
+	return map[string]interface{}{
+		"state":            stateStr,
+		"failureCount":     dbCircuitBreaker.failureCount,
+		"failureThreshold": dbCircuitBreaker.failureThreshold,
+		"lastFailTime":     dbCircuitBreaker.lastFailTime.Format(time.RFC3339),
+		"recoveryTimeout":  dbCircuitBreaker.recoveryTimeout.String(),
+		"healthy":          dbCircuitBreaker.state == CircuitClosed,
+	}
+}
+
+// executeWithRetry executes a database operation with retry logic for SQLITE_BUSY errors
+func executeWithRetry(operation func() error) error {
+	return dbCircuitBreaker.Execute(func() error {
+		maxRetries := 10
+		baseDelay := 100 * time.Millisecond
+
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			err := operation()
+			if err == nil {
+				return nil
+			}
+
+			// Check if it's a SQLite busy error
+			if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+				if attempt < maxRetries-1 {
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					if delay > 5*time.Second {
+						delay = 5*time.Second
+					}
+					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+					time.Sleep(delay + jitter)
+					continue
+				}
+			}
+			return err
+		}
+
+		return fmt.Errorf("operation failed after %d retries", maxRetries)
+	})
 }
 
 // Quality detection utilities

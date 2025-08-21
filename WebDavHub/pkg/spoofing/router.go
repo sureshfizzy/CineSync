@@ -124,18 +124,24 @@ func RegisterRoutes(mux *http.ServeMux) {
 	// Add folder management endpoints (these don't need auth middleware as they're internal)
 	mux.HandleFunc("/api/spoofing/folders/available", HandleAvailableFolders)
 
-	// Register common endpoints
+	// Add circuit breaker status endpoint for monitoring
+	mux.HandleFunc("/api/spoofing/circuit-breaker/status", HandleCircuitBreakerStatus)
+
+	// Register common endpoints with resilience wrappers
 	for path, handler := range commonEndpoints {
-		mux.HandleFunc(path, AuthMiddleware(handler))
+		resilientHandler := HandlerWrapper(RetryHandlerWrapper(handler, 3), 30)
+		mux.HandleFunc(path, AuthMiddleware(resilientHandler))
 	}
 
-	// Register service-specific endpoints
+	// Register service-specific endpoints with resilience wrappers
 	for path, handler := range serviceEndpoints {
-		mux.HandleFunc(path, AuthMiddleware(handler))
+		resilientHandler := HandlerWrapper(RetryHandlerWrapper(handler, 3), 30)
+		mux.HandleFunc(path, AuthMiddleware(resilientHandler))
 	}
 
-	// Register SignalR endpoints with SignalR-specific auth
+	// Register SignalR endpoints with SignalR-specific auth and resilience
 	for path, handler := range signalREndpoints {
-		mux.HandleFunc(path, SignalRAuthMiddleware(handler))
+		resilientHandler := HandlerWrapper(handler, 60)
+		mux.HandleFunc(path, SignalRAuthMiddleware(resilientHandler))
 	}
 }

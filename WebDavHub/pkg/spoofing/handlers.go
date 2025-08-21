@@ -16,10 +16,183 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// PanicRecoveryMiddleware wraps handlers with panic recovery to prevent crashes
+func PanicRecoveryMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Error("Panic recovered in spoofing handler %s %s: %v", r.Method, r.URL.Path, err)
+
+				buf := make([]byte, 1024)
+				for {
+					n := runtime.Stack(buf, false)
+					if n < len(buf) {
+						buf = buf[:n]
+						break
+					}
+					buf = make([]byte, 2*len(buf))
+				}
+				logger.Error("Stack trace: %s", string(buf))
+
+				handleErrorResponse(w, "Service temporarily unavailable due to internal error", http.StatusInternalServerError)
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	}
+}
+
+// HandlerWrapper wraps handlers with timeout and error handling
+func HandlerWrapper(handler http.HandlerFunc, timeoutSeconds int) http.HandlerFunc {
+	return PanicRecoveryMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		done := make(chan bool, 1)
+		errChan := make(chan error, 1)
+
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					logger.Error("Handler panic for %s %s: %v", r.Method, r.URL.Path, err)
+					errChan <- fmt.Errorf("handler panic: %v", err)
+				}
+				done <- true
+			}()
+
+			handler(w, r)
+		}()
+
+		// Wait for completion or timeout
+		select {
+		case <-done:
+			return
+		case err := <-errChan:
+			logger.Error("Handler error for %s %s: %v", r.Method, r.URL.Path, err)
+			handleErrorResponse(w, "Service error occurred", http.StatusInternalServerError)
+		case <-time.After(time.Duration(timeoutSeconds) * time.Second):
+			logger.Warn("Handler timeout for %s %s after %d seconds", r.Method, r.URL.Path, timeoutSeconds)
+			handleErrorResponse(w, "Service is temporarily slow, please try again", http.StatusRequestTimeout)
+		}
+	})
+}
+
+// handleErrorResponse sends a standardized error response
+func handleErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	errorResponse := map[string]interface{}{
+		"error":   http.StatusText(statusCode),
+		"message": message,
+		"status":  statusCode,
+	}
+
+	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
+		logger.Error("Failed to encode error response: %v", err)
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "Error: %s", message)
+	}
+}
+
+// RetryHandlerWrapper wraps handlers
+func RetryHandlerWrapper(handler http.HandlerFunc, maxRetries int) http.HandlerFunc {
+	return PanicRecoveryMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var lastErr error
+
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			recorder := &responseRecorder{
+				ResponseWriter: w,
+				statusCode:     200,
+				headerWritten:  false,
+			}
+
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						lastErr = fmt.Errorf("handler panic: %v", err)
+					}
+				}()
+
+				handler(recorder, r)
+				lastErr = nil
+			}()
+
+			if lastErr == nil || attempt == maxRetries {
+				break
+			}
+
+			logger.Warn("Retrying %s %s (attempt %d/%d) due to error: %v",
+				r.Method, r.URL.Path, attempt+1, maxRetries, lastErr)
+
+			backoffDuration := time.Duration(100*(1<<uint(attempt))) * time.Millisecond
+			if backoffDuration > 5*time.Second {
+				backoffDuration = 5 * time.Second
+			}
+			time.Sleep(backoffDuration)
+		}
+
+		if lastErr != nil {
+			logger.Error("Handler failed after %d retries for %s %s: %v",
+				maxRetries, r.Method, r.URL.Path, lastErr)
+			handleErrorResponse(w, "Service temporarily unavailable", http.StatusServiceUnavailable)
+		}
+	})
+}
+
+// responseRecorder captures response data to enable retries
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode    int
+	headerWritten bool
+}
+
+func (r *responseRecorder) WriteHeader(statusCode int) {
+	if !r.headerWritten {
+		r.statusCode = statusCode
+		r.headerWritten = true
+		r.ResponseWriter.WriteHeader(statusCode)
+	}
+}
+
+func (r *responseRecorder) Write(data []byte) (int, error) {
+	if !r.headerWritten {
+		r.WriteHeader(200)
+	}
+	return r.ResponseWriter.Write(data)
+}
+
+// HandleCircuitBreakerStatus provides circuit breaker status information
+func HandleCircuitBreakerStatus(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleCircuitBreakerStatus: %v", err)
+			handleErrorResponse(w, "Status check failed", http.StatusInternalServerError)
+		}
+	}()
+
+	status := getCircuitBreakerStatus()
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		logger.Error("Failed to encode circuit breaker status: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
 // HandleSystemStatus handles the /api/v3/system/status endpoint for both Radarr and Sonarr
 func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSystemStatus: %v", err)
+			handleErrorResponse(w, "Failed to get system status", http.StatusInternalServerError)
+		}
+	}()
+
 	config := GetConfig()
-	
+	if config == nil {
+		logger.Error("Failed to get spoofing config in HandleSystemStatus")
+		handleErrorResponse(w, "Configuration unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
 	status := SystemStatusResponse{
 		Version:                config.Version,
 		BuildTime:              time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
@@ -51,7 +224,10 @@ func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		logger.Error("Failed to encode system status response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // HandleSystemStatusV1 handles the /api/system/status endpoint (v1 API)
@@ -216,15 +392,30 @@ func HandleSpoofedEpisodeFiles(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedHealth handles the /api/v3/health endpoint for both Radarr and Sonarr
 func HandleSpoofedHealth(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedHealth: %v", err)
+			handleErrorResponse(w, "Health check failed", http.StatusInternalServerError)
+		}
+	}()
+
 	health, err := getHealthStatusFromDatabase()
 	if err != nil {
 		logger.Error("Failed to get health status: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "circuit breaker is open") {
+			handleErrorResponse(w, "Service temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		handleErrorResponse(w, "Health check failed", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(health)
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		logger.Error("Failed to encode health response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // HandleSpoofedRootFolder handles the /api/v3/rootfolder endpoint for both Radarr and Sonarr
