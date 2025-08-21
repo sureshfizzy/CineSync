@@ -18,10 +18,9 @@ if [ "$PUID" != "$current_uid" ] || [ "$PGID" != "$current_gid" ]; then
 fi
 
 # Ensure critical directories exist and have proper ownership
-mkdir -p /app/db /app/logs /app/cache 2>/dev/null || true
+mkdir -p /app/db /app/logs /app/db/cache 2>/dev/null || true
 chown -R appuser:appuser /app/db 2>/dev/null || true
 chown -R appuser:appuser /app/logs 2>/dev/null || true
-chown -R appuser:appuser /app/cache 2>/dev/null || true
 
 # Ensure .env file can be created by appuser
 touch /app/.env 2>/dev/null || true

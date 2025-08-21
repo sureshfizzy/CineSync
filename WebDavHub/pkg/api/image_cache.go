@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	IMAGE_CACHE_DIR     = "cache/images"
+	IMAGE_CACHE_DIR     = "db/cache/images"
 	MAX_IMAGE_SIZE      = 2 * 1024 * 1024  // 2MB max per image (reduced from 10MB)
 	MAX_CACHE_SIZE_MB   = 1024              // 1GB total cache limit
 	MAX_CACHE_FILES     = 5000              // Maximum number of cached files
