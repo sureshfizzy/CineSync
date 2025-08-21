@@ -1743,7 +1743,7 @@ func restoreDeletedFileByID(idStr string) bool {
                     return false
                 }
 
-                if err := os.Rename(foundFile, destinationPath); err != nil {
+                if err := restoreFromTrash(foundFile, destinationPath); err != nil {
                     logger.Warn("Failed to restore episode file from trash: %v", err)
                     return false
                 }
@@ -1758,7 +1758,7 @@ func restoreDeletedFileByID(idStr string) bool {
                     }
                 }
             } else {
-                if err := os.Rename(trashPath, destinationPath); err != nil {
+                if err := restoreFromTrash(trashPath, destinationPath); err != nil {
                     logger.Warn("Failed to restore file from trash: %v", err)
                     return false
                 }
@@ -3312,12 +3312,17 @@ func moveToTrash(fullPath string) (string, error) {
 	}
 
 	trashDir := filepath.Join("..", "db", "trash")
-	if err := os.MkdirAll(trashDir, 0755); err != nil {
+	absTrashDir, err := filepath.Abs(trashDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve trash directory path: %v", err)
+	}
+
+	if err := os.MkdirAll(absTrashDir, 0755); err != nil {
 		return "", err
 	}
 
 	name := filepath.Base(absPath)
-	trashed := filepath.Join(trashDir, name)
+	trashed := filepath.Join(absTrashDir, name)
 
 	// If file already exists in trash, replace it (overwrite)
 	if _, err := os.Stat(trashed); err == nil {
@@ -3326,10 +3331,54 @@ func moveToTrash(fullPath string) (string, error) {
 		}
 	}
 
+	// Check if the source is a symlink
+	if info, err := os.Lstat(absPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err := os.Readlink(absPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read symlink target: %v", err)
+		}
+
+		if err := os.Symlink(linkTarget, trashed); err != nil {
+			return "", fmt.Errorf("failed to create symlink in trash: %v", err)
+		}
+
+		if err := os.Remove(absPath); err != nil {
+			os.Remove(trashed)
+			return "", fmt.Errorf("failed to remove original symlink: %v", err)
+		}
+
+		return trashed, nil
+	}
+
 	if err := os.Rename(absPath, trashed); err != nil {
 		return "", err
 	}
 	return trashed, nil
+}
+
+func restoreFromTrash(trashPath, destinationPath string) error {
+	if info, err := os.Lstat(trashPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err := os.Readlink(trashPath)
+		if err != nil {
+			return fmt.Errorf("failed to read symlink target: %v", err)
+		}
+
+		if err := os.Symlink(linkTarget, destinationPath); err != nil {
+			return fmt.Errorf("failed to create symlink at destination: %v", err)
+		}
+
+		if err := os.Remove(trashPath); err != nil {
+			os.Remove(destinationPath)
+			return fmt.Errorf("failed to remove symlink from trash: %v", err)
+		}
+
+		return nil
+	}
+
+	if err := os.Rename(trashPath, destinationPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 // broadcastFileRenameEvents broadcasts SignalR events when files are renamed
