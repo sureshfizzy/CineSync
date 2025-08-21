@@ -38,7 +38,7 @@ func DefaultConfig() *SpoofingConfig {
 		Version:        "5.14.0.9383",
 		Branch:         "master",
 		APIKey:         generateAPIKey(),
-		ServiceType:    "radarr", // Default to Radarr
+		ServiceType:    "auto", // Default to auto mode to support both Radarr and Sonarr
 		FolderMode:     false,
 		FolderMappings: []FolderMapping{},
 	}
@@ -179,7 +179,7 @@ func InitializeConfig() error {
 			Version:      "5.14.0.9383",
 			Branch:       "master",
 			APIKey:       generateAPIKey(),
-			ServiceType:  "radarr",
+			ServiceType:  "auto",
 		}
 
 		// Save default config to file
