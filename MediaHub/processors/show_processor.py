@@ -564,9 +564,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     f"{show_name} - {episode_identifier}{file_ext}",
                     f"{show_name} - {episode_identifier} - {episode_name}{file_ext}" if episode_name else None
                 ]
-                legacy_formats = [fmt for fmt in expected_basic_formats if fmt]
+                legacy_formats = [fmt for fmt in legacy_formats if fmt]
 
-                if new_name in expected_basic_formats:
+                if new_name in legacy_formats:
                     log_message(f"Falling back to processor legacy naming for: {file}", level="WARNING")
                     sonarr_naming_failed = True
 
