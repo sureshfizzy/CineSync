@@ -21,24 +21,24 @@ type DatabaseConfig struct {
 }
 
 func GetDefaultDatabaseConfig() DatabaseConfig {
-	maxWorkers := env.GetInt("DB_MAX_WORKERS", 8)
-	maxConnections := maxWorkers
-
-	if maxConnections > 10 {
-		maxConnections = 10
-	}
+	// For concurrent access across multiple applications (MediaHub + Spoofing)
+	// We need to allow multiple readers but manage write contention carefully
+	
+	// SQLite in WAL mode supports multiple concurrent readers + 1 writer
+	// Keep connections low to reduce contention
+	maxConnections := 3
 	if maxConnections < 1 {
 		maxConnections = 1
 	}
 
 	return DatabaseConfig{
-		MaxOpenConns:    1, // Use single connection to avoid locking issues
-		MaxIdleConns:    1,
-		ConnMaxLifetime: time.Hour * 24,
-		BusyTimeout:     "300000", // Increase timeout to 5 minutes
-		JournalMode:     "WAL",
-		Synchronous:     "NORMAL",
-		CacheSize:       "500000", // Increase cache size
+		MaxOpenConns:    maxConnections, // Allow multiple readers
+		MaxIdleConns:    1, // Keep minimal idle connections
+		ConnMaxLifetime: time.Hour * 2, // Shorter lifetime to prevent stale connections
+		BusyTimeout:     "60000", // 60 seconds - reasonable for concurrent access
+		JournalMode:     "WAL", // WAL mode is essential for concurrent readers
+		Synchronous:     "NORMAL", // Balance between safety and performance
+		CacheSize:       "-16000", // 16MB cache (negative means KB)
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}
@@ -53,12 +53,14 @@ func (config DatabaseConfig) BuildConnectionString(dbPath string) string {
 		"&_cache_size=" + config.CacheSize +
 		"&_foreign_keys=" + config.ForeignKeys +
 		"&_temp_store=" + config.TempStore +
-		"&_wal_autocheckpoint=100" + // More frequent checkpoints
-		"&_mmap_size=268435456" +
-		"&_locking_mode=NORMAL" +
-		"&_read_uncommitted=false" + // Better consistency
+		"&_wal_autocheckpoint=1000" + // Checkpoint every 1000 pages to prevent WAL bloat
+		"&_mmap_size=134217728" + // 128MB memory mapping - reasonable size
+		"&_locking_mode=NORMAL" + // Normal locking allows concurrent access
+		"&_read_uncommitted=false" + // Ensure consistency
 		"&_query_only=false" +
-		"&_txlock=immediate" // Use immediate transactions
+		"&_secure_delete=false" + // Improve write performance
+		"&_auto_vacuum=INCREMENTAL" + // Prevent database file bloat
+		"&_optimize" // Optimize on connection
 }
 
 

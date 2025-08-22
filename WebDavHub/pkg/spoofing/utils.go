@@ -119,8 +119,8 @@ func getCircuitBreakerStatus() map[string]interface{} {
 // executeWithRetry executes a database operation with retry logic for SQLITE_BUSY errors
 func executeWithRetry(operation func() error) error {
 	return dbCircuitBreaker.Execute(func() error {
-		maxRetries := 10
-		baseDelay := 100 * time.Millisecond
+		maxRetries := 12
+		baseDelay := 50 * time.Millisecond
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			err := operation()
@@ -129,21 +129,31 @@ func executeWithRetry(operation func() error) error {
 			}
 
 			// Check if it's a SQLite busy error
-			if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if strings.Contains(err.Error(), "database is locked") || 
+			   strings.Contains(err.Error(), "SQLITE_BUSY") ||
+			   strings.Contains(err.Error(), "database table is locked") {
+				
 				if attempt < maxRetries-1 {
 					delay := baseDelay * time.Duration(1<<uint(attempt))
-					if delay > 5*time.Second {
-						delay = 5*time.Second
+					if delay > 3*time.Second {
+						delay = 3*time.Second
 					}
+
 					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
-					time.Sleep(delay + jitter)
+					actualDelay := delay + jitter
+					
+					logger.Debug("Database busy (attempt %d/%d), retrying in %v", 
+						attempt+1, maxRetries, actualDelay)
+					
+					time.Sleep(actualDelay)
 					continue
 				}
+				logger.Warn("Database busy error persisted after %d attempts: %v", maxRetries, err)
 			}
 			return err
 		}
 
-		return fmt.Errorf("operation failed after %d retries", maxRetries)
+		return fmt.Errorf("database operation failed after %d retries", maxRetries)
 	})
 }
 
