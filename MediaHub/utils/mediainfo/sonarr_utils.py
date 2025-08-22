@@ -278,6 +278,14 @@ def parse_sonarr_media_tokens(result, media_info):
             else:
                 result = result.replace(f'{{{token}}}', '')
 
+        # Handle MediaInfo VideoDynamicRangeType
+        elif field_name in ['MediaInfo VideoDynamicRangeType', 'Mediainfo VideoDynamicRangeType']:
+            value = media_info.get('MediaInfo VideoDynamicRangeType', '')
+            if value:
+                result = result.replace(f'{{{token}}}', value)
+            else:
+                result = result.replace(f'{{{token}}}', '')
+
         # Handle Release Group
         elif field_name == 'Release Group' and 'Release Group' in media_info:
             value = media_info['Release Group']
