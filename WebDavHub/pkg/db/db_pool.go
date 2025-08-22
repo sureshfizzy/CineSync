@@ -129,15 +129,15 @@ func startWALCheckpointManager(db *sql.DB) {
 
 // performWALCheckpoint checks WAL file size and performs checkpoint if needed
 func performWALCheckpoint(db *sql.DB) {
-	var walPages, checkpointPages int
-	err := db.QueryRow("PRAGMA wal_checkpoint").Scan(&walPages, &checkpointPages)
+	var busy, walFrames, checkpointedFrames int
+	err := db.QueryRow("PRAGMA wal_checkpoint").Scan(&busy, &walFrames, &checkpointedFrames)
 	if err != nil {
 		logger.Debug("Failed to check WAL status: %v", err)
 		return
 	}
 
-	if walPages > 1000 {
-		logger.Debug("WAL file has %d pages, performing checkpoint", walPages)
+	if walFrames > 1000 {
+		logger.Debug("WAL file has %d frames, performing checkpoint", walFrames)
 		_, err = db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
 		if err != nil {
 			logger.Warn("Failed to perform WAL checkpoint: %v", err)
