@@ -59,7 +59,8 @@ def get_ffprobe_media_info(file_path):
         ]
 
         # Increase timeout for larger files and add better error handling
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        # Use UTF-8 encoding with error replacement to handle Unicode characters on Windows
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
 
         # If the optimized command fails, try a simpler approach
         if result.returncode != 0:
@@ -72,7 +73,7 @@ def get_ffprobe_media_info(file_path):
                 '-show_streams',
                 file_path
             ]
-            result = subprocess.run(cmd_simple, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd_simple, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
 
         # Check if the command was successful
         if result.returncode != 0:
@@ -82,7 +83,7 @@ def get_ffprobe_media_info(file_path):
             raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
 
         # Check if we got valid JSON output
-        if not result.stdout.strip():
+        if not result.stdout or not result.stdout.strip():
             log_message(f"ffprobe returned empty output for file: {file_path}", level="ERROR")
             raise ValueError("ffprobe returned empty output")
 
