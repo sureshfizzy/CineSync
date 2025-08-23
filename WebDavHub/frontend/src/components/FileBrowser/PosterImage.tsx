@@ -34,7 +34,7 @@ export default function PosterImage({
   useEffect(() => {
     setHasTriedMediaCover(false);
     if (tmdbId) {
-      const mediaCoverUrl = getMediaCoverPosterUrl(tmdbId, mediaType);
+      const mediaCoverUrl = getMediaCoverPosterUrl(tmdbId);
       if (mediaCoverUrl) {
         setCurrentSrc(mediaCoverUrl);
         return;

@@ -240,22 +240,22 @@ export function getTmdbBackdropUrl(backdropPath: string | null, size: string = '
 }
 
 // Get MediaCover poster URL (Radarr/Sonarr local images)
-export function getMediaCoverPosterUrl(tmdbId: string | number, mediaType?: string): string | null {
+export function getMediaCoverPosterUrl(tmdbId: string | number): string | null {
   if (!tmdbId) return null;
   return `/api/v3/MediaCover/${tmdbId}/poster.jpg`;
 }
 
 // Get MediaCover fanart URL (Radarr/Sonarr local images)
-export function getMediaCoverFanartUrl(tmdbId: string | number, mediaType?: string): string | null {
+export function getMediaCoverFanartUrl(tmdbId: string | number): string | null {
   if (!tmdbId) return null;
   return `/api/v3/MediaCover/${tmdbId}/fanart.jpg`;
 }
 
 // Get poster URL with MediaCover priority, TMDB fallback
-export function getPosterUrlWithFallback(tmdbId: string | number | null, posterPath: string | null, size: string = 'w342', mediaType?: string): string | null {
+export function getPosterUrlWithFallback(tmdbId: string | number | null, posterPath: string | null, size: string = 'w342'): string | null {
   // First try MediaCover if we have a TMDB ID
   if (tmdbId) {
-    return getMediaCoverPosterUrl(tmdbId, mediaType);
+    return getMediaCoverPosterUrl(tmdbId);
   }
 
   // Fallback to TMDB poster
