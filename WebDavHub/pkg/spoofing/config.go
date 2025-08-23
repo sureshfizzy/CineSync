@@ -142,6 +142,11 @@ func loadConfigFromFile() (*SpoofingConfig, error) {
 func saveConfigToFile(cfg *SpoofingConfig) error {
 	configPath := getConfigPath()
 
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %v", err)
+	}
+
 	// Marshal to YAML
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
