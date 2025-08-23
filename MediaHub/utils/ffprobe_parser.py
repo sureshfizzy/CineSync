@@ -445,11 +445,11 @@ def extract_movie_info_from_path(file_path, probe_data=None):
 
     hdr_info = {}
 
-    if re.search(r'(?i)\b(dovi|dolby\s*vision|dv)\b', filename):
+    if re.search(r'\b(dovi|dolby\s*vision|dv)\b', filename, re.IGNORECASE):
         hdr_info['has_dv'] = True
-    if re.search(r'(?i)\b(hdr10\+|hdr10plus|hdr\+|hdrplus)\b', filename):
+    if re.search(r'\b(hdr10\+|hdr10plus|hdr\+|hdrplus)\b', filename, re.IGNORECASE):
         hdr_info['has_hdr10_plus'] = True
-    elif re.search(r'(?i)\b(hdr10|hdr)\b', filename):
+    elif re.search(r'\b(hdr10|hdr)\b', filename, re.IGNORECASE):
         hdr_info['has_hdr10'] = True
     if 'has_dv' in hdr_info and 'has_hdr10_plus' in hdr_info:
         info['Filename HDR'] = 'DV HDR10+'
@@ -462,17 +462,17 @@ def extract_movie_info_from_path(file_path, probe_data=None):
     elif 'has_hdr10' in hdr_info:
         info['Filename HDR'] = 'HDR10'
 
-    if re.search(r'(?i)\b(dts[-\s]?x)\b', filename):
+    if re.search(r'\b(dts[-\s]?x)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'DTS-X'
-    elif re.search(r'(?i)\b(dts[-\s]?hd[-\s]?ma|dts[-\s]?hd[-\s]?master[-\s]?audio)\b', filename):
+    elif re.search(r'\b(dts[-\s]?hd[-\s]?ma|dts[-\s]?hd[-\s]?master[-\s]?audio)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'DTS-HD MA'
-    elif re.search(r'(?i)\b(dts[-\s]?hd[-\s]?hra|dts[-\s]?hd[-\s]?high[-\s]?resolution)\b', filename):
+    elif re.search(r'\b(dts[-\s]?hd[-\s]?hra|dts[-\s]?hd[-\s]?high[-\s]?resolution)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'DTS-HD HRA'
-    elif re.search(r'(?i)\b(truehd[-\s]?atmos)\b', filename):
+    elif re.search(r'\b(truehd[-\s]?atmos)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'TrueHD Atmos'
-    elif re.search(r'(?i)\b(truehd)\b', filename):
+    elif re.search(r'\b(truehd)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'TrueHD'
-    elif re.search(r'(?i)\b(eac3[-\s]?atmos|dd\+[-\s]?atmos)\b', filename):
+    elif re.search(r'\b(eac3[-\s]?atmos|dd\+[-\s]?atmos)\b', filename, re.IGNORECASE):
         info['Filename AudioCodec'] = 'EAC3 Atmos'
 
     return info

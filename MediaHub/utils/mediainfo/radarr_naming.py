@@ -41,9 +41,14 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
             # Build filename with Radarr tags
             for tag in tags_to_use:
                 clean_tag = tag.strip()
+                original_tag = clean_tag
                 field_name = clean_tag
-                if field_name.startswith('[') and field_name.endswith(']'):
-                    field_name = field_name[1:-1]  # Remove [ ]
+                if field_name.startswith('[') and not field_name.endswith(']'):
+                    field_name = field_name[1:]
+                elif not field_name.startswith('[') and field_name.endswith(']'):
+                    field_name = field_name[:-1]
+                elif field_name.startswith('[') and field_name.endswith(']'):
+                    field_name = field_name[1:-1]
                 elif field_name.startswith('{') and field_name.endswith('}'):
                     field_name = field_name[1:-1]  # Remove { }
                 elif field_name.startswith('-'):
@@ -56,7 +61,7 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                 if field_name == 'Edition Tags' and 'Edition Tags' in media_info:
                     value = media_info['Edition Tags']
                     if value:
-                        filename_parts.append(f"{{edition-{value}}}")
+                        filename_parts.append(value)
 
                 # Handle MediaInfo 3D
                 elif field_name == 'MediaInfo 3D' and 'MediaInfo 3D' in media_info:
@@ -80,7 +85,7 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                     if value:
                         filename_parts.append(value)
 
-                # Handle MediaInfo AudioCodec (handle both case variations)
+                # Handle MediaInfo AudioCodec
                 elif field_name in ['MediaInfo AudioCodec', 'Mediainfo AudioCodec'] and 'MediaInfo AudioCodec' in media_info:
                     value = media_info['MediaInfo AudioCodec']
                     if value:
