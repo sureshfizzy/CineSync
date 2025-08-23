@@ -18,6 +18,11 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		if strings.HasPrefix(r.URL.Path, "/api/v3/MediaCover/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Get API key from header or query parameter
 		apiKey := r.Header.Get("X-Api-Key")
 		if apiKey == "" {

@@ -93,6 +93,7 @@ const MediaCard = React.memo(({
         <PosterImage
           tmdbId={tmdbId}
           posterPath={posterPath}
+          mediaType={media.type === 'movie' ? 'movie' : 'tv'}
           alt={displayTitle}
           className="poster-image"
           style={{

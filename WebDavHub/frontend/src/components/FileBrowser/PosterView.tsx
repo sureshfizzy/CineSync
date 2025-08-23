@@ -204,6 +204,7 @@ const PosterView = memo(({
                           <PosterImage
                             tmdbId={tmdbId}
                             posterPath={posterPath}
+                            mediaType={tmdb?.media_type || (tmdb?.first_air_date ? 'tv' : 'movie')}
                             size="w92"
                             className="poster-image"
                             alt={`${title} (loading)`}
@@ -225,6 +226,7 @@ const PosterView = memo(({
                           <PosterImage
                             tmdbId={tmdbId}
                             posterPath={posterPath}
+                            mediaType={tmdb?.media_type || (tmdb?.first_air_date ? 'tv' : 'movie')}
                             className="poster-image"
                             alt={title}
                             style={{

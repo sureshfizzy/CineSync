@@ -12,6 +12,7 @@ interface PosterImageProps {
   onError?: () => void;
   loading?: 'lazy' | 'eager';
   decoding?: 'async' | 'sync' | 'auto';
+  mediaType?: string;
 }
 
 export default function PosterImage({
@@ -24,7 +25,8 @@ export default function PosterImage({
   onLoad,
   onError,
   loading,
-  decoding
+  decoding,
+  mediaType
 }: PosterImageProps) {
   const [currentSrc, setCurrentSrc] = useState<string>('');
   const [hasTriedMediaCover, setHasTriedMediaCover] = useState(false);
@@ -32,7 +34,7 @@ export default function PosterImage({
   useEffect(() => {
     setHasTriedMediaCover(false);
     if (tmdbId) {
-      const mediaCoverUrl = getMediaCoverPosterUrl(tmdbId);
+      const mediaCoverUrl = getMediaCoverPosterUrl(tmdbId, mediaType);
       if (mediaCoverUrl) {
         setCurrentSrc(mediaCoverUrl);
         return;
@@ -50,7 +52,7 @@ export default function PosterImage({
 
     setCurrentSrc('');
     setHasTriedMediaCover(true);
-  }, [tmdbId, posterPath, size]);
+  }, [tmdbId, posterPath, size, mediaType]);
 
   const handleError = () => {
     if (!hasTriedMediaCover && posterPath) {

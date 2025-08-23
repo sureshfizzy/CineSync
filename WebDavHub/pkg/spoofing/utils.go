@@ -308,16 +308,14 @@ func createMediaImages(tmdbID int, mediaType string) []interface{} {
 	images := []interface{}{}
 
 	if posterPath != "" {
-		// Use cached/proxied images
 		images = append(images, createImageEntry("poster", 
-			fmt.Sprintf("/api/image-cache?poster=%s&size=w500", posterPath),
+			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
 			fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", posterPath)))
 		
 		images = append(images, createImageEntry("fanart",
-			fmt.Sprintf("/api/image-cache?poster=%s&size=w1280", posterPath),
+			fmt.Sprintf("/MediaCover/%d/fanart.jpg", tmdbID),
 			fmt.Sprintf("https://image.tmdb.org/t/p/w1280%s", posterPath)))
 	} else if checkLocalMediaExists(tmdbID, mediaType) {
-		// Use local files - same path for both movies and series
 		images = append(images, createImageEntry("poster",
 			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
 			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID)))
@@ -331,6 +329,9 @@ func createMediaImages(tmdbID int, mediaType string) []interface{} {
 }
 
 func createImageEntry(coverType, url, remoteUrl string) map[string]interface{} {
+	if strings.HasPrefix(url, "/api/v3/") {
+		url = strings.TrimPrefix(url, "/api/v3/")
+	}
 	return map[string]interface{}{
 		"coverType": coverType,
 		"url":       url,
@@ -338,19 +339,7 @@ func createImageEntry(coverType, url, remoteUrl string) map[string]interface{} {
 	}
 }
 
-func getImageBaseURL(mediaType string) string {
-	switch mediaType {
-	case "movie":
-		return "/images/MediaCover"
-	case "tv", "series":
-		return "/images/MediaCover"
-	default:
-		return "/images/MediaCover"
-	}
-}
-
 func checkLocalMediaExists(tmdbID int, mediaType string) bool {
-	// Check for poster in db/MediaCover/{tmdbID}/poster.jpg
 	posterPath := filepath.Join("../db", "MediaCover", fmt.Sprintf("%d", tmdbID), "poster.jpg")
 	_, err := os.Stat(posterPath)
 	return err == nil

@@ -76,7 +76,6 @@ func getNetworkIP() string {
 
 // handleMediaCover serves poster and fanart images from the MediaCover directory
 func handleMediaCover(w http.ResponseWriter, r *http.Request) {
-	// Extract the path after /MediaCover/
 	path := strings.TrimPrefix(r.URL.Path, "/MediaCover/")
 	if path == "" {
 		http.NotFound(w, r)
@@ -218,7 +217,7 @@ func main() {
 	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 	apiMux.HandleFunc("/api/image-cache", api.HandleImageCache)
-	apiMux.HandleFunc("/api/mediacover/", spoofing.HandleMediaCover)
+	apiMux.HandleFunc("/api/MediaCover/", spoofing.HandleMediaCover)
 
 	apiMux.HandleFunc("/api/python-bridge", api.HandlePythonBridge)
 	apiMux.HandleFunc("/api/python-bridge/input", api.HandlePythonBridgeInput)
