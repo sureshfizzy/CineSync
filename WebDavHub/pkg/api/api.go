@@ -468,7 +468,7 @@ func resolveActualDirectoryPath(requestedDir, apiPath string) (string, error) {
 		}
 
 		found := false
-		idPattern := regexp.MustCompile(`\s*\{(?:tmdb|imdb|tvdb)-[^}]+\}`)
+		idPattern := regexp.MustCompile(`\s*\{(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-[^}]+\}`)
 		for _, entry := range entries {
 			if entry.IsDir() {
 				baseName := strings.TrimSpace(idPattern.ReplaceAllString(entry.Name(), ""))

@@ -230,18 +230,23 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         track_file_failure(src_file, None, None, "TMDb invalid show name", f"TMDb could not provide valid show name for anime: {show_name} ({year})")
         return None
 
-    tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
+    tmdb_id_match = re.search(r'\{(?:tmdb|tmdbid)-(\d+)\}$', proper_show_name)
     if tmdb_id_match:
         show_id = tmdb_id_match.group(1)
 
     show_name = proper_show_name
 
+    if rename_enabled or is_tmdb_folder_id_enabled() or is_imdb_folder_id_enabled() or is_tvdb_folder_id_enabled():
+        show_name = re.sub(r'\{tmdb-([^}]+)\}', r'{tmdbid-\1}', show_name)
+        show_name = re.sub(r'\{imdb-([^}]+)\}', r'{imdbid-\1}', show_name)
+        show_name = re.sub(r'\{tvdb-([^}]+)\}', r'{tvdbid-\1}', show_name)
+
     if not is_imdb_folder_id_enabled():
-        show_name = re.sub(r' \{imdb-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \{imdb(?:id)?-[^}]+\}', '', show_name)
     if not is_tvdb_folder_id_enabled():
-        show_name = re.sub(r' \{tvdb-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \{tvdb(?:id)?-[^}]+\}', '', show_name)
     if not is_tmdb_folder_id_enabled():
-        show_name = re.sub(r' \{tmdb-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \{tmdb(?:id)?-[^}]+\}', '', show_name)
 
     new_name = file
     episode_name = None

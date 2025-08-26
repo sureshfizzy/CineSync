@@ -160,9 +160,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
-                proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+                proper_movie_name += f" {{tmdbid-{tmdb_id}}}"
             if is_imdb_folder_id_enabled() and imdb_id:
-                proper_movie_name += f" {{imdb-{imdb_id}}}"
+                proper_movie_name += f" {{imdbid-{imdb_id}}}"
 
             # Get TMDB language as fallback if not available from file metadata
             if not language and tmdb_id:
@@ -264,17 +264,17 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_name, collection_id = collection_info
             log_message(f"Movie belongs to collection: {collection_name}", level="INFO")
             resolution_folder = 'Movie Collections'
-            collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
+            collection_folder = f"{collection_name} {{tmdbid-{collection_id}}}"
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
         else:
             movie_folder = proper_movie_name
 
             if not is_imdb_folder_id_enabled():
-                movie_folder = re.sub(r' \{imdb-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \{imdbid-[^}]+\}', '', movie_folder)
             if not is_tvdb_folder_id_enabled():
-                movie_folder = re.sub(r' \{tvdb-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \{tvdbid-[^}]+\}', '', movie_folder)
             if not tmdb_folder_id_enabled:
-                movie_folder = re.sub(r' \{tmdb-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \{tmdbid-[^}]+\}', '', movie_folder)
 
             movie_folder = movie_folder.replace('/', '')
 

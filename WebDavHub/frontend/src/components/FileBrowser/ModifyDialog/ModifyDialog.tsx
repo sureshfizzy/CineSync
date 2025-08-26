@@ -542,9 +542,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
     }
 
     // Look for numbered options with movie/show titles and TMDB IDs in the full output
-    // Support both formats: "1: Title (Year) [Movie - tmdb-12345]" and "1: Title (Year) [tmdb-12345]"
+    // Support both formats: "1: Title (Year) [Movie - tmdb-12345]" and "1: Title (Year) [tmdbid-12345]"
     // Also handle log prefixes like "[INFO] 1: Title..."
-    const optionRegex = /(?:\[INFO\]\s+)?(\d+):\s*([^(\n\[]+?)\s*\((\d{4})\)\s*\[(?:(TV Show|Movie) - )?tmdb-(\d+)\]/gm;
+    const optionRegex = /(?:\[INFO\]\s+)?(\d+):\s*([^(\n\[]+?)\s*\((\d{4})\)\s*\[(?:(TV Show|Movie) - )?(?:tmdb-|tmdbid-)(\d+)\]/gm;
     const allMatches = [...fullOutput.matchAll(optionRegex)];
 
     if (allMatches.length === 0) {
@@ -715,7 +715,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
 
   const detectSeasonEpisodePrompts = (fullOutput: string) => {
 
-    const tmdbIdMatch = fullOutput.match(/tmdb-(\d+)/);
+    const tmdbIdMatch = fullOutput.match(/(?:tmdb-|tmdbid-)(\d+)/);
     if (tmdbIdMatch) {
       setSelectedTmdbId(tmdbIdMatch[1]);
     }
