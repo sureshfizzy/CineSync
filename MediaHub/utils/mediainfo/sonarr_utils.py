@@ -401,6 +401,16 @@ def parse_series_tokens(result, show_data):
     result = result.replace('{TmdbId}', f'[tmdb-{tmdb_id}]' if tmdb_id else '')
     result = result.replace('{TvdbId}', f'[tvdb-{tvdb_id}]' if tvdb_id else '')
 
+    # Handle case-insensitive ID tokens
+    for token_match in re.finditer(r'\{([^}]+)\}', result):
+        token = token_match.group(1)
+        if token.lower() == 'imdbid' and imdb_id:
+            result = result.replace(token_match.group(0), f'{{imdbid-{imdb_id}}}')
+        elif token.lower() == 'tmdbid' and tmdb_id:
+            result = result.replace(token_match.group(0), f'{{tmdbid-{tmdb_id}}}')
+        elif token.lower() == 'tvdbid' and tvdb_id:
+            result = result.replace(token_match.group(0), f'{{tvdbid-{tvdb_id}}}')
+
     # Also support simple ID tokens without brackets
     result = result.replace('{ImdbId-Simple}', imdb_id)
     result = result.replace('{TmdbId-Simple}', tmdb_id)

@@ -350,7 +350,16 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         if use_media_parser:
             media_info = get_ffprobe_media_info(os.path.join(root, file))
             tags_to_use = get_mediainfo_radarr_tags()
-            clean_movie_name_for_radarr = re.sub(r' \(\d{4}\)', '', proper_movie_name)
+
+            # Add ID information to media_info for Radarr naming
+            if tmdb_id:
+                media_info['TmdbId'] = str(tmdb_id)
+            if imdb_id:
+                media_info['ImdbId'] = str(imdb_id)
+
+            # Remove IDs from movie name for Radarr
+            clean_movie_name_for_radarr = re.sub(r' \{(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-[^}]+\}', '', proper_movie_name)
+            clean_movie_name_for_radarr = re.sub(r' \(\d{4}\)', '', clean_movie_name_for_radarr)
             enhanced_movie_folder = get_radarr_movie_filename(
                 clean_movie_name_for_radarr, year, file, root, media_info
             )
@@ -370,7 +379,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         # Initialize variables for both parser modes
         id_tag = ''
-        clean_movie_name = re.sub(r' \{(?:tmdb|imdb)-\w+\}$', '', proper_movie_name)
+        clean_movie_name = re.sub(r' \{(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-\w+\}$', '', proper_movie_name)
 
         # Process legacy naming if not using MediaInfo parser OR if Radarr naming failed
         if not use_media_parser or radarr_naming_failed:

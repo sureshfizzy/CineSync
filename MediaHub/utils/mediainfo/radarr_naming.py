@@ -109,6 +109,22 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                     if value:
                         filename_parts.append(value)
 
+                # Handle ID tokens (new format)
+                elif field_name.lower() == 'tmdbid' and 'TmdbId' in media_info:
+                    value = media_info['TmdbId']
+                    if value:
+                        filename_parts.append(f"{{tmdbid-{value}}}")
+
+                elif field_name.lower() == 'imdbid' and 'ImdbId' in media_info:
+                    value = media_info['ImdbId']
+                    if value:
+                        filename_parts.append(f"{{imdbid-{value}}}")
+
+                elif field_name.lower() == 'tvdbid' and 'TvdbId' in media_info:
+                    value = media_info['TvdbId']
+                    if value:
+                        filename_parts.append(f"{{tvdbid-{value}}}")
+
                 # Handle Release Group
                 elif field_name == 'Release Group' and 'Release Group' in media_info:
                     value = media_info['Release Group']
