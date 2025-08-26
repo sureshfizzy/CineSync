@@ -14,6 +14,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import axios from 'axios';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import { upsertFileDetail, deleteFileDetail } from './fileApi';
+import { useConfig } from '../../contexts/ConfigContext';
 
 interface FileItem {
   name: string;
@@ -24,6 +25,7 @@ interface FileItem {
   webdavPath?: string;
   sourcePath?: string;
   fullPath?: string;
+  destinationPath?: string;
   isCategoryFolder?: boolean;
 }
 
@@ -70,6 +72,7 @@ const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'))
 
 const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu', onNavigateBack }) => {
   const theme = useTheme();
+  const { config } = useConfig();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -126,8 +129,15 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       handleMenuClose();
       return;
     }
-    const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
-    const encodedPath = encodeURIComponent(relPath.replace(/^\/+/,''));
+    let streamPath: string;
+    if (file.destinationPath && config.destinationDir) {
+      const normalizedDestPath = file.destinationPath.replace(/\\/g, '/');
+      const normalizedDestDir = config.destinationDir.replace(/\\/g, '/');
+      streamPath = normalizedDestPath.replace(normalizedDestDir, '').replace(/^\/+/, '');
+    } else {
+      streamPath = joinPaths(currentPath, file.name).replace(/\/$/, '').replace(/^\/+/, '');
+    }
+    const encodedPath = encodeURIComponent(streamPath);
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm'].includes(ext);
     try {
@@ -139,6 +149,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         setVideoPlayerOpen(true);
       } else {
         // fallback: download
+        const relPath = joinPaths(currentPath, file.name).replace(/\/$/, '');
         const url = `/api/files${relPath}`;
         const response = await axios.get(url, { responseType: 'blob' });
         const blob = response.data;
