@@ -320,6 +320,14 @@ def parse_sonarr_media_tokens(result, media_info):
             else:
                 result = result.replace(original_token, '')
 
+        # Handle MediaInfo fields (with or without dash prefix, case-insensitive)
+        elif (field_name.lower().startswith('-mediainfo ') or
+              field_name.lower().startswith('mediainfo ')):
+            has_dash = field_name.startswith('-')
+            clean_field = field_name[1:] if has_dash else field_name
+            value = next((media_info[key] for key in media_info if key.lower() == clean_field.lower()), '')
+            result = result.replace(original_token, f"-{value}" if has_dash and value else str(value) if value else '')
+
         # Handle other fields
         elif field_name in media_info:
             value = media_info[field_name]
