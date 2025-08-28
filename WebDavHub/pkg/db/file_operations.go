@@ -392,7 +392,6 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 	deletedFromTrash := 0
 	var errors []string
 
-	logger.Info("Processing permanent deletion request for IDs: %v", req.FilePaths)
 	for _, fileIDStr := range req.FilePaths {
 		fileID, err := strconv.Atoi(fileIDStr)
 		if err != nil {
@@ -1442,22 +1441,45 @@ func TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason
 		return fmt.Errorf("MediaHub database not found")
 	}
 
-	err := WithDatabaseTransaction(func(tx *sql.Tx) error {
-		err := createDeletionTrackingTableTx(tx)
-		if err != nil {
-			return fmt.Errorf("failed to create deletion tracking table: %w", err)
-		}
+	err := executeMainDBDeletionOperation(func() error {
+		return executeWithRetry(func() error {
+			db, err := GetDatabaseConnection()
+			if err != nil {
+				return err
+			}
 
-		query := `
-			INSERT INTO file_deletions (source_path, destination_path, tmdb_id, season_number, reason)
-			VALUES (?, ?, ?, ?, ?)
-		`
-		_, err = tx.Exec(query, sourcePath, destinationPath, tmdbID, seasonNumber, reason)
-		if err != nil {
-			return fmt.Errorf("failed to insert deletion record: %w", err)
-		}
+			tx, err := db.Begin()
+			if err != nil {
+				return err
+			}
 
-		return nil
+			defer func() {
+				if p := recover(); p != nil {
+					tx.Rollback()
+					panic(p)
+				} else if err != nil {
+					tx.Rollback()
+				} else {
+					err = tx.Commit()
+				}
+			}()
+
+			err = createDeletionTrackingTableTx(tx)
+			if err != nil {
+				return fmt.Errorf("failed to create deletion tracking table: %w", err)
+			}
+
+			query := `
+				INSERT INTO file_deletions (source_path, destination_path, tmdb_id, season_number, reason)
+				VALUES (?, ?, ?, ?, ?)
+			`
+			_, err = tx.Exec(query, sourcePath, destinationPath, tmdbID, seasonNumber, reason)
+			if err != nil {
+				return fmt.Errorf("failed to insert deletion record: %w", err)
+			}
+
+			return nil
+		})
 	})
 
 	if err != nil {

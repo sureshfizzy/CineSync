@@ -2,7 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
+	"math/rand"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,7 +139,8 @@ func performWALCheckpoint(db *sql.DB) {
 		return
 	}
 
-	if walFrames > 1000 {
+	// Reduced threshold for more frequent checkpoints during heavy operations
+	if walFrames > 500 {
 		logger.Debug("WAL file has %d frames, performing checkpoint", walFrames)
 		_, err = db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
 		if err != nil {
@@ -150,7 +154,8 @@ func performWALCheckpoint(db *sql.DB) {
 // initWriteQueue initializes the write queue for serializing write operations
 func initWriteQueue() {
 	dbWriteQueueOnce.Do(func() {
-		dbWriteQueue = make(chan func(), 1000)
+		// Increased buffer size for better handling of deletion bursts
+		dbWriteQueue = make(chan func(), 2000)
 
 		go func() {
 			logger.Info("Database write queue processor started")
@@ -167,7 +172,9 @@ func executeMainDBWriteOperation(operation func()) {
 		select {
 		case dbWriteQueue <- operation:
 		default:
-			logger.Warn("Database write queue is full, executing operation directly")
+			// Add small delay before direct execution to reduce lock contention
+			logger.Warn("Database write queue is full, executing operation directly with delay")
+			time.Sleep(50 * time.Millisecond)
 			operation()
 		}
 	} else {
@@ -184,4 +191,38 @@ func executeMainDBWriteOperationSync(operation func() error) error {
 	})
 
 	return <-resultChan
+}
+
+// executeMainDBDeletionOperation executes deletion operations with optimized retry logic
+func executeMainDBDeletionOperation(operation func() error) error {
+	return executeMainDBWriteOperationSync(func() error {
+		return executeWithRetryOptimized(operation, 15, 25*time.Millisecond)
+	})
+}
+
+// executeWithRetryOptimized provides retry logic for specific operation types
+func executeWithRetryOptimized(operation func() error, maxRetries int, baseDelay time.Duration) error {
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+
+		// Check if it's a SQLite busy error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries-1 {
+				delay := baseDelay * time.Duration(1<<uint(attempt/3))
+				if delay > 1*time.Second {
+					delay = 1*time.Second
+				}
+				jitter := time.Duration(rand.Int63n(int64(delay / 4)))
+				time.Sleep(delay + jitter)
+				logger.Debug("Database busy, retrying deletion operation (attempt %d/%d)", attempt+1, maxRetries)
+				continue
+			}
+		}
+		return err
+	}
+
+	return fmt.Errorf("deletion operation failed after %d retries", maxRetries)
 }
