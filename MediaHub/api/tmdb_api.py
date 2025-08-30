@@ -711,9 +711,17 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                     imdb_id = movie_data.get('imdb_id', '')
                     is_anime_genre = movie_data.get('is_anime_genre', False)
                     is_kids_content = movie_data.get('is_kids_content', False)
+                    original_language = movie_data.get('original_language')
+                    overview = movie_data.get('overview', '')
+                    runtime = movie_data.get('runtime', 0)
+                    original_title = movie_data.get('original_title', '')
+                    status = movie_data.get('status', '')
+                    release_date = movie_data.get('release_date', '')
+                    genres = movie_data.get('genres', '[]')
+                    certification = movie_data.get('certification', '')
 
-                    set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content))
-                    return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content
+                    set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification))
+                    return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification
             return manual_result
         else:
             set_cached_result(cache_key, f"{query}")
@@ -764,6 +772,14 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         imdb_id = movie_data.get('imdb_id', '')
         is_anime_genre = movie_data.get('is_anime_genre', False)
         is_kids_content = movie_data.get('is_kids_content', False)
+        original_language = movie_data.get('original_language')
+        overview = movie_data.get('overview', '')
+        runtime = movie_data.get('runtime', 0)
+        original_title = movie_data.get('original_title', '')
+        status = movie_data.get('status', '')
+        release_date = movie_data.get('release_date', '')
+        genres = movie_data.get('genres', '[]')
+        certification = movie_data.get('certification', '')
 
         if is_imdb_folder_id_enabled():
             proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
@@ -772,8 +788,8 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         else:
             proper_name = f"{movie_name} ({movie_year})"
 
-        set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content))
-        return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content
+        set_cached_result(cache_key, (tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification))
+        return tmdb_id, imdb_id, movie_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification
 
     log_message(f"No valid movie selected or found for query '{query}'.", "WARNING", "stdout")
     set_cached_result(cache_key, f"{query}")

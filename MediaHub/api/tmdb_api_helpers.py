@@ -7,6 +7,7 @@ import logging
 import unicodedata
 import difflib
 import time
+import json
 from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
@@ -132,13 +133,27 @@ def get_movie_data(tmdb_id):
             'ru': 'Russian', 'pt': 'Portuguese', 'ar': 'Arabic', 'hi': 'Hindi'
         }
         original_language_name = lang_map.get(language, language.upper() if language else None)
+        overview = data.get('overview', '') or ''
+        runtime = data.get('runtime') or 0
+        original_title = data.get('original_title', '') or ''
+        status = data.get('status', '') or 'released'
+        release_date = data.get('release_date', '') or ''
+        genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
+        genres_json = json.dumps(genre_names) if genre_names else '[]'
 
         return {
             'imdb_id': imdb_id,
             'collection_name': collection_name,
             'is_anime_genre': is_anime_genre,
             'is_kids_content': is_kids_content,
-            'original_language': original_language_name
+            'original_language': original_language_name,
+            'overview': overview,
+            'runtime': runtime,
+            'original_title': original_title,
+            'status': status.lower(),
+            'release_date': release_date,
+            'genres': genres_json,
+            'certification': rating or ''
         }
 
     except requests.exceptions.RequestException as e:
@@ -210,6 +225,14 @@ def get_show_data(tmdb_id):
             'ru': 'Russian', 'pt': 'Portuguese', 'ar': 'Arabic', 'hi': 'Hindi'
         }
         original_language_name = lang_map.get(language, language.upper() if language else None)
+        overview = data.get('overview', '') or ''
+        episode_runtimes = data.get('episode_run_time', [])
+        runtime = episode_runtimes[0] if episode_runtimes else 0
+        original_title = data.get('original_name', '') or ''
+        status = data.get('status', '') or 'ended'
+        release_date = data.get('first_air_date', '') or ''
+        genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
+        genres_json = json.dumps(genre_names) if genre_names else '[]'
 
         return {
             'external_ids': external_ids,
@@ -217,7 +240,14 @@ def get_show_data(tmdb_id):
             'is_kids_content': is_kids_content,
             'original_language': original_language_name,
             'seasons': data.get('seasons', []),
-            'name': data.get('name', '')
+            'name': data.get('name', ''),
+            'overview': overview,
+            'runtime': runtime,
+            'original_title': original_title,
+            'status': status.lower(),
+            'release_date': release_date,
+            'genres': genres_json,
+            'certification': rating or ''
         }
 
     except requests.exceptions.RequestException as e:
@@ -855,6 +885,14 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     external_ids = tv_data.get('external_ids', {})
     is_anime_genre = tv_data.get('is_anime_genre', False)
     is_kids_content = tv_data.get('is_kids_content', False)
+    original_language = tv_data.get('original_language')
+    overview = tv_data.get('overview', '')
+    runtime = tv_data.get('runtime', 0)
+    original_title = tv_data.get('original_title', '')
+    status = tv_data.get('status', '')
+    release_date = tv_data.get('release_date', '')
+    genres = tv_data.get('genres', '[]')
+    certification = tv_data.get('certification', '')
 
     # Handle season and episode selection
     new_season_number = None
@@ -984,7 +1022,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     imdb_id = external_ids.get('imdb_id', '')
     tvdb_id = external_ids.get('tvdb_id', '')
 
-    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id
+    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, release_date, genres, certification
 
 def has_family_content_indicators(details_data, keywords_data, media_type):
     """Check if content has family-related genres, keywords, or other indicators."""

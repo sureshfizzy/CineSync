@@ -830,13 +830,20 @@ def process_file(args, force=False, batch_apply=False):
                 return
 
             # Handle show processor return format
-            if len(result) >= 14:
-                # New format with TVDB ID
-                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id = result
+            if len(result) >= 22:
+                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
             else:
-                # Legacy format without TVDB ID
-                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+                # Legacy format
+                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:13]
                 tvdb_id = None
+                original_language = None
+                overview = ''
+                runtime = 0
+                original_title = ''
+                status = ''
+                release_date = ''
+                genres = '[]'
+                certification = ''
             # Convert string episode number back to int if needed
             if episode_number_str:
                 try:
@@ -849,8 +856,15 @@ def process_file(args, force=False, batch_apply=False):
                 log_message(f"Skipping symlink creation for extra file: {file}", level="INFO")
                 reason = "Extra/Special Content"
                 log_message(f"Adding extra file to database: {src_file} (reason: {reason})", level="DEBUG")
-                save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None,
-                                  media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre)
+                save_processed_file(
+                    src_file, None, tmdb_id, season_number, reason, None, None,
+                    media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
+                    language, quality, tvdb_id,
+                    # Sports metadata (None for shows)
+                    None, None, None, None, None, None, None, None,
+                    # Show/Movie metadata
+                    original_language, overview, runtime, original_title, status, release_date, genres, certification
+                )
                 return
 
             show_processed = True
@@ -900,7 +914,21 @@ def process_file(args, force=False, batch_apply=False):
                     save_processed_file(src_file, None, tmdb_id, season_number, reason)
                     return
                 # Handle movie processor return format
-                dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+                if len(result) >= 18:
+                    # New format with all metadata fields
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
+                else:
+                    # Legacy format with basic fields
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:11]
+                    # Initialize missing metadata fields
+                    original_language = None
+                    overview = ''
+                    runtime = 0
+                    original_title = ''
+                    status = ''
+                    release_date = ''
+                    genres = '[]'
+                    certification = ''
         elif not show_processed:
             # Not sports content, process as movie
             # For hash files, use parent folder metadata instead of file metadata
@@ -924,7 +952,21 @@ def process_file(args, force=False, batch_apply=False):
                 return
 
             # Handle movie processor return format
-            dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
+            if len(result) >= 18:
+                # New format with all metadata fields
+                dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
+            else:
+                # Legacy format with basic fields
+                dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:11]
+                # Initialize missing metadata fields
+                original_language = None
+                overview = ''
+                runtime = 0
+                original_title = ''
+                status = ''
+                release_date = ''
+                genres = '[]'
+                certification = ''
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -983,15 +1025,30 @@ def process_file(args, force=False, batch_apply=False):
                 if has_complete_metadata:
                     log_message(f"Symlink already exists for source file: {existing_symlink_for_source}", level="INFO")
                     log_message(f"Adding existing symlink to database (rename disabled): {src_file} -> {existing_symlink_for_source}", level="DEBUG")
-                    # Include sports metadata if this is a sports file
-                    if media_type == 'Sports' and 'sport_name' in locals():
-                        save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
-                                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                          league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
-                    else:
-                        save_processed_file(src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
-                                          media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                          None, None)  # league_id, sportsdb_event_id (None for non-sports content)
+                    # Save to database with all available metadata
+                    save_processed_file(
+                        src_file, existing_symlink_for_source, tmdb_id, season_number, None, None, None,
+                        media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
+                        language, quality, tvdb_id,
+                        # Sports metadata (None if not sports)
+                        league_id if 'league_id' in locals() else None,
+                        sportsdb_event_id if 'sportsdb_event_id' in locals() else None,
+                        sport_name if 'sport_name' in locals() else None,
+                        sport_round if 'sport_round' in locals() else None,
+                        sport_location if 'sport_location' in locals() else None,
+                        sport_session if 'sport_session' in locals() else None,
+                        sport_venue if 'sport_venue' in locals() else None,
+                        sport_date if 'sport_date' in locals() else None,
+                        # Movie metadata (None if not movie)
+                        original_language if 'original_language' in locals() else None,
+                        overview if 'overview' in locals() else None,
+                        runtime if 'runtime' in locals() else None,
+                        original_title if 'original_title' in locals() else None,
+                        status if 'status' in locals() else None,
+                        release_date if 'release_date' in locals() else None,
+                        genres if 'genres' in locals() else None,
+                        certification if 'certification' in locals() else None
+                    )
                     return
                 else:
                     log_message(f"Existing symlink found but metadata incomplete (rename disabled) - processing to extract metadata: {existing_symlink_for_source}", level="INFO")
@@ -1018,8 +1075,23 @@ def process_file(args, force=False, batch_apply=False):
             log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
             log_message(f"Adding correct symlink to database (fallback check): {src_file} -> {dest_file}", level="DEBUG")
 
-            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, None, None)
+            # Save to database with all available metadata
+            save_processed_file(
+                src_file, dest_file, tmdb_id, season_number, None, None, None,
+                media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
+                language, quality, None,
+                # Sports metadata (None if not sports)  
+                None, None, None, None, None, None, None, None,
+                # Movie metadata (None if not movie)
+                original_language if 'original_language' in locals() else None,
+                overview if 'overview' in locals() else None,
+                runtime if 'runtime' in locals() else None,
+                original_title if 'original_title' in locals() else None,
+                status if 'status' in locals() else None,
+                release_date if 'release_date' in locals() else None,
+                genres if 'genres' in locals() else None,
+                certification if 'certification' in locals() else None
+            )
             return
         else:
             log_message(f"Symlink exists but metadata incomplete (fallback) - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -1038,15 +1110,30 @@ def process_file(args, force=False, batch_apply=False):
                 log_message(f"Symlink already exists and is correct: {dest_file} -> {src_file}", level="INFO")
                 log_message(f"Adding correct existing symlink to database: {src_file} -> {dest_file}", level="DEBUG")
 
-                # Include sports metadata if this is a sports file
-                if media_type == 'Sports' and 'sport_name' in locals():
-                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                      league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
-                else:
-                    save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                                      media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                                      None, None)  # league_id, sportsdb_event_id (None for non-sports content)
+                # Save to database with all available metadata  
+                save_processed_file(
+                    src_file, dest_file, tmdb_id, season_number, None, None, None,
+                    media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
+                    language, quality, tvdb_id,
+                    # Sports metadata (None if not sports)
+                    league_id if 'league_id' in locals() else None,
+                    sportsdb_event_id if 'sportsdb_event_id' in locals() else None,
+                    sport_name if 'sport_name' in locals() else None,
+                    sport_round if 'sport_round' in locals() else None,
+                    sport_location if 'sport_location' in locals() else None,
+                    sport_session if 'sport_session' in locals() else None,
+                    sport_venue if 'sport_venue' in locals() else None,
+                    sport_date if 'sport_date' in locals() else None,
+                    # Movie metadata (None if not movie)
+                    original_language if 'original_language' in locals() else None,
+                    overview if 'overview' in locals() else None,
+                    runtime if 'runtime' in locals() else None,
+                    original_title if 'original_title' in locals() else None,
+                    status if 'status' in locals() else None,
+                    release_date if 'release_date' in locals() else None,
+                    genres if 'genres' in locals() else None,
+                    certification if 'certification' in locals() else None
+                )
                 return
             else:
                 log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
@@ -1119,15 +1206,30 @@ def process_file(args, force=False, batch_apply=False):
 
         log_message(f"Adding newly created symlink to database: {src_file} -> {dest_file}", level="DEBUG")
 
-        # Include sports metadata if this is a sports file
-        if media_type == 'Sports' and 'sport_name' in locals():
-            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                              league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date)
-        else:
-            save_processed_file(src_file, dest_file, tmdb_id, season_number, None, None, None,
-                              media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, language, quality, tvdb_id,
-                              None, None)  # league_id, sportsdb_event_id (None for non-sports content)
+        # Save to database with all available metadata
+        save_processed_file(
+            src_file, dest_file, tmdb_id, season_number, None, None, None,
+            media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
+            language, quality, tvdb_id, 
+            # Sports metadata (None if not sports)
+            league_id if 'league_id' in locals() else None,
+            sportsdb_event_id if 'sportsdb_event_id' in locals() else None,
+            sport_name if 'sport_name' in locals() else None,
+            sport_round if 'sport_round' in locals() else None,
+            sport_location if 'sport_location' in locals() else None,
+            sport_session if 'sport_session' in locals() else None,
+            sport_venue if 'sport_venue' in locals() else None,
+            sport_date if 'sport_date' in locals() else None,
+            # Movie metadata (None if not movie)
+            original_language if 'original_language' in locals() else None,
+            overview if 'overview' in locals() else None,
+            runtime if 'runtime' in locals() else None,
+            original_title if 'original_title' in locals() else None,
+            status if 'status' in locals() else None,
+            release_date if 'release_date' in locals() else None,
+            genres if 'genres' in locals() else None,
+            certification if 'certification' in locals() else None
+        )
 
         # Handle cache updates for force mode vs normal mode
         if force and 'old_symlink_info' in locals() and old_symlink_info:

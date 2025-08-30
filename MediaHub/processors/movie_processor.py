@@ -98,6 +98,19 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         year = release_date.split('-')[0] if release_date else year
         tmdb_id = movie_data.get('id')
 
+        # Get full movie data for additional metadata
+        full_movie_data = get_movie_data(tmdb_id) if tmdb_id else {}
+        original_language = full_movie_data.get('original_language')
+        overview = full_movie_data.get('overview', '')
+        runtime = full_movie_data.get('runtime', 0)
+        original_title = full_movie_data.get('original_title', '')
+        status = full_movie_data.get('status', '')
+        genres = full_movie_data.get('genres', '[]')
+        certification = full_movie_data.get('certification', '')
+        is_anime_genre = full_movie_data.get('is_anime_genre', False)
+        is_kids_content = full_movie_data.get('is_kids_content', False)
+        imdb_id = full_movie_data.get('imdb_id', '')
+
         # Format the proper movie name
         proper_movie_name = f"{proper_name} ({year})"
         if is_tmdb_folder_id_enabled() and tmdb_id:
@@ -105,8 +118,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         # Get collection info if enabled
         if is_movie_collection_enabled() and tmdb_id:
-            movie_data = get_movie_data(tmdb_id)
-            collection_name = movie_data.get('collection_name')
+            collection_name = full_movie_data.get('collection_name')
             collection_info = (collection_name, tmdb_id) if collection_name else None
 
     elif is_movie_collection_enabled():
@@ -119,13 +131,38 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result[:5]
-                is_kids_content = result[5] if len(result) > 5 else False
+                if len(result) >= 14:
+                    # New format with all metadata fields
+                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
+                else:
+                    # Legacy format with basic fields
+                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre = result[:5]
+                    is_kids_content = result[5] if len(result) > 5 else False
+                    # Initialize missing metadata fields
+                    original_language = None
+                    overview = ''
+                    runtime = 0
+                    original_title = ''
+                    status = ''
+                    release_date = ''
+                    genres = '[]'
+                    certification = ''
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
                 tmdb_id = result['id']
                 is_kids_content = False
+                # Initialize missing metadata fields for dict results
+                original_language = None
+                overview = ''
+                runtime = 0
+                original_title = ''
+                status = ''
+                release_date = ''
+                genres = '[]'
+                certification = ''
+                is_anime_genre = False
+                imdb_id = ''
 
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled():
@@ -156,7 +193,21 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
 
         elif isinstance(result, tuple) and len(result) >= 6:
-            tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result
+            if len(result) >= 14:
+                # New format with all metadata fields
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
+            else:
+                # Legacy format with basic fields
+                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content = result[:6]
+                original_language = None
+                overview = ''
+                runtime = 0
+                original_title = ''
+                status = ''
+                release_date = ''
+                genres = '[]'
+                certification = ''
+            
             year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
@@ -172,8 +223,21 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
-            # Initialize is_kids_content for dict results
+            # Initialize variables for dict results
+            tmdb_id = result.get('id')
+            imdb_id = result.get('imdb_id', '')
             is_kids_content = False
+            is_anime_genre = False
+            # Initialize missing metadata fields
+            original_language = None
+            overview = ''
+            runtime = 0
+            original_title = ''
+            status = ''
+            release_date = ''
+            genres = '[]'
+            certification = ''
+            
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
                 proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
             elif is_tmdb_folder_id_enabled():
@@ -184,6 +248,18 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_data = get_movie_data(result['id'])
                 if movie_data:
                     language = movie_data.get('original_language')
+                    # Also get other metadata fields
+                    original_language = movie_data.get('original_language')
+                    overview = movie_data.get('overview', '')
+                    runtime = movie_data.get('runtime', 0)
+                    original_title = movie_data.get('original_title', '')
+                    status = movie_data.get('status', '')
+                    release_date = movie_data.get('release_date', '')
+                    genres = movie_data.get('genres', '[]')
+                    certification = movie_data.get('certification', '')
+                    is_anime_genre = movie_data.get('is_anime_genre', False)
+                    is_kids_content = movie_data.get('is_kids_content', False)
+                    imdb_id = movie_data.get('imdb_id', '')
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -480,6 +556,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
 
-    # Return all fields including language and quality
+    # Return all fields including language, quality, and new metadata fields
     return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
-            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content, language, quality)
+            None, imdb_id, 1 if is_anime_genre else 0, is_kids_content, language, quality,
+            original_language, overview, runtime, original_title, status, release_date, genres, certification)
