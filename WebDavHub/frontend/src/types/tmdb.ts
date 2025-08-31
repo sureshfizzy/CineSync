@@ -11,6 +11,7 @@ export interface TMDbDetails {
   poster_path: string;
   release_date?: string;
   first_air_date?: string;
+  last_air_date?: string;
   genres?: TMDbGenre[];
   media_type: 'movie' | 'tv';
   vote_average: number;

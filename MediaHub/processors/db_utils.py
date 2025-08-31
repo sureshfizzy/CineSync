@@ -240,6 +240,8 @@ def initialize_db(conn):
             "original_title": "TEXT",
             "status": "TEXT",
             "release_date": "TEXT",
+            "first_air_date": "TEXT",
+            "last_air_date": "TEXT",
             "genres": "TEXT",
             "certification": "TEXT"
         }
@@ -443,7 +445,7 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, genres=None, certification=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -502,6 +504,8 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
             'original_title': original_title,
             'status': status,
             'release_date': release_date,
+            'first_air_date': first_air_date,
+            'last_air_date': last_air_date,
             'genres': genres,
             'certification': certification
         }
@@ -1787,8 +1791,8 @@ def search_database(conn, pattern):
             extra_columns.append("sportsdb_event_id")
         if all(col in columns for col in ["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"]):
             extra_columns.extend(["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
-        if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "genres", "certification"]):
-            extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "genres", "certification"])
+        if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"]):
+            extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"])
         
         all_columns = base_columns + extra_columns
         
@@ -1867,6 +1871,10 @@ def search_database(conn, pattern):
                     log_message(f"Status: {result_dict['status']}", level="INFO")
                 if result_dict.get('release_date'):
                     log_message(f"Release Date: {result_dict['release_date']}", level="INFO")
+                if result_dict.get('first_air_date'):
+                    log_message(f"First Air Date: {result_dict['first_air_date']}", level="INFO")
+                if result_dict.get('last_air_date'):
+                    log_message(f"Last Air Date: {result_dict['last_air_date']}", level="INFO")
                 if result_dict.get('genres'):
                     log_message(f"Genres: {result_dict['genres']}", level="INFO")
                 if result_dict.get('certification'):
@@ -1917,8 +1925,8 @@ def search_database_silent(conn, pattern):
             extra_columns.append("sportsdb_event_id")
         if all(col in columns for col in ["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"]):
             extra_columns.extend(["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
-        if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "genres", "certification"]):
-            extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "genres", "certification"])
+        if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"]):
+            extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"])
         
         all_columns = base_columns + extra_columns
         
@@ -2047,6 +2055,8 @@ def update_database_to_new_format(conn):
             "original_title TEXT",
             "status TEXT",
             "release_date TEXT",
+            "first_air_date TEXT",
+            "last_air_date TEXT",
             "genres TEXT",
             "certification TEXT"
         ]
@@ -2144,7 +2154,11 @@ def update_database_to_new_format(conn):
                         release_year = metadata['first_air_date'][:4] if len(metadata['first_air_date']) >= 4 else None
                         if release_year:
                             updates['year'] = release_year
-                            updates['release_date'] = metadata['first_air_date']
+                            updates['first_air_date'] = metadata['first_air_date']
+
+                    # Handle last_air_date for TV shows
+                    if metadata.get('last_air_date'):
+                        updates['last_air_date'] = metadata['last_air_date']
                     
                     if metadata.get('imdb_id'):
                         updates['imdb_id'] = metadata['imdb_id']

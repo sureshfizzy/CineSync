@@ -212,9 +212,9 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for anime show: {show_name} ({year})")
         return None
     elif isinstance(search_result, tuple) and len(search_result) >= 7:
-        if len(search_result) >= 17:
+        if len(search_result) >= 18:
             # New format with all metadata fields
-            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, release_date, genres, certification = search_result
+            proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = search_result
         elif len(search_result) >= 9:
             # Format with external IDs but no additional metadata
             proper_show_name, original_show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id = search_result[:9]
@@ -223,7 +223,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             runtime = 0
             original_title = ''
             status = ''
-            release_date = ''
+            first_air_date = ''
+            last_air_date = ''
             genres = '[]'
             certification = ''
         else:
@@ -236,7 +237,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             runtime = 0
             original_title = ''
             status = ''
-            release_date = ''
+            first_air_date = ''
+            last_air_date = ''
             genres = '[]'
             certification = ''
     else:
@@ -379,7 +381,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'runtime': runtime,
         'original_title': original_title,
         'status': status,
-        'release_date': release_date,
+        'first_air_date': first_air_date,
+        'last_air_date': last_air_date,
         'genres': genres,
         'certification': certification
     }

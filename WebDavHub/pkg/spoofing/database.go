@@ -1,25 +1,14 @@
 package spoofing
 
 import (
-	"database/sql"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+	   "database/sql"
+	   "encoding/json"
+	   "path/filepath"
+	   "strconv"
+	   "strings"
+	   "time"
 
-	"cinesync/pkg/db"
-)
-
-var (
-	tmdbCache   = make(map[int]*TMDBMovieDetails)
-	tmdbTVCache = make(map[int]*TMDBTVDetails)
-	tmdbMutex   sync.RWMutex
-	tmdbClient  = &http.Client{Timeout: 10 * time.Second}
+	   "cinesync/pkg/db"
 )
 
 // getMoviesFromDatabase retrieves movies from the CineSync database and formats them for Radarr
@@ -50,7 +39,11 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 			MAX(processed_at) as latest_processed_at,
 			COALESCE(file_size, 0) as file_size,
 			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
+			COALESCE(quality, '') as quality,
+			COALESCE(overview, '') as overview,
+			COALESCE(genres, '') as genres,
+			COALESCE(certification, '') as certification,
+			COALESCE(runtime, '0') as runtime
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
 		AND destination_path IS NOT NULL
@@ -69,11 +62,11 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 	var movies []MovieResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
+		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality, overview, genresStr, certification, runtimeStr string
 		var year int
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality); err != nil {
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality, &overview, &genresStr, &certification, &runtimeStr); err != nil {
 			continue
 		}
 
@@ -87,7 +80,30 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		movie := createMovieResourceInternal(tmdbID, properName, year, tmdbID, destinationPath, addedTime, fileSize, language, quality)
+		var genres []string
+		if genresStr != "" {
+			if err := json.Unmarshal([]byte(genresStr), &genres); err != nil {
+				genres = strings.Split(genresStr, ",")
+			}
+		}
+
+		runtime, _ := strconv.Atoi(runtimeStr)
+
+		movie := createMovieResourceInternal(
+			tmdbID,
+			properName,
+			year,
+			tmdbID,
+			destinationPath,
+			addedTime,
+			fileSize,
+			language,
+			quality,
+			overview,
+			genres,
+			certification,
+			runtime,
+		)
 		movies = append(movies, movie)
 	}
 
@@ -95,175 +111,13 @@ func getMoviesFromDatabaseInternal(mediaHubDB *sql.DB) ([]MovieResource, error) 
 }
 
 // createMovieResource creates a properly formatted MovieResource with actual file size
-func createMovieResource(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, language, quality string) MovieResource {
-	return createMovieResourceInternal(id, title, year, tmdbID, filePath, added, fileSize, language, quality)
+func createMovieResource(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, language, quality, overview string, genres []string, certification string, runtime int) MovieResource {
+	return createMovieResourceInternal(id, title, year, tmdbID, filePath, added, fileSize, language, quality, overview, genres, certification, runtime)
 }
 
-type TMDBMovieDetails struct {
-	Overview string `json:"overview"`
-	Runtime  int    `json:"runtime"`
-	Genres   []struct {
-		Name string `json:"name"`
-	} `json:"genres"`
-	Releases struct {
-		Countries []struct {
-			Certification string `json:"certification"`
-			ISO31661      string `json:"iso_3166_1"`
-		} `json:"countries"`
-	} `json:"releases"`
-}
-
-func fetchMovieMetadata(tmdbID int) (string, int, []string, string) {
-	if tmdbID <= 0 {
-		return "", 0, []string{}, ""
-	}
-
-	// Check cache
-	tmdbMutex.RLock()
-	if cached, exists := tmdbCache[tmdbID]; exists {
-		tmdbMutex.RUnlock()
-		return extractMetadata(cached)
-	}
-	tmdbMutex.RUnlock()
-
-	// Fetch from API
-	apiKey := os.Getenv("TMDB_API_KEY")
-	if apiKey == "" {
-		return "", 0, []string{}, ""
-	}
-
-	url := fmt.Sprintf("https://api.themoviedb.org/3/movie/%d?api_key=%s&append_to_response=releases", tmdbID, apiKey)
-	resp, err := tmdbClient.Get(url)
-	if err != nil || resp.StatusCode != 200 {
-		return "", 0, []string{}, ""
-	}
-	defer resp.Body.Close()
-
-	var details TMDBMovieDetails
-	if json.NewDecoder(resp.Body).Decode(&details) != nil {
-		return "", 0, []string{}, ""
-	}
-
-	// Cache result
-	tmdbMutex.Lock()
-	tmdbCache[tmdbID] = &details
-	tmdbMutex.Unlock()
-
-	return extractMetadata(&details)
-}
-
-func extractMetadata(details *TMDBMovieDetails) (string, int, []string, string) {
-	var genres []string
-	for _, g := range details.Genres {
-		if g.Name != "" {
-			genres = append(genres, g.Name)
-		}
-	}
-
-	var cert string
-	for _, c := range details.Releases.Countries {
-		if c.ISO31661 == "US" && c.Certification != "" {
-			cert = c.Certification
-			break
-		}
-	}
-
-	return details.Overview, details.Runtime, genres, cert
-}
-
-// TMDBTVDetails represents the structure of TMDB TV show API response
-type TMDBTVDetails struct {
-	Overview string `json:"overview"`
-	Genres   []struct {
-		Name string `json:"name"`
-	} `json:"genres"`
-	EpisodeRunTime []int    `json:"episode_run_time"`
-	Status         string   `json:"status"`
-	FirstAirDate   string   `json:"first_air_date"`
-	Networks       []struct {
-		Name string `json:"name"`
-	} `json:"networks"`
-}
-
-// TV metadata functions - enhanced to return more fields
-func fetchTVMetadata(tmdbID int) (string, int, []string, string, string, string) {
-	if tmdbID <= 0 {
-		return "", 0, []string{}, "", "", ""
-	}
-
-	// Check cache first
-	tmdbMutex.RLock()
-	if cached, exists := tmdbTVCache[tmdbID]; exists {
-		tmdbMutex.RUnlock()
-		return extractTVMetadata(cached)
-	}
-	tmdbMutex.RUnlock()
-
-	apiKey := os.Getenv("TMDB_API_KEY")
-	if apiKey == "" {
-		return "", 0, []string{}, "", "", ""
-	}
-
-	url := fmt.Sprintf("https://api.themoviedb.org/3/tv/%d?api_key=%s", tmdbID, apiKey)
-	resp, err := tmdbClient.Get(url)
-	if err != nil || resp.StatusCode != 200 {
-		return "", 0, []string{}, "", "", ""
-	}
-	defer resp.Body.Close()
-
-	var details TMDBTVDetails
-	if json.NewDecoder(resp.Body).Decode(&details) != nil {
-		return "", 0, []string{}, "", "", ""
-	}
-
-	// Cache the result
-	tmdbMutex.Lock()
-	tmdbTVCache[tmdbID] = &details
-	tmdbMutex.Unlock()
-
-	return extractTVMetadata(&details)
-}
-
-func extractTVMetadata(details *TMDBTVDetails) (string, int, []string, string, string, string) {
-	var genres []string
-	for _, g := range details.Genres {
-		if g.Name != "" {
-			genres = append(genres, g.Name)
-		}
-	}
-
-	runtime := 0
-	if len(details.EpisodeRunTime) > 0 {
-		runtime = details.EpisodeRunTime[0]
-	}
-
-	// Extract network name (use first network if multiple)
-	network := ""
-	if len(details.Networks) > 0 {
-		network = details.Networks[0].Name
-	}
-
-	// Map TMDB status to appropriate values
-	status := "continuing"
-	switch strings.ToLower(details.Status) {
-	case "ended":
-		status = "ended"
-	case "canceled", "cancelled":
-		status = "ended"
-	case "returning series":
-		status = "continuing"
-	case "in production":
-		status = "continuing"
-	default:
-		status = "continuing"
-	}
-
-	return details.Overview, runtime, genres, status, network, details.FirstAirDate
-}
 
 // createMovieResourceInternal
-func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, dbLanguage, dbQuality string) MovieResource {
-
+func createMovieResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, fileSize int64, dbLanguage, dbQuality, overview string, genres []string, certification string, runtime int) MovieResource {
 	relativePath := filepath.Base(filePath)
 	if strings.Contains(filePath, title) {
 		if parts := strings.Split(filePath, title); len(parts) > 1 {
@@ -271,7 +125,6 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		}
 	}
 
-	overview, runtime, genres, certification := fetchMovieMetadata(tmdbID)
 	quality := detectQualityFromDatabase(dbQuality, filePath)
 	languages := getLanguagesFromDatabase(dbLanguage)
 
@@ -321,9 +174,9 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 	}
 }
 
-func createSeriesResource(id int, title string, year, tmdbID int, filePath string, added time.Time, language, quality string) SeriesResource {
-	overview, runtime, genres, status, network, firstAirDate := fetchTVMetadata(tmdbID)
 
+// createSeriesResourceInternal creates a properly formatted SeriesResource using only database fields
+func createSeriesResourceInternal(id int, title string, year, tmdbID int, filePath string, added time.Time, language, quality, overview string, genres []string, status, firstAirDate, lastAirDate string, runtime int) SeriesResource {
 	firstAired := added.Format("2006-01-02T15:04:05Z")
 	if firstAirDate != "" {
 		if parsedDate, err := time.Parse("2006-01-02", firstAirDate); err == nil {
@@ -332,7 +185,12 @@ func createSeriesResource(id int, title string, year, tmdbID int, filePath strin
 	}
 
 	var lastAired *string
-	if firstAirDate != "" {
+	if lastAirDate != "" {
+		if parsedLastDate, err := time.Parse("2006-01-02", lastAirDate); err == nil {
+			lastAiredFormatted := parsedLastDate.Format("2006-01-02T15:04:05Z")
+			lastAired = &lastAiredFormatted
+		}
+	} else if firstAirDate != "" {
 		lastAired = &firstAired
 	}
 
@@ -343,7 +201,6 @@ func createSeriesResource(id int, title string, year, tmdbID int, filePath strin
 		SortTitle:         title,
 		Status:            status,
 		Overview:          overview,
-		Network:           network,
 		AirTime:           "",
 		Year:              year,
 		Path:              filePath,
@@ -389,9 +246,6 @@ func getSeriesFromDatabase() ([]SeriesResource, error) {
 }
 
 func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error) {
-
-
-
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -401,7 +255,13 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 			MAX(processed_at) as latest_processed_at,
 			SUM(COALESCE(file_size, 0)) as total_file_size,
 			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
+			COALESCE(quality, '') as quality,
+			COALESCE(overview, '') as overview,
+			COALESCE(genres, '') as genres,
+			COALESCE(runtime, '0') as runtime,
+			COALESCE(status, '') as status,
+			COALESCE(first_air_date, '') as first_air_date,
+			COALESCE(last_air_date, '') as last_air_date
 		FROM processed_files
 		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
 		AND destination_path IS NOT NULL
@@ -420,31 +280,40 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 	var series []SeriesResource
 
 	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
-		var year int
-		var totalFileSize int64
+	var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality, overview, genresStr, runtimeStr, status, firstAirDate, lastAirDate string
+	var year int
+	var totalFileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &totalFileSize, &language, &quality); err != nil {
-			continue
+	if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &totalFileSize, &language, &quality, &overview, &genresStr, &runtimeStr, &status, &firstAirDate, &lastAirDate); err != nil {
+	continue
+	}
+
+	tmdbID, _ := strconv.Atoi(tmdbIDStr)
+	if tmdbID == 0 {
+	continue
+	}
+
+	addedTime, _ := time.Parse(time.RFC3339, latestProcessedAt)
+	if addedTime.IsZero() {
+	addedTime = time.Now().Add(-24 * time.Hour)
+	}
+
+	var genres []string
+	if genresStr != "" {
+		if err := json.Unmarshal([]byte(genresStr), &genres); err != nil {
+				genres = strings.Split(genresStr, ",")
 		}
+	}
 
-		tmdbID, _ := strconv.Atoi(tmdbIDStr)
-		if tmdbID == 0 {
-			continue
-		}
+	runtime, _ := strconv.Atoi(runtimeStr)
 
-		addedTime, _ := time.Parse(time.RFC3339, latestProcessedAt)
-		if addedTime.IsZero() {
-			addedTime = time.Now().Add(-24 * time.Hour)
-		}
+	// Construct series folder path from destination path, title, and year
+	seriesPath := constructSeriesPath(destinationPath, properName, year)
 
-		// Construct series folder path from destination path, title, and year
-		seriesPath := constructSeriesPath(destinationPath, properName, year)
-
-		// Generate unique series ID to prevent BAZARR constraint violations
-		uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
-		show := createSeriesResource(uniqueSeriesID, properName, year, tmdbID, seriesPath, addedTime, language, quality)
-		series = append(series, show)
+	// Generate unique series ID to prevent BAZARR constraint violations
+	uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
+	show := createSeriesResourceInternal(uniqueSeriesID, properName, year, tmdbID, seriesPath, addedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
+	series = append(series, show)
 	}
 
 	return series, rows.Err()
@@ -510,8 +379,6 @@ func getQualityProfilesFromDatabase() ([]QualityProfile, error) {
 		{ID: 4, Name: "Any"},
 	}, nil
 }
-
-
 
 // getLanguageProfilesFromDatabase retrieves language profiles
 func getLanguageProfilesFromDatabase() ([]LanguageProfile, error) {
@@ -585,67 +452,76 @@ func getMoviesFromDatabaseByFolder(folderPath string) ([]MovieResource, error) {
 		return nil, err
 	}
 
-	query := `
-		SELECT
-			COALESCE(proper_name, '') as proper_name,
-			COALESCE(year, 0) as year,
-			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(destination_path, '') as destination_path,
-			MAX(processed_at) as latest_processed_at,
-			COALESCE(file_size, 0) as file_size,
-			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
-		FROM processed_files
-		WHERE UPPER(media_type) = 'MOVIE'
-		AND destination_path IS NOT NULL
-		AND destination_path != ''
-		AND proper_name IS NOT NULL
-		AND proper_name != ''
-		AND base_path = ?
-		GROUP BY proper_name, year, tmdb_id
-		ORDER BY proper_name, year`
+	   query := `
+			   SELECT
+					   COALESCE(proper_name, '') as proper_name,
+					   COALESCE(year, 0) as year,
+					   COALESCE(tmdb_id, '') as tmdb_id,
+					   COALESCE(destination_path, '') as destination_path,
+					   MAX(processed_at) as latest_processed_at,
+					   COALESCE(file_size, 0) as file_size,
+					   COALESCE(language, '') as language,
+					   COALESCE(quality, '') as quality,
+					   COALESCE(overview, '') as overview,
+					   COALESCE(genres, '') as genres,
+					   COALESCE(certification, '') as certification,
+					   COALESCE(runtime, '0') as runtime
+			   FROM processed_files
+			   WHERE UPPER(media_type) = 'MOVIE'
+			   AND destination_path IS NOT NULL
+			   AND destination_path != ''
+			   AND proper_name IS NOT NULL
+			   AND proper_name != ''
+			   AND base_path = ?
+			   GROUP BY proper_name, year, tmdb_id
+			   ORDER BY proper_name, year`
 
-	rows, err := mediaHubDB.Query(query, folderPath)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	   rows, err := mediaHubDB.Query(query, folderPath)
+	   if err != nil {
+			   return nil, err
+	   }
+	   defer rows.Close()
 
-	var movies []MovieResource
+	   var movies []MovieResource
 
-	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality string
-		var year int
-		var fileSize int64
+	   for rows.Next() {
+			   var properName, tmdbIDStr, destinationPath, latestProcessedAt, language, quality, overview, genresStr, certification, runtimeStr string
+			   var year int
+			   var fileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality); err != nil {
-			continue
-		}
+			   if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &latestProcessedAt, &fileSize, &language, &quality, &overview, &genresStr, &certification, &runtimeStr); err != nil {
+					   continue
+			   }
 
-		// Convert TMDB ID to integer
-		tmdbID := 0
-		if tmdbIDStr != "" {
-			if id, err := strconv.Atoi(tmdbIDStr); err == nil {
-				tmdbID = id
-			}
-		}
+			   tmdbID := 0
+			   if tmdbIDStr != "" {
+					   if id, err := strconv.Atoi(tmdbIDStr); err == nil {
+							   tmdbID = id
+					   }
+			   }
+			   if tmdbID == 0 {
+					   continue
+			   }
 
-		// Skip movies without valid TMDB ID
-		if tmdbID == 0 {
-			continue
-		}
+			   processedTime, _ := time.Parse("2006-01-02 15:04:05", latestProcessedAt)
+			   if processedTime.IsZero() {
+					   processedTime = time.Now().Add(-24 * time.Hour)
+			   }
 
-		// Parse processed time
-		processedTime, _ := time.Parse("2006-01-02 15:04:05", latestProcessedAt)
-		if processedTime.IsZero() {
-			processedTime = time.Now().Add(-24 * time.Hour)
-		}
+			   var genres []string
+			   if genresStr != "" {
+					   if err := json.Unmarshal([]byte(genresStr), &genres); err != nil {
+							   genres = strings.Split(genresStr, ",")
+					   }
+			   }
 
-		movie := createMovieResourceInternal(tmdbID, properName, year, tmdbID, destinationPath, processedTime, fileSize, language, quality)
-		movies = append(movies, movie)
-	}
+			   runtime, _ := strconv.Atoi(runtimeStr)
 
-	return movies, nil
+			   movie := createMovieResourceInternal(tmdbID, properName, year, tmdbID, destinationPath, processedTime, fileSize, language, quality, overview, genres, certification, runtime)
+			   movies = append(movies, movie)
+	   }
+
+	   return movies, nil
 }
 
 // getSeriesFromDatabaseByFolder retrieves TV series filtered by base folder path
@@ -663,7 +539,15 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(base_path, '') as base_path,
 			MAX(processed_at) as latest_processed_at,
-			SUM(COALESCE(file_size, 0)) as total_file_size
+			SUM(COALESCE(file_size, 0)) as total_file_size,
+			COALESCE(language, '') as language,
+			COALESCE(quality, '') as quality,
+			COALESCE(overview, '') as overview,
+			COALESCE(genres, '') as genres,
+			COALESCE(runtime, '') as runtime,
+			COALESCE(status, '') as status,
+			COALESCE(first_air_date, '') as first_air_date,
+			COALESCE(last_air_date, '') as last_air_date
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -682,38 +566,44 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 
 	var series []SeriesResource
 
-	for rows.Next() {
-		var properName, tmdbIDStr, destinationPath, basePath, latestProcessedAt string
-		var year int
-		var totalFileSize int64
+	   for rows.Next() {
+			   var properName, tmdbIDStr, destinationPath, basePath, latestProcessedAt, language, quality, overview, genresStr, runtimeStr, status, firstAirDate, lastAirDate string
+			   var year int
+			   var totalFileSize int64
 
-		if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &basePath, &latestProcessedAt, &totalFileSize); err != nil {
-			continue
-		}
+			   if err := rows.Scan(&properName, &year, &tmdbIDStr, &destinationPath, &basePath, &latestProcessedAt, &totalFileSize, &language, &quality, &overview, &genresStr, &runtimeStr, &status, &firstAirDate, &lastAirDate); err != nil {
+					   continue
+			   }
 
-		// Convert TMDB ID to integer
-		tmdbID := 0
-		if tmdbIDStr != "" {
-			if id, err := strconv.Atoi(tmdbIDStr); err == nil {
-				tmdbID = id
-			}
-		}
+			   tmdbID := 0
+			   if tmdbIDStr != "" {
+					   if id, err := strconv.Atoi(tmdbIDStr); err == nil {
+							   tmdbID = id
+					   }
+			   }
 
-		// Parse processed time
-		processedTime, _ := time.Parse("2006-01-02 15:04:05", latestProcessedAt)
-		if processedTime.IsZero() {
-			processedTime = time.Now().Add(-24 * time.Hour)
-		}
+			   processedTime, _ := time.Parse("2006-01-02 15:04:05", latestProcessedAt)
+			   if processedTime.IsZero() {
+					   processedTime = time.Now().Add(-24 * time.Hour)
+			   }
 
-		seriesPath := constructSeriesPath(destinationPath, properName, year)
+			   var genres []string
+			   if genresStr != "" {
+					   if err := json.Unmarshal([]byte(genresStr), &genres); err != nil {
+							   genres = strings.Split(genresStr, ",")
+					   }
+			   }
 
-		// Generate unique series ID to prevent BAZARR constraint violations
-		uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
-		show := createSeriesResource(uniqueSeriesID, properName, year, tmdbID, seriesPath, processedTime, "", "")
-		series = append(series, show)
-	}
+			   runtime, _ := strconv.Atoi(runtimeStr)
 
-	return series, nil
+			   seriesPath := constructSeriesPath(destinationPath, properName, year)
+
+			   uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
+			   show := createSeriesResourceInternal(uniqueSeriesID, properName, year, tmdbID, seriesPath, processedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
+			   series = append(series, show)
+	   }
+
+	   return series, nil
 }
 
 // getEpisodesFromDatabase retrieves episodes for a specific series from the database
@@ -1261,13 +1151,4 @@ func createMovieFile(id, movieID int, filePath string, fileSize int64, added tim
 		SceneName:    "",
 		ReleaseGroup: "",
 	}
-}
-
-
-
-func ClearTMDBCache() {
-	tmdbMutex.Lock()
-	tmdbCache = make(map[int]*TMDBMovieDetails)
-	tmdbTVCache = make(map[int]*TMDBTVDetails)
-	tmdbMutex.Unlock()
 }

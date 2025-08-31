@@ -9,6 +9,7 @@ export interface TmdbResult {
   backdrop_path: string | null;
   release_date?: string;
   first_air_date?: string; // For TV shows
+  last_air_date?: string; // For TV shows
   media_type?: string;
 }
 

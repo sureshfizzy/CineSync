@@ -6,6 +6,7 @@ export interface MediaDetailsData {
   name?: string;
   poster_path: string | null;
   first_air_date?: string;
+  last_air_date?: string;
   episode_run_time?: number[];
   credits?: {
     crew: { job: string; name: string }[];

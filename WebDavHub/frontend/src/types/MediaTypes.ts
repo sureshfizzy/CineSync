@@ -6,6 +6,7 @@ export interface MediaDetailsData {
   backdrop_path: string | null;
   release_date?: string;
   first_air_date?: string;
+  last_air_date?: string;
   runtime?: number;
   episode_run_time?: number[];
   genres?: { id: number; name: string }[];

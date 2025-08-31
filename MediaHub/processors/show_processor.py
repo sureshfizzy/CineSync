@@ -192,7 +192,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         runtime = anime_result.get('runtime', 0)
         original_title = anime_result.get('original_title', '')
         status = anime_result.get('status', '')
-        release_date = anime_result.get('release_date', '')
+        first_air_date = anime_result.get('first_air_date', '')
+        last_air_date = anime_result.get('last_air_date', '')
         genres = anime_result.get('genres', '[]')
         certification = anime_result.get('certification', '')
 
@@ -280,9 +281,9 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
         elif isinstance(result, tuple) and len(result) >= 7:
-            if len(result) >= 17:
+            if len(result) >= 18:
                 # New format with all metadata fields
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
+                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = result
             elif len(result) >= 9:
                 # Format with external IDs but no additional metadata
                 proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id = result[:9]
@@ -291,7 +292,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 runtime = 0
                 original_title = ''
                 status = ''
-                release_date = ''
+                first_air_date = ''
+                last_air_date = ''
                 genres = '[]'
                 certification = ''
             else:
@@ -304,7 +306,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 runtime = 0
                 original_title = ''
                 status = ''
-                release_date = ''
+                first_air_date = ''
+                last_air_date = ''
                 genres = '[]'
                 certification = ''
 
@@ -659,4 +662,4 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, imdb_id,
             1 if is_anime_genre else 0, is_kids_content, language, quality, tvdb_id,
-            original_language, overview, runtime, original_title, status, release_date, genres, certification)
+            original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification)

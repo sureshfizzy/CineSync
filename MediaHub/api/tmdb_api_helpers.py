@@ -230,7 +230,8 @@ def get_show_data(tmdb_id):
         runtime = episode_runtimes[0] if episode_runtimes else 0
         original_title = data.get('original_name', '') or ''
         status = data.get('status', '') or 'ended'
-        release_date = data.get('first_air_date', '') or ''
+        first_air_date = data.get('first_air_date', '') or ''
+        last_air_date = data.get('last_air_date', '') or ''
         genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
         genres_json = json.dumps(genre_names) if genre_names else '[]'
 
@@ -245,7 +246,8 @@ def get_show_data(tmdb_id):
             'runtime': runtime,
             'original_title': original_title,
             'status': status.lower(),
-            'release_date': release_date,
+            'release_date': first_air_date,
+            'last_air_date': last_air_date,
             'genres': genres_json,
             'certification': rating or ''
         }
@@ -891,6 +893,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     original_title = tv_data.get('original_title', '')
     status = tv_data.get('status', '')
     release_date = tv_data.get('release_date', '')
+    last_air_date = tv_data.get('last_air_date', '')
     genres = tv_data.get('genres', '[]')
     certification = tv_data.get('certification', '')
 
@@ -1022,7 +1025,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     imdb_id = external_ids.get('imdb_id', '')
     tvdb_id = external_ids.get('tvdb_id', '')
 
-    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, release_date, genres, certification
+    return proper_name, show_name, is_anime_genre, new_season_number, new_episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, release_date, last_air_date, genres, certification
 
 def has_family_content_indicators(details_data, keywords_data, media_type):
     """Check if content has family-related genres, keywords, or other indicators."""

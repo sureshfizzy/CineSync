@@ -21,6 +21,7 @@ export interface FileItem {
   title?: string;
   releaseDate?: string;
   firstAirDate?: string;
+  lastAirDate?: string;
   isSourceRoot?: boolean;
   isSourceFile?: boolean;
   isMediaFile?: boolean;
