@@ -358,6 +358,13 @@ func HandleSpoofedEpisode(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedEpisodeFiles handles the /api/v3/episodefile endpoint for Sonarr
 func HandleSpoofedEpisodeFiles(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedEpisodeFiles: %v", err)
+			handleErrorResponse(w, "Failed to get episode files", http.StatusInternalServerError)
+		}
+	}()
+
 	config := GetConfig()
 
 	// Get seriesId from query parameters
@@ -392,7 +399,10 @@ func HandleSpoofedEpisodeFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(episodeFiles)
+	if err := json.NewEncoder(w).Encode(episodeFiles); err != nil {
+		logger.Error("Failed to encode episode files response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // HandleSpoofedHealth handles the /api/v3/health endpoint for both Radarr and Sonarr

@@ -793,10 +793,22 @@ func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber 
 
 // getEpisodeFilesFromDatabase retrieves episode files for a specific series
 func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
-	mediaHubDB, err := db.GetDatabaseConnection()
-	if err != nil {
-		return nil, err
-	}
+	var episodeFiles []interface{}
+
+	err := executeWithRetry(func() error {
+		mediaHubDB, err := db.GetDatabaseConnection()
+		if err != nil {
+			return err
+		}
+
+		episodeFiles, err = getEpisodeFilesFromDatabaseInternal(mediaHubDB, seriesId)
+		return err
+	})
+
+	return episodeFiles, err
+}
+
+func getEpisodeFilesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
 
 	seriesIDInt := safeAtoi(seriesId, 0)
 	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
@@ -870,80 +882,86 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 
 // getEpisodeFilesFromDatabaseByFolder retrieves episode files for a specific series filtered by folder
 func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}, error) {
-	mediaHubDB, err := db.GetDatabaseConnection()
-	if err != nil {
-		return nil, err
-	}
-
-	seriesIDInt := safeAtoi(seriesId, 0)
-	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
-	tmdbIDStr := strconv.Itoa(tmdbID)
-
-	// Query episode files directly by TMDB ID with folder filtering
-	query := `
-		SELECT
-			COALESCE(proper_name, '') as proper_name,
-			COALESCE(season_number, '') as season_number,
-			COALESCE(episode_number, '') as episode_number,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(processed_at, '') as processed_at,
-			COALESCE(file_size, 0) as file_size,
-			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
-		FROM processed_files
-		WHERE UPPER(media_type) = 'TV'
-		AND destination_path IS NOT NULL
-		AND destination_path != ''
-		AND proper_name IS NOT NULL
-		AND proper_name != ''
-		AND season_number IS NOT NULL
-		AND episode_number IS NOT NULL
-		AND COALESCE(tmdb_id, '') = ?
-		AND base_path = ?
-		ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
-
-	rows, err := mediaHubDB.Query(query, tmdbIDStr, folderPath)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var episodeFiles []interface{}
 
-	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
-		var fileSize int64
-
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
-			continue
+	err := executeWithRetry(func() error {
+		mediaHubDB, err := db.GetDatabaseConnection()
+		if err != nil {
+			return err
 		}
 
-		seasonNum := safeAtoi(seasonNumber, 1)
-		episodeNum := safeAtoi(episodeNumber, 1)
-		seriesIDInt := safeAtoi(seriesId, 1)
-		episodeFileID := generateUniqueEpisodeFileID(seriesIDInt, seasonNum, episodeNum)
+		seriesIDInt := safeAtoi(seriesId, 0)
+		tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+		tmdbIDStr := strconv.Itoa(tmdbID)
 
-		processedTime := parseProcessedTime(processedAt)
+		// Query episode files directly by TMDB ID with folder filtering
+		query := `
+			SELECT
+				COALESCE(proper_name, '') as proper_name,
+				COALESCE(season_number, '') as season_number,
+				COALESCE(episode_number, '') as episode_number,
+				COALESCE(destination_path, '') as destination_path,
+				COALESCE(processed_at, '') as processed_at,
+				COALESCE(file_size, 0) as file_size,
+				COALESCE(language, '') as language,
+				COALESCE(quality, '') as quality
+			FROM processed_files
+			WHERE UPPER(media_type) = 'TV'
+			AND destination_path IS NOT NULL
+			AND destination_path != ''
+			AND proper_name IS NOT NULL
+			AND proper_name != ''
+			AND season_number IS NOT NULL
+			AND episode_number IS NOT NULL
+			AND COALESCE(tmdb_id, '') = ?
+			AND base_path = ?
+			ORDER BY CAST(season_number AS INTEGER), CAST(episode_number AS INTEGER)`
 
-		qualityObj := detectQualityFromDatabase(quality, destinationPath)
-		languages := getLanguagesFromDatabase(language)
+		rows, err := mediaHubDB.Query(query, tmdbIDStr, folderPath)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
 
-		episodeFile := map[string]interface{}{
-			"id":           episodeFileID,
-			"seriesId":     seriesId,
-			"seasonNumber": seasonNum,
-			"relativePath": filepath.Base(destinationPath),
-			"path":         destinationPath,
-			"size":         fileSize,
-			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
-			"quality":      qualityObj,
-			"languages": languages,
+		episodeFiles = []interface{}{}
+
+		for rows.Next() {
+			var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
+			var fileSize int64
+
+			if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
+				continue
+			}
+
+			seasonNum := safeAtoi(seasonNumber, 1)
+			episodeNum := safeAtoi(episodeNumber, 1)
+			seriesIDInt := safeAtoi(seriesId, 1)
+			episodeFileID := generateUniqueEpisodeFileID(seriesIDInt, seasonNum, episodeNum)
+
+			processedTime := parseProcessedTime(processedAt)
+
+			qualityObj := detectQualityFromDatabase(quality, destinationPath)
+			languages := getLanguagesFromDatabase(language)
+
+			episodeFile := map[string]interface{}{
+				"id":           episodeFileID,
+				"seriesId":     seriesId,
+				"seasonNumber": seasonNum,
+				"relativePath": filepath.Base(destinationPath),
+				"path":         destinationPath,
+				"size":         fileSize,
+				"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
+				"quality":      qualityObj,
+				"languages": languages,
+			}
+
+			episodeFiles = append(episodeFiles, episodeFile)
 		}
 
-		episodeFiles = append(episodeFiles, episodeFile)
-	}
+		return nil
+	})
 
-	return episodeFiles, nil
+	return episodeFiles, err
 }
 
 // getMovieByIDFromDatabase retrieves a specific movie by ID from the CineSync database
