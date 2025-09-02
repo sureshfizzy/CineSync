@@ -8,6 +8,10 @@ import (
 func RegisterRoutes(mux *http.ServeMux) {
 	config := GetConfig()
 
+	// Always register MediaCover routes regardless of spoofing status
+	mediaHandler := HandlerWrapper(RetryHandlerWrapper(HandleMediaCover, 3), 30)
+	mux.HandleFunc("/api/v3/MediaCover/", PanicRecoveryMiddleware(mediaHandler))
+
 	// Common endpoints for both services
 	commonEndpoints := map[string]http.HandlerFunc{
 		"/api/v3/system/status":  HandleSystemStatus,
@@ -26,7 +30,6 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/language/":       HandleSpoofedLanguage,
 		"/api/v3/tag":             HandleSpoofedTag,
 		"/api/v3/tag/":            HandleSpoofedTag,
-		"/api/v3/MediaCover/":     HandleMediaCover,
 		"/api":                    HandleSpoofedAPI,
 
 		// Filesystem and utils endpoints
