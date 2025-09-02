@@ -552,7 +552,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         if episode_identifier and rename_enabled and not is_extra:
             # Get episode name from TMDB if available
             episode_name = None
-            tmdb_id_match = re.search(r'\{tmdb-(\d+)\}$', proper_show_name)
+            tmdb_id_match = re.search(r'\{tmdbid-(\d+)\}$', proper_show_name)
             if tmdb_id_match:
                 show_id = tmdb_id_match.group(1)
                 episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
