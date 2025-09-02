@@ -830,8 +830,8 @@ def process_file(args, force=False, batch_apply=False):
                 return
 
             # Handle show processor return format
-            if len(result) >= 23:
-                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = result
+            if len(result) >= 25:
+                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification, episode_title, total_episodes = result
             else:
                 # Legacy format
                 dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:13]
@@ -845,6 +845,8 @@ def process_file(args, force=False, batch_apply=False):
                 last_air_date = ''
                 genres = '[]'
                 certification = ''
+                episode_title = None
+                total_episodes = None
             # Convert string episode number back to int if needed
             if episode_number_str:
                 try:
@@ -864,7 +866,8 @@ def process_file(args, force=False, batch_apply=False):
                     # Sports metadata (None for shows)
                     None, None, None, None, None, None, None, None,
                     # Show/Movie metadata
-                    original_language, overview, runtime, original_title, status, None, None, None, genres, certification
+                    original_language, overview, runtime, original_title, status, None, first_air_date, last_air_date, genres, certification,
+                    episode_title, total_episodes
                 )
                 return
 
@@ -1050,7 +1053,9 @@ def process_file(args, force=False, batch_apply=False):
                         first_air_date if 'first_air_date' in locals() else None,
                         last_air_date if 'last_air_date' in locals() else None,
                         genres if 'genres' in locals() else None,
-                        certification if 'certification' in locals() else None
+                        certification if 'certification' in locals() else None,
+                        episode_title if 'episode_title' in locals() else None,
+                        total_episodes if 'total_episodes' in locals() else None
                     )
                     return
                 else:
@@ -1082,9 +1087,16 @@ def process_file(args, force=False, batch_apply=False):
             save_processed_file(
                 src_file, dest_file, tmdb_id, season_number, None, None, None,
                 media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, 
-                language, quality, None,
-                # Sports metadata (None if not sports)  
-                None, None, None, None, None, None, None, None,
+                language, quality, tvdb_id,
+                # Sports metadata (None if not sports)
+                league_id if 'league_id' in locals() else None,
+                sportsdb_event_id if 'sportsdb_event_id' in locals() else None,
+                sport_name if 'sport_name' in locals() else None,
+                sport_round if 'sport_round' in locals() else None,
+                sport_location if 'sport_location' in locals() else None,
+                sport_session if 'sport_session' in locals() else None,
+                sport_venue if 'sport_venue' in locals() else None,
+                sport_date if 'sport_date' in locals() else None,
                 # Movie metadata (None if not movie)
                 original_language if 'original_language' in locals() else None,
                 overview if 'overview' in locals() else None,
@@ -1095,7 +1107,9 @@ def process_file(args, force=False, batch_apply=False):
                 first_air_date if 'first_air_date' in locals() else None,
                 last_air_date if 'last_air_date' in locals() else None,
                 genres if 'genres' in locals() else None,
-                certification if 'certification' in locals() else None
+                certification if 'certification' in locals() else None,
+                episode_title if 'episode_title' in locals() else None,
+                total_episodes if 'total_episodes' in locals() else None
             )
             return
         else:
@@ -1137,8 +1151,12 @@ def process_file(args, force=False, batch_apply=False):
                     original_title if 'original_title' in locals() else None,
                     status if 'status' in locals() else None,
                     release_date if 'release_date' in locals() else None,
+                    first_air_date if 'first_air_date' in locals() else None,
+                    last_air_date if 'last_air_date' in locals() else None,
                     genres if 'genres' in locals() else None,
-                    certification if 'certification' in locals() else None
+                    certification if 'certification' in locals() else None,
+                    episode_title if 'episode_title' in locals() else None,
+                    total_episodes if 'total_episodes' in locals() else None
                 )
                 return
             else:
@@ -1236,7 +1254,9 @@ def process_file(args, force=False, batch_apply=False):
             first_air_date if 'first_air_date' in locals() else None,
             last_air_date if 'last_air_date' in locals() else None,
             genres if 'genres' in locals() else None,
-            certification if 'certification' in locals() else None
+            certification if 'certification' in locals() else None,
+            episode_title if 'episode_title' in locals() else None,
+            total_episodes if 'total_episodes' in locals() else None
         )
 
         # Handle cache updates for force mode vs normal mode

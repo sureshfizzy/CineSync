@@ -11,7 +11,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
 from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_episode_name
+from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 
@@ -143,6 +143,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     resolution = None
     is_anime_genre = False
     season_folder = None
+    total_episodes = None
 
     # Override with function parameters if provided
     if season_number is not None:
@@ -196,6 +197,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         last_air_date = anime_result.get('last_air_date', '')
         genres = anime_result.get('genres', '[]')
         certification = anime_result.get('certification', '')
+        total_episodes = anime_result.get('total_episodes', '')
 
         # Update episode info from anime result if available
         episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
@@ -367,6 +369,26 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             show_folder = re.sub(r' \{tmdb(?:id)?-[^}]+\}', '', show_folder)
 
     show_folder = show_folder.replace('/', '')
+
+    # Only retrieve episode data if not already provided by anime processor
+    if episode_identifier and not is_extra and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
+        tmdb_id_match = re.search(r'\{tmdb(?:id)?-(\d+)\}', proper_show_name)
+        if tmdb_id_match:
+            show_id = tmdb_id_match.group(1)
+            episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
+            if episode_number_match:
+                episode_num = episode_number_match.group(1)
+                show_data = get_show_data(show_id)
+                total_episodes_from_show = show_data.get('total_episodes', 0) if show_data else 0
+                episode_result = get_episode_name(show_id, int(season_number), int(episode_num), total_episodes=total_episodes_from_show)
+                if episode_result and len(episode_result) >= 5:
+                    episode_name_result, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
+                else:
+                    log_message(f"Failed to retrieve episode data or insufficient data returned", level="WARNING")
+            else:
+                log_message(f"Could not extract episode number from identifier: {episode_identifier}", level="WARNING")
+        else:
+            log_message(f"Could not extract TMDB ID from show name: {proper_show_name}", level="WARNING")
 
     # Determine resolution-specific folder for shows
     if anime_result and anime_result.get('resolution'):
@@ -550,23 +572,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         dest_file = os.path.join(season_dest_path, new_name)
     else:
         if episode_identifier and rename_enabled and not is_extra:
-            # Get episode name from TMDB if available
-            episode_name = None
-            tmdb_id_match = re.search(r'\{tmdbid-(\d+)\}$', proper_show_name)
-            if tmdb_id_match:
-                show_id = tmdb_id_match.group(1)
-                episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
-
-                if episode_number_match:
-                    episode_num = episode_number_match.group(1)
-                    episode_name_result, mapped_season, mapped_episode = get_episode_name(show_id, int(season_number), int(episode_num))
-                    if episode_name_result:
-                        # Extract just the episode title from the formatted result (remove S01E01 - prefix)
-                        if " - " in episode_name_result:
-                            episode_name = episode_name_result.split(" - ", 1)[1]  # Get everything after first " - "
-                        else:
-                            episode_name = episode_name_result
-                        log_message(f"Found episode name: {episode_name} (from: {episode_name_result})", level="DEBUG")
+            episode_name = episode_title
 
             # Check if MEDIAINFO PARSER is enabled to determine naming strategy
             sonarr_naming_failed = False
@@ -662,4 +668,5 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, imdb_id,
             1 if is_anime_genre else 0, is_kids_content, language, quality, tvdb_id,
-            original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification)
+            original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification,
+            episode_title, total_episodes)

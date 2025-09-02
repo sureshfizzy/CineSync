@@ -243,7 +243,9 @@ def initialize_db(conn):
             "first_air_date": "TEXT",
             "last_air_date": "TEXT",
             "genres": "TEXT",
-            "certification": "TEXT"
+            "certification": "TEXT",
+            "episode_title": "TEXT",
+            "total_episodes": "INTEGER"
         }
 
         # Add missing columns
@@ -317,7 +319,10 @@ def initialize_db(conn):
                           "reason", "file_size", "error_message", "processed_at", "media_type",
                           "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre",
                           "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id", "sport_name",
-                          "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"}
+                          "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date",
+                          "original_language", "overview", "runtime", "original_title", "status",
+                          "release_date", "first_air_date", "last_air_date", "genres", "certification",
+                          "episode_title", "total_episodes"}
 
         missing_columns = expected_columns - set(final_columns)
         if missing_columns:
@@ -445,7 +450,7 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None, episode_title=None, total_episodes=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
@@ -507,7 +512,9 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
             'first_air_date': first_air_date,
             'last_air_date': last_air_date,
             'genres': genres,
-            'certification': certification
+            'certification': certification,
+            'episode_title': episode_title,
+            'total_episodes': total_episodes
         }
         
         # Add available optional columns
@@ -1793,6 +1800,8 @@ def search_database(conn, pattern):
             extra_columns.extend(["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
         if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"]):
             extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"])
+        if all(col in columns for col in ["episode_title", "total_episodes"]):
+            extra_columns.extend(["episode_title", "total_episodes"])
         
         all_columns = base_columns + extra_columns
         
@@ -1800,6 +1809,8 @@ def search_database(conn, pattern):
         searchable_columns = ["file_path", "destination_path", "tmdb_id", "proper_name", "imdb_id", "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id"]
         if "base_path" in columns:
             searchable_columns.append("base_path")
+        if "episode_title" in columns:
+            searchable_columns.append("episode_title")
         
         # Filter searchable columns to only include those that actually exist
         searchable_columns = [col for col in searchable_columns if col in columns]
@@ -1879,6 +1890,10 @@ def search_database(conn, pattern):
                     log_message(f"Genres: {result_dict['genres']}", level="INFO")
                 if result_dict.get('certification'):
                     log_message(f"Certification: {result_dict['certification']}", level="INFO")
+                if result_dict.get('episode_title'):
+                    log_message(f"Episode Title: {result_dict['episode_title']}", level="INFO")
+                if result_dict.get('total_episodes'):
+                    log_message(f"Total Episodes: {result_dict['total_episodes']}", level="INFO")
                 if result_dict.get('reason'):
                     log_message(f"Skip Reason: {result_dict['reason']}", level="INFO")
                 
@@ -1927,6 +1942,8 @@ def search_database_silent(conn, pattern):
             extra_columns.extend(["sport_name", "sport_round", "sport_location", "sport_session", "sport_venue", "sport_date"])
         if all(col in columns for col in ["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"]):
             extra_columns.extend(["original_language", "overview", "runtime", "original_title", "status", "release_date", "first_air_date", "last_air_date", "genres", "certification"])
+        if all(col in columns for col in ["episode_title", "total_episodes"]):
+            extra_columns.extend(["episode_title", "total_episodes"])
         
         all_columns = base_columns + extra_columns
         
@@ -1934,6 +1951,8 @@ def search_database_silent(conn, pattern):
         searchable_columns = ["file_path", "destination_path", "tmdb_id", "proper_name", "imdb_id", "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id"]
         if "base_path" in columns:
             searchable_columns.append("base_path")
+        if "episode_title" in columns:
+            searchable_columns.append("episode_title")
 
         searchable_columns = [col for col in searchable_columns if col in columns]
         
@@ -2058,7 +2077,9 @@ def update_database_to_new_format(conn):
             "first_air_date TEXT",
             "last_air_date TEXT",
             "genres TEXT",
-            "certification TEXT"
+            "certification TEXT",
+            "episode_title TEXT",
+            "total_episodes INTEGER"
         ]
         
         expected_columns = [col.split()[0] for col in new_schema_columns]

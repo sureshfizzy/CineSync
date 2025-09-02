@@ -234,6 +234,7 @@ def get_show_data(tmdb_id):
         last_air_date = data.get('last_air_date', '') or ''
         genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
         genres_json = json.dumps(genre_names) if genre_names else '[]'
+        total_episodes = data.get('number_of_episodes', 0)
 
         return {
             'external_ids': external_ids,
@@ -249,7 +250,8 @@ def get_show_data(tmdb_id):
             'release_date': first_air_date,
             'last_air_date': last_air_date,
             'genres': genres_json,
-            'certification': rating or ''
+            'certification': rating or '',
+            'total_episodes': total_episodes
         }
 
     except requests.exceptions.RequestException as e:
@@ -276,7 +278,7 @@ def check_anime_genre(genres, language):
 # HELPER FUNCTIONS
 # ============================================================================
 
-def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False):
+def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False, total_episodes=None):
     """
     Fetch the episode name from TMDb API for the given show, season, and episode number.
     For anime, use AniDB-style mapping for absolute episode numbers across seasons.
@@ -287,30 +289,32 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         episode_number (int): Episode number
         max_length (int): Maximum length for episode names
         force_anidb_style (bool): Force using AniDB-style mapping regardless of season number
+        total_episodes (int): Total episodes count from show data (optional)
 
     Returns:
-        tuple: (formatted_episode_name, mapped_season_number, mapped_episode_number)
+        tuple: (formatted_episode_name, mapped_season_number, mapped_episode_number, episode_title, total_episodes)
     """
     api_key = get_api_key()
     if not api_key:
         log_message("TMDb API key not found in environment variables.", level="ERROR")
-        return None, None, None
+        return None, None, None, None, None
 
     log_message(f"Getting episode name for show ID {show_id}, season {season_number}, episode {episode_number}", level="DEBUG")
 
     # Check if we need to force AniDB-style mapping
     if season_number is None or force_anidb_style:
         log_message(f"Season number is None or AniDB-style mapping forced - using absolute episode mapping", level="INFO")
-        return map_absolute_episode(show_id, episode_number, api_key, max_length)
+        return map_absolute_episode(show_id, episode_number, api_key, max_length, total_episodes)
 
+    # First try direct episode lookup
     try:
-        # First try direct episode lookup
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
         params = {'api_key': api_key, 'language': language_iso}
         response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
+        raw_episode_title = episode_name
 
         # Trim long episode names
         if len(episode_name) > max_length:
@@ -322,21 +326,21 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
 
         formatted_name = f"S{season_number:02d}E{episode_number:02d} - {episode_name}"
         log_message(f"Direct episode lookup successful: {formatted_name}", level="DEBUG")
-        return formatted_name, season_number, episode_number
+        return formatted_name, season_number, episode_number, raw_episode_title, total_episodes
 
     except requests.exceptions.HTTPError as e:
         if response.status_code == 404:
             log_message(f"Episode S{season_number}E{episode_number} not found in TMDB, using AniDB-style mapping", level="INFO")
-            return map_absolute_episode(show_id, episode_number, api_key, max_length)
+            return map_absolute_episode(show_id, episode_number, api_key, max_length, total_episodes)
         else:
             log_message(f"TMDB episode fetch failed - HTTP {response.status_code}: {e}", level="ERROR")
-            return None, None, None
+            return None, None, None, None, total_episodes
 
     except requests.exceptions.RequestException as e:
         log_message(f"TMDB episode fetch failed - Network error: {e}", level="ERROR")
-        return None, None, None
+        return None, None, None, None, total_episodes
 
-def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
+def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60, total_episodes=None):
     """
     Maps an absolute episode number to season and episode using AniDB-style mapping.
     With additional fallback for direct episode number lookup when mapping fails.
@@ -348,7 +352,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         max_length (int): Maximum length for episode names
 
     Returns:
-        tuple: (formatted_episode_name, mapped_season_number, mapped_episode_number)
+        tuple: (formatted_episode_name, mapped_season_number, mapped_episode_number, episode_title, total_episodes)
     """
     log_message(f"Mapping absolute episode {absolute_episode} for show ID {show_id}", level="DEBUG")
 
@@ -361,8 +365,11 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
         show_response.raise_for_status()
         show_data = show_response.json()
 
-        # Get number of seasons
+        # Get number of seasons from show data
         total_seasons = show_data.get('number_of_seasons', 0)
+        if total_episodes is None:
+            total_episodes = show_data.get('number_of_episodes', 0)
+        log_message(f"Show has {total_episodes} total episodes", level="DEBUG")
 
         # Initialize variables to track episode counting
         episode_counts_by_season = []
@@ -403,6 +410,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     if direct_response.status_code == 200:
                         direct_episode_data = direct_response.json()
                         direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
+                        raw_episode_title = direct_episode_name
 
                         if direct_episode_name and len(direct_episode_name) > max_length:
                             direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
@@ -413,7 +421,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                         formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                         log_message(f"Found direct episode match! Episode {absolute_episode} exists in season {season}", level="DEBUG")
-                        return formatted_name, season, int(absolute_episode)
+                        return formatted_name, season, int(absolute_episode), raw_episode_title, total_episodes
 
                 except requests.exceptions.RequestException as e:
                     log_message(f"Direct lookup failed for S{season}E{absolute_episode}: {e}", level="DEBUG")
@@ -446,6 +454,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                     mapped_response.raise_for_status()
                     mapped_episode_data = mapped_response.json()
                     mapped_episode_name = mapped_episode_data.get('name')
+                    raw_episode_title = mapped_episode_name
 
                     # Trim long episode names
                     if mapped_episode_name and len(mapped_episode_name) > max_length:
@@ -457,7 +466,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                     formatted_name = f"S{season:02d}E{current_episode:02d} - {mapped_episode_name}"
                     log_message(f"Mapped to: {formatted_name}", level="DEBUG")
-                    return formatted_name, season, current_episode
+                    return formatted_name, season, current_episode, raw_episode_title, total_episodes
 
                 except requests.exceptions.RequestException as e:
                     log_message(f"Error getting episode info for S{season}E{current_episode}: {e}", level="WARNING")
@@ -477,6 +486,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 if direct_response.status_code == 200:
                     direct_episode_data = direct_response.json()
                     direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
+                    raw_episode_title = direct_episode_name
 
                     if direct_episode_name and len(direct_episode_name) > max_length:
                         direct_episode_name = direct_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
@@ -487,7 +497,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                     formatted_name = f"S{season:02d}E{absolute_episode:02d} - {direct_episode_name}"
                     log_message(f"Second attempt found direct episode match! S{season}E{absolute_episode}", level="DEBUG")
-                    return formatted_name, season, int(absolute_episode)
+                    return formatted_name, season, int(absolute_episode), raw_episode_title, total_episodes
             except:
                 continue
 
@@ -515,6 +525,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             mapped_response.raise_for_status()
             mapped_episode_data = mapped_response.json()
             mapped_episode_name = mapped_episode_data.get('name', 'Unknown Episode')
+            raw_episode_title = mapped_episode_name
 
             if mapped_episode_name and len(mapped_episode_name) > max_length:
                 mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
@@ -524,11 +535,11 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
                 mapped_episode_name = sanitize_windows_filename(mapped_episode_name)
 
             formatted_name = f"S{last_season:02d}E{fallback_episode:02d} - {mapped_episode_name}"
-            return formatted_name, last_season, fallback_episode
+            return formatted_name, last_season, fallback_episode, raw_episode_title, total_episodes
 
         except requests.exceptions.RequestException:
             log_message(f"Could not get episode name for final fallback mapping", level="ERROR")
-            return f"S{last_season:02d}E{fallback_episode:02d}", last_season, fallback_episode
+            return f"S{last_season:02d}E{fallback_episode:02d}", last_season, fallback_episode, None, total_episodes
 
     except requests.exceptions.RequestException as se:
         log_message(f"Error fetching season data: {se}", level="ERROR")
@@ -543,6 +554,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
             if direct_response.status_code == 200:
                 direct_episode_data = direct_response.json()
                 direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
+                raw_episode_title = direct_episode_name
 
                 # Sanitize episode name for Windows compatibility
                 if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
@@ -550,13 +562,13 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60):
 
                 formatted_name = f"S01E{absolute_episode:02d} - {direct_episode_name}"
                 log_message(f"Final attempt found match at S01E{absolute_episode}", level="INFO")
-                return formatted_name, 1, int(absolute_episode)
+                return formatted_name, 1, int(absolute_episode), raw_episode_title, total_episodes
         except:
             pass
 
         # If everything fails, just return a basic season 1, episode X
         log_message(f"All approaches failed. Using S01E{absolute_episode} as last resort", level="WARNING")
-        return f"S01E{absolute_episode:02d}", 1, int(absolute_episode)
+        return f"S01E{absolute_episode:02d}", 1, int(absolute_episode), None, total_episodes
 
 
 
@@ -830,8 +842,8 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
         log_message(f"Auto-selected episode 1 of season {season_number}", level="INFO")
 
         episode_info = get_episode_name(tmdb_id, season_number, new_episode_number)
-        if episode_info:
-            log_message(f"Auto-selected: {episode_info}", level="INFO")
+        if episode_info and episode_info[0]:
+            log_message(f"Auto-selected: {episode_info[0]}", level="INFO")
         return new_episode_number
 
     display_available_episodes(episodes)
@@ -842,8 +854,8 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
             new_episode_number = int(ep_choice)
 
             episode_info = get_episode_name(tmdb_id, season_number, new_episode_number)
-            if episode_info:
-                log_message(f"Selected: {episode_info}", level="INFO")
+            if episode_info and episode_info[0]:
+                log_message(f"Selected: {episode_info[0]}", level="INFO")
             else:
                 log_message(f"Selected: S{season_number:02d}E{new_episode_number:02d}", level="INFO")
             return new_episode_number
@@ -964,7 +976,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     if is_anime_genre and new_episode_number is not None and new_season_number is None:
         log_message(f"Anime show with episode number but no season number - forcing AniDB-style mapping", level="DEBUG")
         if tmdb_id and new_episode_number:
-            episode_info, mapped_season, mapped_episode = get_episode_name(
+            episode_info, mapped_season, mapped_episode, episode_title, total_episodes = get_episode_name(
                 tmdb_id, None, new_episode_number, force_anidb_style=True
             )
             if mapped_season is not None:

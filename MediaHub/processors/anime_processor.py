@@ -186,6 +186,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     is_anime_genre = False
     imdb_id = None
     tvdb_id = None
+    episode_title = None
+    total_episodes = None
 
     # Retry logic for anime show name extraction
     max_retries = 2
@@ -287,6 +289,21 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         else:
             actual_episode = episode_number
 
+    if show_id and season_number and actual_episode and not is_extra:
+        try:
+            from MediaHub.api.tmdb_api_helpers import get_show_data
+            show_data = get_show_data(show_id)
+            total_episodes_from_show = show_data.get('total_episodes', 0) if show_data else 0
+            episode_result = get_episode_name(show_id, int(season_number), int(actual_episode), total_episodes=total_episodes_from_show)
+            if episode_result and len(episode_result) >= 5:
+                episode_name_result, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
+            else:
+                log_message(f"Failed to retrieve episode data or insufficient data returned", level="WARNING")
+        except Exception as e:
+            log_message(f"Error retrieving episode data: {e}", level="ERROR")
+    else:
+        log_message(f"Skipping episode data retrieval - show_id: {show_id}, season_number: {season_number}, actual_episode: {actual_episode}, is_extra: {is_extra}", level="DEBUG")
+
     if rename_enabled and show_id:
         try:
             try:
@@ -384,5 +401,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         'first_air_date': first_air_date,
         'last_air_date': last_air_date,
         'genres': genres,
-        'certification': certification
+        'certification': certification,
+        'total_episodes': total_episodes
     }
