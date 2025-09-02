@@ -80,7 +80,7 @@ func (c *SpoofingConfig) Validate() error {
 		c.Branch = "master"
 	}
 	if c.ServiceType == "" {
-		c.ServiceType = "radarr"
+		c.ServiceType = "auto"
 	}
 
 	// Validate service type
