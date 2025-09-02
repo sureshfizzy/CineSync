@@ -282,36 +282,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             log_message(f"TMDB search failed for show: {show_name} ({year}). Skipping show processing.", level="ERROR")
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for show: {show_name} ({year})")
             return None
-        elif isinstance(result, tuple) and len(result) >= 7:
-            if len(result) >= 18:
-                # New format with all metadata fields
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = result
-            elif len(result) >= 9:
-                # Format with external IDs but no additional metadata
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id = result[:9]
-                original_language = None
-                overview = ''
-                runtime = 0
-                original_title = ''
-                status = ''
-                first_air_date = ''
-                last_air_date = ''
-                genres = '[]'
-                certification = ''
-            else:
-                # Legacy format without external IDs
-                proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content = result
-                imdb_id = None
-                tvdb_id = None
-                original_language = None
-                overview = ''
-                runtime = 0
-                original_title = ''
-                status = ''
-                first_air_date = ''
-                last_air_date = ''
-                genres = '[]'
-                certification = ''
+        elif isinstance(result, tuple) and len(result) >= 18:
+            proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = result
 
             if season_number is not None:
                 season_number = str(season_number).zfill(2)

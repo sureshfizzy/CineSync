@@ -832,21 +832,7 @@ def process_file(args, force=False, batch_apply=False):
             # Handle show processor return format
             if len(result) >= 25:
                 dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification, episode_title, total_episodes = result
-            else:
-                # Legacy format
-                dest_file, tmdb_id, season_number, is_extra, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:13]
-                tvdb_id = None
-                original_language = None
-                overview = ''
-                runtime = 0
-                original_title = ''
-                status = ''
-                first_air_date = ''
-                last_air_date = ''
-                genres = '[]'
-                certification = ''
-                episode_title = None
-                total_episodes = None
+
             # Convert string episode number back to int if needed
             if episode_number_str:
                 try:
@@ -919,20 +905,8 @@ def process_file(args, force=False, batch_apply=False):
                     return
                 # Handle movie processor return format
                 if len(result) >= 18:
-                    # New format with all metadata fields
                     dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
-                else:
-                    # Legacy format with basic fields
-                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:11]
-                    # Initialize missing metadata fields
-                    original_language = None
-                    overview = ''
-                    runtime = 0
-                    original_title = ''
-                    status = ''
-                    release_date = ''
-                    genres = '[]'
-                    certification = ''
+
         elif not show_processed:
             # Not sports content, process as movie
             # For hash files, use parent folder metadata instead of file metadata
@@ -957,20 +931,7 @@ def process_file(args, force=False, batch_apply=False):
 
             # Handle movie processor return format
             if len(result) >= 18:
-                # New format with all metadata fields
                 dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
-            else:
-                # Legacy format with basic fields
-                dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result[:11]
-                # Initialize missing metadata fields
-                original_language = None
-                overview = ''
-                runtime = 0
-                original_title = ''
-                status = ''
-                release_date = ''
-                genres = '[]'
-                certification = ''
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
