@@ -638,7 +638,8 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 			MAX(processed_at) as latest_processed_at,
 			SUM(COALESCE(file_size, 0)) as total_file_size,
 			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
+			COALESCE(quality, '') as quality,
+			COALESCE(episode_title, '') as episode_title
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -660,10 +661,10 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 	var episodes []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality, episodeTitle string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality, &episodeTitle); err != nil {
 			continue
 		}
 
@@ -677,7 +678,7 @@ func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]int
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, language, quality)
+		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, language, quality, episodeTitle)
 		episodes = append(episodes, episode)
 	}
 
@@ -703,7 +704,8 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 			COALESCE(episode_number, '') as episode_number,
 			COALESCE(destination_path, '') as destination_path,
 			MAX(processed_at) as latest_processed_at,
-			SUM(COALESCE(file_size, 0)) as total_file_size
+			SUM(COALESCE(file_size, 0)) as total_file_size,
+			COALESCE(episode_title, '') as episode_title
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -726,10 +728,10 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 	var episodes []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, episodeTitle string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &episodeTitle); err != nil {
 			continue
 		}
 
@@ -743,7 +745,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 			processedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, "", "")
+		episode := createEpisodeResource(episodeID, seriesId, seasonNum, episodeNum, properName, destinationPath, processedTime, fileSize, "", "", episodeTitle)
 		episodes = append(episodes, episode)
 	}
 
@@ -751,8 +753,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 }
 
 // createEpisodeResource creates a properly formatted episode resource
-func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber int, seriesTitle, filePath string, airDate time.Time, fileSize int64, language, quality string) interface{} {
-	episodeTitle := extractEpisodeTitle(filePath, seasonNumber, episodeNumber)
+func createEpisodeResource(id int, seriesId string, seasonNumber, episodeNumber int, seriesTitle, filePath string, airDate time.Time, fileSize int64, language, quality, episodeTitle string) interface{} {
 	qualityObj := detectQualityFromDatabase(quality, filePath)
 	languages := getLanguagesFromDatabase(language)
 
@@ -824,7 +825,8 @@ func getEpisodeFilesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([
 			COALESCE(processed_at, '') as processed_at,
 			COALESCE(file_size, 0) as file_size,
 			COALESCE(language, '') as language,
-			COALESCE(quality, '') as quality
+			COALESCE(quality, '') as quality,
+			COALESCE(episode_title, '') as episode_title
 		FROM processed_files
 		WHERE UPPER(media_type) = 'TV'
 		AND destination_path IS NOT NULL
@@ -845,10 +847,10 @@ func getEpisodeFilesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([
 	var episodeFiles []interface{}
 
 	for rows.Next() {
-		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
+		var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality, episodeTitle string
 		var fileSize int64
 
-		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
+		if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality, &episodeTitle); err != nil {
 			continue
 		}
 
@@ -872,6 +874,7 @@ func getEpisodeFilesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([
 			"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
 			"quality":      qualityObj,
 			"languages": languages,
+			"title":        episodeTitle,
 		}
 
 		episodeFiles = append(episodeFiles, episodeFile)
@@ -904,7 +907,8 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 				COALESCE(processed_at, '') as processed_at,
 				COALESCE(file_size, 0) as file_size,
 				COALESCE(language, '') as language,
-				COALESCE(quality, '') as quality
+				COALESCE(quality, '') as quality,
+				COALESCE(episode_title, '') as episode_title
 			FROM processed_files
 			WHERE UPPER(media_type) = 'TV'
 			AND destination_path IS NOT NULL
@@ -926,10 +930,10 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		episodeFiles = []interface{}{}
 
 		for rows.Next() {
-			var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality string
+			var properName, seasonNumber, episodeNumber, destinationPath, processedAt, language, quality, episodeTitle string
 			var fileSize int64
 
-			if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality); err != nil {
+			if err := rows.Scan(&properName, &seasonNumber, &episodeNumber, &destinationPath, &processedAt, &fileSize, &language, &quality, &episodeTitle); err != nil {
 				continue
 			}
 
@@ -953,6 +957,7 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 				"dateAdded":    processedTime.Format("2006-01-02T15:04:05Z"),
 				"quality":      qualityObj,
 				"languages": languages,
+				"title":        episodeTitle,
 			}
 
 			episodeFiles = append(episodeFiles, episodeFile)
