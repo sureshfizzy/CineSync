@@ -2022,8 +2022,7 @@ def update_database_to_new_format(conn):
     First ensures schema is up to date, then populates missing metadata fields.
     """
     try:
-        import requests
-        
+
         cursor = conn.cursor()
         log_message("Starting database update with TMDB metadata fetch...", level="INFO")
         
@@ -2119,209 +2118,71 @@ def update_database_to_new_format(conn):
         
         log_message(f"Found {total_entries} entries for metadata update", level="INFO")
 
+        batch_size = get_db_batch_size()
+        max_workers = min(get_db_max_workers(), 20)
         updated_count = 0
         failed_count = 0
         
-        for i, (file_path, dest_path, tmdb_id, season_number, media_type, episode_number) in enumerate(entries_to_update, 1):
+        # Process entries in batches
+        for batch_start in range(0, total_entries, batch_size):
+            batch_end = min(batch_start + batch_size, total_entries)
+            batch = entries_to_update[batch_start:batch_end]
+            batch_number = (batch_start // batch_size) + 1
+            total_batches = (total_entries + batch_size - 1) // batch_size
+
+            log_message(f"Processing batch {batch_number}/{total_batches} ({len(batch)} entries)", level="INFO")
+            batch_updates = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_entry = {
+                    executor.submit(_process_single_entry, entry, api_key): entry 
+                    for entry in batch
+                }
+
+                # Collect results
+                for future in concurrent.futures.as_completed(future_to_entry):
+                    entry = future_to_entry[future]
+                    try:
+                        result = future.result()
+                        if result:
+                            batch_updates.append(result)
+                    except Exception as e:
+                        failed_count += 1
+                        file_path = entry[0] if entry else "Unknown"
+                        log_message(f"Error processing entry {file_path}: {e}", level="ERROR")
+
             try:
-                log_message(f"Updating entry {i}/{total_entries}: {file_path}", level="INFO")
+                updated_in_batch = 0
+                for update_data in batch_updates:
+                    file_path = update_data['file_path']
+                    updates = update_data['updates']
 
-                is_tv_show = False
-                if media_type:
-                    is_tv_show = media_type.lower() in ['tv', 'tv show', 'anime']
-                elif dest_path:
-                    dest_lower = dest_path.lower()
-                    is_tv_show = 'tv' in dest_lower or 'show' in dest_lower or 'anime' in dest_lower
-                elif season_number:
-                    is_tv_show = True
-                
-                # Fetch metadata from TMDB
-                metadata = None
-                if tmdb_id and tmdb_id != '':
-                    if is_tv_show:
-                        log_message(f"Fetching TV show metadata for TMDB ID: {tmdb_id}", level="DEBUG")
-                        url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=content_ratings"
-                    else:
-                        log_message(f"Fetching movie metadata for TMDB ID: {tmdb_id}", level="DEBUG")
-                        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=release_dates"
-                    try:
-                        response = requests.get(url, timeout=10)
-                        if response.status_code == 200:
-                            metadata = response.json()
-                        else:
-                            log_message(f"TMDB API returned status {response.status_code} for ID {tmdb_id}", level="WARNING")
-                    except requests.RequestException as e:
-                        log_message(f"Request failed for TMDB ID {tmdb_id}: {e}", level="WARNING")
-                else:
-                    log_message(f"No TMDB ID available for entry, updating local metadata only", level="DEBUG")
-                
-                # Prepare update values
-                updates = {}
+                    if updates:
+                        set_clauses = [f"{key} = ?" for key in updates.keys()]
+                        values = list(updates.values()) + [file_path]
 
-                # Extract metadata fields
-                if metadata:
-                    if metadata.get('title') or metadata.get('name'):
-                        updates['proper_name'] = metadata.get('title') or metadata.get('name')
-                    
-                    if metadata.get('release_date'):
-                        release_year = metadata['release_date'][:4] if len(metadata['release_date']) >= 4 else None
-                        if release_year:
-                            updates['year'] = release_year
-                            updates['release_date'] = metadata['release_date']
-                    elif metadata.get('first_air_date'):
-                        release_year = metadata['first_air_date'][:4] if len(metadata['first_air_date']) >= 4 else None
-                        if release_year:
-                            updates['year'] = release_year
-                            updates['first_air_date'] = metadata['first_air_date']
+                        cursor.execute(f"""
+                            UPDATE processed_files
+                            SET {', '.join(set_clauses)}
+                            WHERE file_path = ?
+                        """, values)
 
-                    # Handle last_air_date for TV shows
-                    if metadata.get('last_air_date'):
-                        updates['last_air_date'] = metadata['last_air_date']
-                    
-                    if metadata.get('imdb_id'):
-                        updates['imdb_id'] = metadata['imdb_id']
-                    
-                    if metadata.get('overview'):
-                        updates['overview'] = metadata['overview']
-                    
-                    if metadata.get('original_language'):
-                        updates['original_language'] = metadata['original_language']
-                    
-                    if metadata.get('original_title'):
-                        updates['original_title'] = metadata['original_title']
-                    elif metadata.get('original_name'):
-                        updates['original_title'] = metadata['original_name']
-                    
-                    if metadata.get('status'):
-                        updates['status'] = metadata['status']
-                    
-                    if metadata.get('runtime'):
-                        updates['runtime'] = metadata['runtime']
-                    elif metadata.get('episode_run_time') and metadata['episode_run_time']:
-                        updates['runtime'] = metadata['episode_run_time'][0]
-                    
-                    if metadata.get('genres'):
-                        genre_names = [g['name'] for g in metadata['genres'] if isinstance(g, dict) and 'name' in g]
-                        if genre_names:
-                            updates['genres'] = ', '.join(genre_names)
-                    
-                    # Set media type if not already set
-                    if not media_type:
-                        updates['media_type'] = 'TV Show' if is_tv_show else 'Movie'
-                    
-                    # Check if it's anime based on genres
-                    if metadata.get('genres'):
-                        genre_names = [g['name'].lower() for g in metadata['genres'] if isinstance(g, dict) and 'name' in g]
-                        if 'animation' in genre_names:
-                            # Check origin country for anime detection
-                            if metadata.get('origin_country') and 'JP' in metadata.get('origin_country'):
-                                updates['is_anime_genre'] = 1
-                                if not media_type or 'anime' not in media_type.lower():
-                                    updates['media_type'] = 'Anime'
-                    
-                    # For TV shows, get total episodes and certification
-                    if is_tv_show:
-                        if metadata.get('number_of_episodes'):
-                            updates['total_episodes'] = metadata['number_of_episodes']
-                        
-                        # Get content ratings for certification
-                        content_ratings = metadata.get('content_ratings', {}).get('results', [])
-                        for rating in content_ratings:
-                            if rating.get('iso_3166_1') == 'US':
-                                updates['certification'] = rating.get('rating', '')
-                                break
-                        if 'certification' not in updates and content_ratings:
-                            updates['certification'] = content_ratings[0].get('rating', '')
-                        
-                        # For TV episodes, get episode title
-                        if season_number and episode_number and tmdb_id:
-                            try:
-                                try:
-                                    season_num = int(season_number) if season_number and season_number.isdigit() else None
-                                    episode_num = int(episode_number) if episode_number and episode_number.isdigit() else None
+                        updated_in_batch += 1
+                        if updated_in_batch <= 3:
+                            log_message(f"Updated metadata for: {updates.get('proper_name', file_path)}", level="DEBUG")
 
-                                    if season_num is not None and episode_num is not None:
-                                        total_episodes_count = metadata.get('number_of_episodes', 0)
+                conn.commit()
+                updated_count += updated_in_batch
+                log_message(f"Batch {batch_number} completed: {updated_in_batch} entries updated", level="INFO")
 
-                                        # Get episode name from TMDB
-                                        formatted_name, mapped_season, mapped_episode, episode_title, total_episodes = get_episode_name(
-                                            int(tmdb_id), season_num, episode_num, max_length=60, force_anidb_style=False,
-                                            total_episodes=total_episodes_count
-                                        )
-
-                                        if episode_title:
-                                            updates['episode_title'] = episode_title
-                                            log_message(f"Episode title updated: {episode_title}", level="DEBUG")
-
-                                        # Use total episodes from API if available and different
-                                        if total_episodes and total_episodes != total_episodes_count:
-                                            updates['total_episodes'] = total_episodes
-                                            log_message(f"Total episodes updated: {total_episodes}", level="DEBUG")
-
-                                except ValueError as e:
-                                    log_message(f"Could not parse season or episode number for {file_path}: {e}", level="WARNING")
-                            except Exception as e:
-                                log_message(f"Error fetching episode title for {file_path}: {e}", level="WARNING")
-
-                    elif not is_tv_show:
-                        release_dates = metadata.get('release_dates', {}).get('results', [])
-                        for release in release_dates:
-                            if release.get('iso_3166_1') == 'US':
-                                for cert in release.get('release_dates', []):
-                                    if cert.get('certification'):
-                                        updates['certification'] = cert.get('certification', '')
-                                        break
-                                if 'certification' in updates:
-                                    break
-
-                        if 'certification' not in updates and release_dates:
-                            for release in release_dates:
-                                for cert in release.get('release_dates', []):
-                                    if cert.get('certification'):
-                                        updates['certification'] = cert.get('certification', '')
-                                        break
-                                if 'certification' in updates:
-                                    break
-
-                # Add file size and base_path if missing
-                if file_path and os.path.exists(file_path):
-                    try:
-                        file_size = os.path.getsize(file_path)
-                        updates['file_size'] = file_size
-                    except (OSError, IOError):
-                        pass
-
-                if dest_path:
-                    base_path = extract_base_path_from_destination_path(dest_path)
-                    if base_path:
-                        updates['base_path'] = base_path
-
-                # Apply updates to database
-                if updates:
-                    set_clauses = [f"{key} = ?" for key in updates.keys()]
-                    values = list(updates.values()) + [file_path]
-
-                    cursor.execute(f"""
-                        UPDATE processed_files
-                        SET {', '.join(set_clauses)}
-                        WHERE file_path = ?
-                    """, values)
-
-                    updated_count += 1
-                    log_message(f"Updated metadata for: {updates.get('proper_name', file_path)}", level="DEBUG")
-                else:
-                    log_message(f"No metadata updates needed for entry: {file_path}", level="DEBUG")
-
-                if i % 10 == 0:
-                    conn.commit()
-                    log_message(f"Progress: {i}/{total_entries} entries processed", level="INFO")
-            
             except Exception as e:
-                failed_count += 1
-                log_message(f"Error updating entry {file_path}: {e}", level="ERROR")
-                continue
+                conn.rollback()
+                failed_count += len(batch)
+                log_message(f"Error applying batch {batch_number} updates: {e}", level="ERROR")
 
-        conn.commit()
+            # Progress reporting
+            processed_so_far = min(batch_end, total_entries)
+            log_message(f"Progress: {processed_so_far}/{total_entries} entries processed ({(processed_so_far/total_entries)*100:.1f}%)", level="INFO")
+            time.sleep(0.1)
 
         log_message("Creating database indexes...", level="INFO")
         indexes = [
@@ -2330,13 +2191,13 @@ def update_database_to_new_format(conn):
             "CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)",
             "CREATE INDEX IF NOT EXISTS idx_media_type ON processed_files(media_type)"
         ]
-        
+
         for index_sql in indexes:
             try:
                 cursor.execute(index_sql)
             except sqlite3.OperationalError:
-                pass  # Index might already exist
-        
+                pass
+
         conn.commit()
 
         log_message(f"Database update completed!", level="INFO")
@@ -2344,10 +2205,191 @@ def update_database_to_new_format(conn):
         log_message(f"Successfully updated: {updated_count}", level="INFO")
         log_message(f"Failed updates: {failed_count}", level="INFO")
         log_message(f"Success rate: {(updated_count/total_entries)*100:.1f}%" if total_entries > 0 else "Success rate: 100%", level="INFO")
-        
+
         return True
-        
+
     except Exception as e:
         log_message(f"Error during database update: {e}", level="ERROR")
         conn.rollback()
         return False
+
+def _process_single_entry(entry, api_key):
+    """
+    Process a single database entry to fetch and prepare metadata updates.
+    This function is designed to be run in parallel threads.
+    """
+    try:
+        file_path, dest_path, tmdb_id, season_number, media_type, episode_number = entry
+
+        is_tv_show = False
+        if media_type:
+            is_tv_show = media_type.lower() in ['tv', 'tv show', 'anime']
+        elif dest_path:
+            dest_lower = dest_path.lower()
+            is_tv_show = 'tv' in dest_lower or 'show' in dest_lower or 'anime' in dest_lower
+        elif season_number:
+            is_tv_show = True
+
+        # Fetch metadata from TMDB
+        metadata = None
+        if tmdb_id and tmdb_id != '':
+            try:
+                if is_tv_show:
+                    url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=content_ratings"
+                else:
+                    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=release_dates"
+                
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    metadata = response.json()
+                else:
+                    log_message(f"TMDB API returned status {response.status_code} for ID {tmdb_id}", level="WARNING")
+            except requests.RequestException as e:
+                log_message(f"Request failed for TMDB ID {tmdb_id}: {e}", level="WARNING")
+
+        # Prepare update values
+        updates = {}
+
+        # Extract metadata fields
+        if metadata:
+            if metadata.get('title') or metadata.get('name'):
+                updates['proper_name'] = metadata.get('title') or metadata.get('name')
+
+            if metadata.get('release_date'):
+                release_year = metadata['release_date'][:4] if len(metadata['release_date']) >= 4 else None
+                if release_year:
+                    updates['year'] = release_year
+                    updates['release_date'] = metadata['release_date']
+            elif metadata.get('first_air_date'):
+                release_year = metadata['first_air_date'][:4] if len(metadata['first_air_date']) >= 4 else None
+                if release_year:
+                    updates['year'] = release_year
+                    updates['first_air_date'] = metadata['first_air_date']
+
+            # Handle last_air_date for TV shows
+            if metadata.get('last_air_date'):
+                updates['last_air_date'] = metadata['last_air_date']
+
+            if metadata.get('imdb_id'):
+                updates['imdb_id'] = metadata['imdb_id']
+
+            if metadata.get('overview'):
+                updates['overview'] = metadata['overview']
+
+            if metadata.get('original_language'):
+                updates['original_language'] = metadata['original_language']
+
+            if metadata.get('original_title'):
+                updates['original_title'] = metadata['original_title']
+            elif metadata.get('original_name'):
+                updates['original_title'] = metadata['original_name']
+
+            if metadata.get('status'):
+                updates['status'] = metadata['status']
+
+            if metadata.get('runtime'):
+                updates['runtime'] = metadata['runtime']
+            elif metadata.get('episode_run_time') and metadata['episode_run_time']:
+                updates['runtime'] = metadata['episode_run_time'][0]
+
+            if metadata.get('genres'):
+                genre_names = [g['name'] for g in metadata['genres'] if isinstance(g, dict) and 'name' in g]
+                if genre_names:
+                    updates['genres'] = ', '.join(genre_names)
+
+            # Set media type if not already set
+            if not media_type:
+                updates['media_type'] = 'TV Show' if is_tv_show else 'Movie'
+
+            # Check if it's anime based on genres
+            if metadata.get('genres'):
+                genre_names = [g['name'].lower() for g in metadata['genres'] if isinstance(g, dict) and 'name' in g]
+                if 'animation' in genre_names:
+                    # Check origin country for anime detection
+                    if metadata.get('origin_country') and 'JP' in metadata.get('origin_country'):
+                        updates['is_anime_genre'] = 1
+                        if not media_type or 'anime' not in media_type.lower():
+                            updates['media_type'] = 'Anime'
+
+            # For TV shows, get total episodes and certification
+            if is_tv_show:
+                if metadata.get('number_of_episodes'):
+                    updates['total_episodes'] = metadata['number_of_episodes']
+
+                # Get content ratings for certification
+                content_ratings = metadata.get('content_ratings', {}).get('results', [])
+                for rating in content_ratings:
+                    if rating.get('iso_3166_1') == 'US':
+                        updates['certification'] = rating.get('rating', '')
+                        break
+                if 'certification' not in updates and content_ratings:
+                    updates['certification'] = content_ratings[0].get('rating', '')
+
+                # For TV episodes, get episode title
+                if season_number and episode_number and tmdb_id:
+                    try:
+                        season_num = int(season_number) if season_number and season_number.isdigit() else None
+                        episode_num = int(episode_number) if episode_number and episode_number.isdigit() else None
+
+                        if season_num is not None and episode_num is not None:
+                            total_episodes_count = metadata.get('number_of_episodes', 0)
+
+                            # Get episode name from TMDB
+                            formatted_name, mapped_season, mapped_episode, episode_title, total_episodes = get_episode_name(
+                                int(tmdb_id), season_num, episode_num, max_length=60, force_anidb_style=False,
+                                total_episodes=total_episodes_count
+                            )
+
+                            if episode_title:
+                                updates['episode_title'] = episode_title
+
+                            # Use total episodes from API if available and different
+                            if total_episodes and total_episodes != total_episodes_count:
+                                updates['total_episodes'] = total_episodes
+
+                    except ValueError as e:
+                        log_message(f"Could not parse season or episode number for {file_path}: {e}", level="WARNING")
+                    except Exception as e:
+                        log_message(f"Error fetching episode title for {file_path}: {e}", level="WARNING")
+
+            elif not is_tv_show:
+                release_dates = metadata.get('release_dates', {}).get('results', [])
+                for release in release_dates:
+                    if release.get('iso_3166_1') == 'US':
+                        for cert in release.get('release_dates', []):
+                            if cert.get('certification'):
+                                updates['certification'] = cert.get('certification', '')
+                                break
+                        if 'certification' in updates:
+                            break
+
+                if 'certification' not in updates and release_dates:
+                    for release in release_dates:
+                        for cert in release.get('release_dates', []):
+                            if cert.get('certification'):
+                                updates['certification'] = cert.get('certification', '')
+                                break
+                        if 'certification' in updates:
+                            break
+
+        # Add file size and base_path if missing
+        if file_path and os.path.exists(file_path):
+            try:
+                file_size = os.path.getsize(file_path)
+                updates['file_size'] = file_size
+            except (OSError, IOError):
+                pass
+
+        if dest_path:
+            base_path = extract_base_path_from_destination_path(dest_path)
+            if base_path:
+                updates['base_path'] = base_path
+
+        return {
+            'file_path': file_path,
+            'updates': updates
+        }
+
+    except Exception as e:
+        log_message(f"Error processing single entry: {e}", level="ERROR")
+        return None
