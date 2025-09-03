@@ -1,7 +1,6 @@
 import os
 import re
 import json
-from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import *
 from MediaHub.api.sportsdb_api import search_sports_content
 from MediaHub.utils.logging_utils import log_message

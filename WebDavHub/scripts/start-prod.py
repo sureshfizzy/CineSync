@@ -25,6 +25,9 @@ import psutil
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
+# Add MediaHub to path for importing env_creator
+sys.path.append(str(Path(__file__).parent.parent.parent / "MediaHub"))
+from utils.env_creator import get_env_file_path
 
 class WebDavHubProductionServer:
     def __init__(self):
@@ -64,20 +67,10 @@ class WebDavHubProductionServer:
 
     def load_environment_variables(self):
         """Load environment variables from .env file"""
-        env_file_paths = [
-            Path("../../.env"),
-            Path("../.env"),
-            Path("/app/.env"),
-            Path(".env")
-        ]
+        env_file_path = get_env_file_path()
+        env_file = Path(env_file_path)
 
-        env_file = None
-        for path in env_file_paths:
-            if path.exists():
-                env_file = path
-                break
-
-        if env_file:
+        if env_file.exists():
             self._parse_env_file(env_file)
         else:
             print("Warning: No .env file found. Using default values.")

@@ -13,8 +13,9 @@ import re
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.config.config import (
     get_db_throttle_rate, get_db_max_retries, get_db_retry_delay,
     get_db_batch_size, get_db_max_workers, get_db_max_records,
@@ -35,11 +36,8 @@ def format_file_size(size):
 from MediaHub.utils.dashboard_utils import send_dashboard_notification
 
 # Load environment variables
-dotenv_path = find_dotenv('../.env')
-if not dotenv_path:
-    print("Warning: .env file not found. Using environment variables only.")
-else:
-    load_dotenv(dotenv_path)
+db_env_path = get_env_file_path()
+load_dotenv(db_env_path)
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")

@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
+from MediaHub.utils.env_creator import get_env_file_path
 
 def setup_logging(log_folder):
     if not os.path.exists(log_folder):
@@ -23,16 +24,12 @@ def read_directories(config_file):
     return directories
 
 def get_fallback_directory(env_file):
-    if os.path.isfile(env_file):
-        load_dotenv(env_file)
-        destination_dir = os.getenv('DESTINATION_DIR')
-        if destination_dir:
-            return [destination_dir]
-        else:
-            logging.error(f"Destination_dir not found in {env_file}")
-            sys.exit(1)
+    load_dotenv(env_file)
+    destination_dir = os.getenv('DESTINATION_DIR')
+    if destination_dir:
+        return [destination_dir]
     else:
-        logging.error(f".env file not found: {env_file}")
+        logging.error(f"Destination_dir not found in {env_file}")
         sys.exit(1)
 
 def find_broken_symlinks(directory):
@@ -50,7 +47,8 @@ def main():
     broken_links_folder = os.path.join(script_dir, '..', '..', 'BrokenLinkVault')
     logs_folder = os.path.join(broken_links_folder, 'logs')
     config_file = os.path.join(broken_links_folder, 'broken_links_config.txt')
-    env_file = os.path.join(script_dir, '..', '..', '.env')
+    env_file = get_env_file_path()
+    load_dotenv(env_file)
 
     # Create directories
     if not os.path.exists(broken_links_folder):

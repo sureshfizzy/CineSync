@@ -2,7 +2,6 @@ import os
 import re
 import requests
 import sys
-from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import extract_resolution_from_filename, clean_query, extract_year, extract_resolution_from_folder
 from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
 from MediaHub.processors.movie_processor import process_movie

@@ -11,7 +11,7 @@ import threading
 import traceback
 import io
 import time
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
 if hasattr(sys.stdout, 'buffer'):
@@ -48,13 +48,9 @@ background_processes = []
 if not ensure_env_file_exists():
     print("Failed to create .env file. Continuing with environment variables only.")
 
-# Load .env file from the parent directory
-dotenv_path = find_dotenv('../.env')
-if not dotenv_path:
-    print("Error: .env file not found in the parent directory.")
-    exit(1)
-
-load_dotenv(dotenv_path)
+# Load .env file
+db_env_path = get_env_file_path()
+load_dotenv(db_env_path)
 
 def wait_for_mount():
     """Wait for the rclone mount to become available with minimal logging."""

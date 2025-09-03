@@ -3,7 +3,7 @@ import os
 def get_env_file_path():
     """Get the path to the .env file, similar to Go implementation."""
     if os.path.exists('/.dockerenv') or os.getenv('CONTAINER') == 'docker':
-        return '/app/.env'
+        return '/app/db/.env'
 
     cwd = os.getcwd()
     basename = os.path.basename(cwd)
@@ -11,9 +11,9 @@ def get_env_file_path():
     # Handle both MediaHub and WebDavHub directories (for Python bridge execution)
     if basename == 'MediaHub' or basename == 'WebDavHub':
         parent_dir = os.path.dirname(cwd)
-        return os.path.join(parent_dir, '.env')
+        return os.path.join(parent_dir, 'db', '.env')
 
-    return os.path.join(cwd, '.env')
+    return os.path.join(cwd, 'db', '.env')
 
 
 def create_env_file_from_environment():

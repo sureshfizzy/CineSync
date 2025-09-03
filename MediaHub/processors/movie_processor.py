@@ -2,7 +2,6 @@ import os
 import re
 import json
 import requests
-from dotenv import load_dotenv, find_dotenv
 from MediaHub.utils.file_utils import *
 from MediaHub.api.tmdb_api import search_movie, determine_tmdb_media_type
 from MediaHub.utils.logging_utils import log_message

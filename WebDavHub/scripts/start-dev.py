@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 CineSync Development Start Script
-==================================
+=================================
 
-This script starts the CineSync development servers:
-- Starts Go backend server for API
-- Starts React frontend development server with hot reload
-- Both servers run in the same terminal with proper logging
+This script starts the CineSync development server:
+- Serves both frontend and backend on configured ports
+- Frontend is served with hot reload via Vite
+- Backend API is available at /api/
 
 Usage: python start-dev.py
        python start-dev.py --help
@@ -25,6 +25,9 @@ import psutil
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
+# Add MediaHub to path for importing env_creator
+sys.path.append(str(Path(__file__).parent.parent.parent / "MediaHub"))
+from utils.env_creator import get_env_file_path
 
 class WebDavHubDevelopmentServer:
     def __init__(self):
@@ -55,32 +58,19 @@ class WebDavHubDevelopmentServer:
 
         args = parser.parse_args()
 
-    def setup_signal_handlers(self):
-        """Setup signal handlers for graceful shutdown"""
-        def signal_handler(signum, frame):
-            print(f"\n🛑 Received signal {signum}, shutting down servers...")
-            self.cleanup()
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+    def setup_working_directory(self):
+        """Change to WebDavHub directory (2 folders back from script location)"""
+        script_dir = Path(__file__).parent.absolute()
+        webdavhub_dir = script_dir.parent
+        os.chdir(webdavhub_dir)
+        print(f"Working directory: {webdavhub_dir}")
 
     def load_environment_variables(self):
         """Load environment variables from .env file"""
-        env_file_paths = [
-            Path("../../.env"),
-            Path("../.env"),
-            Path("/app/.env"),
-            Path(".env")
-        ]
+        env_file_path = get_env_file_path()
+        env_file = Path(env_file_path)
 
-        env_file = None
-        for path in env_file_paths:
-            if path.exists():
-                env_file = path
-                break
-
-        if env_file:
+        if env_file.exists():
             self._parse_env_file(env_file)
         else:
             print("Warning: No .env file found. Using default values.")
@@ -114,13 +104,6 @@ class WebDavHubDevelopmentServer:
             print(f"✅ Loaded environment variables from {env_file}")
         except Exception as e:
             print(f"⚠️  Warning: Could not parse .env file {env_file}: {e}")
-
-    def setup_working_directory(self):
-        """Change to WebDavHub directory (2 folders back from script location)"""
-        script_dir = Path(__file__).parent.absolute()
-        webdavhub_dir = script_dir.parent
-        os.chdir(webdavhub_dir)
-        print(f"Working directory: {webdavhub_dir}")
 
     def check_prerequisites(self):
         """Check if required files and dependencies exist"""
@@ -320,9 +303,6 @@ class WebDavHubDevelopmentServer:
 
             # Parse command line arguments
             self.parse_arguments()
-
-            # Setup signal handlers
-            self.setup_signal_handlers()
 
             # Setup working directory
             self.setup_working_directory()

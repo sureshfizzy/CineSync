@@ -3,7 +3,7 @@ import time
 import subprocess
 import sys
 import signal
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event
 
@@ -12,6 +12,7 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(base_dir)
 
 # Local imports from MediaHub
+from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.processors.db_utils import *
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
@@ -21,12 +22,9 @@ from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_e
 from MediaHub.utils.webdav_api import send_source_file_update
 import requests
 
-# Load .env file from the parent directory
-dotenv_path = find_dotenv('../.env')
-if not dotenv_path:
-    print("Warning: .env file not found. Using environment variables only.")
-else:
-    load_dotenv(dotenv_path)
+# Load .env file
+db_env_path = get_env_file_path()
+load_dotenv(db_env_path)
 
 # Add state variables for mount status tracking
 mount_state = None

@@ -2,25 +2,18 @@ package env
 
 import (
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/joho/godotenv"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/config"
 )
 
 // LoadEnv loads environment variables from .env file
 func LoadEnv() {
-    cwd, err := os.Getwd()
-    if err != nil {
-        logger.Warn("Could not determine current working directory.")
-        return
-    }
+    envPath := config.GetEnvFilePath()
 
-    parentDir := filepath.Dir(cwd)
-    envPath := filepath.Join(parentDir, ".env")
-
-    err = godotenv.Load(envPath)
+    err := godotenv.Load(envPath)
     if err != nil {
         logger.Warn("Could not load .env from %s. Using defaults.", envPath)
     } else {
@@ -28,21 +21,12 @@ func LoadEnv() {
     }
 }
 
-
-
 // ReloadEnv reloads environment variables from .env file at runtime
 func ReloadEnv() error {
-    cwd, err := os.Getwd()
-    if err != nil {
-        logger.Warn("Could not determine current working directory.")
-        return err
-    }
-
-    parentDir := filepath.Dir(cwd)
-    envPath := filepath.Join(parentDir, ".env")
+    envPath := config.GetEnvFilePath()
 
     // Load new environment variables - use Overload to override existing values
-    err = godotenv.Overload(envPath)
+    err := godotenv.Overload(envPath)
     if err != nil {
         logger.Warn("Could not reload .env from %s", envPath)
         return err
@@ -51,8 +35,6 @@ func ReloadEnv() error {
     logger.Info("Environment variables reloaded successfully from %s", envPath)
     return nil
 }
-
-
 
 // GetString returns the environment variable value or a default if not set
 func GetString(key string, defaultValue string) string {

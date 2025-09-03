@@ -120,8 +120,8 @@ func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Load .env from one directory above
-	dotenvPath := filepath.Join("..", ".env")
+	// Load .env from db directory
+	dotenvPath := config.GetEnvFilePath()
 	_ = godotenv.Load(dotenvPath)
 
 	// Initialize logger early so we can use it for warnings

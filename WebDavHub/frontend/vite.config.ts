@@ -3,8 +3,24 @@ import react from '@vitejs/plugin-react';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
-// Load .env from one directory above WebDavHub
-const envPath = path.resolve(__dirname, '../.env');
+// Load .env from db directory
+function getEnvFilePath(): string {
+  if (process.env.CONTAINER === 'docker') {
+    return path.resolve('/app/db/.env');
+  }
+
+  const cwd = process.cwd();
+  const basename = path.basename(cwd);
+
+  if (basename === 'WebDavHub' || basename === 'MediaHub') {
+    const parentDir = path.dirname(cwd);
+    return path.join(parentDir, 'db', '.env');
+  }
+
+  return path.join(cwd, 'db', '.env');
+}
+
+const envPath = getEnvFilePath();
 dotenv.config({ path: envPath });
 
 const uiPort = process.env.CINESYNC_UI_PORT ? parseInt(process.env.CINESYNC_UI_PORT, 10) : 5173;

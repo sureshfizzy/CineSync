@@ -5,6 +5,7 @@ import requests
 import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.env_creator import get_env_file_path
 
 # Beta features that are currently disabled (HARDCODED)
 BETA_DISABLED_FEATURES = {
@@ -104,7 +105,7 @@ def get_env_float(key, default):
         return default
 
 # Load .env file
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+dotenv_path = get_env_file_path()
 load_dotenv(dotenv_path)
 
 def get_directories():

@@ -59,25 +59,33 @@ type UpdateConfigRequest struct {
 // getEnvFilePath returns the path to the .env file
 func getEnvFilePath() string {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return "/app/.env"
+		return "/app/db/.env"
 	}
 
 	if os.Getenv("CONTAINER") == "docker" {
-		return "/app/.env"
+		return "/app/db/.env"
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
 		logger.Warn("Could not determine current working directory.")
-		return "../.env"
+		return "../db/.env"
 	}
 
-	if filepath.Base(cwd) == "WebDavHub" {
+	basename := filepath.Base(cwd)
+
+	// Handle both MediaHub and WebDavHub directories
+	if basename == "MediaHub" || basename == "WebDavHub" {
 		parentDir := filepath.Dir(cwd)
-		return filepath.Join(parentDir, ".env")
+		return filepath.Join(parentDir, "db", ".env")
 	}
 
-	return filepath.Join(cwd, ".env")
+	return filepath.Join(cwd, "db", ".env")
+}
+
+// GetEnvFilePath returns the path to the .env file
+func GetEnvFilePath() string {
+	return getEnvFilePath()
 }
 
 // isConfigLocked checks if a configuration key is locked

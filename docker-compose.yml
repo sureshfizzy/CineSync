@@ -13,4 +13,3 @@ services:
       - /home:/home  # Mount home directory to provide access to home files
       - /mnt:/mnt  # Mount /mnt for access to external storage
       - ./db:/app/db  # Mount local db folder to persist database files
-      - ./.env:/app/.env

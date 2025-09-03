@@ -148,7 +148,6 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
         max_workers = get_db_max_workers()
         throttle_rate = get_db_throttle_rate()
         connection_timeout = get_db_connection_timeout()
-        log_message(f"delete_broken_symlinks using DB config: batch_size={batch_size}, max_workers={max_workers}, throttle_rate={throttle_rate}, timeout={connection_timeout}", level="DEBUG")
         delete_broken_symlinks._config_logged = True
     try:
         connection_timeout = get_db_connection_timeout()
