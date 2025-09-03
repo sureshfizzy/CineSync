@@ -114,7 +114,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         # Format the proper movie name
         proper_movie_name = f"{proper_name} ({year})"
         if is_tmdb_folder_id_enabled() and tmdb_id:
-            proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+            proper_movie_name += f" [tmdbid-{tmdb_id}]"
 
         # Get collection info if enabled
         if is_movie_collection_enabled() and tmdb_id:
@@ -154,7 +154,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled():
-                proper_movie_name += f" {{tmdb-{tmdb_id}}}"
+                proper_movie_name += f" [tmdbid-{tmdb_id}]"
 
             # Get collection info from optimized movie data
             if tmdb_id:
@@ -190,9 +190,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             year = result[3] if result[3] is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
-                proper_movie_name += f" {{tmdbid-{tmdb_id}}}"
+                proper_movie_name += f" [tmdbid-{tmdb_id}]"
             if is_imdb_folder_id_enabled() and imdb_id:
-                proper_movie_name += f" {{imdbid-{imdb_id}}}"
+                proper_movie_name += f" [imdbid-{imdb_id}]"
 
             # Get TMDB language as fallback if not available from file metadata
             if not language and tmdb_id:
@@ -218,9 +218,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             certification = ''
             
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
-                proper_movie_name += f" {{imdb-{result['imdb_id']}}}"
+                proper_movie_name += f" [imdbid-{result['imdb_id']}]"
             elif is_tmdb_folder_id_enabled():
-                proper_movie_name += f" {{tmdb-{result['id']}}}"
+                proper_movie_name += f" [tmdbid-{result['id']}]"
 
             # Get TMDB language as fallback if not available from file metadata
             if not language and result.get('id'):
@@ -253,7 +253,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_name, collection_id = collection_info
             log_message(f"Movie belongs to collection: {collection_name}", level="INFO")
             resolution_folder = get_movie_collections_folder()
-            collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
+            collection_folder = f"{collection_name} [tmdbid-{collection_id}]"
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
             if is_cinesync_layout_enabled():
@@ -305,17 +305,17 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             collection_name, collection_id = collection_info
             log_message(f"Movie belongs to collection: {collection_name}", level="INFO")
             resolution_folder = 'Movie Collections'
-            collection_folder = f"{collection_name} {{tmdbid-{collection_id}}}"
+            collection_folder = f"{collection_name} [tmdbid-{collection_id}]"
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
         else:
             movie_folder = proper_movie_name
 
             if not is_imdb_folder_id_enabled():
-                movie_folder = re.sub(r' \{imdbid-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \[imdbid-[^\]]+\]', '', movie_folder)
             if not is_tvdb_folder_id_enabled():
-                movie_folder = re.sub(r' \{tvdbid-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \[tvdbid-[^\]]+\]', '', movie_folder)
             if not tmdb_folder_id_enabled:
-                movie_folder = re.sub(r' \{tmdbid-[^}]+\}', '', movie_folder)
+                movie_folder = re.sub(r' \[tmdbid-[^\]]+\]', '', movie_folder)
 
             movie_folder = movie_folder.replace('/', '')
 
@@ -399,7 +399,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 media_info['ImdbId'] = str(imdb_id)
 
             # Remove IDs from movie name for Radarr
-            clean_movie_name_for_radarr = re.sub(r' \{(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-[^}]+\}', '', proper_movie_name)
+            clean_movie_name_for_radarr = re.sub(r' \[(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-[^\]]+\]', '', proper_movie_name)
             clean_movie_name_for_radarr = re.sub(r' \(\d{4}\)', '', clean_movie_name_for_radarr)
             enhanced_movie_folder = get_radarr_movie_filename(
                 clean_movie_name_for_radarr, year, file, root, media_info
@@ -420,16 +420,17 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
         # Initialize variables for both parser modes
         id_tag = ''
-        clean_movie_name = re.sub(r' \{(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-\w+\}$', '', proper_movie_name)
+        clean_movie_name = re.sub(r' \[(?:tmdb|imdb|tvdb|tmdbid|imdbid|tvdbid)-\w+\]$', '', proper_movie_name)
 
         # Process legacy naming if not using MediaInfo parser OR if Radarr naming failed
         if not use_media_parser or radarr_naming_failed:
             # Handle ID tags with RENAME_TAGS
             if 'TMDB' in tags_to_use:
-                id_tag_match = re.search(r'\{tmdb-\w+\}', proper_movie_name)
+                id_tag_match = re.search(r'\[tmdbid-\w+\]', proper_movie_name)
                 id_tag = id_tag_match.group(0) if id_tag_match else ''
+                print(id_tag)
             elif 'IMDB' in tags_to_use:
-                id_tag_match = re.search(r'\{imdb-\w+\}', proper_movie_name)
+                id_tag_match = re.search(r'\[imdbid-\w+\]', proper_movie_name)
                 id_tag = id_tag_match.group(0) if id_tag_match else ''
 
             # Extract media details with legacy format
@@ -467,6 +468,10 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
             # Build the details string with proper ordering
             details_parts = []
+
+            # Add ID tag if found and TMDB/IMDB is in RENAME_TAGS
+            if id_tag:
+                details_parts.append(id_tag)
 
             # Add regular media info
             if other_tags:
@@ -512,7 +517,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
 
     # Parse proper_name to extract clean name and year
     if proper_name:
-        clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_name)
+        clean_name = re.sub(r'\s*\[[^\]]+\]', '', proper_name)
 
         if not extracted_year:
             year_match = re.search(r'\((\d{4})\)', clean_name)

@@ -298,7 +298,6 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
             # Get TMDB language as fallback if not available from file metadata
             if not language and tmdb_id:
-                from MediaHub.api.tmdb_api_helpers import get_show_data
                 show_data = get_show_data(tmdb_id)
                 if show_data:
                     language = show_data.get('original_language')
@@ -327,24 +326,26 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         proper_show_name_with_ids = proper_show_name
 
         if rename_enabled or is_tmdb_folder_id_enabled() or is_imdb_folder_id_enabled() or is_tvdb_folder_id_enabled():
-            proper_show_name = re.sub(r'\{tmdb-([^}]+)\}', r'{tmdbid-\1}', proper_show_name)
-            proper_show_name = re.sub(r'\{imdb-([^}]+)\}', r'{imdbid-\1}', proper_show_name)
-            proper_show_name = re.sub(r'\{tvdb-([^}]+)\}', r'{tvdbid-\1}', proper_show_name)
+            proper_show_name = re.sub(r'\{tmdb-([^}]+)\}', r'[tmdbid-\1]', proper_show_name)
+            proper_show_name = re.sub(r'\{imdb-([^}]+)\}', r'[imdbid-\1]', proper_show_name)
+            proper_show_name = re.sub(r'\{tvdb-([^}]+)\}', r'[tvdbid-\1]', proper_show_name)
+
+            proper_show_name_with_ids = proper_show_name
 
         show_folder = proper_show_name
 
         if not is_imdb_folder_id_enabled():
-            show_folder = re.sub(r' \{imdb(?:id)?-[^}]+\}', '', show_folder)
+            show_folder = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_folder)
         if not is_tvdb_folder_id_enabled():
-            show_folder = re.sub(r' \{tvdb(?:id)?-[^}]+\}', '', show_folder)
+            show_folder = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_folder)
         if not is_tmdb_folder_id_enabled():
-            show_folder = re.sub(r' \{tmdb(?:id)?-[^}]+\}', '', show_folder)
+            show_folder = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_folder)
 
     show_folder = show_folder.replace('/', '')
 
     # Only retrieve episode data if not already provided by anime processor
     if episode_identifier and not is_extra and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
-        tmdb_id_match = re.search(r'\{tmdb(?:id)?-(\d+)\}', proper_show_name)
+        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name)
         if tmdb_id_match:
             show_id = tmdb_id_match.group(1)
             episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
@@ -596,7 +597,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     details = []
                     release_group = ""
 
-                    for tag in get_rename_tags():
+                    # Extract ID tag if TMDB or IMDB is in RENAME_TAGS
+                    id_tag = ""
+                    tags_to_use = get_rename_tags()
+                    if 'TMDB' in tags_to_use and tmdb_id:
+                        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name_with_ids)
+                        if tmdb_id_match:
+                            id_tag = f"[tmdbid-{tmdb_id_match.group(1)}]"
+                    elif 'IMDB' in tags_to_use and imdb_id:
+                        imdb_id_match = re.search(r'\[imdb(?:id)?-([^\]]+)\]', proper_show_name_with_ids)
+                        if imdb_id_match:
+                            id_tag = f"[imdbid-{imdb_id_match.group(1)}]"
+
+                    for tag in tags_to_use:
                         tag = tag.strip()
                         if tag in media_info:
                             value = media_info[tag]
@@ -609,6 +622,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                                     details.append(f"[{formatted_value}]")
                                 else:
                                     details.append(f"[{value}]")
+
+                    # Add ID tag if found
+                    if id_tag:
+                        details.append(id_tag)
+
                     if release_group:
                         details.append(f"-{release_group}")
 
@@ -628,7 +646,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Parse proper_show_name to extract clean name and year
     if proper_show_name:
-        clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_show_name)
+        clean_name = re.sub(r'\s*\[[^\]]+\]', '', proper_show_name)
 
         year_match = re.search(r'\((\d{4})\)', clean_name)
         if year_match:

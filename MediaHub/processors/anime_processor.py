@@ -7,7 +7,7 @@ from MediaHub.utils.file_utils import fetch_json, extract_resolution_from_filena
 from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_episode_name
+from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.file_utils import clean_query
 
@@ -194,8 +194,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     retry_count = 0
     search_result = None
 
-
-
     while retry_count < max_retries and search_result is None:
         retry_count += 1
         log_message(f"TMDb anime search attempt {retry_count}/{max_retries} for: {show_name} ({year})", level="DEBUG")
@@ -232,16 +230,16 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     show_name = proper_show_name
 
     if rename_enabled or is_tmdb_folder_id_enabled() or is_imdb_folder_id_enabled() or is_tvdb_folder_id_enabled():
-        show_name = re.sub(r'\{tmdb-([^}]+)\}', r'{tmdbid-\1}', show_name)
-        show_name = re.sub(r'\{imdb-([^}]+)\}', r'{imdbid-\1}', show_name)
-        show_name = re.sub(r'\{tvdb-([^}]+)\}', r'{tvdbid-\1}', show_name)
+        # Convert TMDB API curly brackets to square brackets first
+        show_name = re.sub(r'\{(tmdb|imdb|tvdb)-([^}]+)\}', r'[\1id-\2]', show_name)
+        show_name = re.sub(r'\[(tmdb|imdb|tvdb)-([^\]]+)\]', r'[\1id-\2]', show_name)
 
     if not is_imdb_folder_id_enabled():
-        show_name = re.sub(r' \{imdb(?:id)?-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_name)
     if not is_tvdb_folder_id_enabled():
-        show_name = re.sub(r' \{tvdb(?:id)?-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_name)
     if not is_tmdb_folder_id_enabled():
-        show_name = re.sub(r' \{tmdb(?:id)?-[^}]+\}', '', show_name)
+        show_name = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_name)
 
     new_name = file
     episode_name = None
@@ -263,7 +261,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     if show_id and season_number and actual_episode and not is_extra:
         try:
-            from MediaHub.api.tmdb_api_helpers import get_show_data
             show_data = get_show_data(show_id)
             total_episodes_from_show = show_data.get('total_episodes', 0) if show_data else 0
             episode_result = get_episode_name(show_id, int(season_number), int(actual_episode), total_episodes=total_episodes_from_show)
@@ -282,8 +279,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
                 # Get the episode name and the mapped season/episode numbers
                 episode_result = get_episode_name(show_id, int(season_number), int(actual_episode))
 
-                if isinstance(episode_result, tuple) and len(episode_result) == 3:
-                    episode_name, mapped_season, mapped_episode = episode_result
+                if isinstance(episode_result, tuple) and len(episode_result) >= 5:
+                    episode_name, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
                     # Update season_number with the mapped season number
                     if mapped_season is not None:
                         season_number = str(mapped_season).zfill(2)
@@ -330,6 +327,14 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
                 if 'ENG' in media_info['Languages'] and len(media_info['Languages']) > 1:
                     media_tags.append("[Dual Audio]")
 
+            # Add ID tags if specified in RENAME_TAGS
+            if is_rename_enabled() and get_rename_tags():
+                tags_to_use = get_rename_tags()
+                if 'TMDB' in tags_to_use and tmdb_id:
+                    new_name += f" [tmdbid-{tmdb_id}]"
+                elif 'IMDB' in tags_to_use and imdb_id:
+                    new_name += f" [imdbid-{imdb_id}]"
+
             if media_tags:
                 new_name += f" {''.join(media_tags)}"
 
@@ -341,7 +346,6 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
 
     # Get TMDB language as fallback if not available from file metadata
     if not language and tmdb_id:
-        from MediaHub.api.tmdb_api_helpers import get_show_data
         show_data = get_show_data(tmdb_id)
         if show_data:
             language = show_data.get('original_language')
