@@ -21,7 +21,7 @@ from MediaHub.config.config import (
     get_db_connection_timeout, get_db_cache_size,
     get_cinesync_ip, get_cinesync_api_port
 )
-from MediaHub.api.tmdb_api_helpers import get_movie_data, get_show_data
+from MediaHub.api.tmdb_api_helpers import get_movie_data, get_show_data, get_episode_name
 
 def format_file_size(size):
     """Format file size in human readable format"""
@@ -2103,15 +2103,12 @@ def update_database_to_new_format(conn):
             conn.commit()
             log_message("Schema update completed!", level="INFO")
 
-        log_message("Fetching entries that need metadata updates...", level="INFO")
+        log_message("Fetching all entries for metadata updates...", level="INFO")
         
-        # Find entries with TMDB IDs but missing key metadata fields
+        # Find ALL entries in the database for comprehensive update
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, media_type
+            SELECT file_path, destination_path, tmdb_id, season_number, media_type, episode_number
             FROM processed_files 
-            WHERE tmdb_id IS NOT NULL 
-            AND tmdb_id != '' 
-            AND (proper_name IS NULL OR proper_name = '' OR year IS NULL OR year = '')
             ORDER BY file_path
         """)
         
@@ -2119,21 +2116,21 @@ def update_database_to_new_format(conn):
         total_entries = len(entries_to_update)
         
         if total_entries == 0:
-            log_message("No entries found that need metadata updates", level="INFO")
+            log_message("No entries found in database for update", level="INFO")
             return True
         
-        log_message(f"Found {total_entries} entries that need metadata updates", level="INFO")
+        log_message(f"Found {total_entries} entries for metadata update", level="INFO")
 
         updated_count = 0
         failed_count = 0
         
-        for i, (file_path, dest_path, tmdb_id, season_number, media_type) in enumerate(entries_to_update, 1):
+        for i, (file_path, dest_path, tmdb_id, season_number, media_type, episode_number) in enumerate(entries_to_update, 1):
             try:
-                log_message(f"Updating entry {i}/{total_entries}: TMDB ID {tmdb_id}", level="INFO")
+                log_message(f"Updating entry {i}/{total_entries}: {file_path}", level="INFO")
 
                 is_tv_show = False
                 if media_type:
-                    is_tv_show = media_type.lower() in ['tv show', 'anime']
+                    is_tv_show = media_type.lower() in ['tv', 'tv show', 'anime']
                 elif dest_path:
                     dest_lower = dest_path.lower()
                     is_tv_show = 'tv' in dest_lower or 'show' in dest_lower or 'anime' in dest_lower
@@ -2142,27 +2139,29 @@ def update_database_to_new_format(conn):
                 
                 # Fetch metadata from TMDB
                 metadata = None
-                if is_tv_show:
-                    log_message(f"Fetching TV show metadata for TMDB ID: {tmdb_id}", level="DEBUG")
-                    url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=en-US"
-                else:
-                    log_message(f"Fetching movie metadata for TMDB ID: {tmdb_id}", level="DEBUG")
-                    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}&language=en-US"
-                
-                try:
-                    response = requests.get(url, timeout=10)
-                    if response.status_code == 200:
-                        metadata = response.json()
+                if tmdb_id and tmdb_id != '':
+                    if is_tv_show:
+                        log_message(f"Fetching TV show metadata for TMDB ID: {tmdb_id}", level="DEBUG")
+                        url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=content_ratings"
                     else:
-                        log_message(f"TMDB API returned status {response.status_code} for ID {tmdb_id}", level="WARNING")
-                except requests.RequestException as e:
-                    log_message(f"Request failed for TMDB ID {tmdb_id}: {e}", level="WARNING")
+                        log_message(f"Fetching movie metadata for TMDB ID: {tmdb_id}", level="DEBUG")
+                        url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}&language=en-US&append_to_response=release_dates"
+                    try:
+                        response = requests.get(url, timeout=10)
+                        if response.status_code == 200:
+                            metadata = response.json()
+                        else:
+                            log_message(f"TMDB API returned status {response.status_code} for ID {tmdb_id}", level="WARNING")
+                    except requests.RequestException as e:
+                        log_message(f"Request failed for TMDB ID {tmdb_id}: {e}", level="WARNING")
+                else:
+                    log_message(f"No TMDB ID available for entry, updating local metadata only", level="DEBUG")
                 
+                # Prepare update values
+                updates = {}
+
+                # Extract metadata fields
                 if metadata:
-                    # Prepare update values
-                    updates = {}
-                    
-                    # Extract metadata fields
                     if metadata.get('title') or metadata.get('name'):
                         updates['proper_name'] = metadata.get('title') or metadata.get('name')
                     
@@ -2222,37 +2221,98 @@ def update_database_to_new_format(conn):
                                 if not media_type or 'anime' not in media_type.lower():
                                     updates['media_type'] = 'Anime'
                     
-                    # Add file size and base_path if missing
-                    if file_path and os.path.exists(file_path):
-                        try:
-                            file_size = os.path.getsize(file_path)
-                            updates['file_size'] = file_size
-                        except (OSError, IOError):
-                            pass
-                    
-                    if dest_path:
-                        base_path = extract_base_path_from_destination_path(dest_path)
-                        if base_path:
-                            updates['base_path'] = base_path
-                    
-                    # Apply updates to database
-                    if updates:
-                        set_clauses = [f"{key} = ?" for key in updates.keys()]
-                        values = list(updates.values()) + [file_path]
+                    # For TV shows, get total episodes and certification
+                    if is_tv_show:
+                        if metadata.get('number_of_episodes'):
+                            updates['total_episodes'] = metadata['number_of_episodes']
                         
-                        cursor.execute(f"""
-                            UPDATE processed_files 
-                            SET {', '.join(set_clauses)}
-                            WHERE file_path = ?
-                        """, values)
+                        # Get content ratings for certification
+                        content_ratings = metadata.get('content_ratings', {}).get('results', [])
+                        for rating in content_ratings:
+                            if rating.get('iso_3166_1') == 'US':
+                                updates['certification'] = rating.get('rating', '')
+                                break
+                        if 'certification' not in updates and content_ratings:
+                            updates['certification'] = content_ratings[0].get('rating', '')
                         
-                        updated_count += 1
-                        log_message(f"Updated metadata for: {updates.get('proper_name', 'Unknown')} ({updates.get('year', 'Unknown')})", level="DEBUG")
-                    else:
-                        log_message(f"No metadata updates needed for TMDB ID: {tmdb_id}", level="DEBUG")
+                        # For TV episodes, get episode title
+                        if season_number and episode_number and tmdb_id:
+                            try:
+                                try:
+                                    season_num = int(season_number) if season_number and season_number.isdigit() else None
+                                    episode_num = int(episode_number) if episode_number and episode_number.isdigit() else None
+
+                                    if season_num is not None and episode_num is not None:
+                                        total_episodes_count = metadata.get('number_of_episodes', 0)
+
+                                        # Get episode name from TMDB
+                                        formatted_name, mapped_season, mapped_episode, episode_title, total_episodes = get_episode_name(
+                                            int(tmdb_id), season_num, episode_num, max_length=60, force_anidb_style=False,
+                                            total_episodes=total_episodes_count
+                                        )
+
+                                        if episode_title:
+                                            updates['episode_title'] = episode_title
+                                            log_message(f"Episode title updated: {episode_title}", level="DEBUG")
+
+                                        # Use total episodes from API if available and different
+                                        if total_episodes and total_episodes != total_episodes_count:
+                                            updates['total_episodes'] = total_episodes
+                                            log_message(f"Total episodes updated: {total_episodes}", level="DEBUG")
+
+                                except ValueError as e:
+                                    log_message(f"Could not parse season or episode number for {file_path}: {e}", level="WARNING")
+                            except Exception as e:
+                                log_message(f"Error fetching episode title for {file_path}: {e}", level="WARNING")
+
+                    elif not is_tv_show:
+                        release_dates = metadata.get('release_dates', {}).get('results', [])
+                        for release in release_dates:
+                            if release.get('iso_3166_1') == 'US':
+                                for cert in release.get('release_dates', []):
+                                    if cert.get('certification'):
+                                        updates['certification'] = cert.get('certification', '')
+                                        break
+                                if 'certification' in updates:
+                                    break
+
+                        if 'certification' not in updates and release_dates:
+                            for release in release_dates:
+                                for cert in release.get('release_dates', []):
+                                    if cert.get('certification'):
+                                        updates['certification'] = cert.get('certification', '')
+                                        break
+                                if 'certification' in updates:
+                                    break
+
+                # Add file size and base_path if missing
+                if file_path and os.path.exists(file_path):
+                    try:
+                        file_size = os.path.getsize(file_path)
+                        updates['file_size'] = file_size
+                    except (OSError, IOError):
+                        pass
+
+                if dest_path:
+                    base_path = extract_base_path_from_destination_path(dest_path)
+                    if base_path:
+                        updates['base_path'] = base_path
+
+                # Apply updates to database
+                if updates:
+                    set_clauses = [f"{key} = ?" for key in updates.keys()]
+                    values = list(updates.values()) + [file_path]
+
+                    cursor.execute(f"""
+                        UPDATE processed_files
+                        SET {', '.join(set_clauses)}
+                        WHERE file_path = ?
+                    """, values)
+
+                    updated_count += 1
+                    log_message(f"Updated metadata for: {updates.get('proper_name', file_path)}", level="DEBUG")
                 else:
-                    failed_count += 1
-                    log_message(f"Failed to fetch metadata for TMDB ID: {tmdb_id}", level="WARNING")
+                    log_message(f"No metadata updates needed for entry: {file_path}", level="DEBUG")
 
                 if i % 10 == 0:
                     conn.commit()
@@ -2260,7 +2320,7 @@ def update_database_to_new_format(conn):
             
             except Exception as e:
                 failed_count += 1
-                log_message(f"Error updating entry with TMDB ID {tmdb_id}: {e}", level="ERROR")
+                log_message(f"Error updating entry {file_path}: {e}", level="ERROR")
                 continue
 
         conn.commit()

@@ -139,7 +139,7 @@ def get_movie_data(tmdb_id):
         status = data.get('status', '') or 'released'
         release_date = data.get('release_date', '') or ''
         genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
-        genres_json = json.dumps(genre_names) if genre_names else '[]'
+        genres_str = ', '.join(genre_names) if genre_names else ''
 
         return {
             'imdb_id': imdb_id,
@@ -152,7 +152,7 @@ def get_movie_data(tmdb_id):
             'original_title': original_title,
             'status': status.lower(),
             'release_date': release_date,
-            'genres': genres_json,
+            'genres': genres_str,
             'certification': rating or ''
         }
 
@@ -233,7 +233,7 @@ def get_show_data(tmdb_id):
         first_air_date = data.get('first_air_date', '') or ''
         last_air_date = data.get('last_air_date', '') or ''
         genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
-        genres_json = json.dumps(genre_names) if genre_names else '[]'
+        genres_str = ', '.join(genre_names) if genre_names else ''
         total_episodes = data.get('number_of_episodes', 0)
 
         return {
@@ -249,7 +249,7 @@ def get_show_data(tmdb_id):
             'status': status.lower(),
             'release_date': first_air_date,
             'last_air_date': last_air_date,
-            'genres': genres_json,
+            'genres': genres_str,
             'certification': rating or '',
             'total_episodes': total_episodes
         }
