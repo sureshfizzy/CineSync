@@ -103,6 +103,9 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
             )
 
             if sports_result:
+                if 'event' in sports_result:
+                    event_data = sports_result['event']
+
                 # Extract metadata from SportsDB result
                 league_info = sports_result.get('league', {})
                 season_info = sports_result.get('season', {})
@@ -115,10 +118,14 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
                 sport_name = league_info.get('league_name', sport_name)
                 season_year = metadata.get('season_year', season_year)
                 event_name = metadata.get('event_name', location)
-                venue = metadata.get('venue')
-                date = metadata.get('date')
-
-                # Update location to use official API event name
+                venue = metadata.get('venue') or event_info.get('venue')
+                date = metadata.get('date') or event_info.get('date')
+                city = event_info.get('city')
+                country = event_info.get('country')
+                time = event_info.get('time')
+                api_round_number = event_info.get('round')
+                if api_round_number and str(api_round_number).isdigit():
+                    round_number = int(api_round_number)
                 location = event_name
 
                 log_message(f"SportsDB found: {sport_name} - {event_name}", level="INFO")
@@ -181,11 +188,15 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
             # Traditional seasonal sports (F1, MotoGP, etc.)
             season_folder = f"Season {season_year}" if season_year else "Unknown Season"
 
-        # Get detailed F1 information from parsed data
+        # Get detailed F1 information from parsed data, but only if not already set by API
         grand_prix_name = parsed_data.get('sport_grand_prix_name')
-        venue = parsed_data.get('sport_venue')
-        city = parsed_data.get('sport_city')
-        country = parsed_data.get('sport_country')
+        # Only use parsed data if API didn't provide these values
+        if not venue:
+            venue = parsed_data.get('sport_venue')
+        if 'city' not in locals() or not city:
+            city = parsed_data.get('sport_city')
+        if 'country' not in locals() or not country:
+            country = parsed_data.get('sport_country')
 
         # Determine if we need resolution-based folder structure
         resolution_folder = get_sports_resolution_folder(file, resolution)
@@ -277,6 +288,9 @@ def process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_en
             event_name,         # sport_location (event name)
             session_type,       # sport_session
             venue,              # sport_venue
+            city,               # sport_city
+            country,            # sport_country
+            time,               # sport_time
             date                # sport_date
         )
         

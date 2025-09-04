@@ -869,8 +869,11 @@ def process_file(args, force=False, batch_apply=False):
             result = process_sports(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, sports_metadata=sports_metadata, manual_search=manual_search)
 
             if result and result[0]:
-                if len(result) >= 19:
+                if len(result) >= 23:
+                    dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_city, sport_country, sport_time, sport_date = result
+                elif len(result) >= 19:
                     dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
+                    sport_city = sport_country = sport_time = None
                 elif len(result) >= 18:
                     dest_file, sportsdb_event_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, tvdb_id, sportsdb_event_id_dup, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
                     # Use sportsdb_event_id as tmdb_id for sports content (legacy format)
@@ -878,9 +881,11 @@ def process_file(args, force=False, batch_apply=False):
                     league_id = None
                 elif len(result) >= 17:
                     dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, sport_name, sport_round, sport_location, sport_session, sport_venue, sport_date = result
+                    sport_city = sport_country = sport_time = None
                 else:
                     dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality = result
                     sport_name = sport_round = sport_location = sport_session = sport_venue = sport_date = None
+                    sport_city = sport_country = sport_time = None
                 is_sports_processed = True
             else:
                 log_message(f"Sports processing failed for {file}, falling back to movie processing", level="WARNING")
@@ -1003,6 +1008,9 @@ def process_file(args, force=False, batch_apply=False):
                         sport_location if 'sport_location' in locals() else None,
                         sport_session if 'sport_session' in locals() else None,
                         sport_venue if 'sport_venue' in locals() else None,
+                        sport_city if 'sport_city' in locals() else None,
+                        sport_country if 'sport_country' in locals() else None,
+                        sport_time if 'sport_time' in locals() else None,
                         sport_date if 'sport_date' in locals() else None,
                         # Movie metadata (None if not movie)
                         original_language if 'original_language' in locals() else None,
@@ -1057,6 +1065,9 @@ def process_file(args, force=False, batch_apply=False):
                 sport_location if 'sport_location' in locals() else None,
                 sport_session if 'sport_session' in locals() else None,
                 sport_venue if 'sport_venue' in locals() else None,
+                sport_city if 'sport_city' in locals() else None,
+                sport_country if 'sport_country' in locals() else None,
+                sport_time if 'sport_time' in locals() else None,
                 sport_date if 'sport_date' in locals() else None,
                 # Movie metadata (None if not movie)
                 original_language if 'original_language' in locals() else None,
@@ -1149,15 +1160,16 @@ def process_file(args, force=False, batch_apply=False):
         new_folder_name = os.path.basename(os.path.dirname(dest_file))
         new_filename = os.path.basename(dest_file)
 
-        # Determine media type based on folder structure
-        media_type = "movie"
-        dest_parts = normalize_file_path(dest_file).split(os.sep)
-        is_tv_show = ("TV Shows" in dest_file or "Series" in dest_file or
-                     season_number is not None or
-                     any(part.lower().startswith('season ') for part in dest_parts) or
-                     any(part.lower() == 'extras' for part in dest_parts))
-        if is_tv_show:
-            media_type = "tv"
+        # Determine media type based on folder structures
+        if not media_type or media_type == "Unknown":
+            media_type = "movie"
+            dest_parts = normalize_file_path(dest_file).split(os.sep)
+            is_tv_show = ("TV Shows" in dest_file or "Series" in dest_file or
+                         season_number is not None or
+                         any(part.lower().startswith('season ') for part in dest_parts) or
+                         any(part.lower() == 'extras' for part in dest_parts))
+            if is_tv_show:
+                media_type = "tv"
 
         # Prepare structured data for WebDavHub API
         structured_data = {
@@ -1204,6 +1216,9 @@ def process_file(args, force=False, batch_apply=False):
             sport_location if 'sport_location' in locals() else None,
             sport_session if 'sport_session' in locals() else None,
             sport_venue if 'sport_venue' in locals() else None,
+            sport_city if 'sport_city' in locals() else None,
+            sport_country if 'sport_country' in locals() else None,
+            sport_time if 'sport_time' in locals() else None,
             sport_date if 'sport_date' in locals() else None,
             # Movie metadata (None if not movie)
             original_language if 'original_language' in locals() else None,
