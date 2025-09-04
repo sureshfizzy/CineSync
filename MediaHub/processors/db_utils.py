@@ -2426,7 +2426,7 @@ def _process_single_entry(entry, api_key):
                 pass
 
         if dest_path:
-            base_path = extract_base_path_from_destination_path(dest_path)
+            base_path = extract_base_path_from_destination_path(dest_path, updates.get('proper_name'))
             if base_path:
                 updates['base_path'] = base_path
 
