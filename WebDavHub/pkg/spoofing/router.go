@@ -86,6 +86,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 		serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
 		serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
 		serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
+		serviceEndpoints["/api/v3/episodeFile"] = HandleSpoofedEpisodeFiles
+		serviceEndpoints["/api/v3/episodeFile/"] = HandleSpoofedEpisodeFiles
 		serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 		serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 	} else {
@@ -105,6 +107,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 			serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
 			serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodeFile"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodeFile/"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 			serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 		case "auto":
@@ -119,6 +123,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 			serviceEndpoints["/api/v3/episode/"] = HandleSpoofedEpisode
 			serviceEndpoints["/api/v3/episodefile"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/episodefile/"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodeFile"] = HandleSpoofedEpisodeFiles
+			serviceEndpoints["/api/v3/episodeFile/"] = HandleSpoofedEpisodeFiles
 			serviceEndpoints["/api/v3/languageprofile"] = HandleSpoofedLanguageProfile
 			serviceEndpoints["/api/v3/languageprofile/"] = HandleSpoofedLanguageProfile
 		}

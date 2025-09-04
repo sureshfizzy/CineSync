@@ -253,7 +253,8 @@ func generateUniqueEpisodeID(seriesID, season, episode int) int {
 }
 
 func generateUniqueEpisodeFileID(seriesID, season, episode int) int {
-	return generateUniqueEpisodeID(seriesID, season, episode)
+	base := generateUniqueEpisodeID(seriesID, season, episode)
+	return base*10 + 1
 }
 
 // generateUniqueSeriesID creates a unique series ID based on TMDB ID, title, and year
