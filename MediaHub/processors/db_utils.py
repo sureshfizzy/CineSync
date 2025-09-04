@@ -403,13 +403,15 @@ def is_file_processed(conn, file_path):
         conn.rollback()
         return False
 
-def extract_base_path_from_destination_path(dest_path, proper_name=None):
+def extract_base_path_from_destination_path(dest_path, proper_name=None, media_type=None, sport_name=None):
     """Extract base path - everything between DESTINATION_DIR and the title folder
 
     Args:
         dest_path: Full destination path
         proper_name: The proper name from database (e.g., "Movie Title (2023)")
                     If provided, will be used to identify the title folder precisely
+        media_type: The media type (e.g., 'Sports', 'Movies', 'Shows')
+        sport_name: The sport name for sports content (e.g., 'Formula 1', 'UFC')
     """
     if not dest_path:
         return None
@@ -428,6 +430,18 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None):
         relative_path = dest_path[len(dest_dir):].lstrip(os.sep)
         parts = relative_path.split(os.sep)
 
+        # Special handling for Sports content
+        if media_type == 'Sports' and sport_name:
+            for i, part in enumerate(parts):
+                if sport_name.lower() in part.lower() or part.lower() in sport_name.lower():
+                    if i > 0:
+                        return os.sep.join(parts[:i])
+                    else:
+                        return None
+            if len(parts) >= 2:
+                return parts[0]  # Just return "Sports" as base path
+
+        # Existing logic for non-sports content
         if proper_name:
             for i, part in enumerate(parts[:-1]):
                 if part == proper_name or part.startswith(proper_name):
@@ -459,8 +473,8 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
     if dest_path:
         dest_path = normalize_file_path(dest_path)
 
-    # Extract base path from destination path using proper_name if available
-    base_path = extract_base_path_from_destination_path(dest_path, proper_name)
+    # Extract base path from destination path using proper_name
+    base_path = extract_base_path_from_destination_path(dest_path, proper_name, media_type, sport_name)
 
     # Get file size if not provided and source file exists
     if file_size is None and source_path and os.path.exists(source_path):
@@ -2149,7 +2163,7 @@ def update_database_to_new_format(conn):
         
         # Find ALL entries in the database for comprehensive update
         cursor.execute("""
-            SELECT file_path, destination_path, tmdb_id, season_number, media_type, episode_number
+            SELECT file_path, destination_path, tmdb_id, season_number, media_type, episode_number, sport_name
             FROM processed_files 
             ORDER BY file_path
         """)
@@ -2264,7 +2278,27 @@ def _process_single_entry(entry, api_key):
     This function is designed to be run in parallel threads.
     """
     try:
-        file_path, dest_path, tmdb_id, season_number, media_type, episode_number = entry
+        file_path, dest_path, tmdb_id, season_number, media_type, episode_number, sport_name = entry
+
+        if media_type and media_type.lower() == 'sports':
+            updates = {}
+
+            if file_path and os.path.exists(file_path):
+                try:
+                    file_size = os.path.getsize(file_path)
+                    updates['file_size'] = file_size
+                except (OSError, IOError):
+                    pass
+
+            if dest_path:
+                base_path = extract_base_path_from_destination_path(dest_path, None, media_type, sport_name)
+                if base_path:
+                    updates['base_path'] = base_path
+
+            return {
+                'file_path': file_path,
+                'updates': updates
+            }
 
         is_tv_show = False
         if media_type:
@@ -2426,7 +2460,7 @@ def _process_single_entry(entry, api_key):
                 pass
 
         if dest_path:
-            base_path = extract_base_path_from_destination_path(dest_path, updates.get('proper_name'))
+            base_path = extract_base_path_from_destination_path(dest_path, updates.get('proper_name'), media_type, sport_name)
             if base_path:
                 updates['base_path'] = base_path
 
