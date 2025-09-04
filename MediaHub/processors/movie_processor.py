@@ -313,7 +313,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_folder = re.sub(r' \[imdbid-[^\]]+\]', '', movie_folder)
             if not is_tvdb_folder_id_enabled():
                 movie_folder = re.sub(r' \[tvdbid-[^\]]+\]', '', movie_folder)
-            if not tmdb_folder_id_enabled:
+            if not is_tmdb_folder_id_enabled():
                 movie_folder = re.sub(r' \[tmdbid-[^\]]+\]', '', movie_folder)
 
             movie_folder = movie_folder.replace('/', '')
