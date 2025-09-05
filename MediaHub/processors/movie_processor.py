@@ -32,13 +32,18 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Determine source folder for source structure
     if is_source_structure_enabled():
         source_folder = None
+        normalized_root = os.path.normpath(root)
         for source_dir in source_dirs:
             source_dir = source_dir.strip()
-            if source_dir and root.startswith(source_dir + os.sep):
-                source_folder = os.path.basename(source_dir)
+            if not source_dir:
+                continue
+            normalized_source = os.path.normpath(source_dir)
+            if (normalized_root == normalized_source or
+                normalized_root.startswith(normalized_source + os.sep)):
+                source_folder = os.path.basename(normalized_source)
                 break
         if not source_folder:
-            source_folder = os.path.basename(os.path.dirname(root))
+            source_folder = os.path.basename(os.path.dirname(normalized_root))
     else:
         source_folder = os.path.basename(os.path.dirname(root))
     parent_folder_name = os.path.basename(src_file)

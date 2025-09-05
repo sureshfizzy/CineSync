@@ -28,14 +28,20 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     is_anime_genre = False
     proper_show_name = None
 
-    if any(root == source_dir.strip() for source_dir in source_dirs):
-        parent_folder_name = os.path.basename(root)
-        source_folder = next(source_dir.strip() for source_dir in source_dirs if root == source_dir.strip())
-    else:
-        parent_folder_name = os.path.basename(root)
-        source_folder = os.path.basename(os.path.dirname(root))
-
-    source_folder = os.path.basename(source_folder)
+    parent_folder_name = os.path.basename(root)
+    normalized_root = os.path.normpath(root)
+    source_folder = None
+    for source_dir in source_dirs:
+        source_dir = source_dir.strip()
+        if not source_dir:
+            continue
+        normalized_source = os.path.normpath(source_dir)
+        if (normalized_root == normalized_source or
+            normalized_root.startswith(normalized_source + os.sep)):
+            source_folder = os.path.basename(normalized_source)
+            break
+    if not source_folder:
+        source_folder = os.path.basename(os.path.dirname(normalized_root))
 
     # Check if this is an extra file and skip if it exceeds size limit
     if is_extras_file(file, src_file, is_movie=False):
