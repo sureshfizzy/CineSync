@@ -1832,14 +1832,40 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 
 		// Check if the absolute path is within DESTINATION_DIR
 		if !strings.HasPrefix(reqAbsPath, absDestDir) {
-			logger.Warn("Error: absolute path outside DESTINATION_DIR: %s", reqAbsPath)
-			http.Error(w, "Path outside DESTINATION_DIR", http.StatusBadRequest)
+			apiLike := strings.TrimPrefix(relativePath, "/")
+			candidate := filepath.Join(rootDir, apiLike)
+			deleteTarget := reqAbsPath
+			if _, mapErr := os.Stat(candidate); mapErr == nil {
+				logger.Info("Outside DESTINATION_DIR: mapped API path to rootDir for permanent delete: api=%s -> %s", relativePath, candidate)
+				deleteTarget = candidate
+			} else {
+				logger.Info("Outside DESTINATION_DIR: no rootDir mapping found, using provided absolute path: %s", reqAbsPath)
+			}
+
+			if _, err := os.Stat(deleteTarget); os.IsNotExist(err) {
+				logger.Info("Error: file or directory not found: %s", deleteTarget)
+				http.Error(w, "File or directory not found", http.StatusNotFound)
+				return
+			}
+
+			if err := os.RemoveAll(deleteTarget); err != nil {
+				logger.Warn("Error: failed to permanently delete %s: %v", deleteTarget, err)
+				http.Error(w, "Failed to delete", http.StatusInternalServerError)
+				return
+			}
+
+			deleteFromDatabase(relativePath, deleteTarget)
+			cleanupWebDavHubDatabase(relativePath, deleteTarget)
+			cleanupEmptyDirectories(deleteTarget)
+			broadcastFileDeletionEvents(deleteTarget)
+			db.InvalidateFolderCache()
+			db.NotifyDashboardStatsChanged()
+			db.NotifyFileOperationChanged()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(DeleteResponse{Success: true})
 			return
 		}
-
-		path = relativePath
-		absPath = reqAbsPath
-		logger.Info("Using absolute path from DESTINATION_DIR: %s", path)
 	} else {
 		// For relative paths, use the existing logic with rootDir
 		cleanPath := filepath.Clean(relativePath)
@@ -2031,12 +2057,32 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 
 			// Check if the absolute path is within DESTINATION_DIR
 			if !strings.HasPrefix(reqAbsPath, absDestDir) {
-				errors = append(errors, fmt.Sprintf("Absolute path outside DESTINATION_DIR: %s", reqAbsPath))
+				apiLike := strings.TrimPrefix(relativePath, "/")
+				candidate := filepath.Join(rootDir, apiLike)
+				deleteTarget := reqAbsPath
+				if _, mapErr := os.Stat(candidate); mapErr == nil {
+					logger.Info("Outside DESTINATION_DIR (bulk): mapped API path to rootDir for permanent delete: api=%s -> %s", relativePath, candidate)
+					deleteTarget = candidate
+				}
+
+				if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
+					errors = append(errors, fmt.Sprintf("File or directory not found: %s", deleteTarget))
+					continue
+				}
+
+				if delErr := os.RemoveAll(deleteTarget); delErr != nil {
+					errors = append(errors, fmt.Sprintf("Failed to delete %s: %v", deleteTarget, delErr))
+					continue
+				}
+
+				deleteFromDatabase(relativePath, deleteTarget)
+				cleanupWebDavHubDatabase(relativePath, deleteTarget)
+				cleanupEmptyDirectories(deleteTarget)
+				broadcastFileDeletionEvents(deleteTarget)
+
+				deletedCount++
 				continue
 			}
-
-			path = relativePath
-			absPath = reqAbsPath
 		} else {
 			// For relative paths, use the existing logic with rootDir
 			cleanPath := filepath.Clean(relativePath)
