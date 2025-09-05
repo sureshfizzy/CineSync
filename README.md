@@ -83,7 +83,7 @@ Ready to get started? CineSync supports multiple installation methods to fit you
 
 ## ⚡️ Easy Mode (ElfHosted)
 
-❤️ CineSync is proudly [sponsored sponsored](https://github.com/sponsors/sureshfizzy) by ElfHosted (*along with many more excellent [open-source projects](https://docs.elfhosted.com/sponsorship/)*!)
+❤️ CineSync is proudly [sponsored](https://github.com/sponsors/sureshfizzy) by ElfHosted (*along with many more excellent [open-source projects](https://docs.elfhosted.com/sponsorship/)*!)
 
 What is ElfHosted? [ElfHosted](https://store.elfhosted.com) is "easy mode" for self-hosting - an [open-source](https://docs.elfhosted.com/open/) PaaS which runs runs over 100 popular self-hostable apps for you, reliably and securely. They take responsibility for the painful stuff (*hardware, security, configuration, automation and updates*), so you sit back and enjoy the fun stuff! (*actually **using** your applications!*)
 
