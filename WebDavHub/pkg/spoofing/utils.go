@@ -257,6 +257,11 @@ func generateUniqueEpisodeFileID(seriesID, season, episode int) int {
 	return base*10 + 1
 }
 
+// generateUniqueMovieFileID creates a distinct ID for movie files, separate from movie IDs
+func generateUniqueMovieFileID(movieID int) int {
+	return movieID*10 + 1
+}
+
 // generateUniqueSeriesID creates a unique series ID based on TMDB ID, title, and year
 // This prevents collisions when the same TMDB ID appears multiple times
 func generateUniqueSeriesID(tmdbID int, title string, year int) int {

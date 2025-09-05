@@ -128,8 +128,9 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 	quality := detectQualityFromDatabase(dbQuality, filePath)
 	languages := getLanguagesFromDatabase(dbLanguage)
 
+	movieFileID := generateUniqueMovieFileID(id)
 	movieFile := &MovieFile{
-		ID:           id,
+		ID:           movieFileID,
 		MovieId:      id,
 		RelativePath: relativePath,
 		Path:         filePath,
@@ -151,7 +152,7 @@ func createMovieResourceInternal(id int, title string, year, tmdbID int, filePat
 		Overview:            overview,
 		Year:                year,
 		HasFile:             true,
-		MovieFileId:         id,
+		MovieFileId:         movieFileID,
 		Path:                filepath.Dir(filePath),
 		QualityProfileId:    1,
 		Monitored:           true,
@@ -1058,8 +1059,9 @@ func getMovieFilesFromDatabase() ([]MovieFile, error) {
 			addedTime = time.Now().Add(-24 * time.Hour)
 		}
 
-		// Use TMDB ID as both the file ID and movie ID for consistency
-		movieFile := createMovieFile(tmdbID, tmdbID, destinationPath, fileSize, addedTime, language, quality)
+		// Use distinct movie file ID
+		movieFileID := generateUniqueMovieFileID(tmdbID)
+		movieFile := createMovieFile(movieFileID, tmdbID, destinationPath, fileSize, addedTime, language, quality)
 		movieFiles = append(movieFiles, movieFile)
 	}
 
