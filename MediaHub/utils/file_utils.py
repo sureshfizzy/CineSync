@@ -182,6 +182,8 @@ def _is_clean_title(query: str) -> bool:
         r'\bS\d{1,2}\b',            # Season patterns like S01, S02, S03
         r'\bE\d{1,3}\b',            # Episode patterns like E01, E02
         r'\bSeason\s+\d+\b',        # Season patterns like "Season 1"
+        r'\b[Ss]eason\d+\b',         # Season patterns like "season09", "Season09"
+        r'\bS\s+\d+\b',             # Season patterns like "S 09"
     ]
 
     for pattern in technical_terms:
