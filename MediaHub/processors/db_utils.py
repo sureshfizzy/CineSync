@@ -1479,8 +1479,19 @@ def permanently_delete_file(conn, deleted_file_id):
             # Remove the trash file if it exists
             if os.path.exists(trash_path):
                 try:
-                    os.remove(trash_path)
-                    log_message(f"Removed trash file: {trash_path}", level="DEBUG")
+                    if os.path.isdir(trash_path):
+                        for root, dirs, files in os.walk(trash_path, topdown=False):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                os.remove(file_path)
+                            for dir_name in dirs:
+                                dir_path = os.path.join(root, dir_name)
+                                os.rmdir(dir_path)
+                        os.rmdir(trash_path)
+                        log_message(f"Removed trash directory: {trash_path}", level="DEBUG")
+                    else:
+                        os.remove(trash_path)
+                        log_message(f"Removed trash file: {trash_path}", level="DEBUG")
                 except (OSError, IOError) as e:
                     log_message(f"Failed to remove trash file {trash_path}: {e}", level="WARNING")
         

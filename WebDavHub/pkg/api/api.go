@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -3397,9 +3398,76 @@ func moveToTrash(fullPath string) (string, error) {
 	}
 
 	if err := os.Rename(absPath, trashed); err != nil {
-		return "", err
+		if info, err := os.Lstat(absPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(absPath)
+			if err != nil {
+				return "", fmt.Errorf("failed to read symlink target: %v", err)
+			}
+
+			if err := os.Symlink(linkTarget, trashed); err != nil {
+				return "", fmt.Errorf("failed to create symlink in trash: %v", err)
+			}
+
+			if err := os.Remove(absPath); err != nil {
+				os.Remove(trashed)
+				return "", fmt.Errorf("failed to remove original symlink: %v", err)
+			}
+		} else {
+			if err := copyPath(absPath, trashed); err != nil {
+				return "", fmt.Errorf("failed to copy path: %v", err)
+			}
+			if err := os.RemoveAll(absPath); err != nil {
+				os.RemoveAll(trashed)
+				return "", fmt.Errorf("failed to remove original path: %v", err)
+			}
+		}
 	}
 	return trashed, nil
+}
+
+// copyPath copies a file or directory from src to dst
+func copyPath(src, dst string) error {
+	sourceInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if sourceInfo.IsDir() {
+		if err := os.MkdirAll(dst, sourceInfo.Mode()); err != nil {
+			return err
+		}
+		return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			relPath, _ := filepath.Rel(src, path)
+			dstPath := filepath.Join(dst, relPath)
+
+			if info.IsDir() {
+				return os.MkdirAll(dstPath, info.Mode())
+			} else if info.Mode()&os.ModeSymlink != 0 {
+				linkTarget, _ := os.Readlink(path)
+				return os.Symlink(linkTarget, dstPath)
+			} else {
+				sourceFile, _ := os.Open(path)
+				defer sourceFile.Close()
+				destFile, _ := os.Create(dstPath)
+				defer destFile.Close()
+				io.Copy(destFile, sourceFile)
+				return os.Chmod(dstPath, info.Mode())
+			}
+		})
+	} else if sourceInfo.Mode()&os.ModeSymlink != 0 {
+		linkTarget, _ := os.Readlink(src)
+		return os.Symlink(linkTarget, dst)
+	} else {
+		sourceFile, _ := os.Open(src)
+		defer sourceFile.Close()
+		destFile, _ := os.Create(dst)
+		defer destFile.Close()
+		io.Copy(destFile, sourceFile)
+		return os.Chmod(dst, sourceInfo.Mode())
+	}
 }
 
 func restoreFromTrash(trashPath, destinationPath string) error {
@@ -3422,7 +3490,30 @@ func restoreFromTrash(trashPath, destinationPath string) error {
 	}
 
 	if err := os.Rename(trashPath, destinationPath); err != nil {
-		return err
+		if info, err := os.Lstat(trashPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(trashPath)
+			if err != nil {
+				return fmt.Errorf("failed to read symlink target: %v", err)
+			}
+
+			if err := os.Symlink(linkTarget, destinationPath); err != nil {
+				return fmt.Errorf("failed to create symlink at destination: %v", err)
+			}
+
+			if err := os.Remove(trashPath); err != nil {
+				os.Remove(destinationPath)
+				return fmt.Errorf("failed to remove symlink from trash: %v", err)
+			}
+		} else {
+			// For files and directories, use copyPath
+			if err := copyPath(trashPath, destinationPath); err != nil {
+				return fmt.Errorf("failed to copy path during restore: %v", err)
+			}
+			if err := os.RemoveAll(trashPath); err != nil {
+				os.RemoveAll(destinationPath)
+				return fmt.Errorf("failed to remove path from trash: %v", err)
+			}
+		}
 	}
 	return nil
 }

@@ -147,18 +147,39 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 				if ext != "" {
 					ext = "." + ext
 				}
+
+				parentDirName := ""
+				if parentDir := filepath.Dir(req.DestinationPath); parentDir != "." && parentDir != "" {
+					parentDirName = filepath.Base(parentDir)
+				}
 				
 				for _, entry := range entries {
 					entryName := entry.Name()
+
 					// Check for exact match or numbered variations or random suffix variations
-					if entryName == baseName || 
-					   strings.HasPrefix(entryName, name+" (") && strings.HasSuffix(entryName, ")"+ext) ||
-					   strings.HasPrefix(entryName, baseName+".") {
+					exactMatch := entryName == baseName
+					prefixMatch := strings.HasPrefix(entryName, name+" (") && strings.HasSuffix(entryName, ")"+ext)
+					dotMatch := strings.HasPrefix(entryName, baseName+".")
+					parentMatch := parentDirName != "" && entryName == parentDirName
+
+					if exactMatch || prefixMatch || dotMatch || parentMatch {
 						trashFilePath := filepath.Join(trashDir, entryName)
-						if err := os.Remove(trashFilePath); err != nil {
-							logger.Warn("Failed to remove trash file %s: %v", trashFilePath, err)
+
+						// Check if it's a directory or file
+						if info, err := os.Stat(trashFilePath); err == nil && info.IsDir() {
+							if err := removeDirectoryContents(trashFilePath); err != nil {
+								logger.Warn("Failed to remove directory contents %s: %v", trashFilePath, err)
+							} else if err := os.Remove(trashFilePath); err != nil {
+								logger.Warn("Failed to remove empty directory %s: %v", trashFilePath, err)
+							} else {
+								logger.Info("Removed trash directory: %s", trashFilePath)
+							}
 						} else {
-							logger.Info("Removed trash file: %s", trashFilePath)
+							if err := os.Remove(trashFilePath); err != nil {
+								logger.Warn("Failed to remove trash file %s: %v", trashFilePath, err)
+							} else {
+								logger.Info("Removed trash file: %s", trashFilePath)
+							}
 						}
 					}
 				}
@@ -420,12 +441,26 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 			trashFilePath := filepath.Join("..", "db", "trash", trashFileName)
 			absTrashPath, _ := filepath.Abs(trashFilePath)
 			if _, err := os.Stat(absTrashPath); err == nil {
-				if err := os.Remove(absTrashPath); err != nil {
-					logger.Warn("Failed to remove trash file %s: %v", trashFileName, err)
-					errors = append(errors, fmt.Sprintf("Failed to remove trash file %s: %v", trashFileName, err))
+				// Check if it's a directory or file
+				if info, err := os.Stat(absTrashPath); err == nil && info.IsDir() {
+					if err := removeDirectoryContents(absTrashPath); err != nil {
+						logger.Warn("Failed to remove directory contents %s: %v", trashFileName, err)
+						errors = append(errors, fmt.Sprintf("Failed to remove directory contents %s: %v", trashFileName, err))
+					} else if err := os.Remove(absTrashPath); err != nil {
+						logger.Warn("Failed to remove empty directory %s: %v", trashFileName, err)
+						errors = append(errors, fmt.Sprintf("Failed to remove empty directory %s: %v", trashFileName, err))
+					} else {
+						logger.Info("Successfully deleted trash directory: %s", absTrashPath)
+						deletedFromTrash++
+					}
 				} else {
-					logger.Info("Successfully deleted trash file: %s", absTrashPath)
-					deletedFromTrash++
+					if err := os.Remove(absTrashPath); err != nil {
+						logger.Warn("Failed to remove trash file %s: %v", trashFileName, err)
+						errors = append(errors, fmt.Sprintf("Failed to remove trash file %s: %v", trashFileName, err))
+					} else {
+						logger.Info("Successfully deleted trash file: %s", absTrashPath)
+						deletedFromTrash++
+					}
 				}
 			} else {
 				logger.Warn("Trash file not found at %s: %v", absTrashPath, err)
@@ -476,6 +511,28 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	json.NewEncoder(w).Encode(response)
+}
+
+// removeDirectoryContents removes all contents of a directory recursively
+func removeDirectoryContents(dirPath string) error {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(dirPath, entry.Name())
+		if entry.IsDir() {
+			if err := os.RemoveAll(entryPath); err != nil {
+				return err
+			}
+		} else {
+			if err := os.Remove(entryPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // getFileOperationsFromMediaHub reads file operations from MediaHub database
