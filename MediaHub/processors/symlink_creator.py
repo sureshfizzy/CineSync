@@ -1171,6 +1171,9 @@ def process_file(args, force=False, batch_apply=False):
             if is_tv_show:
                 media_type = "tv"
 
+        # Normalize media_type casing to ensure downstream checks work consistently
+        media_type = (media_type or "").lower()
+
         # Prepare structured data for WebDavHub API
         structured_data = {
             "source_file": src_file,
@@ -1190,6 +1193,9 @@ def process_file(args, force=False, batch_apply=False):
             structured_data.update({
                 "show_name": show_metadata.get('show_name'),
                 "proper_show_name": show_metadata.get('proper_show_name'),
+                "season_number": show_metadata.get('season_number'),
+                "episode_number": show_metadata.get('episode_number'),
+                "episode_identifier": show_metadata.get('episode_identifier'),
                 "episode_title": show_metadata.get('episode_title'),
                 "year": show_metadata.get('year'),
                 "is_anime_genre": show_metadata.get('is_anime_genre', False)
