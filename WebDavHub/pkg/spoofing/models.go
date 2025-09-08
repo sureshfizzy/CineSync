@@ -6,6 +6,8 @@ import "time"
 type SystemStatusResponse struct {
 	Version                string `json:"version"`
 	BuildTime              string `json:"buildTime"`
+	AppGuid                string `json:"appGuid"`
+	InstanceName           string `json:"instanceName"`
 	IsDebug                bool   `json:"isDebug"`
 	IsProduction           bool   `json:"isProduction"`
 	IsAdmin                bool   `json:"isAdmin"`

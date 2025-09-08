@@ -16,6 +16,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var processStartTime = time.Now()
+
 // PanicRecoveryMiddleware wraps handlers with panic recovery to prevent crashes
 func PanicRecoveryMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +202,9 @@ func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 
 	status := SystemStatusResponse{
 		Version:                config.Version,
-		BuildTime:              time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+		BuildTime:              processStartTime.Format(time.RFC3339),
+		AppGuid:                config.AppGuid,
+		InstanceName:           config.InstanceName,
 		IsDebug:                false,
 		IsProduction:           true,
 		IsAdmin:                true,
@@ -222,7 +226,7 @@ func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		UrlBase:                "",
 		RuntimeVersion:         "6.0.16",
 		RuntimeName:            ".NET 6.0",
-		StartTime:              time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+		StartTime:              processStartTime.Format(time.RFC3339),
 		PackageVersion:         config.Version,
 		PackageAuthor:          "linuxserver.io",
 		PackageUpdateMechanism: "docker",

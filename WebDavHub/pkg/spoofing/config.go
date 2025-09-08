@@ -21,6 +21,7 @@ type SpoofingConfig struct {
 	Version        string          `yaml:"version" json:"version"`
 	Branch         string          `yaml:"branch" json:"branch"`
 	APIKey         string          `yaml:"apiKey" json:"apiKey"`
+	AppGuid        string          `yaml:"appGuid" json:"appGuid"`
 	ServiceType    string          `yaml:"serviceType" json:"serviceType"`
 	FolderMode     bool            `yaml:"folderMode" json:"folderMode"`
 	FolderMappings []FolderMapping `yaml:"folderMappings" json:"folderMappings"`
@@ -38,6 +39,7 @@ func DefaultConfig() *SpoofingConfig {
 		Version:        "5.14.0.9383",
 		Branch:         "master",
 		APIKey:         generateAPIKey(),
+		AppGuid:        generateGUID(),
 		ServiceType:    "auto", // Default to auto mode to support both Radarr and Sonarr
 		FolderMode:     false,
 		FolderMappings: []FolderMapping{},
@@ -53,6 +55,20 @@ func generateAPIKey() string {
 		return hex.EncodeToString(hash[:])
 	}
 	return hex.EncodeToString(bytes)
+}
+
+// generateGUID
+func generateGUID() string {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		sum := md5.Sum([]byte(fmt.Sprintf("cinesync-guid-%d", time.Now().UnixNano())))
+		bytes = sum[:]
+	}
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	hexStr := hex.EncodeToString(bytes)
+	return fmt.Sprintf("%s-%s-%s-%s-%s", hexStr[0:8], hexStr[8:12], hexStr[12:16], hexStr[16:20], hexStr[20:32])
 }
 
 // RegenerateAPIKey generates a new API key for the configuration
@@ -78,6 +94,9 @@ func (c *SpoofingConfig) Validate() error {
 	}
 	if c.Branch == "" {
 		c.Branch = "master"
+	}
+	if strings.TrimSpace(c.AppGuid) == "" {
+		c.AppGuid = generateGUID()
 	}
 	if c.ServiceType == "" {
 		c.ServiceType = "auto"
@@ -170,6 +189,12 @@ func InitializeConfig() error {
 	if cfg, err := loadConfigFromFile(); err == nil {
 		config = cfg
 		logger.Info("Loaded spoofing configuration from file")
+		if strings.TrimSpace(config.AppGuid) == "" {
+			config.AppGuid = generateGUID()
+			if err := saveConfigToFile(config); err != nil {
+				return fmt.Errorf("failed to persist generated appGuid: %v", err)
+			}
+		}
 	} else {
 		configPath := getConfigPath()
 		if _, statErr := os.Stat(configPath); statErr == nil {
@@ -184,6 +209,7 @@ func InitializeConfig() error {
 			Version:      "5.14.0.9383",
 			Branch:       "master",
 			APIKey:       generateAPIKey(),
+			AppGuid:      generateGUID(),
 			ServiceType:  "auto",
 		}
 
@@ -227,5 +253,3 @@ func SetConfig(newConfig *SpoofingConfig) error {
 
 	return nil
 }
-
-
