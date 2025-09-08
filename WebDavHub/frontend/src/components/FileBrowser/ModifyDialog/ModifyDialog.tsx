@@ -346,11 +346,10 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
       return;
     }
 
-
-
     const disableMonitor = true;
     const shouldUseBatchApply = batchApplyOverride !== undefined ? batchApplyOverride : useBatchApply;
-    const shouldUseManualSearch = propUseManualSearch;
+    const isInteractiveFlow = selectedOption !== 'auto-select' && Object.values(selectedIds).every(v => !v);
+    const shouldUseManualSearch = propUseManualSearch || isInteractiveFlow;
 
     // Prepare the request payload with selected options and IDs
     const requestPayload = {
@@ -732,6 +731,33 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         handleFetchSeasons(tmdbId);
       }
       return;
+    }
+
+    const seasonSelectedMatch = fullOutput.match(/Season\s+(\d+)\s+selected/i);
+    if (seasonSelectedMatch) {
+      const seasonNum = parseInt(seasonSelectedMatch[1], 10);
+      if (!Number.isNaN(seasonNum)) {
+        setSelectedSeasonNumber(seasonNum);
+        selectedSeasonRef.current = seasonNum;
+        if (seasonDialogOpen) {
+          setSeasonDialogOpen(false);
+        }
+      }
+    }
+
+    if (fullOutput.includes('Available episodes:')) {
+      const tmdbId = selectedTmdbId || (tmdbIdMatch ? tmdbIdMatch[1] : '');
+      const seasonNum = selectedSeasonRef.current || selectedSeasonNumber || null;
+
+      if (seasonDialogOpen) {
+        setSeasonDialogOpen(false);
+      }
+
+      if (tmdbId && seasonNum) {
+        handleFetchEpisodes(tmdbId, Number(seasonNum));
+      }
+
+      setWaitingForInput(true);
     }
   };
 
