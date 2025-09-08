@@ -9,7 +9,7 @@ import threading
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, is_jellyfin_id_format_enabled, tmdb_api_language
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
@@ -530,9 +530,15 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             is_anime_genre = genre_info['is_anime_genre']
 
             if is_imdb_folder_id_enabled():
-                proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
+                if is_jellyfin_id_format_enabled():
+                    proper_name = f"{movie_name} ({movie_year}) [imdbid-{imdb_id}]"
+                else:
+                    proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
             elif is_tmdb_folder_id_enabled():
-                proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
+                if is_jellyfin_id_format_enabled():
+                    proper_name = f"{movie_name} ({movie_year}) [tmdbid-{tmdb_id}]"
+                else:
+                    proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
             else:
                 proper_name = f"{movie_name} ({movie_year})"
 
@@ -782,9 +788,15 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
         certification = movie_data.get('certification', '')
 
         if is_imdb_folder_id_enabled():
-            proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
+            if is_jellyfin_id_format_enabled():
+                proper_name = f"{movie_name} ({movie_year}) [imdbid-{imdb_id}]"
+            else:
+                proper_name = f"{movie_name} ({movie_year}) {{imdb-{imdb_id}}}"
         elif is_tmdb_folder_id_enabled():
-            proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
+            if is_jellyfin_id_format_enabled():
+                proper_name = f"{movie_name} ({movie_year}) [tmdbid-{tmdb_id}]"
+            else:
+                proper_name = f"{movie_name} ({movie_year}) {{tmdb-{tmdb_id}}}"
         else:
             proper_name = f"{movie_name} ({movie_year})"
 

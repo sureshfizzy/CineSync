@@ -125,6 +125,10 @@ def is_imdb_folder_id_enabled():
 def is_tvdb_folder_id_enabled():
     return os.getenv('TVDB_FOLDER_ID', 'false').lower() == 'true'
 
+def is_jellyfin_id_format_enabled():
+    """Check if Jellyfin ID format should be used for ID tags (square brackets vs curly braces)"""
+    return os.getenv('JELLYFIN_ID_FORMAT', 'false').lower() in ['true', '1', 'yes']
+
 def is_rename_enabled():
     return os.getenv('RENAME_ENABLED', 'false').lower() in ['true', '1', 'yes']
 

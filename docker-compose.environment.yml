@@ -73,6 +73,7 @@ services:
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - LANGUAGE=${LANGUAGE:-English}
       - ANIME_SCAN=${ANIME_SCAN:-false}
+      - JELLYFIN_ID_FORMAT=${JELLYFIN_ID_FORMAT:-false}
       - TMDB_FOLDER_ID=${TMDB_FOLDER_ID:-false}
       - IMDB_FOLDER_ID=${IMDB_FOLDER_ID:-false}
       - TVDB_FOLDER_ID=${TVDB_FOLDER_ID:-false}

@@ -8,7 +8,7 @@ current_dir = os.path.dirname(__file__)
 sys.path.append(os.path.join(current_dir, '..', '..'))
 
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import get_mediainfo_radarr_tags, mediainfo_parser
+from MediaHub.config.config import get_mediainfo_radarr_tags, mediainfo_parser, is_jellyfin_id_format_enabled
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 from MediaHub.utils.mediainfo import extract_media_info, keywords
 
@@ -113,17 +113,26 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                 elif field_name.lower() == 'tmdbid' and 'TmdbId' in media_info:
                     value = media_info['TmdbId']
                     if value:
-                        filename_parts.append(f"{{tmdbid-{value}}}")
+                        if is_jellyfin_id_format_enabled():
+                            filename_parts.append(f"[tmdbid-{value}]")
+                        else:
+                            filename_parts.append(f"{{tmdb-{value}}}")
 
                 elif field_name.lower() == 'imdbid' and 'ImdbId' in media_info:
                     value = media_info['ImdbId']
                     if value:
-                        filename_parts.append(f"{{imdbid-{value}}}")
+                        if is_jellyfin_id_format_enabled():
+                            filename_parts.append(f"[imdbid-{value}]")
+                        else:
+                            filename_parts.append(f"{{imdb-{value}}}")
 
                 elif field_name.lower() == 'tvdbid' and 'TvdbId' in media_info:
                     value = media_info['TvdbId']
                     if value:
-                        filename_parts.append(f"{{tvdbid-{value}}}")
+                        if is_jellyfin_id_format_enabled():
+                            filename_parts.append(f"[tvdbid-{value}]")
+                        else:
+                            filename_parts.append(f"{{tvdb-{value}}}")
 
                 # Handle Release Group
                 elif field_name == 'Release Group' and 'Release Group' in media_info:

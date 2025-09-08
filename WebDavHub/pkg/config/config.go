@@ -244,6 +244,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "TMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable TMDb folder ID functionality"},
 		{Key: "IMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable IMDb folder ID functionality"},
 		{Key: "TVDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable TVDb folder ID functionality"},
+		{Key: "JELLYFIN_ID_FORMAT", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "When true: uses [tmdbid-12345] format. When false: uses {tmdb-12345} format"},
 		{Key: "MOVIE_COLLECTION_ENABLED", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable separating movie files based on collections"},
 		{Key: "MOVIE_COLLECTIONS_FOLDER", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Folder name for movie collections"},
 

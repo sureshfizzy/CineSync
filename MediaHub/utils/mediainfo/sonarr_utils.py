@@ -9,6 +9,7 @@ import re
 import os
 from datetime import datetime
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.config.config import is_jellyfin_id_format_enabled
 
 def clean_title_for_filename(title):
     """
@@ -76,18 +77,27 @@ def extract_show_data(proper_show_name, show_name):
     if year_match:
         show_data['series_year'] = year_match.group(1)
 
-    # Extract TMDB ID
-    tmdb_match = re.search(r'\{tmdb-(\d+)\}', proper_show_name)
+    # Extract TMDB ID based on format
+    if is_jellyfin_id_format_enabled():
+        tmdb_match = re.search(r'\[tmdbid-(\d+)\]', proper_show_name)
+    else:
+        tmdb_match = re.search(r'\{tmdb-(\d+)\}', proper_show_name)
     if tmdb_match:
         show_data['tmdb_id'] = tmdb_match.group(1)
 
     # Extract IMDB ID
-    imdb_match = re.search(r'\{imdb-(tt\d+)\}', proper_show_name)
+    if is_jellyfin_id_format_enabled():
+        imdb_match = re.search(r'\[imdbid-(tt\d+)\]', proper_show_name)
+    else:
+        imdb_match = re.search(r'\{imdb-(tt\d+)\}', proper_show_name)
     if imdb_match:
         show_data['imdb_id'] = imdb_match.group(1)
 
     # Extract TVDB ID
-    tvdb_match = re.search(r'\{tvdb-(\d+)\}', proper_show_name)
+    if is_jellyfin_id_format_enabled():
+        tvdb_match = re.search(r'\[tvdbid-(\d+)\]', proper_show_name)
+    else:
+        tvdb_match = re.search(r'\{tvdb-(\d+)\}', proper_show_name)
     if tvdb_match:
         show_data['tvdb_id'] = tvdb_match.group(1)
 

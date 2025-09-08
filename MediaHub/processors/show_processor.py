@@ -330,20 +330,33 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         # Store the original proper_show_name with all IDs
         proper_show_name_with_ids = proper_show_name
 
-        proper_show_name = re.sub(r'\{tmdb-([^}]+)\}', r'[tmdbid-\1]', proper_show_name)
-        proper_show_name = re.sub(r'\{imdb-([^}]+)\}', r'[imdbid-\1]', proper_show_name)
-        proper_show_name = re.sub(r'\{tvdb-([^}]+)\}', r'[tvdbid-\1]', proper_show_name)
+        # Convert ID format based on JELLYFIN_ID_FORMAT setting
+        if is_jellyfin_id_format_enabled():
+            proper_show_name = re.sub(r'\{tmdb-([^}]+)\}', r'[tmdbid-\1]', proper_show_name)
+            proper_show_name = re.sub(r'\{imdb-([^}]+)\}', r'[imdbid-\1]', proper_show_name)
+            proper_show_name = re.sub(r'\{tvdb-([^}]+)\}', r'[tvdbid-\1]', proper_show_name)
+        else:
+            pass
 
         proper_show_name_with_ids = proper_show_name
 
         show_folder = proper_show_name
 
         if not is_imdb_folder_id_enabled():
-            show_folder = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_folder)
+            if is_jellyfin_id_format_enabled():
+                show_folder = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_folder)
+            else:
+                show_folder = re.sub(r' \{imdb-[^}]+\}', '', show_folder)
         if not is_tvdb_folder_id_enabled():
-            show_folder = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_folder)
+            if is_jellyfin_id_format_enabled():
+                show_folder = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_folder)
+            else:
+                show_folder = re.sub(r' \{tvdb-[^}]+\}', '', show_folder)
         if not is_tmdb_folder_id_enabled():
-            show_folder = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_folder)
+            if is_jellyfin_id_format_enabled():
+                show_folder = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_folder)
+            else:
+                show_folder = re.sub(r' \{tmdb-[^}]+\}', '', show_folder)
 
     show_folder = show_folder.replace('/', '')
 
@@ -650,7 +663,10 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Parse proper_show_name to extract clean name and year
     if proper_show_name:
-        clean_name = re.sub(r'\s*\[[^\]]+\]', '', proper_show_name)
+        if is_jellyfin_id_format_enabled():
+            clean_name = re.sub(r'\s*\[[^\]]+\]', '', proper_show_name)
+        else:
+            clean_name = re.sub(r'\s*\{[^}]+\}', '', proper_show_name)
 
         year_match = re.search(r'\((\d{4})\)', clean_name)
         if year_match:

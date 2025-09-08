@@ -12,7 +12,7 @@ from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, tmdb_api_language
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, is_jellyfin_id_format_enabled, tmdb_api_language
 from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
@@ -1052,11 +1052,20 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     # Build proper name with all available IDs (for Sonarr naming compatibility)
     id_parts = []
     if imdb_id:
-        id_parts.append(f"{{imdb-{imdb_id}}}")
+        if is_jellyfin_id_format_enabled():
+            id_parts.append(f"[imdbid-{imdb_id}]")
+        else:
+            id_parts.append(f"{{imdb-{imdb_id}}}")
     if tvdb_id:
-        id_parts.append(f"{{tvdb-{tvdb_id}}}")
+        if is_jellyfin_id_format_enabled():
+            id_parts.append(f"[tvdbid-{tvdb_id}]")
+        else:
+            id_parts.append(f"{{tvdb-{tvdb_id}}}")
     # Always include TMDB ID
-    id_parts.append(f"{{tmdb-{tmdb_id}}}")
+    if is_jellyfin_id_format_enabled():
+        id_parts.append(f"[tmdbid-{tmdb_id}]")
+    else:
+        id_parts.append(f"{{tmdb-{tmdb_id}}}")
 
     # Combine all IDs
     id_string = " ".join(id_parts)

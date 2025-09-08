@@ -223,23 +223,37 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         track_file_failure(src_file, None, None, "TMDb invalid show name", f"TMDb could not provide valid show name for anime: {show_name} ({year})")
         return None
 
-    tmdb_id_match = re.search(r'\{(?:tmdb|tmdbid)-(\d+)\}$', proper_show_name)
+    if is_jellyfin_id_format_enabled():
+        tmdb_id_match = re.search(r'\[(?:tmdb|tmdbid)-(\d+)\]', proper_show_name)
+    else:
+        tmdb_id_match = re.search(r'\{(?:tmdb|tmdbid)-(\d+)\}', proper_show_name)
     if tmdb_id_match:
         show_id = tmdb_id_match.group(1)
 
     show_name = proper_show_name
 
     if rename_enabled or is_tmdb_folder_id_enabled() or is_imdb_folder_id_enabled() or is_tvdb_folder_id_enabled():
-        # Convert TMDB API curly brackets to square brackets first
-        show_name = re.sub(r'\{(tmdb|imdb|tvdb)-([^}]+)\}', r'[\1id-\2]', show_name)
-        show_name = re.sub(r'\[(tmdb|imdb|tvdb)-([^\]]+)\]', r'[\1id-\2]', show_name)
+        if is_jellyfin_id_format_enabled():
+            show_name = re.sub(r'\{(tmdb|imdb|tvdb)-([^}]+)\}', r'[\1id-\2]', show_name)
+            show_name = re.sub(r'\[(tmdb|imdb|tvdb)-([^\]]+)\]', r'[\1id-\2]', show_name)
+        else:
+            pass
 
     if not is_imdb_folder_id_enabled():
-        show_name = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_name)
+        if is_jellyfin_id_format_enabled():
+            show_name = re.sub(r' \[imdb(?:id)?-[^\]]+\]', '', show_name)
+        else:
+            show_name = re.sub(r' \{imdb-[^}]+\}', '', show_name)
     if not is_tvdb_folder_id_enabled():
-        show_name = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_name)
+        if is_jellyfin_id_format_enabled():
+            show_name = re.sub(r' \[tvdb(?:id)?-[^\]]+\]', '', show_name)
+        else:
+            show_name = re.sub(r' \{tvdb-[^}]+\}', '', show_name)
     if not is_tmdb_folder_id_enabled():
-        show_name = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_name)
+        if is_jellyfin_id_format_enabled():
+            show_name = re.sub(r' \[tmdb(?:id)?-[^\]]+\]', '', show_name)
+        else:
+            show_name = re.sub(r' \{tmdb-[^}]+\}', '', show_name)
 
     new_name = file
     episode_name = None
@@ -331,9 +345,15 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
             if is_rename_enabled() and get_rename_tags():
                 tags_to_use = get_rename_tags()
                 if 'TMDB' in tags_to_use and tmdb_id:
-                    new_name += f" [tmdbid-{tmdb_id}]"
+                    if is_jellyfin_id_format_enabled():
+                        new_name += f" [tmdbid-{tmdb_id}]"
+                    else:
+                        new_name += f" {{tmdb-{tmdb_id}}}"
                 elif 'IMDB' in tags_to_use and imdb_id:
-                    new_name += f" [imdbid-{imdb_id}]"
+                    if is_jellyfin_id_format_enabled():
+                        new_name += f" [imdbid-{imdb_id}]"
+                    else:
+                        new_name += f" {{imdb-{imdb_id}}}"
 
             if media_tags:
                 new_name += f" {''.join(media_tags)}"
