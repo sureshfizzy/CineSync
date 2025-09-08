@@ -278,6 +278,30 @@ def check_anime_genre(genres, language):
 # HELPER FUNCTIONS
 # ============================================================================
 
+def clean_episode_title(title):
+    """
+    Clean episode title by removing trailing/leading whitespace, normalizing spaces,
+    and replacing path separators to prevent issues with os.path.dirname().
+
+    Args:
+        title (str): Raw episode title from API
+
+    Returns:
+        str: Cleaned episode title
+    """
+    if not title:
+        return title
+
+    # Strip leading and trailing whitespace
+    cleaned = title.strip()
+
+    # Normalize multiple spaces to single space
+    cleaned = ' '.join(cleaned.split())
+    cleaned = cleaned.replace('/', '-')
+    cleaned = cleaned.replace('\\', '-')
+
+    return cleaned
+
 def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False, total_episodes=None):
     """
     Fetch the episode name from TMDb API for the given show, season, and episode number.
@@ -314,7 +338,8 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
         response.raise_for_status()
         episode_data = response.json()
         episode_name = episode_data.get('name')
-        raw_episode_title = episode_name
+        raw_episode_title = clean_episode_title(episode_name)
+        episode_name = clean_episode_title(episode_name)
 
         # Trim long episode names
         if len(episode_name) > max_length:
@@ -525,7 +550,8 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60, tota
             mapped_response.raise_for_status()
             mapped_episode_data = mapped_response.json()
             mapped_episode_name = mapped_episode_data.get('name', 'Unknown Episode')
-            raw_episode_title = mapped_episode_name
+            raw_episode_title = clean_episode_title(mapped_episode_name)
+            mapped_episode_name = clean_episode_title(mapped_episode_name)
 
             if mapped_episode_name and len(mapped_episode_name) > max_length:
                 mapped_episode_name = mapped_episode_name[:max_length].rsplit(' ', 1)[0] + '...'
@@ -554,7 +580,8 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60, tota
             if direct_response.status_code == 200:
                 direct_episode_data = direct_response.json()
                 direct_episode_name = direct_episode_data.get('name', 'Unknown Episode')
-                raw_episode_title = direct_episode_name
+                raw_episode_title = clean_episode_title(direct_episode_name)
+                direct_episode_name = clean_episode_title(direct_episode_name)
 
                 # Sanitize episode name for Windows compatibility
                 if direct_episode_name and (platform.system().lower() == 'windows' or platform.system().lower() == 'nt'):
