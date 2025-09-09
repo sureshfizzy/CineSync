@@ -1844,7 +1844,30 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 			}
 
 			if _, err := os.Stat(deleteTarget); os.IsNotExist(err) {
-				logger.Info("Error: file or directory not found: %s", deleteTarget)
+				logger.Info("File or directory not found at expected location: %s", deleteTarget)
+				if dbPath, found := findFileInDatabase(relativePath); found {
+					logger.Info("Found file in database, cleaning up entries: %s", dbPath)
+
+					var deletedCount int
+					if isFolderDeletion(relativePath) {
+						showName := filepath.Base(strings.Trim(relativePath, "/\\"))
+						deletedCount = deleteAllShowEntries(showName, relativePath)
+					} else {
+						deletedCount = deleteSpecificFile(relativePath)
+					}
+
+					if deletedCount > 0 {
+						cleanupWebDavHubDatabase(relativePath, dbPath)
+						broadcastFileDeletionEvents(dbPath)
+						db.InvalidateFolderCache()
+						db.NotifyDashboardStatsChanged()
+						db.NotifyFileOperationChanged()
+						w.Header().Set("Content-Type", "application/json")
+						json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+						return
+					}
+				}
+
 				http.Error(w, "File or directory not found", http.StatusNotFound)
 				return
 			}
@@ -1909,7 +1932,31 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		logger.Warn("Error: file or directory not found: %s", path)
+		logger.Info("File or directory not found at expected location: %s", path)
+
+		if dbPath, found := findFileInDatabase(relativePath); found {
+			logger.Info("Found file in database, cleaning up entries: %s", dbPath)
+
+			var deletedCount int
+			if isFolderDeletion(relativePath) {
+				showName := filepath.Base(strings.Trim(relativePath, "/\\"))
+				deletedCount = deleteAllShowEntries(showName, relativePath)
+			} else {
+				deletedCount = deleteSpecificFile(relativePath)
+			}
+
+			if deletedCount > 0 {
+				cleanupWebDavHubDatabase(relativePath, dbPath)
+				broadcastFileDeletionEvents(dbPath)
+				db.InvalidateFolderCache()
+				db.NotifyDashboardStatsChanged()
+				db.NotifyFileOperationChanged()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+				return
+			}
+		}
+
 		http.Error(w, "File or directory not found", http.StatusNotFound)
 		return
 	}
@@ -2067,6 +2114,28 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 				}
 
 				if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
+					logger.Info("File or directory not found at expected location (bulk): %s", deleteTarget)
+
+					if dbPath, found := findFileInDatabase(relativePath); found {
+						logger.Info("Found file in database (bulk), cleaning up entries: %s", dbPath)
+
+						var showDeletedCount int
+						if isFolderDeletion(relativePath) {
+							showName := filepath.Base(strings.Trim(relativePath, "/\\"))
+							showDeletedCount = deleteAllShowEntries(showName, relativePath)
+						} else {
+							showDeletedCount = deleteSpecificFile(relativePath)
+						}
+
+						if showDeletedCount > 0 {
+							cleanupWebDavHubDatabase(relativePath, dbPath)
+							cleanupEmptyDirectories(dbPath)
+							broadcastFileDeletionEvents(dbPath)
+							deletedCount += showDeletedCount
+							continue
+						}
+					}
+
 					errors = append(errors, fmt.Sprintf("File or directory not found: %s", deleteTarget))
 					continue
 				}
@@ -2122,6 +2191,28 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 		}
 
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			logger.Warn("File or directory not found at expected location (bulk relative): %s", path)
+
+			if dbPath, found := findFileInDatabase(relativePath); found {
+				logger.Info("Found file in database (bulk relative), cleaning up entries: %s", dbPath)
+
+				var showDeletedCount int
+				if isFolderDeletion(relativePath) {
+					showName := filepath.Base(strings.Trim(relativePath, "/\\"))
+					showDeletedCount = deleteAllShowEntries(showName, relativePath)
+				} else {
+					showDeletedCount = deleteSpecificFile(relativePath)
+				}
+
+				if showDeletedCount > 0 {
+					cleanupWebDavHubDatabase(relativePath, dbPath)
+					cleanupEmptyDirectories(dbPath)
+					broadcastFileDeletionEvents(dbPath)
+					deletedCount += showDeletedCount
+					continue
+				}
+			}
+
 			errors = append(errors, fmt.Sprintf("File or directory not found: %s", path))
 			continue
 		}
@@ -2255,6 +2346,108 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// findFileInDatabase finds a file in the database by filename
+func findFileInDatabase(filePath string) (string, bool) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return "", false
+	}
+
+	showName := filepath.Base(strings.Trim(filePath, "/\\"))
+	if showName == "" {
+		return "", false
+	}
+
+	query := `SELECT file_path, destination_path FROM processed_files 
+		WHERE destination_path LIKE ? LIMIT 1`
+
+	var dbFilePath, dbDestPath sql.NullString
+	err = mediaHubDB.QueryRow(query, "%"+showName+"%").Scan(&dbFilePath, &dbDestPath)
+	if err == nil {
+		if dbFilePath.Valid && dbFilePath.String != "" {
+			return dbFilePath.String, true
+		}
+		if dbDestPath.Valid && dbDestPath.String != "" {
+			return dbDestPath.String, true
+		}
+	}
+	return "", false
+}
+
+// deleteAllShowEntries deletes all database entries for a show in a specific path
+func deleteAllShowEntries(showName, relativePath string) int {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for show deletion: %v", err)
+		return 0
+	}
+
+	parentDir := filepath.Dir(relativePath)
+	if parentDir == "." || parentDir == "/" {
+		parentDir = ""
+	}
+
+	var pattern string
+	if parentDir != "" {
+		pattern = "%" + parentDir + "/" + showName + "%"
+	} else {
+		pattern = "%" + showName + "%"
+	}
+
+	query := `DELETE FROM processed_files WHERE destination_path LIKE ?`
+	result, err := mediaHubDB.Exec(query, pattern)
+	if err != nil {
+		logger.Warn("Failed to delete show entries: %v", err)
+		return 0
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	logger.Info("Deleted %d database entries for show '%s' in path '%s'", rowsAffected, showName, parentDir)
+	return int(rowsAffected)
+}
+
+// deleteSpecificFile deletes a specific file entry from database
+func deleteSpecificFile(filePath string) int {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for file deletion: %v", err)
+		return 0
+	}
+
+	// Try to delete by exact path match first
+	query := `DELETE FROM processed_files WHERE file_path = ? OR destination_path = ?`
+	result, err := mediaHubDB.Exec(query, filePath, filePath)
+	if err != nil {
+		logger.Warn("Failed to delete file entry: %v", err)
+		return 0
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		logger.Info("Deleted %d database entries for file: %s", rowsAffected, filePath)
+		return int(rowsAffected)
+	}
+
+	// If no exact match, try by filename
+	filename := filepath.Base(filePath)
+	query = `DELETE FROM processed_files WHERE file_path LIKE ? OR destination_path LIKE ?`
+	result, err = mediaHubDB.Exec(query, "%"+filename+"%", "%"+filename+"%")
+	if err != nil {
+		logger.Warn("Failed to delete file entry by name: %v", err)
+		return 0
+	}
+
+	rowsAffected, _ = result.RowsAffected()
+	logger.Info("Deleted %d database entries for file: %s", rowsAffected, filename)
+	return int(rowsAffected)
+}
+
+// isFolderDeletion determines if we're deleting a folder or a file
+func isFolderDeletion(relativePath string) bool {
+	ext := filepath.Ext(relativePath)
+	return ext == ""
 }
 
 // deleteFromDatabase removes a file record from the MediaHub database if it exists
