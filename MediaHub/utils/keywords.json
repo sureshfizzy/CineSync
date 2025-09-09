@@ -65,5 +65,8 @@
         "R1", "DmonHiro", "Frostii", "Otakusensei", "AYZ", "Live-eviL", "ShindenSubs", "Vivid", "Kawaii-Subs",
         "NyaaSi", "Hikari-Subs", "Yumeko", "Tenshi", "Gokudera", "TokyoTosho", "NoobSubs", "Beanosubs", "UTW",
         "AnimeRG", "ToishY", "Lazy", "Anime Land"
+    ],
+    "extras_patterns": [
+        "Featurettes"
     ]
 }

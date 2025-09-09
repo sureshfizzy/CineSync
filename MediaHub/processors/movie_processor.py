@@ -52,9 +52,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         track_file_failure(src_file, None, None, "File skipped", f"File skipped based on skip patterns: {parent_folder_name}")
         return None, None
 
-    # Check if this is an extra file and skip if it exceeds size limit
+    # Check if this is an extra file and skip if detected as extra
     if is_extras_file(file, src_file, is_movie=True):
-        log_message(f"Skipping movie extra file due to size limit: {file}", level="INFO")
+        log_message(f"Skipping movie extra file: {file}", level="INFO")
         # Don't process, but let symlink_creator handle this as a skip, not a failure
         return "SKIP_EXTRA", None
 

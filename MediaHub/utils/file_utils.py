@@ -13,6 +13,9 @@ from MediaHub.utils.parser.parse_anime import is_anime_filename
 # Cache for parsed metadata to avoid redundant parsing
 _metadata_cache = {}
 
+# Cache for keywords dataz
+_keywords_cache = None
+
 # ============================================================================
 # MAIN STRUCTURED PARSING FUNCTIONS
 # ============================================================================
@@ -573,9 +576,58 @@ def should_skip_processing(filename: str) -> bool:
     # Skip only metadata files - allow .srt and .strm to be processed
     return filename.lower().endswith(('.sub', '.idx', '.vtt'))
 
+def _load_keywords():
+    """Load keywords from keywords.json file."""
+    global _keywords_cache
+    if _keywords_cache is not None:
+        return _keywords_cache
+
+    try:
+        keywords_path = os.path.join(os.path.dirname(__file__), 'keywords.json')
+        with open(keywords_path, 'r', encoding='utf-8') as f:
+            _keywords_cache = json.load(f)
+            return _keywords_cache
+    except Exception as e:
+        log_message(f"Error loading keywords from keywords.json: {e}", level="ERROR")
+        _keywords_cache = {'extras_patterns': []}
+        return _keywords_cache
+
+def _is_extras_by_name(filename: str, file_path: str = None) -> bool:
+    """
+    Check if a file should be considered an extra based on its name patterns.
+
+    Args:
+        filename: The filename to check
+        file_path: Optional full file path to also check
+
+    Returns:
+        bool: True if the file matches extras patterns
+    """
+    try:
+        keywords_data = _load_keywords()
+        extras_patterns = keywords_data.get('extras_patterns', [])
+
+        # Check filename
+        filename_lower = filename.lower()
+        for pattern in extras_patterns:
+            if pattern.lower() in filename_lower:
+                return True
+
+        if file_path:
+            file_path_lower = file_path.lower()
+            for pattern in extras_patterns:
+                if pattern.lower() in file_path_lower:
+                    return True
+
+        return False
+
+    except Exception as e:
+        log_message(f"Error checking extras patterns: {e}", level="ERROR")
+        return False
+
 def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
     """
-    Determine if the file is an extra based on size limits.
+    Determine if the file is an extra based on size limits and name patterns.
 
     Args:
         file: Filename to check
@@ -583,7 +635,7 @@ def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
         is_movie: True if processing movie files, False for show files
 
     Returns:
-        bool: True if file should be skipped based on size limits
+        bool: True if file should be skipped based on size limits or name patterns
     """
     if not isinstance(file, str) or not isinstance(file_path, str):
         return False
@@ -602,6 +654,10 @@ def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
     # These files are legitimately small and should always be processed
     if file.lower().endswith(('.srt', '.strm')):
         return False
+
+    if _is_extras_by_name(file, file_path):
+        log_message(f"File identified as extra by name pattern: {file}", level="DEBUG")
+        return True
 
     try:
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
