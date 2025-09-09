@@ -362,7 +362,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Only retrieve episode data if not already provided by anime processor
     if episode_identifier and not is_extra and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
-        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name)
+        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name) or re.search(r'\{tmdb-(\d+)\}', proper_show_name)
         if tmdb_id_match:
             show_id = tmdb_id_match.group(1)
             episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
@@ -618,11 +618,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     id_tag = ""
                     tags_to_use = get_rename_tags()
                     if 'TMDB' in tags_to_use and tmdb_id:
-                        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name_with_ids)
+                        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name_with_ids) or re.search(r'\{tmdb-(\d+)\}', proper_show_name_with_ids)
                         if tmdb_id_match:
                             id_tag = f"[tmdbid-{tmdb_id_match.group(1)}]"
                     elif 'IMDB' in tags_to_use and imdb_id:
-                        imdb_id_match = re.search(r'\[imdb(?:id)?-([^\]]+)\]', proper_show_name_with_ids)
+                        imdb_id_match = re.search(r'\[imdb(?:id)?-([^\]]+)\]', proper_show_name_with_ids) or re.search(r'\{imdb-([^}]+)\}', proper_show_name_with_ids)
                         if imdb_id_match:
                             id_tag = f"[imdbid-{imdb_id_match.group(1)}]"
 
