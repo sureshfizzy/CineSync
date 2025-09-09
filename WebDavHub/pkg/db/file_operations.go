@@ -416,8 +416,21 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 	for _, fileIDStr := range req.FilePaths {
 		fileID, err := strconv.Atoi(fileIDStr)
 		if err != nil {
-			logger.Warn("Invalid file ID: %s", fileIDStr)
-			errors = append(errors, fmt.Sprintf("Invalid file ID: %s", fileIDStr))
+			logger.Info("Processing skipped file deletion for path: %s", fileIDStr)
+			result, err := mediaHubDB.Exec("DELETE FROM processed_files WHERE file_path = ? OR destination_path = ?", fileIDStr, fileIDStr)
+			if err != nil {
+				logger.Warn("Failed to delete skipped file %s from processed_files: %v", fileIDStr, err)
+				errors = append(errors, fmt.Sprintf("Failed to delete skipped file %s: %v", fileIDStr, err))
+				continue
+			}
+
+			rowsAffected, _ := result.RowsAffected()
+			if rowsAffected > 0 {
+				logger.Info("Successfully deleted skipped file record: %s", fileIDStr)
+				deletedFromTrash++
+			} else {
+				logger.Warn("No record found for skipped file: %s", fileIDStr)
+			}
 			continue
 		}
 		logger.Info("Processing permanent deletion for ID: %d", fileID)
