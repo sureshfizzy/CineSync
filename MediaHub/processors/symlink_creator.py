@@ -824,6 +824,38 @@ def process_file(args, force=False, batch_apply=False):
                     _cleanup_old_symlink(old_symlink_info)
                 return
             elif result[0] == "SKIP_EXTRA":
+                existing_dest_path = get_destination_path(src_file)
+                if existing_dest_path:
+                    existing_dest_path = normalize_file_path(existing_dest_path)
+                    log_message(f"Found existing symlink for file now classified as extra: {src_file} -> {existing_dest_path}", level="INFO")
+
+                    old_symlink_info = {
+                        'path': existing_dest_path,
+                        'parent_dir': os.path.dirname(existing_dest_path),
+                        'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path))
+                    }
+
+                    try:
+                        if os.path.exists(existing_dest_path):
+                            os.remove(existing_dest_path)
+                            log_message(f"Removed existing symlink for file now classified as extra: {existing_dest_path}", level="INFO")
+
+                        if tmdb_id:
+                            try:
+                                cleanup_tmdb_covers(int(tmdb_id))
+                            except Exception as e:
+                                log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+
+                        if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
+                            log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
+                            os.rmdir(old_symlink_info['parent_dir'])
+
+                            if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
+                                log_message(f"Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
+                                os.rmdir(old_symlink_info['parent_parent_dir'])
+                    except OSError as e:
+                        log_message(f"Error during extra file cleanup: {e}", level="WARNING")
+
                 reason = "Extra file skipped - size below limit threshold"
                 log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
                 save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
@@ -929,6 +961,38 @@ def process_file(args, force=False, batch_apply=False):
                     _cleanup_old_symlink(old_symlink_info)
                 return
             elif result[0] == "SKIP_EXTRA":
+                existing_dest_path = get_destination_path(src_file)
+                if existing_dest_path:
+                    existing_dest_path = normalize_file_path(existing_dest_path)
+                    log_message(f"Found existing symlink for file now classified as extra: {src_file} -> {existing_dest_path}", level="INFO")
+
+                    old_symlink_info = {
+                        'path': existing_dest_path,
+                        'parent_dir': os.path.dirname(existing_dest_path),
+                        'parent_parent_dir': os.path.dirname(os.path.dirname(existing_dest_path))
+                    }
+
+                    try:
+                        if os.path.exists(existing_dest_path):
+                            os.remove(existing_dest_path)
+                            log_message(f"Removed existing symlink for file now classified as extra: {existing_dest_path}", level="INFO")
+
+                        if tmdb_id:
+                            try:
+                                cleanup_tmdb_covers(int(tmdb_id))
+                            except Exception as e:
+                                log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+
+                        if os.path.exists(old_symlink_info['parent_dir']) and not os.listdir(old_symlink_info['parent_dir']):
+                            log_message(f"Deleting empty directory: {old_symlink_info['parent_dir']}", level="INFO")
+                            os.rmdir(old_symlink_info['parent_dir'])
+
+                            if os.path.exists(old_symlink_info['parent_parent_dir']) and not os.listdir(old_symlink_info['parent_parent_dir']):
+                                log_message(f"Deleting empty directory: {old_symlink_info['parent_parent_dir']}", level="INFO")
+                                os.rmdir(old_symlink_info['parent_parent_dir'])
+                    except OSError as e:
+                        log_message(f"Error during extra file cleanup: {e}", level="WARNING")
+
                 reason = "Extra file skipped - size below limit threshold"
                 log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
                 save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
