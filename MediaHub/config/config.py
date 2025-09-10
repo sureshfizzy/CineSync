@@ -145,6 +145,14 @@ def get_movie_extras_size_limit():
     """Get maximum allowed file size for movie extras in MB"""
     return get_env_int('MOVIE_EXTRAS_SIZE_LIMIT', 250)
 
+def get_4k_movie_extras_size_limit():
+    """Get maximum allowed file size for 4K movie extras in MB"""
+    return get_env_int('4K_MOVIE_EXTRAS_SIZE_LIMIT', 2048)
+
+def get_4k_show_extras_size_limit():
+    """Get maximum allowed file size for 4K show extras in MB"""
+    return get_env_int('4K_SHOW_EXTRAS_SIZE_LIMIT', 800)
+
 def is_source_structure_enabled():
     return os.getenv('USE_SOURCE_STRUCTURE', 'false').lower() == 'true'
 

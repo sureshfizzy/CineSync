@@ -662,11 +662,46 @@ def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
     try:
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # Use appropriate size limit based on content type
+        is_4k = ('2160' in file or
+                 re.search(r'\b4k\b', file, re.IGNORECASE) or
+                 'UHD' in file.upper() or
+                 'UltraHD' in file)
+
+        if not is_4k:
+            try:
+                parent_dir = os.path.dirname(file_path)
+                folder_name = os.path.basename(parent_dir)
+
+                if (
+                    '2160' in folder_name or
+                    re.search(r'\b4k\b', folder_name, re.IGNORECASE) or
+                    'UHD' in folder_name.upper() or
+                    'UltraHD' in folder_name
+                ):
+                    is_4k = True
+                else:
+                    folder_resolution = extract_resolution_from_folder(parent_dir)
+                    if isinstance(folder_resolution, str):
+                        if (
+                            '2160' in folder_resolution or
+                            re.search(r'\b4k\b', folder_resolution, re.IGNORECASE) or
+                            'UHD' in folder_resolution.upper() or
+                            'UltraHD' in folder_resolution
+                        ):
+                            is_4k = True
+            except Exception:
+                pass
+
         if is_movie:
-            size_limit = get_movie_extras_size_limit()
+            if is_4k:
+                size_limit = get_4k_movie_extras_size_limit()
+            else:
+                size_limit = get_movie_extras_size_limit()
         else:
-            size_limit = get_show_extras_size_limit()
+            if is_4k:
+                size_limit = get_4k_show_extras_size_limit()
+            else:
+                size_limit = get_show_extras_size_limit()
 
         return file_size_mb <= size_limit
 
