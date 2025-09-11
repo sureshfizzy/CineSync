@@ -261,7 +261,7 @@ WEBSITE_PATTERNS = [
 
 # File extension patterns
 FILE_EXTENSION_PATTERNS = {
-    'video': re.compile(r'\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts)$', re.IGNORECASE),
+    'video': re.compile(r'\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|strm)$', re.IGNORECASE),
     'subtitle': re.compile(r'\.(srt|sub|idx|vtt|ass|ssa)$', re.IGNORECASE),
     'audio': re.compile(r'\.(mp3|flac|aac|ac3|dts|wav|ogg)$', re.IGNORECASE),
 }
