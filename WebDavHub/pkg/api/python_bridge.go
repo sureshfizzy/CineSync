@@ -174,9 +174,9 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Source path: '%s'", req.SourcePath)
 	if req.SelectedIds != nil {
-		logger.Info("Selected IDs received:")
+		logger.Debug("Selected IDs received:")
 		for key, value := range req.SelectedIds {
-			logger.Info("  %s: %s", key, value)
+			logger.Debug("  %s: %s", key, value)
 		}
 	}
 
@@ -452,6 +452,8 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logger.Info("Python process started successfully with PID: %d", cmd.Process.Pid)
+
 	// Set headers for streaming JSON response
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -557,10 +559,17 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 	// Wait for command to finish in a goroutine
 	doneChan := make(chan error)
 	go func() {
-		doneChan <- cmd.Wait()
+		logger.Debug("Waiting for Python process (PID: %d) to complete...", cmd.Process.Pid)
+		err := cmd.Wait()
+		if err != nil {
+			logger.Error("Python process (PID: %d) exited with error: %v", cmd.Process.Pid, err)
+		} else {
+			logger.Info("Python process (PID: %d) completed successfully", cmd.Process.Pid)
+		}
+		doneChan <- err
 	}()
 
-	// Wait for command to finish or client to close connection
+	// Wait for command to finish, client to close connection, or timeout
 	select {
 	case err := <-doneChan:
 		if err != nil {
@@ -582,6 +591,15 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		// Client closed connection
 		logger.Warn("Python bridge processing interrupted (client disconnected) for: %s", filepath.Base(realPath))
 		cmd.Process.Kill()
+	case <-time.After(10 * time.Minute):
+		// Timeout after 10 minutes
+		logger.Error("Python bridge processing timed out after 10 minutes for: %s", filepath.Base(realPath))
+		cmd.Process.Kill()
+		if sendErr := sendResponse(PythonBridgeResponse{Error: "Processing timed out after 10 minutes", Done: true}); sendErr != nil {
+			if !isClientDisconnectError(sendErr) {
+				logger.Error("Error sending timeout response: %v", sendErr)
+			}
+		}
 	}
 
 	// Close stdin and cleanup
@@ -680,7 +698,8 @@ func handleBulkAutoProcess(w http.ResponseWriter, r *http.Request, req PythonBri
 	}
 
 	pythonCmd := getPythonCommand()
-	logger.Info("Starting bulk auto processing with command: %s %v", pythonCmd, args)
+	logger.Info("Executing bulk auto processing command: %s %s", pythonCmd, strings.Join(args, " "))
+	logger.Debug("Bulk command breakdown - Python: %s, Args: %v", pythonCmd, args)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

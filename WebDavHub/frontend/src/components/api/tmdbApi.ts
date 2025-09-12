@@ -43,7 +43,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
               if (parsed && typeof parsed === 'object' && 'id' in parsed) {
                 return parsed as TmdbResult;
               }
-            } catch {}
+            } catch { }
           }
         }
       } catch (err: any) {
@@ -126,7 +126,7 @@ export async function searchTmdb(query: string, year?: string, mediaType?: 'movi
             if (parsed && typeof parsed === 'object' && 'id' in parsed) {
               return parsed as TmdbResult;
             }
-          } catch {}
+          } catch { }
         }
       }
     } catch (err: any) {

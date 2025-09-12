@@ -4035,3 +4035,98 @@ func createEpisodeFileFromDB(filePath string, tmdbID int, properName string, sea
 		"dateAdded":    modTime.Format("2006-01-02T15:04:05Z"),
 	}
 }
+
+// SeriesInfo represents a TV series from the processed_files database
+type SeriesInfo struct {
+	ID       int    `json:"id"`
+	Title    string `json:"title"`
+	Year     *int   `json:"year,omitempty"`
+	TvdbID   *int   `json:"tvdb_id,omitempty"`
+	ImdbID   string `json:"imdb_id,omitempty"`
+	TmdbID   *int   `json:"tmdb_id,omitempty"`
+	Overview string `json:"overview,omitempty"`
+}
+
+// HandleSeries returns TV series from the processed_files database
+func HandleSeries(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get MediaHub database connection
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to connect to MediaHub database: %v", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+	defer mediaHubDB.Close()
+
+	// Query to get TV series from processed_files table
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, 0) as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(overview, '') as overview
+		FROM processed_files
+		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year`
+
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		logger.Error("Failed to query series: %v", err)
+		http.Error(w, "Database query failed", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var series []SeriesInfo
+	id := 1
+
+	for rows.Next() {
+		var properName, tmdbIDStr, overview string
+		var year int
+
+		if err := rows.Scan(&properName, &year, &tmdbIDStr, &overview); err != nil {
+			logger.Warn("Failed to scan series row: %v", err)
+			continue
+		}
+
+		seriesInfo := SeriesInfo{
+			ID:       id,
+			Title:    properName,
+			Overview: overview,
+		}
+
+		// Add year if it's valid
+		if year > 0 {
+			seriesInfo.Year = &year
+		}
+
+		// Add TMDB ID if it's valid
+		if tmdbIDStr != "" {
+			if tmdbID, err := strconv.Atoi(tmdbIDStr); err == nil && tmdbID > 0 {
+				seriesInfo.TmdbID = &tmdbID
+			}
+		}
+
+		series = append(series, seriesInfo)
+		id++
+	}
+
+	if err := rows.Err(); err != nil {
+		logger.Error("Error iterating series rows: %v", err)
+		http.Error(w, "Database iteration error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(series)
+}

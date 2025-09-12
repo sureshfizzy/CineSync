@@ -702,7 +702,6 @@ def process_file(args, force=False, batch_apply=False):
 
     if force_show:
         is_show = True
-        force_extra = True
         log_message(f"Processing as show based on Force Show flag: {file}", level="INFO")
     elif force_movie:
         is_show = False

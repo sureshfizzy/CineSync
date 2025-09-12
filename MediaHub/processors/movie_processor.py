@@ -136,13 +136,21 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
         if isinstance(result, (tuple, dict)):
             if isinstance(result, tuple):
-                if len(result) >= 14:
-                    # New format with all metadata fields
-                    tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
-                else:
-                    log_message(f"TMDB search returned unexpected result format for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
-                    track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result format for movie: {movie_name} ({year})")
-                    return None, None
+                # Map available tuple fields and default the rest
+                tmdb_id = result[0] if len(result) > 0 else tmdb_id
+                imdb_id = result[1] if len(result) > 1 else (imdb_id or '')
+                proper_name = result[2] if len(result) > 2 else proper_name
+                movie_year = result[3] if len(result) > 3 else year
+                is_anime_genre = result[4] if len(result) > 4 else False
+                is_kids_content = result[5] if len(result) > 5 else False
+                original_language = result[6] if len(result) > 6 else None
+                overview = result[7] if len(result) > 7 else ''
+                runtime = result[8] if len(result) > 8 else 0
+                original_title = result[9] if len(result) > 9 else ''
+                status = result[10] if len(result) > 10 else ''
+                release_date = result[11] if len(result) > 11 else ''
+                genres = result[12] if len(result) > 12 else '[]'
+                certification = result[13] if len(result) > 13 else ''
             elif isinstance(result, dict):
                 proper_name = result['title']
                 year = result.get('release_date', '').split('-')[0]
@@ -188,16 +196,24 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             track_file_failure(src_file, None, None, "TMDB search failed", f"No TMDB results found for movie: {movie_name} ({year})")
             return None, None
 
-        elif isinstance(result, tuple) and len(result) >= 6:
-            if len(result) >= 14:
-                # New format with all metadata fields
-                tmdb_id, imdb_id, proper_name, movie_year, is_anime_genre, is_kids_content, original_language, overview, runtime, original_title, status, release_date, genres, certification = result
-            else:
-                log_message(f"TMDB search returned unexpected result format for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
-                track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result format for movie: {movie_name} ({year})")
-                return None, None
+        elif isinstance(result, tuple):
+            # Map available tuple fields and default the rest
+            tmdb_id = result[0] if len(result) > 0 else tmdb_id
+            imdb_id = result[1] if len(result) > 1 else (imdb_id or '')
+            proper_name = result[2] if len(result) > 2 else proper_name
+            movie_year = result[3] if len(result) > 3 else year
+            is_anime_genre = result[4] if len(result) > 4 else False
+            is_kids_content = result[5] if len(result) > 5 else False
+            original_language = result[6] if len(result) > 6 else None
+            overview = result[7] if len(result) > 7 else ''
+            runtime = result[8] if len(result) > 8 else 0
+            original_title = result[9] if len(result) > 9 else ''
+            status = result[10] if len(result) > 10 else ''
+            release_date = result[11] if len(result) > 11 else ''
+            genres = result[12] if len(result) > 12 else '[]'
+            certification = result[13] if len(result) > 13 else ''
             
-            year = result[3] if result[3] is not None else year
+            year = movie_year if movie_year is not None else year
             proper_movie_name = f"{proper_name} ({year})"
             if is_tmdb_folder_id_enabled() and tmdb_id:
                 if is_jellyfin_id_format_enabled():
