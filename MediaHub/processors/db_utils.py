@@ -2171,7 +2171,13 @@ def update_database_to_new_format(conn):
             log_message("Schema update completed!", level="INFO")
 
         log_message("Fetching all entries for metadata updates...", level="INFO")
-        
+
+        try:
+            cursor.execute("UPDATE processed_files SET media_type = 'tv' WHERE LOWER(media_type) = 'anime'")
+            conn.commit()
+        except Exception as e:
+            log_message(f"Failed to normalize legacy media_type values: {e}", level="WARNING")
+
         # Find ALL entries in the database for comprehensive update
         cursor.execute("""
             SELECT file_path, destination_path, tmdb_id, season_number, media_type, episode_number, sport_name
@@ -2398,8 +2404,6 @@ def _process_single_entry(entry, api_key):
                     # Check origin country for anime detection
                     if metadata.get('origin_country') and 'JP' in metadata.get('origin_country'):
                         updates['is_anime_genre'] = 1
-                        if not media_type or 'anime' not in media_type.lower():
-                            updates['media_type'] = 'Anime'
 
             # For TV shows, get total episodes and certification
             if is_tv_show:

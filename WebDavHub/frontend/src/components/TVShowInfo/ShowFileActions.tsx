@@ -61,7 +61,7 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
         }
         const folderResponse = await axios.get(`/api/files${folderPath}`);
         const files = folderResponse.data;
-        const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
+        const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'];
         const mediaFile = files.find((file: any) => file.type === 'file' && videoExtensions.some((ext: string) => file.name.toLowerCase().endsWith(ext)));
         if (mediaFile) {
           setFileInfo({

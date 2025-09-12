@@ -37,7 +37,11 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
         for (const item of items) {
           if (item.type === 'directory') {
             result = result.concat(await collectVideoFiles(`${path}/${item.name}`));
-          } else if (item.type === 'file' && ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext => item.name.toLowerCase().endsWith(ext))) {
+          } else if (
+            item.type === 'file' &&
+            ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm']
+              .some(ext => item.name.toLowerCase().endsWith(ext))
+          ) {
             result.push({ file: item, relPath: `${path}/${item.name}` });
           }
         }

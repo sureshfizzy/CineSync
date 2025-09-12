@@ -86,7 +86,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
             const seasonResponse = await axios.get(`/api/files${seasonPath}`);
             const episodeFiles = seasonResponse.data.filter((file: FileItem) =>
               file.type === 'file' &&
-              ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'].some(ext =>
+              ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'].some(ext =>
                 file.name.toLowerCase().endsWith(ext)
               )
             );
@@ -121,7 +121,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
             const folderResponse = await axios.get(`/api/files${folderPath}`);
             const files: FileItem[] = folderResponse.data;
 
-            const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v'];
+            const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'];
             mediaFile = files.find(file =>
               file.type === 'file' &&
               videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))

@@ -676,7 +676,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             clean_name = re.sub(r'\s*\(\d{4}\)', '', clean_name).strip()
 
     # Return all fields
-    return (dest_file, tmdb_id, season_number, is_extra, 'Anime' if is_anime_genre else 'TV',
+    return (dest_file, tmdb_id, season_number, is_extra, 'TV',
             clean_name, str(extracted_year) if extracted_year else None,
             str(episode_number) if episode_number else None, imdb_id,
             1 if is_anime_genre else 0, is_kids_content, language, quality, tvdb_id,
