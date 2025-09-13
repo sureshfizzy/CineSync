@@ -122,6 +122,10 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
     # Handle direct ID searches first
     if tmdb_id or imdb_id or tvdb_id:
+        proper_name = None
+        show_name = None
+        is_anime_genre = False
+
         try:
             if tmdb_id:
                 log_message(f"Using provided TMDB ID: {tmdb_id}", level="INFO")
