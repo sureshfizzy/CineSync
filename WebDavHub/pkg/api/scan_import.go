@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 )
 
@@ -42,8 +44,17 @@ type ScanImportFile struct {
 
 // ScanImportResponse represents the response from scanning a directory for import
 type ScanImportResponse struct {
-	Files []ScanImportFile `json:"files"`
+	Files []ScanImportFile `json:"files,omitempty"`
+	File  *ScanImportFile  `json:"file,omitempty"`
+	Progress *ScanProgress `json:"progress,omitempty"`
 	Error string           `json:"error,omitempty"`
+	Done  bool             `json:"done,omitempty"`
+}
+
+// ScanProgress represents the current scanning progress
+type ScanProgress struct {
+	Current int `json:"current"`
+	Total   int `json:"total"`
 }
 
 // HandleScanForImport scans a directory for video files and parses them with TMDB data
@@ -59,14 +70,22 @@ func HandleScanForImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	skipStr := r.URL.Query().Get("skip")
+	skip := 0
+	if skipStr != "" {
+		if parsedSkip, err := strconv.Atoi(skipStr); err == nil && parsedSkip > 0 {
+			skip = parsedSkip
+		}
+	}
+
 	logger.Info("Scanning directory for import: %s", path)
 
 	// Check if directory exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		logger.Warn("Directory does not exist: %s", path)
 		response := ScanImportResponse{
-			Files: []ScanImportFile{},
 			Error: "Directory does not exist",
+			Done:  true,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -78,31 +97,160 @@ func HandleScanForImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.Error("Failed to scan directory %s: %v", path, err)
 		response := ScanImportResponse{
-			Files: []ScanImportFile{},
 			Error: fmt.Sprintf("Failed to scan directory: %v", err),
+			Done:  true,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Parse each video file and get TMDB data
-	var parsedFiles []ScanImportFile
-	for i, file := range videoFiles {		
-		parsedFile := parseVideoFileForImport(file, i+1)
-		parsedFiles = append(parsedFiles, parsedFile)
-	}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
-	response := ScanImportResponse{
-		Files: parsedFiles,
-	}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("Failed to encode scan import response: %v", err)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+		totalFiles := len(videoFiles)
+		logger.Info("Found %d video files to process", totalFiles)
+
+		// Send initial progress
+		progressResponse := ScanImportResponse{
+			Progress: &ScanProgress{
+				Current: skip,
+				Total:   totalFiles,
+			},
+		}
+		data, _ := json.Marshal(progressResponse)
+		w.Write(data)
+		w.Write([]byte("\n"))
+		flusher.Flush()
+
+		// Process files in parallel using goroutines
+		maxWorkers := env.GetInt("MAX_PROCESSES", runtime.NumCPU())
+		if maxWorkers > 20 {
+			maxWorkers = 20
+		}
+		if maxWorkers < 1 {
+			maxWorkers = 1
+		}
+
+		logger.Debug("Starting parallel processing with %d workers for %d files", maxWorkers, len(videoFiles)-skip)
+
+		type IndexedJob struct {
+			File  VideoFileInfo
+			Index int
+		}
+		type IndexedResult struct {
+			File  ScanImportFile
+			Index int
+		}
+
+		jobs := make(chan IndexedJob, len(videoFiles))
+		results := make(chan IndexedResult, len(videoFiles))
+
+		// Start worker goroutines
+		for w := 0; w < maxWorkers; w++ {
+			go func() {
+				for job := range jobs {
+					select {
+					case <-r.Context().Done():
+						return
+					default:
+					}
+
+					fallbackEpisode := job.Index + skip + 1
+					parsedFile := parseVideoFileForImport(job.File, fallbackEpisode)
+					results <- IndexedResult{File: parsedFile, Index: job.Index}
+				}
+			}()
+		}
+
+		// Send jobs to workers with proper indexing
+		remainingFiles := videoFiles[skip:]
+		go func() {
+			defer close(jobs)
+			for i, file := range remainingFiles {
+				select {
+				case <-r.Context().Done():
+					return
+				case jobs <- IndexedJob{File: file, Index: i}:
+				}
+			}
+		}()
+
+		// Collect results in order and stream them
+		resultBuffer := make([]ScanImportFile, len(remainingFiles))
+		receivedResults := make([]bool, len(remainingFiles))
+		processedCount := 0
+		nextToStream := 0
+
+		for processedCount < len(remainingFiles) {
+			select {
+			case <-r.Context().Done():
+				logger.Info("Client disconnected during streaming scan")
+				return
+			case result := <-results:
+				processedCount++
+
+				// Store result in correct position
+				resultBuffer[result.Index] = result.File
+				receivedResults[result.Index] = true
+
+				// Stream all consecutive results starting from nextToStream
+				for nextToStream < len(remainingFiles) && receivedResults[nextToStream] {
+					parsedFile := resultBuffer[nextToStream]
+
+					// Send the parsed file result
+					fileResponse := ScanImportResponse{
+						File: &parsedFile,
+						Progress: &ScanProgress{
+							Current: skip + nextToStream + 1,
+							Total:   totalFiles,
+						},
+					}
+
+					data, err := json.Marshal(fileResponse)
+					if err != nil {
+						logger.Error("Failed to marshal file response: %v", err)
+						continue
+					}
+
+					if _, err := w.Write(data); err != nil {
+						logger.Error("Failed to write streaming response: %v", err)
+						return
+					}
+
+					if _, err := w.Write([]byte("\n")); err != nil {
+						logger.Error("Failed to write newline: %v", err)
+						return
+					}
+
+					flusher.Flush()
+					nextToStream++
+				}
+			}
+		}
+
+		// Send completion signal
+		completionResponse := ScanImportResponse{
+			Done: true,
+			Progress: &ScanProgress{
+				Current: totalFiles,
+				Total:   totalFiles,
+			},
+		}
+
+		data, _ = json.Marshal(completionResponse)
+		w.Write(data)
+		w.Write([]byte("\n"))
+		flusher.Flush()
+
+		logger.Info("Completed streaming scan for %d files", totalFiles)
 }
 
 // VideoFileInfo represents basic info about a video file
@@ -110,6 +258,18 @@ type VideoFileInfo struct {
 	Name string
 	Path string
 	Size int64
+}
+
+// IndexedJob represents a file processing job with its index
+type IndexedJob struct {
+	File  VideoFileInfo
+	Index int
+}
+
+// IndexedResult represents a processed file result with its original index
+type IndexedResult struct {
+	File  ScanImportFile
+	Index int
 }
 
 // MediaHubParsedData represents the result from MediaHub's parse_media_file()
@@ -194,11 +354,70 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 	return videoFiles, nil
 }
 
+// processFilesInParallel processes files using parallel workers and returns results in order
+func processFilesInParallel(files []VideoFileInfo, skip int, ctx context.Context) []ScanImportFile {
+	maxWorkers := env.GetInt("MAX_PROCESSES", runtime.NumCPU())
+	if maxWorkers > 20 {
+		maxWorkers = 20
+	}
+	if maxWorkers < 1 {
+		maxWorkers = 1
+	}
+
+	jobs := make(chan IndexedJob, len(files))
+	results := make(chan IndexedResult, len(files))
+
+	// Start worker goroutines
+	for w := 0; w < maxWorkers; w++ {
+		go func() {
+			for job := range jobs {
+				// Check for cancellation
+				if ctx != nil {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+				}
+
+				fallbackEpisode := job.Index + skip + 1
+				parsedFile := parseVideoFileForImport(job.File, fallbackEpisode)
+				results <- IndexedResult{File: parsedFile, Index: job.Index}
+			}
+		}()
+	}
+
+	// Send jobs to workers
+	go func() {
+		defer close(jobs)
+		for i, file := range files {
+			if ctx != nil {
+				select {
+				case <-ctx.Done():
+					return
+				case jobs <- IndexedJob{File: file, Index: i}:
+				}
+			} else {
+				jobs <- IndexedJob{File: file, Index: i}
+			}
+		}
+	}()
+
+	// Collect results in order
+	resultBuffer := make([]ScanImportFile, len(files))
+	for i := 0; i < len(files); i++ {
+		result := <-results
+		resultBuffer[result.Index] = result.File
+	}
+
+	return resultBuffer
+}
+
 // parseVideoFileForImport parses a video file using MediaHub's parser and gets TMDB data
 func parseVideoFileForImport(file VideoFileInfo, fallbackEpisode int) ScanImportFile {
-
 	// Format file size
 	sizeStr := formatFileSizeForImport(file.Size)
+
 	result, err := callMediaHubCleanQuery(file.Name)
 	if err != nil {
 		logger.Error("MediaHub parser failed for %s: %v", file.Name, err)
@@ -217,9 +436,105 @@ func parseVideoFileForImport(file VideoFileInfo, fallbackEpisode int) ScanImport
 		}
 	}
 
-	parsedData, err := callMediaHubParser(file.Name)
-	if err != nil {
-		logger.Error("MediaHub parser conversion failed for %s: %v", file.Name, err)
+	// Extract all data directly from the single result
+	mediaType := getStringValue(result, "media_type")
+	if mediaType == "" {
+		mediaType = "tv"
+	}
+
+	title := getStringValue(result, "title")
+	episodeTitle := getStringValue(result, "episode_title")
+	year := getIntValue(result, "year")
+	season := getIntValue(result, "season")
+	episode := getIntValue(result, "episode")
+
+	quality := getStringValue(result, "resolution")
+	if quality == "" {
+		quality = getStringValue(result, "quality_source")
+	}
+	if quality == "" {
+		quality = "Unknown"
+	}
+
+	releaseGroup := getStringValue(result, "release_group")
+	if releaseGroup == "" {
+		releaseGroup = "Unknown"
+	}
+
+	languages := getStringArrayValue(result, "languages")
+	language := "English"
+	if len(languages) > 0 {
+		language = languages[0]
+	}
+
+	// Determine release type based on parsed data and media type
+	releaseType := "Single Episode"
+	if mediaType == "movie" {
+		releaseType = "Movie"
+	} else if season == 0 {
+		releaseType = "Special"
+	} else if episode == 0 {
+		releaseType = "Season Pack"
+	}
+
+	// Use parsed episode number or fallback (only for TV shows)
+	if mediaType == "tv" && episode == 0 {
+		episode = fallbackEpisode
+	}
+
+	// Use parsed season number or default (only for TV shows)
+	if mediaType == "tv" && season == 0 {
+		season = 1
+	}
+
+	// Extract ID fields from the result map
+	tmdbID := getIntValue(result, "tmdb_id")
+	imdbID := getStringValue(result, "imdb_id")
+	tvdbID := getIntValue(result, "tvdb_id")
+
+	// Create final parsed file structure
+	parsedFile := ScanImportFile{
+		Name:         file.Name,
+		Path:         file.Path,
+		Size:         sizeStr,
+		ReleaseGroup: releaseGroup,
+		Quality:      quality,
+		Language:     language,
+		ReleaseType:  releaseType,
+		MediaType:    mediaType,
+		Year:         year,
+		TMDBID:       tmdbID,
+		IMDBID:       imdbID,
+		TVDBID:       tvdbID,
+	}
+
+	// Set fields based on media type
+	if mediaType == "movie" {
+		parsedFile.Title = title
+		parsedFile.MovieTitle = title
+		parsedFile.Series = ""
+		parsedFile.Season = 0
+		parsedFile.Episode = 0
+		parsedFile.EpisodeTitle = ""
+		parsedFile.MovieID = tmdbID
+		parsedFile.SeriesID = 0
+	} else {
+		parsedFile.Series = title
+		parsedFile.Season = season
+		parsedFile.Episode = episode
+		parsedFile.EpisodeTitle = episodeTitle
+		parsedFile.Title = episodeTitle
+		parsedFile.MovieTitle = ""
+		parsedFile.SeriesID = tmdbID
+		parsedFile.MovieID = 0
+	}
+	return parsedFile
+}
+
+// convertParsedResultToScanImportFile converts a parsed result map to ScanImportFile
+func convertParsedResultToScanImportFile(result map[string]interface{}, file VideoFileInfo, sizeStr string, fallbackEpisode int) ScanImportFile {
+	if errorMsg, hasError := result["error"]; hasError {
+		logger.Error("MediaHub parser error for %s: %v", file.Name, errorMsg)
 		return ScanImportFile{
 			Name:         file.Name,
 			Path:         file.Path,
@@ -241,42 +556,48 @@ func parseVideoFileForImport(file VideoFileInfo, fallbackEpisode int) ScanImport
 		mediaType = "tv"
 	}
 
-	seriesName := parsedData.Title
-	episodeTitle := parsedData.EpisodeTitle
+	title := getStringValue(result, "title")
+	episodeTitle := getStringValue(result, "episode_title")
+	year := getIntValue(result, "year")
+	season := getIntValue(result, "season")
+	episode := getIntValue(result, "episode")
+	quality := getStringValue(result, "resolution")
+	if quality == "" {
+		quality = getStringValue(result, "quality_source")
+	}
+	if quality == "" {
+		quality = "Unknown"
+	}
+
+	releaseGroup := getStringValue(result, "release_group")
+	if releaseGroup == "" {
+		releaseGroup = "Unknown"
+	}
+
+	languages := getStringArrayValue(result, "languages")
+	language := "English"
+	if len(languages) > 0 {
+		language = languages[0]
+	}
 
 	// Determine release type based on parsed data and media type
 	releaseType := "Single Episode"
 	if mediaType == "movie" {
 		releaseType = "Movie"
-	} else if parsedData.Season == 0 {
+	} else if season == 0 {
 		releaseType = "Special"
-	} else if parsedData.Episode == 0 {
+	} else if episode == 0 {
 		releaseType = "Season Pack"
 	}
 
 	// Use parsed episode number or fallback (only for TV shows)
-	episodeNum := parsedData.Episode
-	if mediaType == "tv" && episodeNum == 0 {
-		episodeNum = fallbackEpisode
+	if mediaType == "tv" && episode == 0 {
+		episode = fallbackEpisode
 	}
 
 	// Use parsed season number or default (only for TV shows)
-	seasonNum := parsedData.Season
-	if mediaType == "tv" && seasonNum == 0 {
-		seasonNum = 1
-	}
-
-	// Create final parsed file structure
-	parsedFile := ScanImportFile{
-		Name:         file.Name,
-		Path:         file.Path,
-		Size:         sizeStr,
-		ReleaseGroup: parsedData.ReleaseGroup,
-		Quality:      parsedData.Quality,
-		Language:     parsedData.Language,
-		ReleaseType:  releaseType,
-		MediaType:    mediaType,
-		Year:         parsedData.Year,
+	if mediaType == "tv" && season == 0 {
+		season = 1
 	}
 
 	// Extract ID fields from the result map
@@ -284,29 +605,39 @@ func parseVideoFileForImport(file VideoFileInfo, fallbackEpisode int) ScanImport
 	imdbID := getStringValue(result, "imdb_id")
 	tvdbID := getIntValue(result, "tvdb_id")
 
+	// Create final parsed file structure
+	parsedFile := ScanImportFile{
+		Name:         file.Name,
+		Path:         file.Path,
+		Size:         sizeStr,
+		ReleaseGroup: releaseGroup,
+		Quality:      quality,
+		Language:     language,
+		ReleaseType:  releaseType,
+		MediaType:    mediaType,
+		Year:         year,
+		TMDBID:       tmdbID,
+		IMDBID:       imdbID,
+		TVDBID:       tvdbID,
+	}
+
 	// Set fields based on media type
 	if mediaType == "movie" {
-		parsedFile.Title = seriesName
-		parsedFile.MovieTitle = seriesName
+		parsedFile.Title = title
+		parsedFile.MovieTitle = title
 		parsedFile.Series = ""
 		parsedFile.Season = 0
 		parsedFile.Episode = 0
 		parsedFile.EpisodeTitle = ""
-		parsedFile.TMDBID = tmdbID
-		parsedFile.IMDBID = imdbID
-		parsedFile.TVDBID = tvdbID
 		parsedFile.MovieID = tmdbID
 		parsedFile.SeriesID = 0
 	} else {
-		parsedFile.Series = seriesName
-		parsedFile.Season = seasonNum
-		parsedFile.Episode = episodeNum
+		parsedFile.Series = title
+		parsedFile.Season = season
+		parsedFile.Episode = episode
 		parsedFile.EpisodeTitle = episodeTitle
 		parsedFile.Title = episodeTitle
 		parsedFile.MovieTitle = ""
-		parsedFile.TMDBID = tmdbID
-		parsedFile.IMDBID = imdbID
-		parsedFile.TVDBID = tvdbID
 		parsedFile.SeriesID = tmdbID
 		parsedFile.MovieID = 0
 	}

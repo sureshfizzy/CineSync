@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, IconButton, useTheme, Paper, Chip, CircularProgress, FormControl, Select, MenuItem, TextField } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
-import axios from 'axios';
+
 import { fetchEpisodesFromTmdb } from '../api/tmdbApi';
 import SeriesSelectionDialog from './SeriesSelectionDialog';
 import SeasonSelectionDialog from './SeasonSelectionDialog';
@@ -90,75 +90,170 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
   const [episodeDialogOpen, setEpisodeDialogOpen] = useState(false);
   const [movieDialogOpen, setMovieDialogOpen] = useState(false);
   const [currentEditingFileId, setCurrentEditingFileId] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState({ completed: 0, total: 0, currentFile: '' });
+  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanAbortController, setScanAbortController] = useState<AbortController | null>(null);
+  const [scanWasCancelled, setScanWasCancelled] = useState(false);
+  const [lastScanPosition, setLastScanPosition] = useState(0);
+
 
   useEffect(() => {
     if (open && folderPath) {
+      setImportProgress({ completed: 0, total: 0, currentFile: '' });
+      setScanProgress({ current: 0, total: 0 });
+      setScanAbortController(null);
+      setScanWasCancelled(false);
+      setLastScanPosition(0);
       scanFolder();
     }
   }, [open, folderPath]);
 
-  const scanFolder = async () => {
+  // Cleanup effect to abort scan when dialog closes
+  useEffect(() => {
+    if (!open && scanAbortController) {
+      scanAbortController.abort();
+      setScanAbortController(null);
+      setIsScanning(false);
+    }
+  }, [open, scanAbortController]);
+
+  const scanFolder = async (skipFiles = 0) => {
+    console.log('Starting scan for folder:', folderPath, 'skipping:', skipFiles);
     setLoading(true);
+    setIsScanning(true);
+
+    // Only clear files if starting from beginning
+    if (skipFiles === 0) {
+      setFiles([]);
+    }
+
+    // Create abort controller for this scan
+    const abortController = new AbortController();
+    setScanAbortController(abortController);
+
     try {
-      const scanResponse = await axios.get('/api/scan-for-import', {
-        params: { path: folderPath }
+      const url = `/api/scan-for-import?path=${encodeURIComponent(folderPath)}&streaming=true${skipFiles > 0 ? `&skip=${skipFiles}` : ''}`;
+      const response = await fetch(url, {
+        signal: abortController.signal
       });
 
-      if (scanResponse.data && scanResponse.data.files && Array.isArray(scanResponse.data.files)) {
-        const videoFiles = scanResponse.data.files;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-        if (videoFiles.length > 0) {
-          const mediaFiles: MediaFile[] = videoFiles.map((file: any, index: number) => {
-            const mediaType = file.mediaType || (file.season || file.episode ? 'tv' : 'movie');
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body reader available');
+      }
 
-            const baseFile = {
-              id: `file-${index}`,
-              fileName: file.name,
-              filePath: file.path,
-              mediaType: mediaType as 'movie' | 'tv',
-              releaseGroup: file.releaseGroup || 'Unknown',
-              quality: file.quality || 'Unknown',
-              language: file.language || 'English',
-              size: file.size || 'Unknown',
-              selected: true
-            };
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const allFiles: any[] = [];
 
-            if (mediaType === 'tv') {
-              return {
-                ...baseFile,
-                series: file.series || 'Unknown Series',
-                seriesId: file.seriesId || file.tmdbId,
-                season: file.season || 1,
-                episode: file.episode || (index + 1),
-                title: file.episodeTitle || `Episode ${file.episode || (index + 1)}`,
-                releaseType: file.releaseType || 'Single Episode',
-              };
-            } else {
-              return {
-                ...baseFile,
-                movieTitle: file.title || file.movieTitle || 'Unknown Movie',
-                movieId: file.movieId || file.tmdbId,
-                year: file.year || new Date().getFullYear(),
-                title: file.title || file.movieTitle || 'Unknown Movie',
-                releaseType: 'Movie',
-              };
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const data = JSON.parse(line);
+
+                if (data.file) {
+                  if (allFiles.length === 0) {
+                    setLoading(false);
+                  }
+
+                  allFiles.push(data.file);
+
+                  // Update files state incrementally
+                  const currentFileIndex = skipFiles + allFiles.length - 1;
+                  const newFile = allFiles[allFiles.length - 1];
+                  const mediaType = newFile.mediaType || (newFile.season || newFile.episode ? 'tv' : 'movie');
+                  const baseFile = {
+                    id: `file-${currentFileIndex}`,
+                    fileName: newFile.name,
+                    filePath: newFile.path,
+                    mediaType: mediaType as 'movie' | 'tv',
+                    releaseGroup: newFile.releaseGroup || 'Unknown',
+                    quality: newFile.quality || 'Unknown',
+                    language: newFile.language || 'English',
+                    size: newFile.size || 'Unknown',
+                    selected: true
+                  };
+
+                  let newMediaFile: MediaFile;
+                  if (mediaType === 'tv') {
+                    newMediaFile = {
+                      ...baseFile,
+                      series: newFile.series || 'Unknown Series',
+                      seriesId: newFile.seriesId || newFile.tmdbId,
+                      season: newFile.season || 1,
+                      episode: newFile.episode || (currentFileIndex + 1),
+                      title: newFile.episodeTitle || `Episode ${newFile.episode || (currentFileIndex + 1)}`,
+                      releaseType: newFile.releaseType || 'Single Episode',
+                    };
+                  } else {
+                    newMediaFile = {
+                      ...baseFile,
+                      movieTitle: newFile.title || newFile.movieTitle || 'Unknown Movie',
+                      movieId: newFile.movieId || newFile.tmdbId,
+                      year: newFile.year || new Date().getFullYear(),
+                      title: newFile.title || newFile.movieTitle || 'Unknown Movie',
+                      releaseType: 'Movie',
+                    };
+                  }
+                  files
+                  setFiles(prev => {
+                    const newList = [...prev, newMediaFile];
+                    return newList;
+                  });
+                }
+
+                if (data.progress) {
+                  setScanProgress(data.progress);
+                }
+
+                if (data.done) {
+                  setLoading(false);
+                  setIsScanning(false);
+                  setScanWasCancelled(false);
+                  setLastScanPosition(0);
+                  break;
+                }
+
+                if (data.error) {
+                  console.error('Scan error:', data.error);
+                  setLoading(false);
+                  setIsScanning(false);
+                  break;
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse streaming response:', line);
+              }
             }
-          });
-
-          setFiles(mediaFiles);
-        } else {
-          // No video files found
-          setFiles([]);
+          }
         }
-      } else {
-        // API didn't return expected format
-        setFiles([]);
+      } finally {
+        reader.releaseLock();
       }
     } catch (error) {
-      // Error occurred during scanning
-      setFiles([]);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Scan was cancelled by user - keeping existing files');
+      } else {
+        console.error('Error during scanning:', error);
+        setFiles([]);
+      }
     } finally {
       setLoading(false);
+      setIsScanning(false);
+      setScanAbortController(null);
     }
   };
 
@@ -172,13 +267,39 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
     ));
   };
 
+  const handleCancelScan = () => {
+    if (scanAbortController) {
+      setTimeout(() => {
+        if (scanAbortController) {
+          scanAbortController.abort();
+        }
+      }, 200);
+
+      setScanAbortController(null);
+      setIsScanning(false);
+      setLoading(false);
+      const backendPosition = scanProgress.current;
+      const hasRemaining = backendPosition < scanProgress.total;
+      setScanWasCancelled(hasRemaining);
+      if (hasRemaining) {
+        setLastScanPosition(backendPosition);
+      }
+    }
+  };
+
+  const handleContinueScan = () => {
+    setScanWasCancelled(false);
+    scanFolder(lastScanPosition);
+  };
+
   const handleImport = async () => {
     const selectedFiles = files.filter(file => file.selected);
     if (selectedFiles.length === 0) return;
 
     setProcessing(true);
+
     try {
-      for (const file of selectedFiles) {
+      const processFile = async (file: MediaFile) => {
         try {
           let selectedOption = 'manual';
 
@@ -212,16 +333,86 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             requestPayload.selectedIds = selectedIds;
           }
 
-          await axios.post('/api/python-bridge', requestPayload);
+          setImportProgress(prev => ({
+            ...prev,
+            currentFile: file.fileName,
+            total: selectedFiles.length
+          }));
 
+          const response = await fetch('/api/python-bridge', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestPayload),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error('No response body reader available');
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.trim()) {
+                  try {
+                    const data = JSON.parse(line);
+                    if (data.done) {
+                      setImportProgress(prev => ({
+                        ...prev,
+                        completed: prev.completed + 1
+                      }));
+                      break;
+                    }
+                  } catch (parseError) {
+                    console.warn('Failed to parse streaming response:', line);
+                  }
+                }
+              }
+            }
+          } finally {
+            reader.releaseLock();
+          }
+
+          return { success: true, file: file.fileName };
         } catch (fileError) {
+          console.error(`Failed to import ${file.fileName}:`, fileError);
+          return { success: false, file: file.fileName, error: fileError };
         }
+      };
+
+      const maxConcurrency = Math.min(3, selectedFiles.length);
+      const results = [];
+
+      for (let i = 0; i < selectedFiles.length; i += maxConcurrency) {
+        const batch = selectedFiles.slice(i, i + maxConcurrency);
+        const batchPromises = batch.map((file) =>
+          processFile(file)
+        );
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        results.push(...batchResults);
       }
 
       // Close dialog after processing
       onClose();
     } catch (error) {
-      // Failed to import files
+      console.error('Import process failed:', error);
     } finally {
       setProcessing(false);
     }
@@ -542,7 +733,7 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
               Scanning and parsing media files...
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              This may take a moment as we parse filenames and lookup TMDB data
+              Files will appear as they are processed
             </Typography>
           </Box>
         ) : files.length === 0 ? (
@@ -565,6 +756,30 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
               Folder: {folderPath}
             </Typography>
+          </Box>
+        ) : processing ? (
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: 400,
+            flexDirection: 'column',
+            gap: 2,
+            bgcolor: theme.palette.background.paper,
+            backgroundImage: 'none'
+          }}>
+            <CircularProgress size={60} />
+            <Typography variant="h6" color="text.secondary">
+              Importing Files...
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 400 }}>
+              Processing {importProgress.completed} of {importProgress.total} files
+            </Typography>
+            {importProgress.currentFile && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center', fontFamily: 'monospace' }}>
+                Current: {importProgress.currentFile}
+              </Typography>
+            )}
           </Box>
         ) : (
           <TableContainer
@@ -714,6 +929,30 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
         )}
       </DialogContent>
 
+      {/* Progress indicator at the bottom */}
+      {scanProgress.total > 0 && !processing && (
+        <Box sx={{
+          p: 2,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.background.paper,
+          backgroundImage: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2
+        }}>
+          <Typography variant="body2" color="text.secondary">
+            {isScanning
+              ? `Scanning: ${scanProgress.current} of ${scanProgress.total} files processed`
+              : `Scan completed: ${scanProgress.current} of ${scanProgress.total} files processed`
+            }
+          </Typography>
+          {isScanning && scanProgress.current < scanProgress.total && (
+            <CircularProgress size={16} />
+          )}
+        </Box>
+      )}
+
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,
@@ -722,14 +961,31 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
         backgroundImage: 'none'
       }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={isScanning ? handleCancelScan : onClose}
+            color={isScanning ? "error" : "inherit"}
+          >
+            {isScanning ? "Stop Scan" : "Cancel"}
+          </Button>
+          {scanWasCancelled && !isScanning && !processing && (
+            <Button
+              onClick={handleContinueScan}
+              color="primary"
+              variant="outlined"
+            >
+              Continue Scan ({scanProgress.total - lastScanPosition} remaining)
+            </Button>
+          )}
           <Button
             variant="contained"
             onClick={handleImport}
-            disabled={selectedCount === 0 || processing}
+            disabled={selectedCount === 0 || processing || isScanning}
             startIcon={processing ? <CircularProgress size={16} /> : undefined}
           >
-            {processing ? 'Importing...' : `Import (${selectedCount})`}
+            {processing
+              ? `Importing... (${importProgress.completed}/${importProgress.total})`
+              : `Import (${selectedCount})`
+            }
           </Button>
         </Box>
       </DialogActions>

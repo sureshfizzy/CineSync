@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 *.pyo
 
+# IDE files
+.vscode/
+.idea/
+
 # Ignore other potential bytecode files
 *.pyd
 /db

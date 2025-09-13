@@ -10,6 +10,8 @@ import json
 import os
 import re
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from multiprocessing import cpu_count
 
 script_path = os.path.abspath(__file__)
 utils_dir = os.path.dirname(script_path)
@@ -24,9 +26,15 @@ from MediaHub.api.tmdb_api_helpers import get_episode_name
 from MediaHub.api.tmdb_api import search_tv_show, search_movie
 from MediaHub.api.tmdb_api import cached_get
 from MediaHub.api.api_key_manager import get_api_key
-from MediaHub.config.config import tmdb_api_language
+from MediaHub.config.config import tmdb_api_language, get_max_processes
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.utils.parser.extractor import extract_all_metadata
+
+def get_max_processes():
+    """Get the maximum number of processes for parallel processing"""
+    # Import here to avoid circular imports
+    from MediaHub.config.config import get_max_processes as config_get_max_processes
+    return config_get_max_processes()
 
 def get_media_ids_from_tmdb(title, media_type, year=None, season=None, episode=None):
     """
@@ -329,15 +337,74 @@ def parse_filename(filename, include_tmdb_lookup=True):
             "tvdb_id": None
         }
 
+def parse_multiple_files(filenames, include_tmdb_lookup=True, max_workers=None):
+    """Parse multiple filenames in parallel using ThreadPoolExecutor"""
+    if max_workers is None:
+        max_workers = get_max_processes()
+
+    if len(filenames) == 1:
+        return [parse_filename(filenames[0], include_tmdb_lookup)]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_filename = {
+            executor.submit(parse_filename, filename, include_tmdb_lookup): filename 
+            for filename in filenames
+        }
+
+        for future in as_completed(future_to_filename):
+            filename = future_to_filename[future]
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                error_result = {
+                    "title": filename,
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                    "media_type": "movie",
+                    "year": None,
+                    "season": None,
+                    "episode": None,
+                    "episode_title": None,
+                    "resolution": "Unknown",
+                    "quality_source": "Unknown",
+                    "release_group": "Unknown",
+                    "languages": ["English"],
+                    "is_anime": False,
+                    "container": "",
+                    "episodes": [],
+                    "seasons": [],
+                    "episode_identifier": None,
+                    "video_codec": None,
+                    "audio_codecs": [],
+                    "audio_channels": [],
+                    "is_dubbed": False,
+                    "is_subbed": False,
+                    "is_repack": False,
+                    "is_proper": False,
+                    "hdr": None,
+                    "tmdb_id": None,
+                    "imdb_id": None,
+                    "tvdb_id": None
+                }
+                results.append(error_result)
+
+    return results
+
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: python parse_filename.py 'filename'"}))
+        print(json.dumps({"error": "Usage: python parse_filename.py 'filename' [filename2] [filename3] ..."}))
         sys.exit(1)
     
-    filename = sys.argv[1]
+    filenames = sys.argv[1:]
     
-    result = parse_filename(filename, include_tmdb_lookup=True)
-    print(json.dumps(result, default=str))
+    if len(filenames) == 1:
+        result = parse_filename(filenames[0], include_tmdb_lookup=True)
+        print(json.dumps(result, default=str))
+    else:
+        results = parse_multiple_files(filenames, include_tmdb_lookup=True)
+        print(json.dumps(results, default=str))
 
 if __name__ == "__main__":
     main()
