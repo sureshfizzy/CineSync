@@ -608,6 +608,9 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
   const renderEditableCell = (file: MediaFile, field: string, value: any) => {
     const isEditing = editingCell?.fileId === file.id && editingCell?.field === field;
 
+    // Check if the field is blank/empty
+    const isBlank = !value || value === '' || value === 'Unknown' || value === 'Unknown Series' || value === 'Unknown Movie';
+
     if (isEditing) {
       if (field === 'season' || field === 'episode' || field === 'year') {
         return (
@@ -741,7 +744,14 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           cursor: 'pointer',
           '&:hover': { bgcolor: 'action.hover' },
           p: 0.5,
-          borderRadius: 1
+          borderRadius: 1,
+          ...(isBlank && {
+            border: '2px dotted #f44336',
+            borderRadius: '4px',
+            minHeight: '24px',
+            minWidth: '40px',
+            backgroundColor: 'rgba(244, 67, 54, 0.05)',
+          })
         }}
         onClick={() => {
           if (field === 'series') {
@@ -757,7 +767,17 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           }
         }}
       >
-        <Typography variant="body2" sx={{ flex: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            flex: 1,
+            ...(isBlank && {
+              color: '#f44336',
+              fontStyle: 'italic',
+              opacity: 0.7
+            })
+          }}
+        >
           {value}
         </Typography>
       </Box>
@@ -985,10 +1005,14 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
                       {file.mediaType === 'tv' ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {renderEditableCell(file, 'episode', file.episode)}
-                          <Typography variant="body2">-</Typography>
-                          <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>
-                            {file.title}
-                          </Typography>
+                          {file.episode && file.title && (
+                            <>
+                              <Typography variant="body2">-</Typography>
+                              <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>
+                                {file.title}
+                              </Typography>
+                            </>
+                          )}
                         </Box>
                       ) : (
                         <Typography variant="body2" color="text.secondary">-</Typography>
