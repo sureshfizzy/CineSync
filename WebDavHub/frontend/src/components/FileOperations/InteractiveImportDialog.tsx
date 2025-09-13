@@ -96,6 +96,7 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
   const [scanAbortController, setScanAbortController] = useState<AbortController | null>(null);
   const [scanWasCancelled, setScanWasCancelled] = useState(false);
   const [lastScanPosition, setLastScanPosition] = useState(0);
+  const [defaultMediaType, setDefaultMediaType] = useState<'movie' | 'tv' | 'default'>('default');
 
 
   useEffect(() => {
@@ -175,7 +176,7 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
                   // Update files state incrementally
                   const currentFileIndex = skipFiles + allFiles.length - 1;
                   const newFile = allFiles[allFiles.length - 1];
-                  const mediaType = newFile.mediaType || (newFile.season || newFile.episode ? 'tv' : 'movie');
+                  const mediaType = newFile.mediaType || (newFile.season || newFile.episode ? 'tv' : (defaultMediaType === 'default' ? (newFile.season || newFile.episode ? 'tv' : 'movie') : defaultMediaType));
                   const baseFile = {
                     id: `file-${currentFileIndex}`,
                     fileName: newFile.name,
@@ -442,6 +443,11 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
 
       updateFileField(currentEditingFileId, 'series', series.name);
       updateFileField(currentEditingFileId, 'seriesId', series.tmdb_id || series.id);
+      updateFileField(currentEditingFileId, 'mediaType', 'tv');
+
+      // Clear movie fields when selecting a series
+      updateFileField(currentEditingFileId, 'movieId', undefined);
+      updateFileField(currentEditingFileId, 'movieTitle', undefined);
 
       // If we have season and episode info, try to fetch the episode title from the new series
       if (currentFile && currentFile.season && currentFile.episode && (series.tmdb_id || series.id)) {
@@ -470,6 +476,12 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
       updateFileField(currentEditingFileId, 'movieId', movie.tmdb_id || movie.id);
       updateFileField(currentEditingFileId, 'title', movie.title);
       updateFileField(currentEditingFileId, 'year', movie.year);
+      updateFileField(currentEditingFileId, 'mediaType', 'movie');
+
+      // Clear TV fields when selecting a movie
+      updateFileField(currentEditingFileId, 'seriesId', undefined);
+      updateFileField(currentEditingFileId, 'series', undefined);
+
       setCurrentEditingFileId(null);
     }
     setMovieDialogOpen(false);
@@ -510,6 +522,86 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
   const openMovieDialog = (fileId: string) => {
     setCurrentEditingFileId(fileId);
     setMovieDialogOpen(true);
+  };
+
+  const applyFirstTmdbIdToAll = async () => {
+    const selectedFiles = files.filter(file => file.selected);
+    if (selectedFiles.length < 2) return;
+
+    const firstFile = selectedFiles[0];
+    const mediaType = firstFile.mediaType;
+
+    // Get the correct TMDB ID based on media type
+    const tmdbId = mediaType === 'tv' ? firstFile.seriesId : firstFile.movieId;
+
+    if (!tmdbId) {
+      console.warn('No TMDB ID found for first file:', firstFile);
+      return;
+    }
+
+    setFiles(prev => prev.map(file => {
+      if (file.selected && file.id !== firstFile.id) {
+        if (mediaType === 'tv') {
+          return {
+            ...file,
+            mediaType: 'tv',
+            seriesId: tmdbId,
+            series: firstFile.series,
+            movieId: undefined,
+            movieTitle: undefined
+          };
+        } else if (mediaType === 'movie') {
+          return {
+            ...file,
+            mediaType: 'movie',
+            movieId: tmdbId,
+            movieTitle: firstFile.movieTitle,
+            title: firstFile.title,
+            year: firstFile.year,
+            seriesId: undefined,
+            series: undefined
+          };
+        }
+      }
+      return file;
+    }));
+
+    // For TV shows, fetch episode titles for each file
+    if (mediaType === 'tv') {
+      const filesToUpdate = selectedFiles.filter(file => file.id !== firstFile.id);
+
+      for (const file of filesToUpdate) {
+        if (file.season && file.episode) {
+          try {
+            const episodes = await fetchEpisodesFromTmdb(tmdbId.toString(), file.season);
+
+            if (episodes && episodes.length > 0) {
+              const matchingEpisode = episodes.find(ep => ep.episode_number === file.episode);
+              if (matchingEpisode && matchingEpisode.name) {
+                updateFileField(file.id, 'title', matchingEpisode.name);
+              }
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch episode title for ${file.fileName}:`, error);
+          }
+        }
+      }
+    }
+  };
+
+  const applyDefaultMediaTypeToSelected = () => {
+    const selectedFiles = files.filter(file => file.selected);
+    if (selectedFiles.length === 0 || defaultMediaType === 'default') return;
+
+    setFiles(prev => prev.map(file => {
+      if (file.selected) {
+        return {
+          ...file,
+          mediaType: defaultMediaType as 'movie' | 'tv'
+        };
+      }
+      return file;
+    }));
   };
 
   // Render editable cell
@@ -846,7 +938,18 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
                           <Select
                             value={file.mediaType || 'tv'}
                             onChange={(e) => {
-                              updateFileField(file.id, 'mediaType', e.target.value);
+                              const newMediaType = e.target.value as 'movie' | 'tv';
+                              updateFileField(file.id, 'mediaType', newMediaType);
+
+                              // Clear conflicting fields when changing media type
+                              if (newMediaType === 'tv') {
+                                updateFileField(file.id, 'movieId', undefined);
+                                updateFileField(file.id, 'movieTitle', undefined);
+                              } else if (newMediaType === 'movie') {
+                                updateFileField(file.id, 'seriesId', undefined);
+                                updateFileField(file.id, 'series', undefined);
+                              }
+
                               stopEditing();
                             }}
                             onClose={stopEditing}
@@ -950,6 +1053,77 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           {isScanning && scanProgress.current < scanProgress.total && (
             <CircularProgress size={16} />
           )}
+        </Box>
+      )}
+
+      {/* Bottom options */}
+      {files.length > 0 && !processing && !loading && (
+        <Box sx={{
+          p: 2,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.background.paper,
+          backgroundImage: 'none',
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: { xs: 'stretch', md: 'center' },
+          gap: 2,
+          justifyContent: 'space-between'
+        }}>
+          <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 2
+          }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              minWidth: 'fit-content'
+            }}>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                Default Media Type:
+              </Typography>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <Select
+                  value={defaultMediaType}
+                  onChange={(e) => setDefaultMediaType(e.target.value as 'movie' | 'tv' | 'default')}
+                >
+                  <MenuItem value="default">Default</MenuItem>
+                  <MenuItem value="tv">TV Show</MenuItem>
+                  <MenuItem value="movie">Movie</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Button
+              variant="text"
+              size="small"
+              onClick={applyDefaultMediaTypeToSelected}
+              disabled={selectedCount === 0 || defaultMediaType === 'default'}
+              sx={{
+                whiteSpace: 'nowrap',
+                minWidth: 'fit-content'
+              }}
+            >
+              Apply to Selected ({selectedCount})
+            </Button>
+          </Box>
+
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={applyFirstTmdbIdToAll}
+            disabled={(() => {
+              const selected = files.filter(f => f.selected);
+              return selected.length < 2 || (!selected[0]?.seriesId && !selected[0]?.movieId);
+            })()}
+            sx={{
+              whiteSpace: 'nowrap',
+              minWidth: 'fit-content'
+            }}
+          >
+            Apply First TMDB ID to All Selected
+          </Button>
         </Box>
       )}
 
