@@ -620,7 +620,7 @@ def calculate_score(result, query, year=None):
     # Normalize punctuation for matching
     def normalize_for_matching(text):
         """Remove punctuation that shouldn't affect matching"""
-        normalized = re.sub(r'[:\.\-_\(\)\[\]]+', ' ', text)
+        normalized = re.sub(r'[:\.\-_\(\)\[\]/]+', ' ', text)
         normalized = re.sub(r'\s+', ' ', normalized).strip()
         return normalized
 
