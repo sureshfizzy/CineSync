@@ -69,6 +69,12 @@ def run_symlink_cleanup(dest_dir):
                             try:
                                 os.remove(file_path)
                                 log_message(f"Manually deleted broken symlink: {file_path}", level="INFO")
+
+                                # Trigger Plex refresh for deletion
+                                try:
+                                    update_plex_after_deletion(file_path)
+                                except Exception as plex_error:
+                                    log_message(f"Error triggering Plex refresh for deletion: {plex_error}", level="DEBUG")
                             except Exception as rm_error:
                                 log_message(f"Error removing symlink: {str(rm_error)}", level="ERROR")
                 except Exception as e:

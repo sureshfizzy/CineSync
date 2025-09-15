@@ -72,3 +72,19 @@ def update_plex_after_symlink(dest_file: str) -> None:
             log_message(f"File does not exist: {dest_file}", "ERROR")
     except Exception as e:
         log_message(f"Error updating Plex: {e}", "ERROR")
+
+def update_plex_after_deletion(dest_file: str) -> None:
+    """Wrapper function to trigger Plex refresh after symlink deletion."""
+    try:
+        if not plex_update() or not plex_token():
+            return
+
+        if dest_file:
+            parent_dir = os.path.dirname(dest_file)
+            if parent_dir and os.path.exists(parent_dir):
+                refresh_plex_for_file(parent_dir)
+                log_message(f"Plex refresh triggered for deletion: {dest_file} (refreshed parent: {parent_dir})", "INFO")
+            else:
+                log_message(f"Parent directory does not exist for deleted file: {dest_file}", "WARNING")
+    except Exception as e:
+        log_message(f"Error updating Plex after deletion: {e}", "ERROR")

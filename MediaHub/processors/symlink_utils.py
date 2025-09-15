@@ -12,6 +12,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
+from MediaHub.utils.plex_utils import update_plex_after_deletion
 
 def generate_unique_filename(dest_file, src_file=None):
 	"""Generate a unique filename by adding version numbers if conflicts occur.
@@ -327,6 +328,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         if source_path:
                                             send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring")
 
+                                        # Trigger Plex refresh for deletion
+                                        update_plex_after_deletion(safe_path)
+
                                         _cleanup_empty_dirs(os.path.dirname(safe_path))
                                     except OSError as e:
                                         log_message(f"Error handling symlink {safe_path}: {e}", level="ERROR")
@@ -366,6 +370,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             # Update cache by notifying WebDavHub
                                             if source_path:
                                                 send_file_deletion(source_path, symlink_path, tmdb_id, season_number, "Source file removed during monitoring (rm command)")
+
+                                            # Trigger Plex refresh for deletion
+                                            update_plex_after_deletion(safe_path)
 
                                             # Clean up empty directories
                                             try:
@@ -493,6 +500,8 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     except Exception as e:
                                                         log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
                                                 send_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, "Source file removed, cleaned up broken symlink")
+                                            # Trigger Plex refresh for deletion
+                                            update_plex_after_deletion(possible_dest_path)
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
                                             _cleanup_empty_dirs(os.path.dirname(possible_dest_path))
@@ -534,6 +543,8 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                         track_file_deletion(removed_path, file_path, tmdb_id, season_number, reason="Source file removed -> symlink cleanup")
                                                     except Exception:
                                                         pass
+                                                    # Trigger Plex refresh for deletion
+                                                    update_plex_after_deletion(file_path)
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))
                                                     _cleanup_empty_dirs(os.path.dirname(file_path))
@@ -576,6 +587,8 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                             cleanup_tmdb_covers(int(tmdb_id))
                                                         except Exception as e:
                                                             log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+                                                    # Trigger Plex refresh for deletion
+                                                    update_plex_after_deletion(dest_path)
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
                                                     _cleanup_empty_dirs(os.path.dirname(dest_path))
@@ -613,6 +626,9 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             except Exception:
                                                 pass
                                             send_file_deletion(source_path, symlink_path, tmdb_id_db, season_number_db, "Source file removed, cleaned up symlink")
+
+                                        # Trigger Plex refresh for deletion
+                                        update_plex_after_deletion(safe_path)
 
                                         # Remove from both databases
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
@@ -770,6 +786,9 @@ def _check_all_symlinks(dest_dir):
                     conn1.commit()
                     conn2.commit()
                     log_message(f"Removed {affected_rows} database entries", level="DEBUG")
+
+                # Trigger Plex refresh for deletion
+                update_plex_after_deletion(file_path)
 
                 _cleanup_empty_dirs(os.path.dirname(file_path))
 
