@@ -292,6 +292,16 @@ func HandleSpoofedMovies(w http.ResponseWriter, r *http.Request) {
 func HandleSpoofedSeries(w http.ResponseWriter, r *http.Request) {
 	config := GetConfig()
 
+	// Check if this is a request for a specific series by ID
+	path := strings.TrimPrefix(r.URL.Path, "/api/v3/series")
+	if path != "" && path != "/" {
+		seriesIDStr := strings.Trim(path, "/")
+		if seriesID, err := strconv.Atoi(seriesIDStr); err == nil {
+			HandleSpoofedSeriesByID(w, r, seriesID)
+			return
+		}
+	}
+
 	var series []SeriesResource
 	var err error
 
@@ -1031,6 +1041,45 @@ func HandleConfigHost(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// HandleSpoofedSeriesByID handles requests for individual series by ID
+func HandleSpoofedSeriesByID(w http.ResponseWriter, r *http.Request, seriesID int) {
+	config := GetConfig()
+
+	var series *SeriesResource
+	var err error
+
+	if config.FolderMode {
+		folderMapping := getFolderMappingFromRequest(r, config.FolderMappings)
+		if folderMapping != nil {
+			if folderMapping.ServiceType == "sonarr" || folderMapping.ServiceType == "auto" || folderMapping.ServiceType == "" {
+				series, err = getSeriesByIDFromDatabaseByFolder(seriesID, folderMapping.FolderPath)
+			} else {
+				http.NotFound(w, r)
+				return
+			}
+		} else {
+			http.NotFound(w, r)
+			return
+		}
+	} else {
+		series, err = getSeriesByIDFromDatabase(seriesID)
+	}
+
+	if err != nil {
+		logger.Error("Failed to get series by ID %d: %v", seriesID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if series == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(series)
 }
 
 // HandleSpoofedMovieByID handles requests for individual movies by ID

@@ -308,12 +308,10 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 
 	runtime, _ := strconv.Atoi(runtimeStr)
 
-	// Construct series folder path from destination path, title, and year
-	seriesPath := constructSeriesPath(destinationPath, properName, year)
+		// Construct series folder path from destination path, title, and year
+		seriesPath := constructSeriesPath(destinationPath, properName, year)
 
-	// Generate unique series ID to prevent BAZARR constraint violations
-	uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
-	show := createSeriesResourceInternal(uniqueSeriesID, properName, year, tmdbID, seriesPath, addedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
+		show := createSeriesResourceInternal(tmdbID, properName, year, tmdbID, seriesPath, addedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
 	series = append(series, show)
 	}
 
@@ -599,8 +597,7 @@ func getSeriesFromDatabaseByFolder(folderPath string) ([]SeriesResource, error) 
 
 			   seriesPath := constructSeriesPath(destinationPath, properName, year)
 
-			   uniqueSeriesID := generateUniqueSeriesID(tmdbID, properName, year)
-			   show := createSeriesResourceInternal(uniqueSeriesID, properName, year, tmdbID, seriesPath, processedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
+			   show := createSeriesResourceInternal(tmdbID, properName, year, tmdbID, seriesPath, processedTime, language, quality, overview, genres, status, firstAirDate, lastAirDate, runtime)
 			   series = append(series, show)
 	   }
 
@@ -626,7 +623,7 @@ func getEpisodesFromDatabase(seriesId string) ([]interface{}, error) {
 
 func getEpisodesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
 	seriesIDInt := safeAtoi(seriesId, 0)
-	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbID := seriesIDInt
 	tmdbIDStr := strconv.Itoa(tmdbID)
 
 	// Query episodes directly by TMDB ID, grouped to avoid duplicates
@@ -694,7 +691,7 @@ func getEpisodesFromDatabaseByFolder(folderPath, seriesId string) ([]interface{}
 	}
 
 	seriesIDInt := safeAtoi(seriesId, 0)
-	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbID := seriesIDInt
 	tmdbIDStr := strconv.Itoa(tmdbID)
 
 	// Query episodes directly by TMDB ID with folder filtering, grouped to avoid duplicates
@@ -813,7 +810,7 @@ func getEpisodeFilesFromDatabase(seriesId string) ([]interface{}, error) {
 func getEpisodeFilesFromDatabaseInternal(mediaHubDB *sql.DB, seriesId string) ([]interface{}, error) {
 
 	seriesIDInt := safeAtoi(seriesId, 0)
-	tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+	tmdbID := seriesIDInt
 	tmdbIDStr := strconv.Itoa(tmdbID)
 
 	// Query episode files directly by TMDB ID
@@ -895,7 +892,7 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 		}
 
 		seriesIDInt := safeAtoi(seriesId, 0)
-		tmdbID := extractTMDBIDFromSeriesID(seriesIDInt)
+		tmdbID := seriesIDInt
 		tmdbIDStr := strconv.Itoa(tmdbID)
 
 		// Query episode files directly by TMDB ID with folder filtering
@@ -968,6 +965,38 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 	})
 
 	return episodeFiles, err
+}
+
+// getSeriesByIDFromDatabase retrieves a specific series by ID
+func getSeriesByIDFromDatabase(seriesID int) (*SeriesResource, error) {
+	series, err := getSeriesFromDatabase()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, show := range series {
+		if show.ID == seriesID {
+			return &show, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// getSeriesByIDFromDatabaseByFolder retrieves a specific series by ID filtered by folder
+func getSeriesByIDFromDatabaseByFolder(seriesID int, folderPath string) (*SeriesResource, error) {
+	series, err := getSeriesFromDatabaseByFolder(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, show := range series {
+		if show.ID == seriesID {
+			return &show, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // getMovieByIDFromDatabase retrieves a specific movie by ID from the CineSync database

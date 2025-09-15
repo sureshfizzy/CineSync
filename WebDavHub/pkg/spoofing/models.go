@@ -159,6 +159,8 @@ type SeriesResource struct {
 	Genres            []string      `json:"genres"`
 	Tags              []int         `json:"tags"`
 	Added             time.Time     `json:"added"`
+	QualityProfile    interface{}   `json:"qualityProfile,omitempty"`
+	LanguageProfile   interface{}   `json:"languageProfile,omitempty"`
 }
 
 // QualityProfile represents a quality profile
