@@ -59,7 +59,7 @@ def send_structured_message_http(message_type, data, max_retries=2):
     for attempt in range(max_retries + 1):
         try:
             session = _connection_manager.get_session()
-            response = session.post(api_url, json=structured_msg, timeout=5)
+            response = session.post(api_url, json=structured_msg, timeout=10)
 
             if response.status_code == 200:
                 _connection_manager.mark_success()
@@ -67,6 +67,14 @@ def send_structured_message_http(message_type, data, max_retries=2):
             elif response.status_code >= 500 and attempt < max_retries:
                 _connection_manager.mark_failure()
                 time.sleep(1)
+                continue
+            return False
+
+        except requests.exceptions.Timeout as e:
+            log_message(f"Timeout sending {message_type}, attempt {attempt + 1}: {e}", level="DEBUG")
+            if attempt < max_retries:
+                _connection_manager.mark_failure()
+                time.sleep(2)
                 continue
             return False
 

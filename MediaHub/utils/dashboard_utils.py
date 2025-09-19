@@ -150,6 +150,14 @@ def send_dashboard_notification(url, payload, operation_type="notification", max
                 mark_dashboard_unavailable()
             return False
 
+        except requests.exceptions.Timeout as e:
+            log_message(f"Dashboard {operation_type} timeout (attempt {attempt + 1}): {e}", level="DEBUG")
+            if attempt < max_retries:
+                time.sleep(2)
+                continue
+            mark_dashboard_unavailable()
+            return False
+
         except (requests.exceptions.ConnectionError, BrokenPipeError) as e:
             if "broken pipe" in str(e).lower():
                 log_message(f"Dashboard {operation_type} broken pipe (attempt {attempt + 1})", level="DEBUG")
@@ -165,6 +173,7 @@ def send_dashboard_notification(url, payload, operation_type="notification", max
             if attempt < max_retries:
                 time.sleep(1)
                 continue
+            mark_dashboard_unavailable()
             return False
 
     return False

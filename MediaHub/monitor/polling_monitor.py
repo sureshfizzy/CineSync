@@ -231,7 +231,6 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_
                     task.result()
                 except Exception as e:
                     log_message(f"Error in modified directory task: {str(e)}", level="ERROR")
-                    set_shutdown()
 
     # Process new/removed files with parallel processing
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -285,18 +284,17 @@ def process_changes(current_files, new_files, dest_dir, modified_dirs=None, max_
                 task.result()
             except Exception as e:
                 log_message(f"Error in file processing task: {str(e)}", level="ERROR")
-                set_shutdown()
+                # Continue processing other tasks instead of shutting down the service
 
         # Process all file removal tasks
         for task in as_completed(removal_tasks):
-            if error_event.is_set():
-                log_message("Error detected during removal processing. Stopping tasks.", level="WARNING")
+            if is_shutdown_requested():
+                log_message("Shutdown requested during removal processing. Stopping tasks.", level="WARNING")
                 break
             try:
                 task.result()
             except Exception as e:
                 log_message(f"Error in removal processing task: {str(e)}", level="ERROR")
-                error_event.set()
 
 def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_batch_size=None):
     """Helper function to process a single modified directory."""
@@ -416,8 +414,6 @@ def process_file(file_path):
                 send_source_file_update(file_path, "failed")
             except Exception:
                 pass
-
-            set_shutdown()
     else:
         log_message(f"File already exists in the database, skipping processing: {file_path}", level="DEBUG")
 
@@ -477,8 +473,6 @@ def main():
 
     while not shutdown_event.is_set():
         try:
-            # Reset error event at the start of each cycle (only reset error_event, not shutdown events)
-            error_event.clear()
 
             # Check if rclone mount is available (if enabled)
             if not check_rclone_mount():
