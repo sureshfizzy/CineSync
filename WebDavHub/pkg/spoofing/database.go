@@ -1,14 +1,15 @@
 package spoofing
 
 import (
-	   "database/sql"
-	   "encoding/json"
-	   "path/filepath"
-	   "strconv"
-	   "strings"
-	   "time"
+	"database/sql"
+	"encoding/json"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
-	   "cinesync/pkg/db"
+	"cinesync/pkg/db"
+	"cinesync/pkg/logger"
 )
 
 // getMoviesFromDatabase retrieves movies from the CineSync database and formats them for Radarr
@@ -969,18 +970,60 @@ func getEpisodeFilesFromDatabaseByFolder(folderPath, seriesId string) ([]interfa
 
 // getSeriesByIDFromDatabase retrieves a specific series by ID
 func getSeriesByIDFromDatabase(seriesID int) (*SeriesResource, error) {
-	series, err := getSeriesFromDatabase()
+	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
 		return nil, err
 	}
 
-	for _, show := range series {
-		if show.ID == seriesID {
-			return &show, nil
+	var series SeriesResource
+	var genresJSON string
+	query := `
+		SELECT DISTINCT 
+			tmdb_id, proper_name, year, overview, runtime, status, 
+			first_air_date, last_air_date, genres
+		FROM processed_files 
+		WHERE tmdb_id = ? AND UPPER(media_type) = 'TV'
+		LIMIT 1`
+
+	err = mediaHubDB.QueryRow(query, seriesID).Scan(
+		&series.ID, &series.Title, &series.Year, &series.Overview, 
+		&series.Runtime, &series.Status, &series.FirstAired, 
+		&series.LastAired, &genresJSON)
+	
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
 		}
+		logger.Error("Failed to query series by ID %d: %v", seriesID, err)
+		return nil, err
 	}
 
-	return nil, nil
+	// Parse genres - handle both JSON array and comma-separated string
+	if genresJSON != "" {
+		err = json.Unmarshal([]byte(genresJSON), &series.Genres)
+		if err != nil {
+			genresList := strings.Split(genresJSON, ",")
+			series.Genres = make([]string, 0, len(genresList))
+			for _, genre := range genresList {
+				trimmed := strings.TrimSpace(genre)
+				if trimmed != "" {
+					series.Genres = append(series.Genres, trimmed)
+				}
+			}
+		}
+	} else {
+		series.Genres = []string{}
+	}
+
+	series.SortTitle = series.Title
+	series.TvdbId = series.ID
+	series.QualityProfileId = 1
+	series.LanguageProfileId = 1
+	series.SeasonFolder = true
+	series.Monitored = true
+
+	return &series, nil
 }
 
 // getSeriesByIDFromDatabaseByFolder retrieves a specific series by ID filtered by folder

@@ -524,7 +524,7 @@ def get_dashboard_check_interval():
 
 def get_dashboard_timeout():
     """Get timeout in seconds for dashboard requests"""
-    return get_env_float('DASHBOARD_TIMEOUT', 2.0)
+    return get_env_float('DASHBOARD_TIMEOUT', 3.0)
 
 def get_dashboard_retry_count():
     """Get number of retries for dashboard requests"""

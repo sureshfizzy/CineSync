@@ -527,3 +527,128 @@ func buildEpisodesQuery(seriesName, folderPath string, groupBy bool) (string, []
 
 	return query, args
 }
+
+// ID generation utilities
+func GenerateUniqueEpisodeID(seriesID, season, episode int) int {
+	return seriesID*10000 + season*100 + episode
+}
+
+func GenerateUniqueEpisodeFileID(seriesID, season, episode int) int {
+	base := GenerateUniqueEpisodeID(seriesID, season, episode)
+	return base*10 + 1
+}
+
+// GenerateUniqueMovieFileID creates a distinct ID for movie files, separate from movie IDs
+func GenerateUniqueMovieFileID(movieID int) int {
+	return movieID*10 + 1
+}
+
+// BuildQualityFromDatabase constructs a Quality object from database quality string and file path
+func BuildQualityFromDatabase(dbQuality, filePath string) Quality {
+	quality := Quality{
+		Quality: QualityDefinition{
+			ID:         1,
+			Name:       "HD-1080p",
+			Source:     "unknown",
+			Resolution: 1080,
+		},
+		Revision: QualityRevision{
+			Version:   1,
+			Real:      0,
+			IsRepack:  false,
+		},
+	}
+
+	if dbQuality == "" {
+		// Try to infer quality from filename
+		filename := filepath.Base(filePath)
+		if strings.Contains(strings.ToLower(filename), "4k") || strings.Contains(strings.ToLower(filename), "2160p") {
+			quality.Quality.ID = 4
+			quality.Quality.Name = "UHD-2160p"
+			quality.Quality.Resolution = 2160
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(strings.ToLower(filename), "1080p") {
+			quality.Quality.ID = 1
+			quality.Quality.Name = "HD-1080p"
+			quality.Quality.Resolution = 1080
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(strings.ToLower(filename), "720p") {
+			quality.Quality.ID = 2
+			quality.Quality.Name = "HD-720p"
+			quality.Quality.Resolution = 720
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(strings.ToLower(filename), "web") {
+			quality.Quality.Source = "web"
+		}
+	} else {
+		// Parse quality from database
+		qualityStr := strings.ToLower(dbQuality)
+		if strings.Contains(qualityStr, "4k") || strings.Contains(qualityStr, "2160p") {
+			quality.Quality.ID = 4
+			quality.Quality.Name = "UHD-2160p"
+			quality.Quality.Resolution = 2160
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(qualityStr, "1080p") {
+			quality.Quality.ID = 1
+			quality.Quality.Name = "HD-1080p"
+			quality.Quality.Resolution = 1080
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(qualityStr, "720p") {
+			quality.Quality.ID = 2
+			quality.Quality.Name = "HD-720p"
+			quality.Quality.Resolution = 720
+			quality.Quality.Source = "bluray"
+		} else if strings.Contains(qualityStr, "web") {
+			quality.Quality.Source = "web"
+		}
+	}
+
+	return quality
+}
+
+// BuildLanguagesFromDatabase constructs a slice of Language objects from a database language string
+func BuildLanguagesFromDatabase(dbLanguage string) []Language {
+	// Default to English if not specified
+	languages := []Language{
+		{
+			ID:   2,
+			Name: "English",
+		},
+	}
+
+	if dbLanguage == "" {
+		return languages
+	}
+
+	langStr := strings.ToLower(strings.TrimSpace(dbLanguage))
+	
+	// Map common language strings to Language objects
+	languageMap := map[string]Language{
+		"english":     {ID: 2, Name: "English"},
+		"en":          {ID: 2, Name: "English"},
+		"spanish":     {ID: 1, Name: "Spanish"},
+		"es":          {ID: 1, Name: "Spanish"},
+		"french":      {ID: 3, Name: "French"},
+		"fr":          {ID: 3, Name: "French"},
+		"german":      {ID: 4, Name: "German"},
+		"de":          {ID: 4, Name: "German"},
+		"italian":     {ID: 5, Name: "Italian"},
+		"it":          {ID: 5, Name: "Italian"},
+		"portuguese":  {ID: 6, Name: "Portuguese"},
+		"pt":          {ID: 6, Name: "Portuguese"},
+		"russian":     {ID: 7, Name: "Russian"},
+		"ru":          {ID: 7, Name: "Russian"},
+		"japanese":    {ID: 8, Name: "Japanese"},
+		"ja":          {ID: 8, Name: "Japanese"},
+		"korean":      {ID: 9, Name: "Korean"},
+		"ko":          {ID: 9, Name: "Korean"},
+		"chinese":     {ID: 10, Name: "Chinese"},
+		"zh":          {ID: 10, Name: "Chinese"},
+	}
+
+	if lang, exists := languageMap[langStr]; exists {
+		languages = []Language{lang}
+	}
+
+	return languages
+}

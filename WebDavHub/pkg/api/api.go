@@ -3713,15 +3713,16 @@ func restoreFromTrash(trashPath, destinationPath string) error {
 
 // broadcastFileRenameEvents broadcasts SignalR events when files are renamed
 func broadcastFileRenameEvents(oldPath, newPath string) {
-	if isMovieFile(oldPath) || isMovieFile(newPath) {
-		if movieFile := getMovieFileFromPath(newPath); movieFile != nil {
-			spoofing.BroadcastMovieFileUpdated(movieFile)
-		}
-	} else if isTVFile(oldPath) || isTVFile(newPath) {
-		if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
-			spoofing.BroadcastEpisodeFileUpdated(episodeFile)
-		}
-	}
+    if isMovieFile(oldPath) || isMovieFile(newPath) {
+        if movieFile := getMovieFileFromPath(newPath); movieFile != nil {
+            movieFile.ID = spoofing.GenerateUniqueMovieFileID(movieFile.MovieId)
+            spoofing.BroadcastMovieFileImported(movieFile)
+        }
+    } else if isTVFile(oldPath) || isTVFile(newPath) {
+        if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
+            spoofing.BroadcastEpisodeFileAdded(episodeFile)
+        }
+    }
 }
 
 // isMovieFile determines if a file path represents a movie file
@@ -3754,7 +3755,7 @@ func getMovieFileFromPath(filePath string) *spoofing.MovieFile {
 		return nil
 	}
 
-	var properName, tmdbIDStr, language, quality string
+    var properName, tmdbIDStr, language, quality string
 	var year int
 	var fileSize int64
 
@@ -3793,16 +3794,18 @@ func getMovieFileFromPath(filePath string) *spoofing.MovieFile {
 	}
 
 	// Create MovieFile with database information
-	movieFile := &spoofing.MovieFile{
-		ID:           tmdbID,
-		MovieId:      tmdbID,
-		RelativePath: fileName,
-		Path:         filePath,
-		Size:         fileSize,
-		DateAdded:    modTime,
-		SceneName:    "",
-		ReleaseGroup: "",
-	}
+    movieFile := &spoofing.MovieFile{
+        ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
+        MovieId:      tmdbID,
+        RelativePath: fileName,
+        Path:         filePath,
+        Size:         fileSize,
+        DateAdded:    modTime,
+        Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
+        Languages:    spoofing.BuildLanguagesFromDatabase(language),
+        SceneName:    "",
+        ReleaseGroup: "",
+    }
 
 	return movieFile
 }
@@ -3849,6 +3852,7 @@ func getEpisodeFileFromPath(filePath string) map[string]interface{} {
 	seasonNum, _ := strconv.Atoi(seasonNumber)
 	episodeNum, _ := strconv.Atoi(episodeNumber)
 
+
 	if tmdbID == 0 || seasonNum == 0 || episodeNum == 0 {
 		return nil
 	}
@@ -3863,19 +3867,35 @@ func getEpisodeFileFromPath(filePath string) map[string]interface{} {
 		}
 	}
 
-	// Generate unique IDs based on TMDB ID and episode info
-	seriesID := tmdbID * 1000
-	episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+    // Use TMDB ID directly for series ID
+    seriesID := tmdbID
+    episodeID := spoofing.GenerateUniqueEpisodeID(seriesID, seasonNum, episodeNum)
+    episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
+
+	// Retrieve quality, language, and episode title from DB
+	var dbQuality, dbLanguage, dbEpisodeTitle string
+	if mediaHubDB != nil {
+		query := `SELECT COALESCE(quality, ''), COALESCE(language, ''), COALESCE(episode_title, '') FROM processed_files WHERE destination_path = ? LIMIT 1`
+		mediaHubDB.QueryRow(query, filePath).Scan(&dbQuality, &dbLanguage, &dbEpisodeTitle)
+	}
 
 	// Create episode file with database information
-	episodeFile := map[string]interface{}{
-		"id":           episodeFileID,
-		"seriesId":     seriesID,
-		"seasonNumber": seasonNum,
-		"relativePath": fileName,
-		"path":         filePath,
-		"size":         fileSize,
-		"dateAdded":    modTime.Format("2006-01-02T15:04:05Z"),
+    episodeFile := map[string]interface{}{
+        "id":            episodeFileID,
+        "seriesId":      seriesID,
+        "episodeId":     episodeID,
+        "seasonNumber":  seasonNum,
+        "episodeNumber": episodeNum,
+        "title":         dbEpisodeTitle,
+        "airDate":       "2023-01-01",
+        "relativePath":  fileName,
+		"path":          filePath,
+		"size":          fileSize,
+		"dateAdded":     modTime.Format("2006-01-02T15:04:05Z"),
+		"quality":       spoofing.BuildQualityFromDatabase(dbQuality, filePath),
+		"languages":     spoofing.BuildLanguagesFromDatabase(dbLanguage),
+		"sceneName":     "",
+		"releaseGroup":  "",
 	}
 
 	return episodeFile
@@ -3915,13 +3935,13 @@ func broadcastFileDeletionEvents(filePath string) {
 		return
 	}
 
-	if strings.ToUpper(mediaType) == "MOVIE" {
-		spoofing.BroadcastMovieFileDeleted(tmdbID, tmdbID, properName)
+    if strings.ToUpper(mediaType) == "MOVIE" {
+        spoofing.BroadcastMovieFileDeleted(spoofing.GenerateUniqueMovieFileID(tmdbID), tmdbID, properName)
 	} else if strings.ToUpper(mediaType) == "TV" {
 		seasonNum, _ := strconv.Atoi(seasonNumber)
 		episodeNum, _ := strconv.Atoi(episodeNumber)
 		seriesID := tmdbID * 1000
-		episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+        episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
 		spoofing.BroadcastEpisodeFileDeleted(episodeFileID, seriesID, properName)
 	}
 }
@@ -3970,15 +3990,15 @@ func broadcastFileAdditionEvents(filePath string) {
 		return
 	}
 
-	if strings.ToUpper(mediaType) == "MOVIE" {
-		if movieFile := createMovieFileFromDB(filePath, tmdbID, properName, year); movieFile != nil {
-			spoofing.BroadcastMovieFileUpdated(movieFile)
-		}
-	} else if strings.ToUpper(mediaType) == "TV" {
-		if episodeFile := createEpisodeFileFromDB(filePath, tmdbID, properName, seasonNumber, episodeNumber); episodeFile != nil {
-			spoofing.BroadcastEpisodeFileUpdated(episodeFile)
-		}
-	}
+    if strings.ToUpper(mediaType) == "MOVIE" {
+        if movieFile := createMovieFileFromDB(filePath, tmdbID, properName, year); movieFile != nil {
+            spoofing.BroadcastMovieFileImported(movieFile)
+        }
+    } else if strings.ToUpper(mediaType) == "TV" {
+        if episodeFile := createEpisodeFileFromDB(filePath, tmdbID, properName, seasonNumber, episodeNumber); episodeFile != nil {
+            spoofing.BroadcastEpisodeFileAdded(episodeFile)
+        }
+    }
 }
 
 func createMovieFileFromDB(filePath string, tmdbID int, properName string, year int) *spoofing.MovieFile {
@@ -3992,16 +4012,25 @@ func createMovieFileFromDB(filePath string, tmdbID int, properName string, year 
 		fileSize = fileInfo.Size()
 	}
 
-	return &spoofing.MovieFile{
-		ID:           tmdbID,
-		MovieId:      tmdbID,
-		RelativePath: fileName,
-		Path:         filePath,
-		Size:         fileSize,
-		DateAdded:    modTime,
-		SceneName:    "",
-		ReleaseGroup: "",
-	}
+    // Query DB for language and quality to enrich payload
+    mediaHubDB, err := db.GetDatabaseConnection()
+    var language, quality string
+    if err == nil {
+        _ = mediaHubDB.QueryRow(`SELECT COALESCE(language,''), COALESCE(quality,'') FROM processed_files WHERE destination_path = ? AND UPPER(media_type) = 'MOVIE' LIMIT 1`, filePath).Scan(&language, &quality)
+    }
+
+    return &spoofing.MovieFile{
+        ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
+        MovieId:      tmdbID,
+        RelativePath: fileName,
+        Path:         filePath,
+        Size:         fileSize,
+        DateAdded:    modTime,
+        Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
+        Languages:    spoofing.BuildLanguagesFromDatabase(language),
+        SceneName:    "",
+        ReleaseGroup: "",
+    }
 }
 
 func createEpisodeFileFromDB(filePath string, tmdbID int, properName string, seasonNumber, episodeNumber string) map[string]interface{} {
@@ -4022,17 +4051,35 @@ func createEpisodeFileFromDB(filePath string, tmdbID int, properName string, sea
 		fileSize = fileInfo.Size()
 	}
 
-	seriesID := tmdbID * 1000
-	episodeFileID := seriesID*10000 + seasonNum*100 + episodeNum
+	// Use TMDB ID directly for series ID
+	seriesID := tmdbID
+	episodeID := spoofing.GenerateUniqueEpisodeID(seriesID, seasonNum, episodeNum)
+	episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
+
+	// Retrieve quality, language, and episode title from DB
+	var dbQuality, dbLanguage, dbEpisodeTitle string
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err == nil {
+		query := `SELECT COALESCE(quality, ''), COALESCE(language, ''), COALESCE(episode_title, '') FROM processed_files WHERE destination_path = ? LIMIT 1`
+		mediaHubDB.QueryRow(query, filePath).Scan(&dbQuality, &dbLanguage, &dbEpisodeTitle)
+	}
 
 	return map[string]interface{}{
-		"id":           episodeFileID,
-		"seriesId":     seriesID,
-		"seasonNumber": seasonNum,
-		"relativePath": fileName,
-		"path":         filePath,
-		"size":         fileSize,
-		"dateAdded":    modTime.Format("2006-01-02T15:04:05Z"),
+		"id":            episodeFileID,
+		"seriesId":      seriesID,
+		"episodeId":     episodeID,
+		"seasonNumber":  seasonNum,
+		"episodeNumber": episodeNum,
+		"title":         dbEpisodeTitle,
+		"airDate":       "2023-01-01",
+		"relativePath":  fileName,
+		"path":          filePath,
+		"size":          fileSize,
+		"dateAdded":     modTime.Format("2006-01-02T15:04:05Z"),
+		"quality":       spoofing.BuildQualityFromDatabase(dbQuality, filePath),
+		"languages":     spoofing.BuildLanguagesFromDatabase(dbLanguage),
+		"sceneName":     "",
+		"releaseGroup":  "",
 	}
 }
 

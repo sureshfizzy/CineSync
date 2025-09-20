@@ -901,7 +901,7 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keep connection alive with periodic pings
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	done := make(chan struct{})
@@ -909,7 +909,7 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer close(done)
 		for {
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			_, _, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
@@ -923,7 +923,7 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker.C:
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":6}`+"\x1e")); err != nil {
 				return
 			}
@@ -1241,6 +1241,56 @@ func BroadcastMovieFileUpdated(movieFile *MovieFile) {
 	broadcastSignalRMessage(message)
 }
 
+// BroadcastMovieFileImported broadcasts a movie file imported event
+func BroadcastMovieFileImported(movieFile *MovieFile) {
+    if movieFile == nil {
+        return
+    }
+
+    movie := getMovieDetailsForSignalR(movieFile.MovieId)
+    movieForAdded := make(map[string]interface{})
+    for k, v := range movie {
+        movieForAdded[k] = v
+    }
+    movieForAdded["hasFile"] = false
+    movieForAdded["movieFileId"] = 0
+    
+    movieAddedMessage := map[string]interface{}{
+        "name": "movie",
+        "body": map[string]interface{}{
+            "resource": movieForAdded,
+            "action":   "added",
+        },
+    }
+    broadcastSignalRMessage(movieAddedMessage)
+    time.Sleep(1000 * time.Millisecond)
+
+    // Then broadcast the movie updated with file
+    movieUpdatedMessage := map[string]interface{}{
+        "name": "movie",
+        "body": map[string]interface{}{
+            "resource": movie,
+            "action":   "updated",
+        },
+    }
+    broadcastSignalRMessage(movieUpdatedMessage)
+}
+
+// BroadcastMovieAdded broadcasts a movie added event to all connected SignalR clients
+func BroadcastMovieAdded(movieID int) {
+    movie := getMovieDetailsForSignalR(movieID)
+
+    message := map[string]interface{}{
+        "name": "movie",
+        "body": map[string]interface{}{
+            "resource": movie,
+            "action":   "added",
+        },
+    }
+
+    broadcastSignalRMessage(message)
+}
+
 // BroadcastMovieFileDeleted broadcasts a movie file deleted event to all connected SignalR clients
 func BroadcastMovieFileDeleted(movieFileId int, movieId int, movieTitle string) {
 	message := map[string]interface{}{
@@ -1266,33 +1316,196 @@ func BroadcastEpisodeFileUpdated(episodeFile map[string]interface{}) {
 		return
 	}
 
-	message := map[string]interface{}{
-		"name": "episodeFileUpdated",
-		"body": map[string]interface{}{
-			"episodeFile": episodeFile,
-		},
+	// Extract series ID and episode ID for proper event structure
+	seriesID, _ := episodeFile["seriesId"].(int)
+	episodeID, _ := episodeFile["episodeId"].(int)
+	
+	
+	if seriesID == 0 || episodeID == 0 {
+		logger.Warn("Missing seriesId or episodeId in episodeFile, skipping broadcast")
+		return
 	}
 
-	broadcastSignalRMessage(message)
+	series := getSeriesDetailsForSignalR(seriesID)
+
+	// First broadcast series added with hasFile=false to ensure Bazarr has the series in its database
+	seriesForAdded := make(map[string]interface{})
+	for k, v := range series {
+		seriesForAdded[k] = v
+	}
+	seriesForAdded["hasFile"] = false
+	
+	seriesAddedMessage := map[string]interface{}{
+		"name": "series",
+		"body": map[string]interface{}{
+			"resource": seriesForAdded,
+			"action":   "added",
+		},
+	}
+	broadcastSignalRMessage(seriesAddedMessage)
+
+	time.Sleep(3000 * time.Millisecond)
+
+	seriesUpdatedMessage := map[string]interface{}{
+		"name": "series",
+		"body": map[string]interface{}{
+			"resource": series,
+			"action":   "updated",
+		},
+	}
+	broadcastSignalRMessage(seriesUpdatedMessage)
+	time.Sleep(2000 * time.Millisecond)
+
+	// Also broadcast the episodeFile event
+	episodeFileMessage := map[string]interface{}{
+		"name": "episodeFile",
+		"body": map[string]interface{}{
+			"resource": episodeFile,
+			"action":   "updated",
+		},
+	}
+	broadcastSignalRMessage(episodeFileMessage)
+}
+
+// BroadcastEpisodeFileAdded broadcasts an episode file added event
+func BroadcastEpisodeFileAdded(episodeFile map[string]interface{}) {
+    if episodeFile == nil {
+        return
+    }
+
+	seriesID, _ := episodeFile["seriesId"].(int)
+	episodeID, _ := episodeFile["episodeId"].(int)
+	
+	
+	if seriesID == 0 || episodeID == 0 {
+		logger.Warn("Missing seriesId or episodeId in episodeFile, skipping broadcast")
+		return
+	}
+
+	series := getSeriesDetailsForSignalR(seriesID)
+
+    seriesForAdded := make(map[string]interface{})
+    for k, v := range series {
+        seriesForAdded[k] = v
+    }
+    seriesForAdded["hasFile"] = false
+    
+    seriesAddedMessage := map[string]interface{}{
+        "name": "series",
+        "body": map[string]interface{}{
+            "resource": seriesForAdded,
+            "action":   "added",
+        },
+    }
+    broadcastSignalRMessage(seriesAddedMessage)
+
+    time.Sleep(3000 * time.Millisecond)
+
+    // Then broadcast the series updated with file
+    seriesUpdatedMessage := map[string]interface{}{
+        "name": "series",
+        "body": map[string]interface{}{
+            "resource": series,
+            "action":   "updated",
+        },
+    }
+    broadcastSignalRMessage(seriesUpdatedMessage)
+
+    time.Sleep(2000 * time.Millisecond)
+
+    episodeFileMessage := map[string]interface{}{
+        "name": "episodeFile",
+        "body": map[string]interface{}{
+            "resource": episodeFile,
+            "action":   "added",
+        },
+    }
+    broadcastSignalRMessage(episodeFileMessage)
 }
 
 // BroadcastEpisodeFileDeleted broadcasts an episode file deleted event to all connected SignalR clients
 func BroadcastEpisodeFileDeleted(episodeFileId int, seriesId int, seriesTitle string) {
-	message := map[string]interface{}{
+	episodeFileMessage := map[string]interface{}{
 		"name": "episodeFileDeleted",
 		"body": map[string]interface{}{
 			"episodeFile": map[string]interface{}{
 				"id":       episodeFileId,
 				"seriesId": seriesId,
 			},
+		},
+	}
+	broadcastSignalRMessage(episodeFileMessage)
+
+	time.Sleep(300 * time.Millisecond)
+	seriesMessage := map[string]interface{}{
+		"name": "seriesUpdated",
+		"body": map[string]interface{}{
 			"series": map[string]interface{}{
-				"id":    seriesId,
-				"title": seriesTitle,
+				"id": seriesId,
 			},
 		},
 	}
+	broadcastSignalRMessage(seriesMessage)
+}
 
-	broadcastSignalRMessage(message)
+// getSeriesDetailsForSignalR retrieves detailed series information for SignalR events
+func getSeriesDetailsForSignalR(seriesID int) map[string]interface{} {
+
+	series, err := getSeriesByIDFromDatabase(seriesID)
+	
+	if err != nil {
+		logger.Error("Database error getting series ID %d: %v", seriesID, err)
+	}
+	if series == nil {
+		logger.Error("Series is nil for ID %d", seriesID)
+	}
+	
+	if err != nil || series == nil {
+		return map[string]interface{}{
+			"id":    seriesID,
+			"title": "Unknown Series",
+		}
+	}
+
+	// Convert to map for easier manipulation
+	seriesMap := map[string]interface{}{
+		"id":                   series.ID,
+		"title":               series.Title,
+		"sortTitle":           series.SortTitle,
+		"status":              series.Status,
+		"ended":               false,
+		"overview":            series.Overview,
+		"network":             series.Network,
+		"airTime":             series.AirTime,
+		"images":              series.Images,
+		"seasons":             series.Seasons,
+		"year":                series.Year,
+		"path":                series.Path,
+		"qualityProfileId":    series.QualityProfileId,
+		"languageProfileId":   series.LanguageProfileId,
+		"seasonFolder":        series.SeasonFolder,
+		"monitored":           series.Monitored,
+		"useSceneNumbering":   false,
+		"runtime":             series.Runtime,
+		"tvdbId":              series.TvdbId,
+		"tvRageId":            series.TvRageId,
+		"tvMazeId":            series.TvMazeId,
+		"firstAired":          "2023-01-01",
+		"seriesType":          "standard",
+		"cleanTitle":          strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
+		"imdbId":              "",
+		"titleSlug":           strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
+		"certification":       "",
+		"genres":              []string{},
+		"tags":                []int{},
+		"added":               time.Now().Format("2006-01-02T15:04:05Z"),
+		"ratings":             map[string]interface{}{},
+		"statistics":          map[string]interface{}{},
+		"hasFile":             true,
+	}
+
+	
+	return seriesMap
 }
 
 func IsSignalRConnected() bool {
@@ -1332,12 +1545,18 @@ func broadcastSignalRMessage(message map[string]interface{}) {
 	// Add SignalR message terminator
 	messageData := string(messageBytes) + "\x1e"
 
-	// Send to all connected clients
+
+	// Send to all connected clients with better error handling
 	for conn := range signalRConnections {
+		// Set write deadline for each message
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(messageData)); err != nil {
 			logger.Warn("Failed to send SignalR message to client: %v", err)
 			// Remove failed connection
 			delete(signalRConnections, conn)
+			// Close the connection gracefully
+			conn.Close()
 		}
 	}
 }
@@ -1356,4 +1575,46 @@ func extractTitleFromPath(filePath string) string {
 	}
 
 	return baseName
+}
+
+// getMovieDetailsForSignalR gets movie details for SignalR payloads
+func getMovieDetailsForSignalR(movieID int) map[string]interface{} {
+	movie, err := getMovieByIDFromDatabase(movieID)
+	if err != nil || movie == nil {
+		return map[string]interface{}{
+			"id":    movieID,
+			"title": "Unknown Movie",
+		}
+	}
+
+	// Return enriched movie object with fields Bazarr expects
+	return map[string]interface{}{
+		"id":                  movie.ID,
+		"title":               movie.Title,
+		"originalTitle":       movie.OriginalTitle,
+		"sortTitle":           movie.SortTitle,
+		"status":              movie.Status,
+		"overview":            movie.Overview,
+		"year":                movie.Year,
+		"hasFile":             movie.HasFile,
+		"movieFileId":         movie.MovieFileId,
+		"path":                movie.Path,
+		"qualityProfileId":    movie.QualityProfileId,
+		"monitored":           movie.Monitored,
+		"minimumAvailability": movie.MinimumAvailability,
+		"isAvailable":         movie.IsAvailable,
+		"runtime":             movie.Runtime,
+		"cleanTitle":          movie.CleanTitle,
+		"imdbId":              movie.ImdbId,
+		"tmdbId":              movie.TmdbId,
+		"titleSlug":           movie.TitleSlug,
+		"rootFolderPath":      movie.RootFolderPath,
+		"certification":       movie.Certification,
+		"genres":              movie.Genres,
+		"tags":                movie.Tags,
+		"added":               movie.Added,
+		"images":              movie.Images,
+		"popularity":          movie.Popularity,
+		"sizeOnDisk":          movie.SizeOnDisk,
+	}
 }
