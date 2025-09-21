@@ -12,6 +12,8 @@ import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
+import { BulkSelectionProvider } from '../../contexts/BulkSelectionContext';
+import { useBulkSelectionSafe } from '../../hooks/useBulkSelectionSafe';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
@@ -20,6 +22,7 @@ import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
 
 const ITEMS_PER_PAGE = 100;
+
 
 // Reusable pagination component
 const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: {
@@ -53,7 +56,8 @@ const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: {
   );
 };
 
-export default function FileBrowser() {
+// FileBrowserContent component that uses the bulk selection context
+const FileBrowserContent: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -61,10 +65,17 @@ export default function FileBrowser() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { tmdbData, imgLoadedMap, updateTmdbData, setImageLoaded, getTmdbDataFromCache } = useTmdb();
+  
+  // Use bulk selection
+  const { isSelectionMode, toggleSelectionMode, exitSelectionMode } = useBulkSelectionSafe();
 
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
 
+  // Exit selection mode when navigating to a different path
+  useEffect(() => {
+    exitSelectionMode();
+  }, [currentPath, exitSelectionMode]);
 
   const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
   const searchFromUrl = searchParams.get('search') || '';
@@ -717,12 +728,14 @@ export default function FileBrowser() {
         view={view}
         sortOption={sortOption}
         isSearching={isSearching}
+        isSelectionMode={isSelectionMode}
         onPathClick={handlePathClick}
         onUpClick={handleUpClick}
         onSearchChange={setSearch}
         onViewChange={setView}
         onSortChange={setSortOption}
         onRefresh={handleRefresh}
+        onToggleSelectionMode={toggleSelectionMode}
       />
 
       {/* Processing Progress Indicator */}
@@ -889,5 +902,13 @@ export default function FileBrowser() {
         </DialogContent>
       </Dialog>
     </Box>
+  );
+};
+
+export default function FileBrowser() {
+  return (
+    <BulkSelectionProvider>
+      <FileBrowserContent />
+    </BulkSelectionProvider>
   );
 }

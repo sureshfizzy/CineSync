@@ -1,7 +1,7 @@
 import React, { useState, lazy, Suspense, useEffect } from 'react';
 import {
   Menu, MenuItem, IconButton, Divider, Dialog, DialogTitle, DialogContent,
-  DialogActions, Button, Typography, TextField, Box, Tooltip, Avatar, useTheme
+  DialogActions, Button, Typography, TextField, Box, Tooltip, Avatar, useTheme, Checkbox
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -15,6 +15,7 @@ import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import axios from 'axios';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import MoveFileDialog from './MoveFileDialog';
+import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 import { upsertFileDetail, deleteFileDetail, moveFile } from './fileApi';
 import { useConfig } from '../../contexts/ConfigContext';
 
@@ -75,6 +76,9 @@ const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'))
 const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onViewDetails, onRename, onModify, onError, onDeleted, variant = 'menu', onNavigateBack }) => {
   const theme = useTheme();
   const { config } = useConfig();
+  
+  // Use bulk selection hook
+  const { isSelectionMode, isSelected, toggleSelection } = useBulkSelection();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
@@ -93,7 +97,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveLoading, setMoveLoading] = useState(false);
-  const [moveError, setMoveError] = useState<string | null>(null);
+  const [, setMoveError] = useState<string | null>(null);
 
   // Auto-close success dialog after 3 seconds
   useEffect(() => {
@@ -341,6 +345,23 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         width: '100%',
         mt: 1, mb: 0
       }}>
+        {isSelectionMode && (
+          <Checkbox
+            checked={isSelected(file)}
+            onChange={() => toggleSelection(file)}
+            sx={{ 
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              zIndex: 1,
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              '&:hover': {
+                bgcolor: theme.palette.action.hover
+              }
+            }}
+          />
+        )}
         {file.type === 'file' && (
           <Button size="small" variant="contained" color="primary" startIcon={<PlayArrowIcon />} onClick={handleOpen} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Play</Button>
         )}

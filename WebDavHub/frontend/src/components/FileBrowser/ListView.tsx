@@ -1,20 +1,9 @@
-import {
-  Box,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
+import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, useTheme, useMediaQuery, Checkbox } from '@mui/material';
 import { FileItem } from './types';
 import { getFileIcon } from './fileUtils';
 import FileActionMenu from './FileActionMenu';
 import MobileListItem from './MobileListItem';
+import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 
 interface ListViewProps {
   files: FileItem[];
@@ -41,6 +30,7 @@ export default function ListView({
 }: ListViewProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { isSelectionMode, isSelected, toggleSelection } = useBulkSelection();
 
   if (files.length === 0) {
     return (
@@ -105,6 +95,7 @@ export default function ListView({
       }}>
         <TableHead>
           <TableRow sx={{ bgcolor: 'action.hover' }}>
+            {isSelectionMode && <TableCell padding="checkbox"></TableCell>}
             <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Size</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Modified</TableCell>
@@ -117,11 +108,21 @@ export default function ListView({
               key={file.name}
               data-file-name={file.name}
               hover
-              onClick={() => onItemClick(file)}
+              onClick={() => {
+                if (isSelectionMode) {
+                  toggleSelection(file);
+                } else {
+                  onItemClick(file);
+                }
+              }}
               sx={{
-                cursor: file.type === 'directory' ? 'pointer' : 'default',
+                cursor: isSelectionMode ? 'pointer' : (file.type === 'directory' ? 'pointer' : 'default'),
                 transition: 'background-color 0.2s',
-                '&:hover': { bgcolor: 'action.hover' },
+                bgcolor: isSelected(file) ? theme.palette.primary.main + '10' : 'transparent',
+                borderLeft: isSelected(file) ? `4px solid ${theme.palette.primary.main}` : '4px solid transparent',
+                '&:hover': { 
+                  bgcolor: isSelectionMode ? theme.palette.action.hover : 'action.hover' 
+                },
                 '&.alphabet-highlight': {
                   backgroundColor: theme.palette.primary.main + '20',
                   animation: 'pulse 2s ease-in-out',
@@ -133,6 +134,18 @@ export default function ListView({
                 }
               }}
             >
+              {isSelectionMode && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={isSelected(file)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelection(file);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </TableCell>
+              )}
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
                   <Box sx={{ mr: 2, display: 'flex' }}>

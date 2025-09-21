@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, memo } from 'react';
-import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -10,10 +10,15 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import axios from 'axios';
+import { moveFile } from './fileApi';
 import { useFileActions } from '../../hooks/useFileActions';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import MoveFileDialog from './MoveFileDialog';
 import MoveErrorDialog from './MoveErrorDialog';
+import { useBulkSelection } from '../../contexts/BulkSelectionContext';
+import BulkActionsBar from './BulkActionsBar';
+import BulkMoveDialog from './BulkMoveDialog';
+import BulkDeleteDialog from './BulkDeleteDialog';
 import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
@@ -60,6 +65,23 @@ const PosterView = memo(({
     onDeleted,
   });
 
+  // Use bulk selection
+  const { 
+    isSelectionMode, 
+    selectedItems, 
+    toggleSelection, 
+    selectAll, 
+    clearSelection, 
+    isSelected, 
+    getSelectedItems,
+    exitSelectionMode
+  } = useBulkSelection();
+
+  // Bulk action states
+  const [bulkMoveDialogOpen, setBulkMoveDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+
   const handleContextMenu = useCallback((event: React.MouseEvent, file: FileItem) => {
     event.preventDefault();
     event.stopPropagation();
@@ -93,6 +115,52 @@ const PosterView = memo(({
       sourcePath: realPath
     });
   };
+
+  // Bulk action handlers
+  const handleBulkMove = useCallback(() => {
+    setBulkMoveDialogOpen(true);
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    setBulkDeleteDialogOpen(true);
+  }, []);
+
+
+  const handleBulkMoveSubmit = useCallback(async (targetPath: string) => {
+    setBulkLoading(true);
+    try {
+      const selected = getSelectedItems(files);
+      for (const item of selected) {
+        const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+        await moveFile(sourcePath, targetPath);
+      }
+      setBulkMoveDialogOpen(false);
+      exitSelectionMode();
+      if (onDeleted) onDeleted();
+    } catch (error) {
+      console.error('Bulk move failed:', error);
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [getSelectedItems, files, currentPath, exitSelectionMode, onDeleted]);
+
+  const handleBulkDeleteSubmit = useCallback(async () => {
+    setBulkLoading(true);
+    try {
+      const selected = getSelectedItems(files);
+      for (const item of selected) {
+        const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+        await axios.post('/api/delete', { path: sourcePath });
+      }
+      setBulkDeleteDialogOpen(false);
+      exitSelectionMode();
+      if (onDeleted) onDeleted();
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [getSelectedItems, files, currentPath, exitSelectionMode, onDeleted]);
 
   if (files.length === 0) {
     return (
@@ -135,7 +203,7 @@ const PosterView = memo(({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                cursor: file.type === 'directory' ? 'pointer' : 'default',
+                cursor: isSelectionMode ? 'pointer' : (file.type === 'directory' ? 'pointer' : 'default'),
                 transition: 'transform 0.15s ease-out, box-shadow 0.15s ease-out',
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
@@ -144,9 +212,12 @@ const PosterView = memo(({
                 borderRadius: 3,
                 overflow: 'hidden',
                 position: 'relative',
+                border: isSelected(file) ? `2px solid ${theme.palette.primary.main}` : '2px solid transparent',
+                bgcolor: isSelected(file) ? theme.palette.primary.main + '10' : 'transparent',
                 '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
+                  transform: isSelectionMode ? 'none' : 'translateY(-4px)',
+                  boxShadow: isSelectionMode ? 2 : 6,
+                  bgcolor: isSelectionMode ? theme.palette.action.hover : 'transparent',
                 },
                 '&.alphabet-highlight': {
                   backgroundColor: theme.palette.primary.main + '20',
@@ -158,7 +229,13 @@ const PosterView = memo(({
                   '100%': { backgroundColor: 'transparent' },
                 }
               }}
-              onClick={() => onFileClick(file, tmdb)}
+              onClick={() => {
+                if (isSelectionMode) {
+                  toggleSelection(file);
+                } else {
+                  onFileClick(file, tmdb);
+                }
+              }}
               onContextMenu={(e) => handleContextMenu(e, file)}
             >
               {/* Category poster overlay */}
@@ -178,9 +255,30 @@ const PosterView = memo(({
                   alignItems: 'center',
                   justifyContent: 'center',
                   background: theme.palette.background.default,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}>
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                {isSelectionMode && (
+                  <Checkbox
+                    checked={isSelected(file)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelection(file);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{ 
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      zIndex: 10,
+                      bgcolor: theme.palette.background.paper,
+                      borderRadius: 1,
+                      '&:hover': {
+                        bgcolor: theme.palette.action.hover
+                      }
+                    }}
+                  />
+                )}
                 {(() => {
                   const title = file.title || (tmdb && tmdb.title) || file.name;
 
@@ -363,69 +461,73 @@ const PosterView = memo(({
           root: { sx: { p: 0 } }
         }}
       >
+        {contextMenu && contextMenu.file.type === 'file' && (
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            console.log('Play file:', contextMenu.file.name);
+          }}>
+            <PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />
+            Play
+          </MenuItem>
+        )}
         {contextMenu && (
-          <>
-            {contextMenu.file.type === 'file' && (
-              <MenuItem onClick={() => {
-                setContextMenu(null);
-                console.log('Play file:', contextMenu.file.name);
-              }}>
-                <PlayArrowIcon fontSize="small" sx={{ mr: 1 }} />
-                Play
-              </MenuItem>
-            )}
-            <MenuItem onClick={() => {
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            handleViewDetails(contextMenu.file);
+          }}>
+            <InfoIcon fontSize="small" sx={{ mr: 1 }} />
+            View Details
+          </MenuItem>
+        )}
+        {contextMenu && contextMenu.file.type === 'file' && (
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            console.log('Download file:', contextMenu.file.name);
+          }}>
+            <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
+            Download
+          </MenuItem>
+        )}
+        {contextMenu && <Divider />}
+        {contextMenu && (
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            fileActions.handleRenameClick(contextMenu.file);
+          }}>
+            <EditIcon fontSize="small" sx={{ mr: 1 }} />
+            Rename
+          </MenuItem>
+        )}
+        {contextMenu && (
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            fileActions.handleMoveClick(contextMenu.file);
+          }}>
+            <DriveFileMoveIcon fontSize="small" sx={{ mr: 1 }} />
+            Move
+          </MenuItem>
+        )}
+        {contextMenu && !contextMenu.file.isCategoryFolder && (
+          <MenuItem onClick={() => {
+            setContextMenu(null);
+            fileActions.handleModifyClick(contextMenu.file);
+          }}>
+            <TuneIcon fontSize="small" sx={{ mr: 1 }} />
+            Modify
+          </MenuItem>
+        )}
+        {contextMenu && <Divider />}
+        {contextMenu && (
+          <MenuItem
+            onClick={() => {
               setContextMenu(null);
-              handleViewDetails(contextMenu.file);
-            }}>
-              <InfoIcon fontSize="small" sx={{ mr: 1 }} />
-              View Details
-            </MenuItem>
-            {contextMenu.file.type === 'file' && (
-              <MenuItem onClick={() => {
-                setContextMenu(null);
-                console.log('Download file:', contextMenu.file.name);
-              }}>
-                <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
-                Download
-              </MenuItem>
-            )}
-            <Divider />
-            <MenuItem onClick={() => {
-              setContextMenu(null);
-              fileActions.handleRenameClick(contextMenu.file);
-            }}>
-              <EditIcon fontSize="small" sx={{ mr: 1 }} />
-              Rename
-            </MenuItem>
-            <MenuItem onClick={() => {
-              setContextMenu(null);
-              fileActions.handleMoveClick(contextMenu.file);
-            }}>
-              <DriveFileMoveIcon fontSize="small" sx={{ mr: 1 }} />
-              Move
-            </MenuItem>
-            {!contextMenu.file.isCategoryFolder && (
-              <MenuItem onClick={() => {
-                setContextMenu(null);
-                fileActions.handleModifyClick(contextMenu.file);
-              }}>
-                <TuneIcon fontSize="small" sx={{ mr: 1 }} />
-                Modify
-              </MenuItem>
-            )}
-            <Divider />
-            <MenuItem
-              onClick={() => {
-                setContextMenu(null);
-                fileActions.handleDeleteClick(contextMenu.file);
-              }}
-              sx={{ color: 'error.main' }}
-            >
-              <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-              Delete
-            </MenuItem>
-          </>
+              fileActions.handleDeleteClick(contextMenu.file);
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+            Delete
+          </MenuItem>
         )}
       </Menu>
 
@@ -501,6 +603,32 @@ const PosterView = memo(({
         fileName={fileActions.fileBeingMoved?.name || ''}
         targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
         errorMessage={fileActions.moveError || ''}
+      />
+
+      {/* Bulk Actions */}
+      <BulkActionsBar
+        selectedItems={getSelectedItems(files)}
+        onClose={exitSelectionMode}
+        onMove={handleBulkMove}
+        onDelete={handleBulkDelete}
+        onSelectAll={() => selectAll(files)}
+        isVisible={isSelectionMode && selectedItems.size > 0}
+      />
+
+      <BulkMoveDialog
+        open={bulkMoveDialogOpen}
+        onClose={() => setBulkMoveDialogOpen(false)}
+        onMove={handleBulkMoveSubmit}
+        selectedItems={getSelectedItems(files)}
+        loading={bulkLoading}
+      />
+
+      <BulkDeleteDialog
+        open={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        onDelete={handleBulkDeleteSubmit}
+        selectedItems={getSelectedItems(files)}
+        loading={bulkLoading}
       />
     </Box>
   );

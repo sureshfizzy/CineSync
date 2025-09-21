@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Breadcrumbs, IconButton, Link, TextField, Tooltip, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress, InputAdornment } from '@mui/material';
-import { NavigateBefore as UpIcon, Refresh as RefreshIcon, ViewList as ViewListIcon, GridView as GridViewIcon, Close as CloseIcon, Search as SearchIcon, Sort as SortIcon, SortByAlpha as SortByAlphaIcon, Schedule as ScheduleIcon, Storage as StorageIcon } from '@mui/icons-material';
+import { NavigateBefore as UpIcon, Refresh as RefreshIcon, ViewList as ViewListIcon, GridView as GridViewIcon, Close as CloseIcon, Search as SearchIcon, Sort as SortIcon, SortByAlpha as SortByAlphaIcon, Schedule as ScheduleIcon, Storage as StorageIcon, CheckBox as CheckBoxIcon } from '@mui/icons-material';
 import MobileBreadcrumbs from './MobileBreadcrumbs';
 import { SortOption } from './types';
 
@@ -10,12 +10,14 @@ interface HeaderProps {
   view: 'list' | 'poster';
   sortOption: SortOption;
   isSearching?: boolean;
+  isSelectionMode?: boolean;
   onPathClick: (path: string) => void;
   onUpClick: () => void;
   onSearchChange: (value: string) => void;
   onViewChange: (view: 'list' | 'poster') => void;
   onSortChange: (sortOption: SortOption) => void;
   onRefresh: () => void;
+  onToggleSelectionMode?: () => void;
 }
 
 export default function Header({
@@ -24,12 +26,14 @@ export default function Header({
   view,
   sortOption,
   isSearching = false,
+  isSelectionMode = false,
   onPathClick,
   onUpClick,
   onSearchChange,
   onViewChange,
   onSortChange,
   onRefresh,
+  onToggleSelectionMode,
 }: HeaderProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -172,6 +176,22 @@ export default function Header({
                     <RefreshIcon />
                   </IconButton>
                 </Tooltip>
+                {onToggleSelectionMode && (
+                  <Tooltip title={isSelectionMode ? "Exit Selection Mode" : "Select Multiple Items"}>
+                    <IconButton 
+                      onClick={onToggleSelectionMode} 
+                      color={isSelectionMode ? "secondary" : "primary"}
+                      sx={{ 
+                        bgcolor: isSelectionMode ? theme.palette.secondary.main + '20' : 'transparent',
+                        '&:hover': {
+                          bgcolor: isSelectionMode ? theme.palette.secondary.main + '30' : theme.palette.action.hover
+                        }
+                      }}
+                    >
+                      <CheckBoxIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             </Box>
           </>
@@ -187,7 +207,7 @@ export default function Header({
               placeholder="Search files and folders..."
               size="small"
               variant="outlined"
-              fullWidth
+              sx={{ flex: 1, maxWidth: '85%' }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -206,8 +226,25 @@ export default function Header({
                 sx: { borderRadius: 2, background: theme.palette.background.paper }
               }}
             />
+            {onToggleSelectionMode && (
+              <Tooltip title={isSelectionMode ? "Exit Selection Mode" : "Select Multiple Items"}>
+                <IconButton 
+                  onClick={onToggleSelectionMode} 
+                  color={isSelectionMode ? "secondary" : "primary"}
+                  size="small"
+                  sx={{ 
+                    bgcolor: isSelectionMode ? theme.palette.secondary.main + '20' : 'transparent',
+                    '&:hover': {
+                      bgcolor: isSelectionMode ? theme.palette.secondary.main + '30' : theme.palette.action.hover
+                    }
+                  }}
+                >
+                  <CheckBoxIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title={`Sort: ${getSortLabel(sortOption)}`}>
-              <IconButton onClick={handleSortClick} color="default">
+              <IconButton onClick={handleSortClick} color="default" size="small">
                 <SortIcon />
               </IconButton>
             </Tooltip>
