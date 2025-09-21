@@ -796,16 +796,32 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
     new_dest_path = normalize_file_path(new_dest_path)
     try:
         cursor = conn.cursor()
+
         cursor.execute("""
-            UPDATE processed_files
-            SET destination_path = ?
+            SELECT proper_name, media_type FROM processed_files
             WHERE destination_path = ?
-        """, (new_dest_path, old_dest_path))
-        conn.commit()
-        if cursor.rowcount > 0:
-            log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path}", level="INFO")
+        """, (old_dest_path,))
+        result = cursor.fetchone()
+
+        if result:
+            proper_name, media_type = result
+            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name, media_type, None)
+
+            # Update both destination_path and base_path
+            cursor.execute("""
+                UPDATE processed_files
+                SET destination_path = ?, base_path = ?
+                WHERE destination_path = ?
+            """, (new_dest_path, new_base_path, old_dest_path))
+
+            if cursor.rowcount > 0:
+                log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path})", level="INFO")
+            else:
+                log_message(f"No matching record found for renamed file: {old_dest_path}", level="WARNING")
         else:
-            log_message(f"No matching record found for renamed file: {old_dest_path}", level="WARNING")
+            log_message(f"Could not find record to update base_path for renamed file: {old_dest_path}", level="WARNING")
+        conn.commit()
+
     except (sqlite3.Error, DatabaseError) as e:
         log_message(f"Error updating renamed file in database: {e}", level="ERROR")
         conn.rollback()
@@ -2487,3 +2503,4 @@ def _process_single_entry(entry, api_key):
     except Exception as e:
         log_message(f"Error processing single entry: {e}", level="ERROR")
         return None
+
