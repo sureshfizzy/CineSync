@@ -71,7 +71,6 @@ const PosterView = memo(({
     selectedItems, 
     toggleSelection, 
     selectAll, 
-    clearSelection, 
     isSelected, 
     getSelectedItems,
     exitSelectionMode
