@@ -77,7 +77,14 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                     # Check if Quality Full already contains the source information
                     if not (quality_full and any(source in quality_full.upper() for source in ['WEBDL', 'WEBRIP', 'BLURAY', 'HDTV', 'REMUX'])):
                         if value:
-                            filename_parts.append(value)
+                            audio_codec = media_info.get('MediaInfo AudioCodec', '')
+                            if 'Atmos' in audio_codec and 'Atmos' in value:
+                                custom_formats_list = value.split()
+                                custom_formats_list = [fmt for fmt in custom_formats_list if fmt.lower() != 'atmos']
+                                value = ' '.join(custom_formats_list) if custom_formats_list else ''
+
+                            if value:
+                                filename_parts.append(value)
 
                 # Handle Quality Full with proper formatting - keep original format
                 elif field_name == 'Quality Full' and 'Quality Full' in media_info:

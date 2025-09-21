@@ -146,10 +146,6 @@ def get_ffprobe_media_info(file_path):
             if key in media_result:
                 del media_result[key]
 
-        # Add Atmos to DV tags if both are present
-        if 'MediaInfo VideoDynamicRangeType' in media_result and 'Atmos' in media_result.get('MediaInfo AudioCodec', ''):
-            if 'Atmos' not in media_result['MediaInfo VideoDynamicRangeType']:
-                media_result['MediaInfo VideoDynamicRangeType'] = f"{media_result['MediaInfo VideoDynamicRangeType']} Atmos"
 
         log_message(f"Successfully extracted media info for: {os.path.basename(file_path)}", level="DEBUG")
         return media_result

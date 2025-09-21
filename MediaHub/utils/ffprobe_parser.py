@@ -267,11 +267,6 @@ def get_ffprobe_info(file_path, probe_data):
                         has_atmos = True
                         media_info_simple.append('Atmos')
 
-            # Add Atmos to dynamic range if applicable
-            if has_atmos and 'MediaInfo VideoDynamicRangeType' in media_info:
-                media_info['MediaInfo VideoDynamicRangeType'] = f"{media_info['MediaInfo VideoDynamicRangeType']} Atmos"
-            elif has_atmos:
-                media_info['MediaInfo VideoDynamicRangeType'] = 'Atmos'
 
         # Get audio languages
         audio_languages = []
@@ -337,7 +332,9 @@ def extract_movie_info_from_path(file_path, probe_data=None):
         r'(?i)(Special Edition)',
         r'(?i)(Ultimate Edition)',
         r'(?i)(Final Cut)',
-        r'(?i)(Remastered)'
+        r'(?i)(Remastered)',
+        r'(?i)(Hybrid)',
+        r'(?i)(Anniversary Edition)'
     ]
 
     edition_tags = []
