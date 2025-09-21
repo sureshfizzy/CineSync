@@ -813,7 +813,8 @@ func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "OPTIONS" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -843,7 +844,8 @@ func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -852,6 +854,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+	EnableCompression: true,
+	HandshakeTimeout:  10 * time.Second,
 }
 
 // Global variables to track SignalR connections
@@ -1012,8 +1016,8 @@ func HandleConfigHost(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"bindAddress":        "*",
 		"port":               8989,
-		"sslPort":            9898,
-		"enableSsl":          false,
+		"sslPort":            443,
+		"enableSsl":          true,
 		"launchBrowser":      false,
 		"authenticationMethod": "none",
 		"analyticsEnabled":   false,
