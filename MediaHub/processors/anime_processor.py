@@ -52,13 +52,19 @@ def extract_anime_episode_info(filename, file_metadata=None):
             season_number = match.group(1)
             episode_number = match.group(2)
 
+    # Check if this is a S00 episode (specials/extras)
+    is_extra = anime_result.get('is_extra', False)
+    if season_number == "0" or season_number == 0:
+        is_extra = True
+        log_message(f"Detected S00 episode - marking as special/extra", level="DEBUG")
+
     # Convert to the expected format
     result = {
         'show_name': show_name,
         'season_number': season_number,
         'episode_number': episode_number,
         'episode_title': None,
-        'is_extra': anime_result.get('is_extra', False)
+        'is_extra': is_extra
     }
 
     # Clean up show name if available

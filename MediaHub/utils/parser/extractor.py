@@ -116,6 +116,7 @@ class MediaMetadata:
     # Content type flags
     is_tv_show: bool = False
     is_movie: bool = False
+    is_extra: bool = False
 
     # Technical flags
     hdr: Optional[str] = None
@@ -177,10 +178,16 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
     # Check for TV show patterns first (prioritize over sports when clear season/episode patterns exist)
     is_tv = _is_tv_show(parsed)
     episode = _extract_episode_from_parsed(parsed)
+    season = _extract_season_from_parsed(parsed)
 
     # If we found an episode number
     if episode is not None:
         is_tv = True
+
+    # Check if this is a S00 episode (specials/extras)
+    is_extra = False
+    if season == 0:
+        is_extra = True
 
     # Check for sports content
     if is_tv:
@@ -224,6 +231,7 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         episode=episode,
         is_tv_show=is_tv,
         is_movie=is_movie,
+        is_extra=is_extra,
         episode_title=_extract_episode_title_from_parsed(parsed),
         hdr=_extract_hdr_from_parsed(parsed),
         is_repack=_extract_repack_flag_from_parsed(parsed),

@@ -54,6 +54,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     else:
         file_result = clean_query(file)
 
+    # Check if this is a S00 episode (specials/extras) and skip if detected
+    if file_result.get('is_extra', False) and file_result.get('season_number') == '00':
+        log_message(f"Skipping S00 special episode: {file}", level="INFO")
+        return "SKIP_EXTRA", None
+
     # Initialize language and quality variables and extract from file_result
     languages = file_result.get('languages', [])
     language = ', '.join(languages) if isinstance(languages, list) and languages else None

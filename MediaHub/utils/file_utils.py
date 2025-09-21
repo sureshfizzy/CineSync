@@ -272,7 +272,7 @@ def clean_query(query: str) -> Dict[str, Any]:
 
         result['show_name'] = result['title'] if metadata.season or metadata.episode else None
         result['create_season_folder'] = bool(metadata.season or metadata.episode)
-        result['is_extra'] = False
+        result['is_extra'] = metadata.is_extra
         result['dubbed'] = metadata.is_dubbed
         result['subbed'] = metadata.is_subbed
         result['repack'] = metadata.is_repack
