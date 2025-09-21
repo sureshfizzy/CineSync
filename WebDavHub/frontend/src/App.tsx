@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TmdbProvider } from './contexts/TmdbContext';
 import { ConfigProvider } from './contexts/ConfigContext';
 import { SSEProvider } from './components/SSEProvider';
+import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
 import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
 import Dashboard from './components/Dashboard/Dashboard';
@@ -345,9 +346,11 @@ function App() {
         <AuthProvider>
           <SSEProvider>
             <TmdbProvider>
-              <Router>
-                <AppContent toggleTheme={toggleTheme} mode={mode} />
-              </Router>
+              <BulkSelectionProvider>
+                <Router>
+                  <AppContent toggleTheme={toggleTheme} mode={mode} />
+                </Router>
+              </BulkSelectionProvider>
             </TmdbProvider>
           </SSEProvider>
         </AuthProvider>
