@@ -211,6 +211,7 @@ func main() {
 	apiMux.HandleFunc("/api/delete", api.HandleDelete)
 	apiMux.HandleFunc("/api/restore-symlinks", api.HandleRestoreSymlinks)
 	apiMux.HandleFunc("/api/rename", api.HandleRename)
+	apiMux.HandleFunc("/api/move", api.HandleMove)
 	apiMux.HandleFunc("/api/download", api.HandleDownload)
 	apiMux.HandleFunc("/api/me", auth.HandleMe)
 	apiMux.HandleFunc("/api/tmdb/search", api.WithTmdbValidation(api.HandleTmdbProxy))

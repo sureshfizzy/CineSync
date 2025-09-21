@@ -121,3 +121,10 @@ export async function getFileDetail(path: string) {
   const response = await axios.get(`/api/file-details?path=${encodeURIComponent(path)}`);
   return response.data;
 }
+
+export async function moveFile(sourcePath: string, targetPath: string): Promise<void> {
+  await axios.post('/api/move', {
+    sourcePath,
+    targetPath
+  });
+}

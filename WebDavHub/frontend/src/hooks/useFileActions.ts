@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { upsertFileDetail, deleteFileDetail } from '../components/FileBrowser/fileApi';
+import { upsertFileDetail, deleteFileDetail, moveFile } from '../components/FileBrowser/fileApi';
 import { FileItem } from '../components/FileBrowser/types';
 
 function joinPaths(...parts: string[]): string {
@@ -32,6 +32,13 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
 
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [fileBeingModified, setFileBeingModified] = useState<FileItem | null>(null);
+
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [moveErrorDialogOpen, setMoveErrorDialogOpen] = useState(false);
+  const [fileBeingMoved, setFileBeingMoved] = useState<FileItem | null>(null);
+  const [lastMoveAttempt, setLastMoveAttempt] = useState<{targetPath: string} | null>(null);
 
   const handleRenameClick = (file: FileItem) => {
     setRenameError(null);
@@ -125,6 +132,64 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
     setFileBeingModified(null);
   };
 
+  const handleMoveClick = (file: FileItem) => {
+    setMoveError(null);
+    setFileBeingMoved(file);
+    setMoveDialogOpen(true);
+  };
+
+  const handleMoveDialogClose = () => {
+    setMoveDialogOpen(false);
+    setMoveError(null);
+    setFileBeingMoved(null);
+    setLastMoveAttempt(null);
+  };
+
+  const handleMoveErrorDialogClose = () => {
+    setMoveErrorDialogOpen(false);
+    setMoveError(null);
+    setLastMoveAttempt(null);
+  };
+
+  const handleMoveSubmit = async (targetPath: string) => {
+    if (!fileBeingMoved) return;
+    const file = fileBeingMoved;
+
+    setMoveLoading(true);
+    setMoveError(null);
+    
+    // Use the most reliable path available
+    const sourcePath = file.fullPath || file.sourcePath || joinPaths(currentPath, file.name);
+
+    try {
+      await moveFile(sourcePath, targetPath);
+      
+      // Update persistent file details DB
+      await upsertFileDetail({
+        path: targetPath,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        modified: file.modified,
+        icon: (file as any).icon || '',
+        extra: '',
+      });
+      
+      setMoveDialogOpen(false);
+      setMoveLoading(false);
+      setFileBeingMoved(null);
+      setLastMoveAttempt(null);
+      if (onDeleted) onDeleted();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.response?.data || error.message || 'Failed to move file';
+      setMoveError(errorMessage);
+      setLastMoveAttempt({ targetPath });
+      setMoveDialogOpen(false);
+      setMoveLoading(false);
+      setMoveErrorDialogOpen(true);
+    }
+  };
+
   const handleRenameDialogClose = () => {
     setRenameDialogOpen(false);
     setRenameError(null);
@@ -160,5 +225,15 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
     handleModifyClick,
     handleModifyDialogClose,
     setModifyDialogOpen,
+    moveDialogOpen,
+    moveLoading,
+    moveError,
+    moveErrorDialogOpen,
+    fileBeingMoved,
+    lastMoveAttempt,
+    handleMoveClick,
+    handleMoveSubmit,
+    handleMoveDialogClose,
+    handleMoveErrorDialogClose,
   };
 }

@@ -110,11 +110,16 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
       <>
         <FileActionMenu
           file={{
-            ...fileInfo,
+            name: folderName || 'Unknown Folder',
+            type: 'directory' as const,
             fullPath: filePath,
             sourcePath: filePath,
+            webdavPath: filePath,
+            path: filePath,
+            size: '0 B',
+            modified: new Date().toISOString()
           }}
-          currentPath={filePath}
+          currentPath={currentPath}
           onViewDetails={() => {}}
           onRename={handleRename}
           onModify={handleModify}

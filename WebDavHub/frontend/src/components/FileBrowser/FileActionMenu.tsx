@@ -11,9 +11,11 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import axios from 'axios';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
-import { upsertFileDetail, deleteFileDetail } from './fileApi';
+import MoveFileDialog from './MoveFileDialog';
+import { upsertFileDetail, deleteFileDetail, moveFile } from './fileApi';
 import { useConfig } from '../../contexts/ConfigContext';
 
 interface FileItem {
@@ -89,6 +91,9 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   // Auto-close success dialog after 3 seconds
   useEffect(() => {
@@ -207,6 +212,49 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
     handleMenuClose();
   };
 
+  const handleMoveClick = () => {
+    setMoveError(null);
+    setMoveDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleMoveDialogClose = () => {
+    setMoveDialogOpen(false);
+    setMoveError(null);
+  };
+
+  const handleMoveSubmit = async (targetPath: string) => {
+    setMoveLoading(true);
+    setMoveError(null);
+    
+    // Use the most reliable path available
+    const sourcePath = file.fullPath || file.sourcePath || joinPaths(currentPath, file.name);
+
+    try {
+      await moveFile(sourcePath, targetPath);
+      
+      // Update persistent file details DB
+      await upsertFileDetail({
+        path: targetPath,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        modified: file.modified,
+        icon: (file as any).icon || '',
+        extra: '',
+      });
+      
+      setMoveDialogOpen(false);
+      setMoveLoading(false);
+      setSuccessMessage(`${file.type === 'directory' ? 'Folder' : 'File'} moved to "${targetPath}" successfully`);
+      setSuccessDialogOpen(true);
+      if (onDeleted) onDeleted();
+    } catch (error: any) {
+      setMoveError(error.response?.data || error.message || 'Failed to move file');
+      setMoveLoading(false);
+    }
+  };
+
 
 
   const handleRenameSubmit = async () => {
@@ -300,6 +348,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           <Button size="small" variant="outlined" color="primary" startIcon={<DownloadIcon />} onClick={handleDownload} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Download</Button>
         )}
         <Button size="small" variant="outlined" color="secondary" startIcon={<EditIcon />} onClick={handleRenameClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Rename</Button>
+        <Button size="small" variant="outlined" color="primary" startIcon={<DriveFileMoveIcon />} onClick={handleMoveClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Move</Button>
         <Tooltip title="Delete file">
           <span>
             <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleDeleteClick} sx={{ flex: '1 1 120px', maxWidth: 180, fontWeight: 600 }}>Delete</Button>
@@ -475,6 +524,13 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             </Button>
           </DialogActions>
         </Dialog>
+        <MoveFileDialog
+          open={moveDialogOpen}
+          onClose={handleMoveDialogClose}
+          onMove={handleMoveSubmit}
+          fileName={file.name}
+          loading={moveLoading}
+        />
       </Box>
     );
   }
@@ -509,6 +565,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           <MenuItem onClick={handleDownload}><DownloadIcon fontSize="small" sx={{ mr: 1 }} />Download</MenuItem>
         )}
         <MenuItem onClick={handleRenameClick}><EditIcon fontSize="small" sx={{ mr: 1 }} />Rename</MenuItem>
+        <MenuItem onClick={handleMoveClick}><DriveFileMoveIcon fontSize="small" sx={{ mr: 1 }} />Move</MenuItem>
         {!file.isCategoryFolder && (
           <MenuItem onClick={handleModifyClick}><TuneIcon fontSize="small" sx={{ mr: 1 }} />Modify</MenuItem>
         )}
@@ -616,6 +673,14 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
           </Button>
         </DialogActions>
       </Dialog>
+      <MoveFileDialog
+        open={moveDialogOpen}
+        onClose={handleMoveDialogClose}
+        onMove={handleMoveSubmit}
+        fileName={file.name}
+        loading={moveLoading}
+      />
+
       {modifyDialogOpen && (
         <ModifyDialog
           open={modifyDialogOpen}

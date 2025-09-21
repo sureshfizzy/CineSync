@@ -8,9 +8,12 @@ import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import axios from 'axios';
 import { useFileActions } from '../../hooks/useFileActions';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
+import MoveFileDialog from './MoveFileDialog';
+import MoveErrorDialog from './MoveErrorDialog';
 import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
 import { getFileIcon } from './fileUtils';
@@ -395,6 +398,13 @@ const PosterView = memo(({
               <EditIcon fontSize="small" sx={{ mr: 1 }} />
               Rename
             </MenuItem>
+            <MenuItem onClick={() => {
+              setContextMenu(null);
+              fileActions.handleMoveClick(contextMenu.file);
+            }}>
+              <DriveFileMoveIcon fontSize="small" sx={{ mr: 1 }} />
+              Move
+            </MenuItem>
             {!contextMenu.file.isCategoryFolder && (
               <MenuItem onClick={() => {
                 setContextMenu(null);
@@ -468,6 +478,30 @@ const PosterView = memo(({
           currentFilePath={fileActions.fileBeingModified.fullPath || fileActions.fileBeingModified.sourcePath || joinPaths(currentPath, fileActions.fileBeingModified.name)}
         />
       )}
+
+      {/* Move Dialog */}
+      <MoveFileDialog
+        open={fileActions.moveDialogOpen}
+        onClose={fileActions.handleMoveDialogClose}
+        onMove={fileActions.handleMoveSubmit}
+        fileName={fileActions.fileBeingMoved?.name || ''}
+        loading={fileActions.moveLoading}
+      />
+
+      {/* Move Error Dialog */}
+      <MoveErrorDialog
+        open={fileActions.moveErrorDialogOpen}
+        onClose={fileActions.handleMoveErrorDialogClose}
+        onRetry={() => {
+          if (fileActions.lastMoveAttempt) {
+            fileActions.handleMoveErrorDialogClose();
+            fileActions.handleMoveSubmit(fileActions.lastMoveAttempt.targetPath);
+          }
+        }}
+        fileName={fileActions.fileBeingMoved?.name || ''}
+        targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
+        errorMessage={fileActions.moveError || ''}
+      />
     </Box>
   );
 });

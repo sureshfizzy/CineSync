@@ -246,6 +246,16 @@ type RenameResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type MoveRequest struct {
+	SourcePath string `json:"sourcePath"`
+	TargetPath string `json:"targetPath"`
+}
+
+type MoveResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 func formatFileSize(size int64) string {
 	const unit = 1024
 	if size < unit {
@@ -2776,6 +2786,155 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(RenameResponse{Success: true})
 }
 
+// HandleMove moves a file or directory from source to target path
+func HandleMove(w http.ResponseWriter, r *http.Request) {
+	logger.Info("Request: %s %s", r.Method, r.URL.Path)
+
+	if r.Method != http.MethodPost {
+		logger.Warn("Invalid method: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		logger.Warn("Error: failed to read request body: %v", err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var req MoveRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Warn("Error: invalid request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.SourcePath == "" || req.TargetPath == "" {
+		logger.Warn("Error: missing sourcePath or targetPath")
+		http.Error(w, "sourcePath and targetPath are required", http.StatusBadRequest)
+		return
+	}
+
+
+	cleanSourcePath := filepath.Clean(req.SourcePath)
+	cleanTargetPath := filepath.Clean(req.TargetPath)
+
+	if cleanSourcePath == "." || cleanSourcePath == ".." || strings.HasPrefix(cleanSourcePath, "..") {
+		logger.Warn("Error: invalid sourcePath: %s", cleanSourcePath)
+		http.Error(w, "Invalid sourcePath", http.StatusBadRequest)
+		return
+	}
+
+	if cleanTargetPath == "." || cleanTargetPath == ".." || strings.HasPrefix(cleanTargetPath, "..") {
+		logger.Warn("Error: invalid targetPath: %s", cleanTargetPath)
+		http.Error(w, "Invalid targetPath", http.StatusBadRequest)
+		return
+	}
+
+	sourceFullPath := filepath.Join(rootDir, cleanSourcePath)
+	
+	// Extract filename from source path
+	sourceFileName := filepath.Base(cleanSourcePath)
+	targetFullPath := filepath.Join(rootDir, cleanTargetPath, sourceFileName)
+	apiSourcePath := strings.ReplaceAll(cleanSourcePath, "\\", "/")
+	resolvedSourcePath, err := resolveActualDirectoryPath(sourceFullPath, apiSourcePath)
+	if err == nil {
+		sourceFullPath = resolvedSourcePath
+	}
+
+	absSource, err := filepath.Abs(sourceFullPath)
+	if err != nil {
+		logger.Warn("Error: failed to get absolute source path: %v", err)
+		http.Error(w, "Invalid sourcePath", http.StatusBadRequest)
+		return
+	}
+	absTarget, err := filepath.Abs(targetFullPath)
+	if err != nil {
+		logger.Warn("Error: failed to get absolute target path: %v", err)
+		http.Error(w, "Invalid targetPath", http.StatusBadRequest)
+		return
+	}
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		logger.Warn("Error: failed to get absolute root path: %v", err)
+		http.Error(w, "Server configuration error", http.StatusInternalServerError)
+		return
+	}
+
+	if !strings.HasPrefix(absSource, absRoot) {
+		logger.Warn("Error: sourcePath outside root directory: %s", absSource)
+		http.Error(w, "Invalid sourcePath", http.StatusBadRequest)
+		return
+	}
+	if !strings.HasPrefix(absTarget, absRoot) {
+		logger.Warn("Error: targetPath outside root directory: %s", absTarget)
+		http.Error(w, "Invalid targetPath", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := os.Stat(sourceFullPath); os.IsNotExist(err) {
+		logger.Warn("Error: source file or directory not found: %s", sourceFullPath)
+		http.Error(w, "Source file or directory not found", http.StatusNotFound)
+		return
+	}
+
+	if _, err := os.Stat(targetFullPath); err == nil {
+		logger.Warn("Error: target already exists: %s", targetFullPath)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(MoveResponse{
+			Success: false,
+			Error:   "Target already exists. A file or folder with this name already exists in the destination.",
+		})
+		return
+	}
+
+	// Ensure target directory exists
+	targetDir := filepath.Dir(targetFullPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		logger.Warn("Error: failed to create target directory: %v", err)
+		http.Error(w, "Failed to create target directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if source is a directory
+	sourceInfo, err := os.Stat(sourceFullPath)
+	if err != nil {
+		logger.Warn("Error: failed to stat source path: %v", err)
+		http.Error(w, "Failed to access source", http.StatusInternalServerError)
+		return
+	}
+
+	if sourceInfo.IsDir() {
+		// For directories on Windows, use copy-and-delete approach to avoid "Access is denied"
+		err = moveDirectory(sourceFullPath, targetFullPath)
+		if err != nil {
+			logger.Warn("Error: failed to move directory %s to %s: %v", sourceFullPath, targetFullPath, err)
+			http.Error(w, "Failed to move directory: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// For files, use os.Rename
+		err = os.Rename(sourceFullPath, targetFullPath)
+		if err != nil {
+			logger.Warn("Error: failed to move file %s to %s: %v", sourceFullPath, targetFullPath, err)
+			http.Error(w, "Failed to move file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Update database records for the moved file
+	updateDatabaseForMovedFile(sourceFullPath, targetFullPath)
+
+	// Invalidate folder cache to ensure frontend refreshes
+	db.InvalidateFolderCache()
+
+	logger.Info("Success: moved %s to %s", sourceFullPath, targetFullPath)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(MoveResponse{Success: true})
+}
+
 // HandleFileDetails handles GET/POST/DELETE for file details
 func HandleFileDetails(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -3721,6 +3880,163 @@ func broadcastFileRenameEvents(oldPath, newPath string) {
     } else if isTVFile(oldPath) || isTVFile(newPath) {
         if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
             spoofing.BroadcastEpisodeFileAdded(episodeFile)
+        }
+    }
+}
+
+
+// moveDirectory moves a directory using copy-and-delete approach to avoid Windows "Access is denied" errors
+func moveDirectory(sourcePath, targetPath string) error {
+	// First try os.Rename (works on most systems)
+	err := os.Rename(sourcePath, targetPath)
+	if err == nil {
+		return nil
+	}
+
+	// If os.Rename fails (common on Windows), use copy-and-delete
+	logger.Info("os.Rename failed for directory, using copy-and-delete approach: %v", err)
+
+	// Copy the directory
+	err = copyDirectory(sourcePath, targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to copy directory: %v", err)
+	}
+
+	// Delete the source directory
+	err = os.RemoveAll(sourcePath)
+	if err != nil {
+		// If delete fails, try to clean up the target directory
+		os.RemoveAll(targetPath)
+		return fmt.Errorf("failed to remove source directory after copy: %v", err)
+	}
+
+	return nil
+}
+
+// copyDirectory recursively copies a directory
+func copyDirectory(src, dst string) error {
+	// Create destination directory
+	err := os.MkdirAll(dst, 0755)
+	if err != nil {
+		return err
+	}
+
+	// Read source directory
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	// Copy each entry
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			err = copyDirectory(srcPath, dstPath)
+		} else {
+			err = copyFile(srcPath, dstPath)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a single file with retry logic for Windows file locks
+func copyFile(src, dst string) error {
+	var err error
+	maxRetries := 3
+	
+	for i := 0; i < maxRetries; i++ {
+		err = copyFileOnce(src, dst)
+		if err == nil {
+			return nil
+		}
+		
+		// If it's a permission error and we have retries left, wait and try again
+		if i < maxRetries-1 && (os.IsPermission(err) || strings.Contains(err.Error(), "Access is denied")) {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		
+		return err
+	}
+	
+	return err
+}
+
+// copyFileOnce performs a single file copy operation
+func copyFileOnce(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = destFile.ReadFrom(sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Copy file permissions
+	sourceInfo, err := sourceFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	return os.Chmod(dst, sourceInfo.Mode())
+}
+
+// updateDatabaseForMovedFile updates database records when a file is moved
+func updateDatabaseForMovedFile(sourcePath, targetPath string) {
+    mediaHubDB, err := db.GetDatabaseConnection()
+    if err != nil {
+        logger.Warn("Failed to get database connection for file move update: %v", err)
+        return
+    }
+
+    // Extract target base path for updating
+    targetDir := filepath.Dir(targetPath)
+    targetBasePath := filepath.Base(targetDir)
+
+    // Update destination_path and base_path for moved files
+    sourcePattern := sourcePath + "%"
+    query := `UPDATE processed_files SET 
+                destination_path = REPLACE(destination_path, ?, ?),
+                base_path = ? 
+              WHERE destination_path LIKE ?`
+    result, err := mediaHubDB.Exec(query, sourcePath, targetPath, targetBasePath, sourcePattern)
+    if err != nil {
+        logger.Warn("Failed to update processed_files for moved file: %v", err)
+    } else {
+        rowsAffected, _ := result.RowsAffected()
+        logger.Info("Updated processed_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected)
+    }
+
+    // Update source_files table if it exists
+    sourceQuery := `UPDATE source_files SET 
+                      destination_path = REPLACE(destination_path, ?, ?),
+                      base_path = ? 
+                    WHERE destination_path LIKE ?`
+    result2, err := mediaHubDB.Exec(sourceQuery, sourcePath, targetPath, targetBasePath, sourcePattern)
+    if err != nil {
+        // Only log as warning if it's not a "table doesn't exist" error
+        if !strings.Contains(err.Error(), "no such table") {
+            logger.Warn("Failed to update source_files for moved file: %v", err)
+        }
+    } else {
+        rowsAffected2, _ := result2.RowsAffected()
+        if rowsAffected2 > 0 {
+            logger.Info("Updated source_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected2)
         }
     }
 }
