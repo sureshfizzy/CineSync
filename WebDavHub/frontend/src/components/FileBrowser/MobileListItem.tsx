@@ -1,13 +1,25 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Checkbox, useTheme } from '@mui/material';
 import { getFileIcon } from './fileUtils.tsx';
 import { MobileListItemProps } from './types';
+import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 
 const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, formatDate, menu }) => {
+  const theme = useTheme();
+  const { isSelectionMode, isSelected, toggleSelection } = useBulkSelection();
+
+  const handleClick = () => {
+    if (isSelectionMode) {
+      toggleSelection(file);
+    } else {
+      onItemClick();
+    }
+  };
+
   return (
     <Box
       data-file-name={file.name}
-      onClick={onItemClick}
+      onClick={handleClick}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -15,27 +27,40 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
         p: 1.5,
         borderBottom: '1px solid',
         borderColor: 'divider',
-        cursor: file.type === 'directory' ? 'pointer' : 'default',
+        cursor: isSelectionMode ? 'pointer' : (file.type === 'directory' ? 'pointer' : 'default'),
         '&:active': {
           bgcolor: 'action.selected',
         },
-        bgcolor: 'background.paper',
+        bgcolor: isSelected(file) ? theme.palette.primary.main + '10' : 'background.paper',
+        borderLeft: isSelected(file) ? `4px solid ${theme.palette.primary.main}` : '4px solid transparent',
         '&:hover': {
-          bgcolor: 'action.hover',
+          bgcolor: isSelectionMode ? theme.palette.action.hover : 'action.hover',
         },
         '&.alphabet-highlight': {
-          backgroundColor: 'primary.main',
-          opacity: 0.2,
+          backgroundColor: theme.palette.primary.main + '20',
           animation: 'pulse 2s ease-in-out',
         },
         '@keyframes pulse': {
-          '0%': { opacity: 0.4 },
-          '50%': { opacity: 0.2 },
-          '100%': { opacity: 0 },
+          '0%': { backgroundColor: theme.palette.primary.main + '40' },
+          '50%': { backgroundColor: theme.palette.primary.main + '20' },
+          '100%': { backgroundColor: 'transparent' },
         }
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
+        {isSelectionMode && (
+          <Box sx={{ mr: 2 }}>
+            <Checkbox
+              checked={isSelected(file)}
+              onChange={(e) => {
+                e.stopPropagation();
+                toggleSelection(file);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              size="small"
+            />
+          </Box>
+        )}
         <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
           {getFileIcon(file.name, file.type)}
         </Box>
@@ -65,7 +90,7 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
           </Typography>
         </Box>
       </Box>
-      {menu}
+      {!isSelectionMode && menu}
     </Box>
   );
 };
