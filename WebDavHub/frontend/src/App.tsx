@@ -12,7 +12,7 @@ import { SSEProvider } from './components/SSEProvider';
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
 import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
-import Dashboard from './components/Dashboard/Dashboard';
+import DashboardSwitcher from './components/Dashboard/DashboardSwitcher';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
@@ -277,7 +277,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         }
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dashboard" element={<DashboardSwitcher />} />
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
         <Route path="file-operations" element={<FileOperations />} />

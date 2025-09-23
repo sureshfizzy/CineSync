@@ -1,6 +1,6 @@
 import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 
@@ -64,6 +64,22 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
     handleRefresh,
   };
 
+  const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>(() => {
+    const saved = localStorage.getItem('dashboardView');
+    return saved === 'arrdash' ? 'arrdash' : 'current';
+  });
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.view === 'arrdash' || detail?.view === 'current') {
+        setActiveDashboardView(detail.view);
+      }
+    };
+    window.addEventListener('dashboardViewChanged', handler as EventListener);
+    return () => window.removeEventListener('dashboardViewChanged', handler as EventListener);
+  }, []);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
       <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />
@@ -86,11 +102,15 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               height: '100%',
             }}
           >
-            <Sidebar
-              currentView={view}
-              onViewChange={handleViewChange}
-              onRefresh={handleRefresh}
-            />
+            {location.pathname === '/dashboard' && activeDashboardView === 'arrdash' ? (
+              <></>
+            ) : (
+              <Sidebar
+                currentView={view}
+                onViewChange={handleViewChange}
+                onRefresh={handleRefresh}
+              />
+            )}
           </Box>
         )}
 
@@ -114,12 +134,16 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               },
             }}
           >
-            <Sidebar
-              onNavigate={handleSidebarNavigate}
-              currentView={view}
-              onViewChange={handleViewChange}
-              onRefresh={handleRefresh}
-            />
+            {location.pathname === '/dashboard' && activeDashboardView === 'arrdash' ? (
+              <></>
+            ) : (
+              <Sidebar
+                onNavigate={handleSidebarNavigate}
+                currentView={view}
+                onViewChange={handleViewChange}
+                onRefresh={handleRefresh}
+              />
+            )}
           </Drawer>
         )}
 
