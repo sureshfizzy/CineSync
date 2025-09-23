@@ -1,10 +1,13 @@
-import { AppBar, Box, Toolbar, Typography, IconButton, Avatar, Tooltip, useMediaQuery, useTheme, Chip, alpha } from '@mui/material';
+import { AppBar, Box, Toolbar, Typography, IconButton, Avatar, Tooltip, useMediaQuery, useTheme, Chip, alpha, ToggleButton, ToggleButtonGroup, Paper, Menu, MenuItem } from '@mui/material';
+import { useState } from 'react';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
+import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import logoImage from '../../assets/logo.png';
 import './topbar-fixes.css';
 
@@ -19,6 +22,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -27,6 +31,26 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
 
   const handleLogoClick = () => {
     navigate('/dashboard');
+  };
+
+  const onDashboard = location.pathname === '/dashboard';
+  const initialView = (localStorage.getItem('dashboardView') === 'arrdash') ? 'arrdash' : 'current';
+  const [dashView, setDashView] = useState<'current' | 'arrdash'>(initialView as 'current' | 'arrdash');
+  const [dashMenuAnchor, setDashMenuAnchor] = useState<null | HTMLElement>(null);
+
+  const handleHeaderToggle = (_: any, v: 'current' | 'arrdash' | null) => {
+    if (!v || v === dashView) return;
+    setDashView(v);
+    localStorage.setItem('dashboardView', v);
+    window.dispatchEvent(new CustomEvent('dashboardHeaderToggle', { detail: { view: v } }));
+    window.dispatchEvent(new CustomEvent('dashboardViewChanged', { detail: { view: v } }));
+  };
+
+  const openDashMenu = (e: React.MouseEvent<HTMLButtonElement>) => setDashMenuAnchor(e.currentTarget);
+  const closeDashMenu = () => setDashMenuAnchor(null);
+  const chooseDashView = (v: 'current' | 'arrdash') => {
+    closeDashMenu();
+    if (v !== dashView) handleHeaderToggle(null, v);
   };
 
   return (
@@ -163,6 +187,106 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 } }}>
+          {onDashboard && (
+            <Paper sx={{
+              p: 0.5,
+              borderRadius: 999,
+              border: '1px solid',
+              borderColor: alpha(theme.palette.divider, 0.2),
+              bgcolor: alpha(theme.palette.background.paper, 0.6),
+              backdropFilter: 'blur(10px)',
+              boxShadow: `0 4px 14px ${alpha(theme.palette.common.black, 0.08)}`,
+              display: { xs: 'none', sm: 'block' }
+            }}>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={dashView}
+                onChange={handleHeaderToggle}
+                sx={{
+                  '& .MuiToggleButtonGroup-grouped': {
+                    border: 0,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    px: 1.5,
+                    color: 'text.secondary',
+                    transition: 'all 0.2s ease',
+                    borderRadius: 999,
+                    '&:not(:first-of-type)': { marginLeft: 0.5 },
+                    '&:first-of-type': {
+                      borderTopLeftRadius: 999,
+                      borderBottomLeftRadius: 999,
+                    },
+                    '&:last-of-type': {
+                      borderTopRightRadius: 999,
+                      borderBottomRightRadius: 999,
+                    },
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.06)
+                    },
+                    '&.Mui-focusVisible': {
+                      outline: 'none',
+                      boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.4)}`,
+                      borderRadius: 999,
+                    }
+                  },
+                  '& .MuiToggleButton-root.Mui-selected': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.14),
+                    color: theme.palette.mode === 'dark' ? '#fff' : theme.palette.primary.main,
+                    boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.4)}`,
+                    borderRadius: 999,
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.18)
+                    }
+                  }
+                }}
+              >
+                <ToggleButton value="current" aria-label="Symlinks view">
+                  <LinkRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+                  Symlinks
+                </ToggleButton>
+                <ToggleButton value="arrdash" aria-label="Arr dashboard view">
+                  <DashboardRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+                  ArrDash
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Paper>
+          )}
+
+          {/* Mobile compact menu button for dashboard view switch */}
+          {onDashboard && isMobile && (
+            <>
+              <IconButton
+                size="small"
+                onClick={openDashMenu}
+                sx={{
+                  color: 'text.secondary',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+                  bgcolor: alpha(theme.palette.background.paper, 0.6),
+                }}
+                aria-label="Change dashboard view"
+              >
+                <DashboardRoundedIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={dashMenuAnchor}
+                open={Boolean(dashMenuAnchor)}
+                onClose={closeDashMenu}
+                keepMounted
+                slotProps={{ paper: { sx: { borderRadius: 2 } } }}
+              >
+                <MenuItem selected={dashView === 'current'} onClick={() => chooseDashView('current')}>
+                  <LinkRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> Symlinks
+                </MenuItem>
+                <MenuItem selected={dashView === 'arrdash'} onClick={() => chooseDashView('arrdash')}>
+                  <DashboardRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> ArrDash
+                </MenuItem>
+              </Menu>
+            </>
+          )}
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} arrow>
             <IconButton
               size="small"

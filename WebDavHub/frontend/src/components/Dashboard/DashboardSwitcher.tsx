@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, ToggleButton, ToggleButtonGroup, Paper } from '@mui/material';
+import { Box } from '@mui/material';
 import DashboardCurrent from './Dashboard';
 import ArrDashboard from './ArrDashboard';
 
@@ -16,25 +16,19 @@ export default function DashboardSwitcher() {
     localStorage.setItem('dashboardView', view);
   }, [view]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.view === 'arrdash' || detail?.view === 'current') {
+        setView(detail.view);
+      }
+    };
+    window.addEventListener('dashboardHeaderToggle', handler as EventListener);
+    return () => window.removeEventListener('dashboardHeaderToggle', handler as EventListener);
+  }, []);
+
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1, position: 'sticky', top: 0, zIndex: 2 }}>
-        <Paper sx={{ p: 0.5, border: '1px solid', borderColor: 'divider' }}>
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={view}
-            onChange={(_, v) => {
-              if (!v || v === view) return;
-              setView(v);
-              window.dispatchEvent(new CustomEvent('dashboardViewChanged', { detail: { view: v } }));
-            }}
-          >
-            <ToggleButton value="current">Symlinks</ToggleButton>
-            <ToggleButton value="arrdash">ArrDash</ToggleButton>
-          </ToggleButtonGroup>
-        </Paper>
-      </Box>
 
       <Box sx={{ position: 'relative', minHeight: '60vh' }}>
         <Box

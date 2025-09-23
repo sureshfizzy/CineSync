@@ -28,6 +28,7 @@ export interface FileItem {
   processingStatus?: string;
   seasonNumber?: number | null;
   lastProcessedAt?: number | null;
+  quality?: string;
 }
 
 export interface MobileListItemProps {

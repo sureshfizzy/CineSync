@@ -194,6 +194,7 @@ type FileInfo struct {
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
 	SourcePath   string `json:"sourcePath,omitempty"`
 	DestinationPath string `json:"destinationPath,omitempty"`
+    Quality string `json:"quality,omitempty"`
 }
 
 type Stats struct {
@@ -650,6 +651,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				if dbFolder.MediaType == "tv" || dbFolder.MediaType == "TV" {
 					fileInfo.HasSeasonFolders = true
 				}
+			}
+			if dbFolder.Quality != "" {
+				fileInfo.Quality = dbFolder.Quality
 			}
 
 			// Get poster path from TMDB cache using database metadata

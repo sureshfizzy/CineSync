@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, memo } from 'react';
-import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox } from '@mui/material';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -37,6 +37,7 @@ interface PosterViewProps {
   onRename: () => void;
   onDeleted: () => void;
   onNavigateBack?: () => void;
+  sizeVariant?: 'default' | 'compact';
 }
 
 const PosterView = memo(({
@@ -50,6 +51,7 @@ const PosterView = memo(({
   onRename,
   onDeleted,
   onNavigateBack,
+  sizeVariant = 'default',
 }: PosterViewProps) => {
   const theme = useTheme();
   const [contextMenu, setContextMenu] = useState<{
@@ -177,13 +179,18 @@ const PosterView = memo(({
         className="poster-grid"
         sx={{
           display: 'grid',
-          gridTemplateColumns: {
+          gridTemplateColumns: sizeVariant === 'compact' ? {
+            xs: 'repeat(3, 1fr)',
+            sm: 'repeat(4, 1fr)',
+            md: 'repeat(6, 1fr)',
+            lg: 'repeat(7, 1fr)'
+          } : {
             xs: 'repeat(2, 1fr)',
             sm: 'repeat(3, 1fr)',
             md: 'repeat(4, 1fr)',
             lg: 'repeat(5, 1fr)'
           },
-          gap: 3,
+          gap: sizeVariant === 'compact' ? 1.5 : 3,
           p: 1
         }}>
         {files.map((file) => {
@@ -277,6 +284,28 @@ const PosterView = memo(({
                       }
                     }}
                   />
+                )}
+                
+                {/* Quality Badge */}
+                {file.quality && !isSelectionMode && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      zIndex: 5,
+                      bgcolor: alpha(theme.palette.success.main, 0.9),
+                      color: 'white',
+                      px: 1,
+                      py: 0.25,
+                      borderRadius: 1,
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    {file.quality}
+                  </Box>
                 )}
                 {(() => {
                   const title = file.title || (tmdb && tmdb.title) || file.name;
@@ -401,7 +430,7 @@ const PosterView = memo(({
                   sx={{
                     fontWeight: 500,
                     textAlign: 'center',
-                    fontSize: { xs: '0.9rem', sm: '1rem' },
+                    fontSize: sizeVariant === 'compact' ? { xs: '0.8rem', sm: '0.9rem' } : { xs: '0.9rem', sm: '1rem' },
                     mb: 0.5,
                     lineHeight: 1.2,
                     overflow: 'hidden',

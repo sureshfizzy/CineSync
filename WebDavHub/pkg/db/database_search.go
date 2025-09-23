@@ -784,6 +784,7 @@ type FolderInfo struct {
 	SeasonNumber int    `json:"season_number,omitempty"`
 	FileCount    int    `json:"file_count"`
 	Modified     string `json:"modified,omitempty"`
+	Quality      string `json:"quality,omitempty"`
 }
 
 func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
@@ -913,7 +914,8 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
 			MAX(processed_at) as latest_processed_at,
-			COUNT(*) OVER() as total_count
+			COUNT(*) OVER() as total_count,
+			COALESCE(MAX(quality), '') as quality
 		FROM processed_files
 		WHERE base_path = ?
 		AND proper_name IS NOT NULL
@@ -936,7 +938,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 		var folder FolderInfo
 		var latestProcessedAt string
 
-		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount, &folder.Quality)
 		if err != nil {
 			continue
 		}
