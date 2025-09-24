@@ -798,24 +798,43 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT proper_name, media_type FROM processed_files
+            SELECT proper_name, media_type, year FROM processed_files
             WHERE destination_path = ?
         """, (old_dest_path,))
         result = cursor.fetchone()
 
         if result:
-            proper_name, media_type = result
-            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name, media_type, None)
+            original_proper_name, media_type, saved_year = result
 
-            # Update both destination_path and base_path
+            new_folder_name = os.path.basename(os.path.dirname(new_dest_path))
+            clean_title = new_folder_name
+
+            if saved_year:
+                clean_title = re.sub(rf'\s*\({re.escape(str(saved_year))}\)', '', clean_title)
+
+            id_patterns = [
+                r'\s*[\{\[]tmdb(?:id)?-[^}\]]+[\}\]]',
+                r'\s*[\{\[]imdb(?:id)?-[^}\]]+[\}\]]',
+                r'\s*[\{\[]tvdb(?:id)?-[^}\]]+[\}\]]'
+            ]
+
+            for pattern in id_patterns:
+                clean_title = re.sub(pattern, '', clean_title, flags=re.IGNORECASE)
+
+            clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+            new_proper_name = clean_title if clean_title else original_proper_name
+
+            new_base_path = extract_base_path_from_destination_path(new_dest_path, new_proper_name, media_type, None)
+
+            # Update destination_path, base_path, and proper_name
             cursor.execute("""
                 UPDATE processed_files
-                SET destination_path = ?, base_path = ?
+                SET destination_path = ?, base_path = ?, proper_name = ?
                 WHERE destination_path = ?
-            """, (new_dest_path, new_base_path, old_dest_path))
+            """, (new_dest_path, new_base_path, new_proper_name, old_dest_path))
 
             if cursor.rowcount > 0:
-                log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path})", level="INFO")
+                log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path}, proper_name: {new_proper_name})", level="INFO")
             else:
                 log_message(f"No matching record found for renamed file: {old_dest_path}", level="WARNING")
         else:
