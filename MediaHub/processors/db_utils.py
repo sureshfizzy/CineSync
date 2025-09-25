@@ -451,13 +451,27 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None, media_t
                         return None
 
         if len(parts) >= 4:
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            for i, part in enumerate(parts):
+                if any(keyword in part.lower() for keyword in season_keywords):
+                    if i >= 2:
+                        return os.sep.join(parts[:i-1])
+                    break
+
+            # Check for extras/specials at any level
             extras_keywords = ['extras', 'specials']
             for i, part in enumerate(parts[:-1]):
                 if part.lower() in extras_keywords:
                     return parts[0]
             return os.sep.join(parts[:-2])
         elif len(parts) >= 3:
-            return os.sep.join(parts[:-2])
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            if any(keyword in parts[2].lower() for keyword in season_keywords):
+                return parts[0]
+            elif any(keyword in parts[1].lower() for keyword in season_keywords):
+                return parts[0]
+            else:
+                return os.sep.join(parts[:-2])
         elif len(parts) >= 2:
             return parts[0]
         elif len(parts) >= 1:
@@ -798,24 +812,52 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT proper_name, media_type FROM processed_files
+            SELECT proper_name, media_type, year FROM processed_files
             WHERE destination_path = ?
         """, (old_dest_path,))
         result = cursor.fetchone()
 
         if result:
-            proper_name, media_type = result
-            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name, media_type, None)
+            original_proper_name, media_type, saved_year = result
 
-            # Update both destination_path and base_path
+            parent_dir = os.path.dirname(new_dest_path)
+            folder_name = os.path.basename(parent_dir)
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            if any(keyword in folder_name.lower() for keyword in season_keywords):
+                show_dir = os.path.dirname(parent_dir)
+                new_folder_name = os.path.basename(show_dir)
+            else:
+                new_folder_name = folder_name
+
+            clean_title = new_folder_name
+
+            if saved_year:
+                clean_title = re.sub(rf'\s*\({re.escape(str(saved_year))}\)', '', clean_title)
+
+            id_patterns = [
+                r'\s*[\{\[]tmdb(?:id)?-[^}\]]+[\}\]]',
+                r'\s*[\{\[]imdb(?:id)?-[^}\]]+[\}\]]',
+                r'\s*[\{\[]tvdb(?:id)?-[^}\]]+[\}\]]'
+            ]
+
+            for pattern in id_patterns:
+                clean_title = re.sub(pattern, '', clean_title, flags=re.IGNORECASE)
+
+            clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+            new_proper_name = clean_title if clean_title else original_proper_name
+
+            proper_name_for_base_path = new_proper_name if media_type != 'tv' else None
+            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name_for_base_path, media_type, None)
+
+            # Update destination_path, base_path, and proper_name
             cursor.execute("""
                 UPDATE processed_files
-                SET destination_path = ?, base_path = ?
+                SET destination_path = ?, base_path = ?, proper_name = ?
                 WHERE destination_path = ?
-            """, (new_dest_path, new_base_path, old_dest_path))
+            """, (new_dest_path, new_base_path, new_proper_name, old_dest_path))
 
             if cursor.rowcount > 0:
-                log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path})", level="INFO")
+                log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path}, proper_name: {new_proper_name})", level="INFO")
             else:
                 log_message(f"No matching record found for renamed file: {old_dest_path}", level="WARNING")
         else:

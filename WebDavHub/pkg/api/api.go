@@ -2782,6 +2782,12 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update database records for the renamed file
+	updateDatabaseForRenamedFile(oldFullPath, newFullPath)
+
+	// Invalidate folder cache to ensure frontend refreshes
+	db.InvalidateFolderCache()
+
 	// Broadcast SignalR events for file rename
 	broadcastFileRenameEvents(oldFullPath, newFullPath)
 
@@ -3641,6 +3647,21 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 				if year != "" {
 					item["year"] = year
 				}
+			} else {
+				filename := filepath.Base(media.Path)
+				fallbackQuery := `SELECT COALESCE(base_path, ''), COALESCE(proper_name, ''), COALESCE(year, '') FROM processed_files WHERE destination_path LIKE ? LIMIT 1`
+				var fallbackBasePath, fallbackProperName, fallbackYear string
+				if err := mediaHubDB.QueryRow(fallbackQuery, "%"+filename).Scan(&fallbackBasePath, &fallbackProperName, &fallbackYear); err == nil {
+					if fallbackBasePath != "" {
+						item["basePath"] = strings.ReplaceAll(fallbackBasePath, "\\", "/")
+					}
+					if fallbackProperName != "" {
+						item["properName"] = fallbackProperName
+					}
+					if fallbackYear != "" {
+						item["year"] = fallbackYear
+					}
+				}
 			}
 		}
 
@@ -4041,6 +4062,56 @@ func updateDatabaseForMovedFile(sourcePath, targetPath string) {
         rowsAffected2, _ := result2.RowsAffected()
         if rowsAffected2 > 0 {
             logger.Info("Updated source_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected2)
+        }
+    }
+}
+
+// updateDatabaseForRenamedFile updates database records when a file is renamed
+func updateDatabaseForRenamedFile(oldPath, newPath string) {
+    mediaHubDB, err := db.GetDatabaseConnection()
+    if err != nil {
+        logger.Warn("Failed to get database connection for file rename update: %v", err)
+        return
+    }
+
+    // Extract new base path for updating
+    newDir := filepath.Dir(newPath)
+    newBasePath := filepath.Base(newDir)
+
+    // Extract new proper name from the new folder name
+    newFolderName := filepath.Base(newPath)
+    newProperName := extractTitleFromFolderName(newFolderName)
+
+    // Update destination_path, base_path, and proper_name for renamed files using pattern matching
+    oldPathPattern := oldPath + "%"
+    query := `UPDATE processed_files SET
+                destination_path = REPLACE(destination_path, ?, ?),
+                base_path = ?,
+                proper_name = ?
+              WHERE destination_path LIKE ?`
+    result, err := mediaHubDB.Exec(query, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
+    if err != nil {
+        logger.Warn("Failed to update processed_files for renamed file: %v", err)
+    } else {
+        rowsAffected, _ := result.RowsAffected()
+        logger.Info("Updated processed_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected)
+    }
+
+    // Update source_files table if it exists
+    sourceQuery := `UPDATE source_files SET
+                      destination_path = REPLACE(destination_path, ?, ?),
+                      base_path = ?,
+                      proper_name = ?
+                    WHERE destination_path LIKE ?`
+    result2, err := mediaHubDB.Exec(sourceQuery, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
+    if err != nil {
+        if !strings.Contains(err.Error(), "no such table") {
+            logger.Warn("Failed to update source_files for renamed file: %v", err)
+        }
+    } else {
+        rowsAffected2, _ := result2.RowsAffected()
+        if rowsAffected2 > 0 {
+            logger.Info("Updated source_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected2)
         }
     }
 }
