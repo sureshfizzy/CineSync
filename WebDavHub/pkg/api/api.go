@@ -3643,6 +3643,21 @@ func HandleRecentMedia(w http.ResponseWriter, r *http.Request) {
 				if year != "" {
 					item["year"] = year
 				}
+			} else {
+				filename := filepath.Base(media.Path)
+				fallbackQuery := `SELECT COALESCE(base_path, ''), COALESCE(proper_name, ''), COALESCE(year, '') FROM processed_files WHERE destination_path LIKE ? LIMIT 1`
+				var fallbackBasePath, fallbackProperName, fallbackYear string
+				if err := mediaHubDB.QueryRow(fallbackQuery, "%"+filename).Scan(&fallbackBasePath, &fallbackProperName, &fallbackYear); err == nil {
+					if fallbackBasePath != "" {
+						item["basePath"] = strings.ReplaceAll(fallbackBasePath, "\\", "/")
+					}
+					if fallbackProperName != "" {
+						item["properName"] = fallbackProperName
+					}
+					if fallbackYear != "" {
+						item["year"] = fallbackYear
+					}
+				}
 			}
 		}
 

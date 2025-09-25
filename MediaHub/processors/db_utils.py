@@ -451,13 +451,27 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None, media_t
                         return None
 
         if len(parts) >= 4:
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            for i, part in enumerate(parts):
+                if any(keyword in part.lower() for keyword in season_keywords):
+                    if i >= 2:
+                        return os.sep.join(parts[:i-1])
+                    break
+
+            # Check for extras/specials at any level
             extras_keywords = ['extras', 'specials']
             for i, part in enumerate(parts[:-1]):
                 if part.lower() in extras_keywords:
                     return parts[0]
             return os.sep.join(parts[:-2])
         elif len(parts) >= 3:
-            return os.sep.join(parts[:-2])
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            if any(keyword in parts[2].lower() for keyword in season_keywords):
+                return parts[0]
+            elif any(keyword in parts[1].lower() for keyword in season_keywords):
+                return parts[0]
+            else:
+                return os.sep.join(parts[:-2])
         elif len(parts) >= 2:
             return parts[0]
         elif len(parts) >= 1:
@@ -806,7 +820,15 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
         if result:
             original_proper_name, media_type, saved_year = result
 
-            new_folder_name = os.path.basename(os.path.dirname(new_dest_path))
+            parent_dir = os.path.dirname(new_dest_path)
+            folder_name = os.path.basename(parent_dir)
+            season_keywords = ['season', 'series', 'specials', 'extras']
+            if any(keyword in folder_name.lower() for keyword in season_keywords):
+                show_dir = os.path.dirname(parent_dir)
+                new_folder_name = os.path.basename(show_dir)
+            else:
+                new_folder_name = folder_name
+
             clean_title = new_folder_name
 
             if saved_year:
@@ -824,7 +846,8 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
             clean_title = re.sub(r'\s+', ' ', clean_title).strip()
             new_proper_name = clean_title if clean_title else original_proper_name
 
-            new_base_path = extract_base_path_from_destination_path(new_dest_path, new_proper_name, media_type, None)
+            proper_name_for_base_path = new_proper_name if media_type != 'tv' else None
+            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name_for_base_path, media_type, None)
 
             # Update destination_path, base_path, and proper_name
             cursor.execute("""
