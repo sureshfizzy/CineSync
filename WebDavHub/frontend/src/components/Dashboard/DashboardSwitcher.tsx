@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import DashboardCurrent from './Dashboard';
-import ArrDashboard from './ArrDashboard';
+import { ArrDashboard } from '../ArrDashboard';
 
 type ViewMode = 'current' | 'arrdash';
 

@@ -2,7 +2,7 @@ import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
-import ArrSidebar from './ArrSidebar.tsx';
+import { ArrSidebar } from '../ArrDashboard';
 import Topbar from './Topbar';
 
 interface LayoutProps {

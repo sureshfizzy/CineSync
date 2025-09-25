@@ -17,6 +17,7 @@ import { useTmdb } from '../../contexts/TmdbContext';
 import { setPosterInCache } from '../FileBrowser/tmdbCache';
 import { TmdbResult } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
+import ArrSearchPage from './ArrSearchPage';
 
 export default function ArrDashboard() {
   const { view } = useLayoutContext();
@@ -34,32 +35,53 @@ export default function ArrDashboard() {
     return saved === 'movies' || saved === 'series' ? saved : 'all';
   };
   const [arrFilter, setArrFilter] = useState<'all' | 'movies' | 'series'>(getInitialFilter);
-
+  
+  // New search page state
+  const [showSearchPage, setShowSearchPage] = useState(false);
+  const [searchMediaType, setSearchMediaType] = useState<'movie' | 'tv'>('movie');
+  
   useEffect(() => {
-    const handler = (e: Event) => {
+    const filterHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       const val = detail?.filter;
       if (val === 'movies' || val === 'series' || val === 'all') {
         setArrFilter(val);
+        setShowSearchPage(false);
+        loadArrItems();
       }
     };
-    window.addEventListener('arrSidebarFilterChanged', handler as EventListener);
-    return () => window.removeEventListener('arrSidebarFilterChanged', handler as EventListener);
+    
+    const searchHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const mediaType = detail?.mediaType;
+      if (mediaType === 'movie' || mediaType === 'tv') {
+        setSearchMediaType(mediaType);
+        setShowSearchPage(true);
+      }
+    };
+    
+    window.addEventListener('arrSidebarFilterChanged', filterHandler as EventListener);
+    window.addEventListener('arrSearchRequested', searchHandler as EventListener);
+    
+    return () => {
+      window.removeEventListener('arrSidebarFilterChanged', filterHandler as EventListener);
+      window.removeEventListener('arrSearchRequested', searchHandler as EventListener);
+    };
   }, []);
+  
   const [files, setFiles] = useState<FileItem[]>([]);
 
-  // Fetch root to get base_path folders, then fetch all items inside and flatten
+
+  // Fetch root to get base_path folders
   const loadArrItems = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      // Get base paths from root
       const root = await fetchFilesApi('/', true, 1, 100);
       const baseFolders = (root.data || []).filter(f => f.type === 'directory');
 
       const results: FileItem[] = [];
 
-      // Fetch first page from each base folder and merge
       await Promise.all(
         baseFolders.map(async (folder) => {
           const basePath = folder.path || folder.fullPath || joinPaths('/', folder.name);
@@ -67,14 +89,11 @@ export default function ArrDashboard() {
             const resp = await fetchFilesApi(basePath, true, 1, 200);
             const inner = (resp.data || [])
               .filter(item => {
-                // Exclude the base/category folders themselves
                 if (item.isCategoryFolder) return false;
-                // Exclude items that are the base folder echo
                 if (item.name === folder.name && item.type === 'directory') return false;
                 return true;
               })
               .map(item => {
-                // Ensure full path info is present for navigation/actions
                 const fullOrPath = item.path || item.fullPath || joinPaths(basePath, item.name);
                 return {
                   ...item,
@@ -83,7 +102,6 @@ export default function ArrDashboard() {
                 } as FileItem;
               });
 
-            // Seed TMDB cache for directories that include metadata from backend
             inner.forEach((it) => {
               if (it.type === 'directory' && it.tmdbId && it.posterPath && it.mediaType) {
                 const normalizedMediaType = it.mediaType.toLowerCase() as 'movie' | 'tv';
@@ -104,7 +122,6 @@ export default function ArrDashboard() {
 
             results.push(...inner);
           } catch (e) {
-            // Skip folder on error but continue others
           }
         })
       );
@@ -197,6 +214,16 @@ export default function ArrDashboard() {
       navigate(`/files${targetPath}`);
     }
   };
+
+  // Show search page if active
+  if (showSearchPage) {
+    return (
+      <ArrSearchPage
+        mediaType={searchMediaType}
+        onBack={() => setShowSearchPage(false)}
+      />
+    );
+  }
 
   return (
     <ConfigurationWrapper>
