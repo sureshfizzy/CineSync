@@ -50,6 +50,14 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
   const lastRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // If we don't have a folder name (e.g., TMDB-ID based routes), avoid indefinite loading
+    if (!folderName) {
+      setLoading(false);
+      setError(null);
+      lastRequestKeyRef.current = null;
+      return;
+    }
+
     const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
     const folderPath = `${normalizedPath}/${folderName}`;
     const requestKey = `${folderPath}|${mediaType}|${selectedFile?.name || 'auto'}`;

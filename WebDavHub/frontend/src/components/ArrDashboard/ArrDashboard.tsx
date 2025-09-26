@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, ToggleButton, alpha, Collapse, IconButton } from '@mui/material';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
-import { FileItem, SortOption } from '../FileBrowser/types';
+import { FileItem } from '../FileBrowser/types';
 import { fetchFiles as fetchFilesApi } from '../FileBrowser/fileApi';
-import { formatDate, joinPaths, sortFiles } from '../FileBrowser/fileUtils';
+import { formatDate, joinPaths } from '../FileBrowser/fileUtils';
 import FolderIcon from '@mui/icons-material/Folder';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import StraightenIcon from '@mui/icons-material/Straighten';
@@ -15,9 +15,11 @@ import ListView from '../FileBrowser/ListView';
 import { useLayoutContext } from '../Layout/Layout';
 import { useTmdb } from '../../contexts/TmdbContext';
 import { setPosterInCache } from '../FileBrowser/tmdbCache';
-import { TmdbResult } from '../api/tmdbApi';
+import { TmdbResult, searchTmdb } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
 import ArrSearchPage from './ArrSearchPage';
+import { libraryApi, LibraryItem } from '../../api/libraryApi';
+import ArrWantedList from './ArrWantedList';
 
 export default function ArrDashboard() {
   const { view } = useLayoutContext();
@@ -27,7 +29,6 @@ export default function ArrDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [sortOption] = useState<SortOption>('name-asc');
   const [dashSort, setDashSort] = useState<'title' | 'path' | 'size' | 'folder'>('title');
   const [showSort, setShowSort] = useState(false);
   const getInitialFilter = () => {
@@ -47,7 +48,12 @@ export default function ArrDashboard() {
       if (val === 'movies' || val === 'series' || val === 'all') {
         setArrFilter(val);
         setShowSearchPage(false);
+        setShowLibrary(false);
         loadArrItems();
+      } else if (val === 'wanted') {
+        setShowLibrary(true);
+        setShowSearchPage(false);
+        loadLibraryItems();
       }
     };
     
@@ -70,7 +76,19 @@ export default function ArrDashboard() {
   }, []);
   
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+  const [showLibrary, setShowLibrary] = useState(false);
 
+  const loadLibraryItems = useCallback(async () => {
+    try {
+      const mediaType = arrFilter === 'movies' ? 'movie' : arrFilter === 'series' ? 'tv' : undefined;
+      const response = await libraryApi.getLibrary(mediaType);
+      setLibraryItems(response.data || []);
+    } catch (e) {
+      console.error('Failed to load library items:', e);
+      setLibraryItems([]);
+    }
+  }, [arrFilter]);
 
   // Fetch root to get base_path folders
   const loadArrItems = useCallback(async () => {
@@ -137,44 +155,21 @@ export default function ArrDashboard() {
 
   useEffect(() => {
     loadArrItems();
-  }, [loadArrItems]);
+    loadLibraryItems();
+  }, [loadArrItems, loadLibraryItems]);
 
-  const filteredSorted = useMemo(() => {
-    const base = arrFilter === 'movies' ? files.filter(f => f.mediaType === 'movie')
-      : arrFilter === 'series' ? files.filter(f => f.mediaType === 'tv')
-      : files;
-    if (dashSort === 'title') {
-      return sortFiles(base, sortOption);
-    }
-
-    const parseSizeToBytes = (sizeStr?: string): number => {
-      if (!sizeStr || sizeStr === '--') return 0;
-      const units: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
-      const match = sizeStr.match(/^([\d.]+)\s*([A-Z]+)$/i);
-      if (!match) return 0;
-      const value = parseFloat(match[1]);
-      const unit = match[2].toUpperCase();
-      return value * (units[unit] || 1);
-    };
-
-    const getParentFolder = (p?: string): string => {
-      const s = (p || '').replace(/\\/g, '/');
-      const parts = s.split('/').filter(Boolean);
-      parts.pop();
-      return parts.join('/') || '';
-    };
-
-    const getFullPath = (f: FileItem): string => (f.fullPath || f.path || '/' + f.name).replace(/\\/g, '/');
-
-    const byPath = (a: FileItem, b: FileItem) => getFullPath(a).localeCompare(getFullPath(b), undefined, { sensitivity: 'base' });
-    const bySizeDesc = (a: FileItem, b: FileItem) => parseSizeToBytes(b.size) - parseSizeToBytes(a.size);
-    const byFolder = (a: FileItem, b: FileItem) => getParentFolder(getFullPath(a)).localeCompare(getParentFolder(getFullPath(b)), undefined, { sensitivity: 'base' });
-    const comparator = dashSort === 'path' ? byPath
-      : dashSort === 'size' ? bySizeDesc
-      : byFolder;
-
-    return [...base].sort(comparator);
-  }, [files, sortOption, dashSort, arrFilter]);
+  // Enrich library items with TMDB details so posters/overviews populate like FS items
+  useEffect(() => {
+    libraryItems.forEach((item) => {
+      // Key used by PosterView lookup is file.name; for library items we set name = title
+      const key = item.title;
+      searchTmdb(item.tmdb_id.toString(), undefined, item.media_type).then((result) => {
+        if (result) {
+          updateTmdbData(key, result);
+        }
+      });
+    });
+  }, [libraryItems, updateTmdbData]);
 
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
@@ -187,12 +182,14 @@ export default function ArrDashboard() {
         mediaPathParts.pop();
         const parentPath = '/' + mediaPathParts.join('/') + (mediaPathParts.length > 0 ? '/' : '');
 
-        navigate(`/media${mediaPath}`, {
+        const typeSegment = isTvShow ? 'tv' : 'movie';
+        navigate(`/media/${typeSegment}/${encodeURIComponent(tmdbId.toString())}`, {
           state: {
             mediaType: isTvShow ? 'tv' : 'movie',
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: parentPath,
+            folderName: file.name,
             tmdbData: tmdb,
             returnPage: 1,
             returnSearch: ''
@@ -212,6 +209,21 @@ export default function ArrDashboard() {
     if (file.type === 'directory') {
       const targetPath = file.path || file.fullPath || joinPaths('/', file.name);
       navigate(`/files${targetPath}`);
+    }
+  };
+
+  const handleLibraryItemSearch = (item: any) => {
+    // Navigate to search page for this item
+    setSearchMediaType(item.mediaType);
+    setShowSearchPage(true);
+  };
+
+  const handleLibraryItemDelete = async (item: any) => {
+    try {
+      await libraryApi.deleteItem(parseInt(item.id));
+      loadLibraryItems(); // Reload library items
+    } catch (error) {
+      console.error('Failed to delete library item:', error);
     }
   };
 
@@ -314,9 +326,82 @@ export default function ArrDashboard() {
         ) : (
           <Fade in timeout={250}>
             <Box>
+              {showLibrary ? (
+                <ArrWantedList
+                  items={libraryItems.map(item => ({
+                    id: item.id.toString(),
+                    tmdbId: item.tmdb_id,
+                    title: item.title,
+                    year: item.year,
+                    mediaType: item.media_type,
+                    posterPath: undefined, // Will be fetched from TMDB
+                    overview: '',
+                    status: item.status as 'wanted' | 'searching' | 'downloading' | 'imported' | 'failed',
+                    rootFolder: item.root_folder,
+                    qualityProfile: item.quality_profile,
+                    monitorPolicy: item.monitor_policy,
+                    tags: item.tags ? JSON.parse(item.tags) : [],
+                    createdAt: new Date(item.added_at * 1000).toISOString(),
+                    updatedAt: new Date(item.updated_at * 1000).toISOString(),
+                  }))}
+                  onSearch={handleLibraryItemSearch}
+                  onDelete={handleLibraryItemDelete}
+                />
+              ) : (
+                <>
+                  {/* Combined view: Library Items + File System items */}
+                  {(() => {
+                    // Filter library items by current filter
+                    const libraryItemsForFilter = arrFilter === 'movies' 
+                      ? libraryItems.filter(item => item.media_type === 'movie')
+                      : arrFilter === 'series' 
+                      ? libraryItems.filter(item => item.media_type === 'tv')
+                      : libraryItems;
+
+                    // Filter file system items by current filter
+                    const fileSystemItems = arrFilter === 'movies' ? files.filter(f => f.mediaType === 'movie')
+                      : arrFilter === 'series' ? files.filter(f => f.mediaType === 'tv')
+                      : files;
+
+                    const fsTmdbSet = new Set(
+                      fileSystemItems
+                        .map(f => (f.tmdbId ? f.tmdbId.toString() : ''))
+                        .filter(Boolean)
+                    );
+
+                    // Convert library items to FileItem format for consistent display
+                    const libraryItemsAsFiles: FileItem[] = libraryItemsForFilter.map(item => ({
+                      name: item.title,
+                      path: item.root_folder,
+                      fullPath: item.root_folder,
+                      // Treat library entries like directories so PosterView renders posters
+                      type: 'directory' as const,
+                      isSeasonFolder: false,
+                      hasSeasonFolders: item.media_type === 'tv' ? true : false,
+                      size: '--',
+                      modified: new Date(item.added_at * 1000).toISOString(),
+                      mediaType: item.media_type,
+                      tmdbId: item.tmdb_id.toString(),
+                      year: item.year,
+                      isLibraryItem: true,
+                      libraryItemId: item.id,
+                      qualityProfile: item.quality_profile,
+                      monitorPolicy: item.monitor_policy,
+                      tags: item.tags ? JSON.parse(item.tags) : [],
+                      status: fsTmdbSet.has(item.tmdb_id.toString())
+                        ? 'available'
+                        : (item.status as any)
+                    }));
+
+                    // Combine library items and file system items
+                    const allItems = [...libraryItemsAsFiles, ...fileSystemItems];
+
+                    if (allItems.length > 0) {
+                      return (
+                        <Box>
               {view === 'poster' ? (
                 <PosterView
-                  files={filteredSorted}
+                              files={allItems}
                   tmdbData={tmdbData}
                   imgLoadedMap={imgLoadedMap}
                   onFileClick={handleFileClick}
@@ -325,11 +410,12 @@ export default function ArrDashboard() {
                   onViewDetails={() => {}}
                   onRename={() => loadArrItems()}
                   onDeleted={() => loadArrItems()}
+                  showArrBadges
                   sizeVariant="compact"
                 />
               ) : (
                 <ListView
-                  files={filteredSorted}
+                              files={allItems}
                   currentPath={'/'}
                   formatDate={formatDate}
                   onItemClick={handleListItemClick}
@@ -338,6 +424,13 @@ export default function ArrDashboard() {
                   onDeleted={() => loadArrItems()}
                   onError={setError}
                 />
+                          )}
+                        </Box>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
               )}
             </Box>
           </Fade>

@@ -241,6 +241,18 @@ func main() {
 	apiMux.HandleFunc("/api/database/export", db.HandleDatabaseExport)
 	apiMux.HandleFunc("/api/database/update", db.HandleDatabaseUpdate)
 	apiMux.HandleFunc("/api/series", api.HandleSeries)
+	apiMux.HandleFunc("/api/library/movie", api.HandleAddMovie)
+	apiMux.HandleFunc("/api/library/series", api.HandleAddSeries)
+	apiMux.HandleFunc("/api/library", api.HandleGetLibrary)
+	apiMux.HandleFunc("/api/library/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			api.HandleUpdateLibraryItem(w, r)
+		} else if r.Method == http.MethodDelete {
+			api.HandleDeleteLibraryItem(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)

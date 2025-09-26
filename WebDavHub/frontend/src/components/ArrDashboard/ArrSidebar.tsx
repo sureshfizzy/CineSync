@@ -2,6 +2,7 @@ import { List, ListItemButton, ListItemIcon, ListItemText, Box, Typography, alph
 import MovieIcon from '@mui/icons-material/Movie';
 import TvIcon from '@mui/icons-material/Tv';
 import SearchIcon from '@mui/icons-material/Search';
+import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import { useEffect, useState } from 'react';
 import { ArrSidebarFilter } from './types';
 
@@ -11,12 +12,12 @@ interface ArrSidebarProps {
 }
 
 export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebarProps) {
-  const getInitial = (): 'all' | 'movies' | 'series' => {
+  const getInitial = (): 'all' | 'movies' | 'series' | 'wanted' => {
     const saved = localStorage.getItem('arrSidebarFilter');
-    return saved === 'movies' || saved === 'series' ? saved : 'all';
+    return saved === 'movies' || saved === 'series' || saved === 'wanted' ? saved : 'all';
   };
   
-  const [filter, setFilter] = useState<'all' | 'movies' | 'series'>(getInitial);
+  const [filter, setFilter] = useState<'all' | 'movies' | 'series' | 'wanted'>(getInitial);
   const [moviesExpanded, setMoviesExpanded] = useState(true);
   const [seriesExpanded, setSeriesExpanded] = useState(true);
 
@@ -30,14 +31,17 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
     window.dispatchEvent(new CustomEvent('arrSidebarFilterChanged', { detail: { filter } }));
   }, [filter, moviesExpanded, seriesExpanded, onFilterChange]);
 
-  const handleMainClick = (value: 'movies' | 'series') => {
+  const handleMainClick = (value: 'movies' | 'series' | 'wanted') => {
     // Auto-expand clicked section and collapse the other, but don't toggle closed when re-clicking
     if (value === 'movies') {
       setMoviesExpanded(true);
       setSeriesExpanded(false);
-    } else {
+    } else if (value === 'series') {
       setSeriesExpanded(true);
       setMoviesExpanded(false);
+    } else if (value === 'wanted') {
+      setMoviesExpanded(false);
+      setSeriesExpanded(false);
     }
     setFilter(value);
     try {
@@ -166,6 +170,31 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
             </ListItemButton>
           </Box>
         </Collapse>
+
+        {/* Wanted Section */}
+        <ListItemButton 
+          selected={filter === 'wanted'} 
+          onClick={() => handleMainClick('wanted')} 
+          sx={{ 
+            borderRadius: 1, 
+            mx: 0.5, 
+            mb: 0.5, 
+            '&.Mui-selected': { 
+              bgcolor: (t) => alpha(t.palette.primary.main, 0.12) 
+            } 
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34 }}>
+            <PlaylistAddIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText 
+            primary={
+              <Typography variant="body2" fontWeight={700}>
+                Wanted
+              </Typography>
+            } 
+          />
+        </ListItemButton>
 
       </List>
     </Box>

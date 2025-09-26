@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, memo } from 'react';
-import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha } from '@mui/material';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha, Chip } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -38,6 +38,7 @@ interface PosterViewProps {
   onDeleted: () => void;
   onNavigateBack?: () => void;
   sizeVariant?: 'default' | 'compact';
+  showArrBadges?: boolean;
 }
 
 const PosterView = memo(({
@@ -52,6 +53,7 @@ const PosterView = memo(({
   onDeleted,
   onNavigateBack,
   sizeVariant = 'default',
+  showArrBadges = false,
 }: PosterViewProps) => {
   const theme = useTheme();
   const [contextMenu, setContextMenu] = useState<{
@@ -198,7 +200,7 @@ const PosterView = memo(({
           const loaded = imgLoadedMap[file.name] || false;
           const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
           const tmdbId = file.tmdbId || (tmdb && tmdb.id);
-          const hasPosterPath = !!posterPath;
+          const hasPosterPath = !!posterPath || !!tmdbId;
 
           return (
             <Paper
@@ -287,7 +289,7 @@ const PosterView = memo(({
                 )}
                 
                 {/* Quality Badge */}
-                {file.quality && !isSelectionMode && (
+                {showArrBadges && file.quality && !isSelectionMode && (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -460,6 +462,36 @@ const PosterView = memo(({
                     })()}
                   </Typography>
                 )}
+
+                {/* Status row */}
+                {showArrBadges && (() => {
+                  const isAvailable = (file.status === 'imported' || file.status === 'available' || !!file.quality);
+                  const showMonitored = !!file.isLibraryItem;
+                  return (
+                  <Box sx={{
+                    mt: 0.5,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 1
+                  }}>
+                    {showMonitored && (
+                      <Chip size="small" label="Monitored" sx={{
+                        height: 20,
+                        fontSize: '0.7rem',
+                        bgcolor: alpha(theme.palette.info.main, 0.1),
+                        color: theme.palette.info.main,
+                      }} />
+                    )}
+
+                    <Chip size="small" label={isAvailable ? 'Available' : 'Missing'} sx={{
+                      height: 20,
+                      fontSize: '0.7rem',
+                      bgcolor: isAvailable ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.warning.main, 0.12),
+                      color: isAvailable ? theme.palette.success.main : theme.palette.warning.main,
+                    }} />
+                  </Box>
+                  );
+                })()}
               </Box>
             </Paper>
           );

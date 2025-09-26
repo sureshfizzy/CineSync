@@ -27,8 +27,15 @@ export default function MediaDetails() {
   const fullPath = '/' + urlPath;
 
   const pathParts = fullPath.split('/').filter(Boolean);
-  const folderName = pathParts.pop() || '';
-  const currentPath = location.state?.currentPath || ('/' + pathParts.join('/') + (pathParts.length > 0 ? '/' : ''));
+  // Support URL format: /media/:type/:tmdbId (type is 'movie' or 'tv')
+  // Also support legacy: /media/tmdb/:tmdbId and /media/<folder path>
+  const isTypedTmdbRoute = (pathParts[0] === 'movie' || pathParts[0] === 'tv') && pathParts[1];
+  const isLegacyTmdbRoute = pathParts[0] === 'tmdb' && pathParts[1];
+  const tmdbIdFromUrl = isTypedTmdbRoute ? pathParts[1] : (isLegacyTmdbRoute ? pathParts[1] : undefined);
+  const mediaTypeFromUrl = isTypedTmdbRoute ? (pathParts[0] as 'movie' | 'tv') : undefined;
+  const legacyFolderParts = (isTypedTmdbRoute || isLegacyTmdbRoute) ? pathParts.slice(2) : pathParts;
+  const folderName = (location.state?.folderName as string) || (legacyFolderParts.length > 0 ? legacyFolderParts[legacyFolderParts.length - 1] : '');
+  const currentPath = location.state?.currentPath || ('/' + legacyFolderParts.slice(0, -1).join('/') + (legacyFolderParts.length > 1 ? '/' : ''));
   const returnPage = location.state?.returnPage || 1;
   const returnSearch = location.state?.returnSearch || '';
 
@@ -39,8 +46,8 @@ export default function MediaDetails() {
   const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const mediaType = location.state?.mediaType || 'movie';
-  const tmdbId = location.state?.tmdbId;
+  const mediaType = mediaTypeFromUrl || location.state?.mediaType || 'movie';
+  const tmdbId = location.state?.tmdbId || tmdbIdFromUrl;
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
   const transitionTimeoutRef = useRef<number | null>(null);
