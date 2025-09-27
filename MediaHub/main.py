@@ -11,6 +11,7 @@ import threading
 import traceback
 import io
 import time
+import tempfile
 from dotenv import load_dotenv
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
@@ -117,9 +118,9 @@ def display_missing_files_with_mount_check(dest_dir):
         return []
 
 def ensure_windows_temp_directory():
-    """Create the C:\\temp directory if it does not exist on Windows."""
+    """Create a temp directory if it does not exist on Windows."""
     if platform.system() == 'Windows':
-        temp_dir = 'C:\\temp'
+        temp_dir = tempfile.gettempdir()
         if not os.path.exists(temp_dir):
             try:
                 os.makedirs(temp_dir)
