@@ -3,6 +3,8 @@ import MovieIcon from '@mui/icons-material/Movie';
 import TvIcon from '@mui/icons-material/Tv';
 import SearchIcon from '@mui/icons-material/Search';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import SettingsIcon from '@mui/icons-material/Settings';
+import FolderIcon from '@mui/icons-material/Folder';
 import { useEffect, useState } from 'react';
 import { ArrSidebarFilter } from './types';
 
@@ -12,14 +14,15 @@ interface ArrSidebarProps {
 }
 
 export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebarProps) {
-  const getInitial = (): 'all' | 'movies' | 'series' | 'wanted' => {
+  const getInitial = (): 'all' | 'movies' | 'series' | 'wanted' | 'settings' => {
     const saved = localStorage.getItem('arrSidebarFilter');
-    return saved === 'movies' || saved === 'series' || saved === 'wanted' ? saved : 'all';
+    return saved === 'movies' || saved === 'series' || saved === 'wanted' || saved === 'settings' ? saved : 'all';
   };
   
-  const [filter, setFilter] = useState<'all' | 'movies' | 'series' | 'wanted'>(getInitial);
+  const [filter, setFilter] = useState<'all' | 'movies' | 'series' | 'wanted' | 'settings'>(getInitial);
   const [moviesExpanded, setMoviesExpanded] = useState(true);
   const [seriesExpanded, setSeriesExpanded] = useState(true);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('arrSidebarFilter', filter);
@@ -31,17 +34,24 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
     window.dispatchEvent(new CustomEvent('arrSidebarFilterChanged', { detail: { filter } }));
   }, [filter, moviesExpanded, seriesExpanded, onFilterChange]);
 
-  const handleMainClick = (value: 'movies' | 'series' | 'wanted') => {
+  const handleMainClick = (value: 'movies' | 'series' | 'wanted' | 'settings') => {
     // Auto-expand clicked section and collapse the other, but don't toggle closed when re-clicking
     if (value === 'movies') {
       setMoviesExpanded(true);
       setSeriesExpanded(false);
+      setSettingsExpanded(false);
     } else if (value === 'series') {
       setSeriesExpanded(true);
       setMoviesExpanded(false);
+      setSettingsExpanded(false);
     } else if (value === 'wanted') {
       setMoviesExpanded(false);
       setSeriesExpanded(false);
+      setSettingsExpanded(false);
+    } else if (value === 'settings') {
+      setMoviesExpanded(false);
+      setSeriesExpanded(false);
+      setSettingsExpanded(true);
     }
     setFilter(value);
     try {
@@ -195,6 +205,60 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
             } 
           />
         </ListItemButton>
+
+        {/* Settings Section */}
+        <ListItemButton 
+          selected={filter === 'settings'} 
+          onClick={() => handleMainClick('settings')} 
+          sx={{ 
+            borderRadius: 1, 
+            mx: 0.5, 
+            mb: 0.5, 
+            '&.Mui-selected': { 
+              bgcolor: (t) => alpha(t.palette.primary.main, 0.12) 
+            } 
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34 }}>
+            <SettingsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText 
+            primary={
+              <Typography variant="body2" fontWeight={700}>
+                Settings
+              </Typography>
+            } 
+          />
+        </ListItemButton>
+
+        {/* Settings Sub-items */}
+        <Collapse in={settingsExpanded} timeout={200}>
+          <Box sx={{ pl: 2 }}>
+            <ListItemButton 
+              onClick={() => window.dispatchEvent(new CustomEvent('arrSettingsRequested', { detail: { section: 'mediaManagement' } }))}
+              sx={{ 
+                borderRadius: 1, 
+                mx: 0.5, 
+                mb: 0.5,
+                py: 0.5,
+                '&:hover': {
+                  bgcolor: (t) => alpha(t.palette.primary.main, 0.08)
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <FolderIcon fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText 
+                primary={
+                  <Typography variant="body2" fontWeight={500}>
+                    Media Management
+                  </Typography>
+                } 
+              />
+            </ListItemButton>
+          </Box>
+        </Collapse>
 
       </List>
     </Box>

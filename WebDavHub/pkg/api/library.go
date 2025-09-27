@@ -58,8 +58,8 @@ type AddSeriesRequest struct {
 	Tags           []string `json:"tags"`
 }
 
-// initLibraryTable creates the library table if it doesn't exist
-func initLibraryTable() error {
+// InitLibraryTable creates the library table if it doesn't exist
+func InitLibraryTable() error {
 	database, err := db.GetDatabaseConnection()
 	if err != nil {
 		return fmt.Errorf("failed to get database connection: %v", err)
@@ -88,12 +88,27 @@ func initLibraryTable() error {
 		return fmt.Errorf("failed to create library_items table: %w", err)
 	}
 
+	// Create root_folders table
+	createRootFoldersTableSQL := `
+	CREATE TABLE IF NOT EXISTS root_folders (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		path TEXT UNIQUE NOT NULL,
+		created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+		updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+	);`
+
+	if _, err := database.Exec(createRootFoldersTableSQL); err != nil {
+		return fmt.Errorf("failed to create root_folders table: %w", err)
+	}
+	logger.Info("Root folders table created successfully")
+
 	// Create indexes for better performance
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_library_items_media_type ON library_items(media_type);`,
 		`CREATE INDEX IF NOT EXISTS idx_library_items_tmdb_id ON library_items(tmdb_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_library_items_status ON library_items(status);`,
 		`CREATE INDEX IF NOT EXISTS idx_library_items_added_at ON library_items(added_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_root_folders_path ON root_folders(path);`,
 	}
 
 	for _, indexSQL := range indexes {
@@ -102,7 +117,7 @@ func initLibraryTable() error {
 		}
 	}
 
-	logger.Info("Library table initialized successfully")
+	logger.Info("Library and root_folders tables initialized successfully")
 	return nil
 }
 
@@ -365,7 +380,7 @@ func HandleAddMovie(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Initialize library table if it doesn't exist
-	if err := initLibraryTable(); err != nil {
+	if err := InitLibraryTable(); err != nil {
 		logger.Error("Failed to initialize library table: %v", err)
 		http.Error(w, "Database initialization failed", http.StatusInternalServerError)
 		return
@@ -446,7 +461,7 @@ func HandleAddSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Initialize library table if it doesn't exist
-	if err := initLibraryTable(); err != nil {
+	if err := InitLibraryTable(); err != nil {
 		logger.Error("Failed to initialize library table: %v", err)
 		http.Error(w, "Database initialization failed", http.StatusInternalServerError)
 		return
@@ -530,7 +545,7 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Initialize library table if it doesn't exist
-	if err := initLibraryTable(); err != nil {
+	if err := InitLibraryTable(); err != nil {
 		logger.Error("Failed to initialize library table: %v", err)
 		http.Error(w, "Database initialization failed", http.StatusInternalServerError)
 		return

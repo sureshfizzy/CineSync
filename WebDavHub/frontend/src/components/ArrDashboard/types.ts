@@ -30,7 +30,7 @@ export interface SearchResult {
 }
 
 export interface ArrSidebarFilter {
-  type: 'all' | 'movies' | 'series' | 'wanted';
+  type: 'all' | 'movies' | 'series' | 'wanted' | 'settings';
   searchOpen: boolean;
 }
 

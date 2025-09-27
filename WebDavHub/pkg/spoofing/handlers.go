@@ -449,7 +449,7 @@ func HandleSpoofedHealth(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedRootFolder handles the /api/v3/rootfolder endpoint for both Radarr and Sonarr
 func HandleSpoofedRootFolder(w http.ResponseWriter, r *http.Request) {
-	rootFolders, err := getRootFoldersFromDatabase()
+	rootFolders, err := GetRootFoldersFromDatabase()
 	if err != nil {
 		logger.Error("Failed to get root folders: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -608,7 +608,7 @@ func HandleSpoofedFilesystem(w http.ResponseWriter, r *http.Request) {
 
 	// If no path specified, return root folders
 	if path == "" {
-		rootFolders, err := getRootFoldersFromDatabase()
+		rootFolders, err := GetRootFoldersFromDatabase()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
@@ -646,7 +646,7 @@ func HandleSpoofedFilesystem(w http.ResponseWriter, r *http.Request) {
 func getFilesystemContents(dirPath string, includeFiles bool) ([]map[string]interface{}, error) {
 	cleanPath := filepath.Clean(dirPath)
 
-	rootFolders, err := getRootFoldersFromDatabase()
+	rootFolders, err := GetRootFoldersFromDatabase()
 	if err != nil {
 		return nil, err
 	}

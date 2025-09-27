@@ -253,6 +253,10 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+	
+	// Root folders management endpoints
+	apiMux.HandleFunc("/api/root-folders", api.HandleRootFolders)
+	apiMux.HandleFunc("/api/root-folders/", api.HandleRootFolders)
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
