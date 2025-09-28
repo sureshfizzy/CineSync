@@ -52,6 +52,11 @@ func GetDatabaseConnection() (*sql.DB, error) {
 			}
 		}
 
+		// Initialize MediaHub database tables if they don't exist
+		if err := initializeMediaHubTables(db); err != nil {
+			logger.Warn("Failed to initialize MediaHub database tables: %v", err)
+		}
+
 		dbPool = db
 		logger.Info("MediaHub database connection pool initialized successfully")
 
@@ -225,4 +230,49 @@ func executeWithRetryOptimized(operation func() error, maxRetries int, baseDelay
 	}
 
 	return fmt.Errorf("deletion operation failed after %d retries", maxRetries)
+}
+
+// initializeMediaHubTables creates the necessary tables for MediaHub database if they don't exist
+func initializeMediaHubTables(db *sql.DB) error {
+	tables := []string{
+		`CREATE TABLE IF NOT EXISTS processed_files (
+			file_path TEXT PRIMARY KEY, destination_path TEXT, base_path TEXT, root_folder TEXT,
+			tmdb_id TEXT, season_number TEXT, reason TEXT, file_size INTEGER, error_message TEXT,
+			processed_at TIMESTAMP, media_type TEXT, proper_name TEXT, year TEXT, episode_number TEXT,
+			imdb_id TEXT, is_anime_genre INTEGER, language TEXT, quality TEXT, tvdb_id TEXT,
+			league_id TEXT, sportsdb_event_id TEXT, sport_name TEXT, sport_round INTEGER,
+			sport_location TEXT, sport_session TEXT, sport_venue TEXT, sport_city TEXT,
+			sport_country TEXT, sport_time TEXT, sport_date TEXT, original_language TEXT,
+			overview TEXT, runtime INTEGER, original_title TEXT, status TEXT, release_date TEXT,
+			first_air_date TEXT, last_air_date TEXT, genres TEXT, certification TEXT,
+			episode_title TEXT, total_episodes INTEGER)`,
+		`CREATE TABLE IF NOT EXISTS processed_files_archive (
+			file_path TEXT PRIMARY KEY, destination_path TEXT, archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+		`CREATE TABLE IF NOT EXISTS deleted_files (
+			file_path TEXT PRIMARY KEY, deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reason TEXT)`,
+	}
+
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_processed_files_destination_path ON processed_files(destination_path)",
+		"CREATE INDEX IF NOT EXISTS idx_processed_files_base_path ON processed_files(base_path)",
+		"CREATE INDEX IF NOT EXISTS idx_processed_files_tmdb_id ON processed_files(tmdb_id)",
+		"CREATE INDEX IF NOT EXISTS idx_processed_files_media_type ON processed_files(media_type)",
+		"CREATE INDEX IF NOT EXISTS idx_processed_files_processed_at ON processed_files(processed_at)",
+		"CREATE INDEX IF NOT EXISTS idx_deleted_files_deleted_at ON deleted_files(deleted_at)",
+	}
+
+	for _, table := range tables {
+		if _, err := db.Exec(table); err != nil {
+			return fmt.Errorf("failed to create table: %w", err)
+		}
+	}
+
+	for _, index := range indexes {
+		if _, err := db.Exec(index); err != nil {
+			logger.Warn("Failed to create index: %v", err)
+		}
+	}
+
+	logger.Info("MediaHub database tables initialized successfully")
+	return nil
 }

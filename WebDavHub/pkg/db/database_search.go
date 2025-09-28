@@ -57,7 +57,7 @@ func checkFileSizeColumnExists() bool {
 
 		var dummy sql.NullInt64
 		err = mediaHubDB.QueryRow("SELECT file_size FROM processed_files LIMIT 1").Scan(&dummy)
-		hasFileSizeColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasFileSizeColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasFileSizeColumn
 }
@@ -74,7 +74,7 @@ func checkReasonColumnExists() bool {
 		// Simple query to check if column exists - if it fails, column doesn't exist
 		var dummy sql.NullString
 		err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
-		hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasReasonColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasReasonColumn
 }
@@ -91,7 +91,7 @@ func checkBasePathColumnExists() bool {
 		// Simple query to check if column exists - if it fails, column doesn't exist
 		var dummy sql.NullString
 		err = mediaHubDB.QueryRow("SELECT base_path FROM processed_files LIMIT 1").Scan(&dummy)
-		hasBasePathColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasBasePathColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasBasePathColumn
 }
