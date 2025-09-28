@@ -17,12 +17,14 @@ import { useTmdb } from '../../contexts/TmdbContext';
 import { setPosterInCache } from '../FileBrowser/tmdbCache';
 import { TmdbResult, searchTmdb } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
-import ArrSearchPage from './ArrSearchPage';
 import { libraryApi, LibraryItem } from '../../api/libraryApi';
 import ArrWantedList from './ArrWantedList';
-import RootFoldersManagement from './RootFoldersManagement';
 
-export default function ArrDashboard() {
+interface ArrDashboardProps {
+  filter?: 'all' | 'movies' | 'series' | 'wanted';
+}
+
+export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
   const { view } = useLayoutContext();
   const navigate = useNavigate();
 
@@ -32,86 +34,12 @@ export default function ArrDashboard() {
   const [error, setError] = useState<string>('');
   const [dashSort, setDashSort] = useState<'title' | 'path' | 'size' | 'folder'>('title');
   const [showSort, setShowSort] = useState(false);
-  const getInitialFilter = () => {
-    const saved = localStorage.getItem('arrSidebarFilter');
-    return saved === 'movies' || saved === 'series' || saved === 'settings' ? saved : 'all';
-  };
-  const [arrFilter, setArrFilter] = useState<'all' | 'movies' | 'series' | 'settings'>(getInitialFilter);
   
-  // New search page state
-  const [showSearchPage, setShowSearchPage] = useState(false);
-  const [searchMediaType, setSearchMediaType] = useState<'movie' | 'tv'>('movie');
-  
-  // Settings page state
-  const [showSettingsPage, setShowSettingsPage] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<string>('');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('arrSidebarFilter');
-    if (saved === 'settings') {
-      setShowSettingsPage(true);
-      setSettingsSection('mediaManagement');
-    }
-  }, []);
-  
-  useEffect(() => {
-    const filterHandler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const val = detail?.filter;
-      if (val === 'movies' || val === 'series' || val === 'all') {
-        setArrFilter(val);
-        setShowSearchPage(false);
-        setShowLibrary(false);
-        setShowSettingsPage(false);
-        loadArrItems();
-        loadLibraryItems();
-      } else if (val === 'wanted') {
-        setShowLibrary(true);
-        setShowSearchPage(false);
-        setShowSettingsPage(false);
-        loadLibraryItems();
-      } else if (val === 'settings') {
-        setShowLibrary(false);
-        setShowSearchPage(false);
-        setShowSettingsPage(true);
-        setSettingsSection('mediaManagement');
-      }
-    };
-    
-    const searchHandler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const mediaType = detail?.mediaType;
-      if (mediaType === 'movie' || mediaType === 'tv') {
-        setSearchMediaType(mediaType);
-        setShowSearchPage(true);
-        setShowSettingsPage(false);
-      }
-    };
-
-    const settingsHandler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const section = detail?.section;
-      if (section) {
-        setSettingsSection(section);
-        setShowSettingsPage(true);
-        setShowSearchPage(false);
-      }
-    };
-    
-    window.addEventListener('arrSidebarFilterChanged', filterHandler as EventListener);
-    window.addEventListener('arrSearchRequested', searchHandler as EventListener);
-    window.addEventListener('arrSettingsRequested', settingsHandler as EventListener);
-    
-    return () => {
-      window.removeEventListener('arrSidebarFilterChanged', filterHandler as EventListener);
-      window.removeEventListener('arrSearchRequested', searchHandler as EventListener);
-      window.removeEventListener('arrSettingsRequested', settingsHandler as EventListener);
-    };
-  }, []);
+  // Use filter from props instead of internal state
+  const arrFilter = filter;
   
   const [files, setFiles] = useState<FileItem[]>([]);
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
-  const [showLibrary, setShowLibrary] = useState(false);
 
   const loadLibraryItems = useCallback(async () => {
     try {
@@ -189,10 +117,15 @@ export default function ArrDashboard() {
     }
   }, [updateTmdbData]);
 
+  // Load data when filter changes
   useEffect(() => {
-    loadArrItems();
-    loadLibraryItems();
-  }, [loadArrItems, loadLibraryItems]);
+    if (arrFilter === 'wanted') {
+      loadLibraryItems();
+    } else {
+      loadArrItems();
+      loadLibraryItems();
+    }
+  }, [arrFilter, loadArrItems, loadLibraryItems]);
 
   // Enrich library items with TMDB details so posters/overviews populate like FS items
   useEffect(() => {
@@ -250,8 +183,8 @@ export default function ArrDashboard() {
 
   const handleLibraryItemSearch = (item: any) => {
     // Navigate to search page for this item
-    setSearchMediaType(item.mediaType);
-    setShowSearchPage(true);
+    const mediaType = item.mediaType === 'movie' ? 'movie' : 'tv';
+    navigate(`/dashboard/search/${mediaType}`);
   };
 
   const handleLibraryItemDelete = async (item: any) => {
@@ -263,40 +196,6 @@ export default function ArrDashboard() {
     }
   };
 
-  // Show search page if active
-  if (showSearchPage) {
-    return (
-      <ArrSearchPage
-        mediaType={searchMediaType}
-        onBack={() => setShowSearchPage(false)}
-      />
-    );
-  }
-
-  // Show settings page if active
-  if (showSettingsPage) {
-    if (settingsSection === 'mediaManagement') {
-      return (
-        <RootFoldersManagement
-          onBack={() => setShowSettingsPage(false)}
-        />
-      );
-    }
-    
-    // Default settings view - could be expanded with more sections
-    return (
-      <ConfigurationWrapper>
-        <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
-          <Typography variant="h5" fontWeight={700} gutterBottom>
-            Settings
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Select a settings category from the sidebar to configure your media management.
-          </Typography>
-        </Box>
-      </ConfigurationWrapper>
-    );
-  }
 
   return (
     <ConfigurationWrapper>
@@ -387,7 +286,7 @@ export default function ArrDashboard() {
         ) : (
           <Fade in timeout={250}>
             <Box>
-              {showLibrary ? (
+              {arrFilter === 'wanted' ? (
                 <ArrWantedList
                   items={libraryItems.map(item => ({
                     id: item.id.toString(),

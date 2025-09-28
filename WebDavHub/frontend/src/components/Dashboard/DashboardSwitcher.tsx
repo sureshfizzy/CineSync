@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
+import { useLocation } from 'react-router-dom';
 import DashboardCurrent from './Dashboard';
-import { ArrDashboard } from '../ArrDashboard';
+import ArrDashboardRouter from '../ArrDashboard/ArrDashboardRouter';
 
 type ViewMode = 'current' | 'arrdash';
 
 export default function DashboardSwitcher() {
+  const location = useLocation();
   const getInitial = (): ViewMode => {
     const saved = localStorage.getItem('dashboardView');
     return saved === 'arrdash' || saved === 'current' ? (saved as ViewMode) : 'current';
   };
   const [view, setView] = useState<ViewMode>(getInitial);
+
+  // Determine view based on URL path
+  const isArrDashboardRoute = location.pathname.startsWith('/dashboard/') && 
+    !['/dashboard'].includes(location.pathname);
 
   useEffect(() => {
     localStorage.setItem('dashboardView', view);
@@ -27,9 +33,14 @@ export default function DashboardSwitcher() {
     return () => window.removeEventListener('dashboardHeaderToggle', handler as EventListener);
   }, []);
 
+  // If we're on an ArrDashboard route, show ArrDashboardRouter
+  if (isArrDashboardRoute) {
+    return <ArrDashboardRouter />;
+  }
+
+  // Otherwise, show the traditional switcher
   return (
     <Box>
-
       <Box sx={{ position: 'relative', minHeight: '60vh' }}>
         <Box
           sx={{
@@ -52,7 +63,7 @@ export default function DashboardSwitcher() {
             inset: 0
           }}
         >
-          <ArrDashboard />
+          <ArrDashboardRouter />
         </Box>
       </Box>
     </Box>

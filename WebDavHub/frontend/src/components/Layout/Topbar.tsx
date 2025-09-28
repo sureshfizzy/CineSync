@@ -1,5 +1,5 @@
 import { AppBar, Box, Toolbar, Typography, IconButton, Avatar, Tooltip, useMediaQuery, useTheme, Chip, alpha, ToggleButton, ToggleButtonGroup, Paper, Menu, MenuItem } from '@mui/material';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -33,15 +33,39 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     navigate('/dashboard');
   };
 
-  const onDashboard = location.pathname === '/dashboard';
-  const initialView = (localStorage.getItem('dashboardView') === 'arrdash') ? 'arrdash' : 'current';
-  const [dashView, setDashView] = useState<'current' | 'arrdash'>(initialView as 'current' | 'arrdash');
+  const onDashboard = true;
+  const isArrDashboardRoute = location.pathname.startsWith('/dashboard/') && location.pathname !== '/dashboard';
+  
+  // Determine initial view based on current route
+  const getInitialView = (): 'current' | 'arrdash' => {
+    if (isArrDashboardRoute) return 'arrdash';
+    return (localStorage.getItem('dashboardView') === 'arrdash') ? 'arrdash' : 'current';
+  };
+  
+  const [dashView, setDashView] = useState<'current' | 'arrdash'>(getInitialView());
   const [dashMenuAnchor, setDashMenuAnchor] = useState<null | HTMLElement>(null);
+
+  // Update dashboard view when route changes
+  useEffect(() => {
+    const newView = getInitialView();
+    if (newView !== dashView) {
+      setDashView(newView);
+      localStorage.setItem('dashboardView', newView);
+    }
+  }, [location.pathname]);
 
   const handleHeaderToggle = (_: any, v: 'current' | 'arrdash' | null) => {
     if (!v || v === dashView) return;
     setDashView(v);
     localStorage.setItem('dashboardView', v);
+    
+    // Navigate to appropriate route when switching views
+    if (v === 'current') {
+      navigate('/dashboard');
+    } else if (v === 'arrdash') {
+      navigate('/dashboard/movies');
+    }
+    
     window.dispatchEvent(new CustomEvent('dashboardHeaderToggle', { detail: { view: v } }));
     window.dispatchEvent(new CustomEvent('dashboardViewChanged', { detail: { view: v } }));
   };

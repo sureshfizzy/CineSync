@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Card, CardContent, List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Button, Alert, CircularProgress, Divider, Avatar, alpha, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, Fade } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Folder as FolderIcon, ArrowBack as ArrowBackIcon, Storage as StorageIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import FolderSelector from '../FileOperations/FolderSelector';
 
 interface RootFolder {
@@ -15,6 +16,7 @@ interface RootFoldersManagementProps {
 }
 
 export default function RootFoldersManagement({ onBack }: RootFoldersManagementProps) {
+  const navigate = useNavigate();
   const theme = useTheme();
   const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,12 +179,17 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
             gap: { xs: 1.5, sm: 2 },
             width: { xs: '100%', sm: 'auto' }
           }}>
-            {onBack && (
-              <IconButton 
-                onClick={onBack} 
-                sx={{ 
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  '&:hover': {
+            <IconButton 
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                } else {
+                  navigate('/dashboard/settings');
+                }
+              }} 
+              sx={{ 
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                '&:hover': {
                     bgcolor: alpha(theme.palette.primary.main, 0.2)
                   },
                   minWidth: { xs: 40, sm: 44 },
@@ -191,7 +198,6 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
               >
                 <ArrowBackIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
               </IconButton>
-            )}
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="h5" fontWeight={600} sx={{ 
                 background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,

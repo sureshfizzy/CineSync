@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, TextField, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, CircularProgress, Chip, Card, CardContent, Divider, Paper, IconButton, Alert } from '@mui/material';
 import Modal from '@mui/material/Modal';
+import { useNavigate } from 'react-router-dom';
 import ArrConfigCard from './ArrConfigCard';
 import { useConfig } from '../../contexts/ConfigContext';
 import {
@@ -19,7 +20,7 @@ import { joinPaths } from '../FileBrowser/fileUtils';
 
 interface ArrSearchPageProps {
   mediaType: 'movie' | 'tv';
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 interface AddConfig {
@@ -41,6 +42,7 @@ const defaultConfig: AddConfig = {
 };
 
 export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps) {
+  const navigate = useNavigate();
   const { config: runtime } = useConfig();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -73,14 +75,23 @@ export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps)
         if (showConfig) {
           resetConfig();
         } else {
-          onBack();
+          handleBack();
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showConfig, onBack]);
+  }, [showConfig]);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      const mediaTypePath = mediaType === 'movie' ? 'movies' : 'series';
+      navigate(`/dashboard/${mediaTypePath}`);
+    }
+  };
 
   // Load destination root folders (base_path directories)
   useEffect(() => {

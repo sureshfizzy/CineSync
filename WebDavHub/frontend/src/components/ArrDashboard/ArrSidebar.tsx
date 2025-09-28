@@ -6,6 +6,7 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FolderIcon from '@mui/icons-material/Folder';
 import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrSidebarFilter } from './types';
 
 interface ArrSidebarProps {
@@ -14,12 +15,20 @@ interface ArrSidebarProps {
 }
 
 export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebarProps) {
-  const getInitial = (): 'all' | 'movies' | 'series' | 'wanted' | 'settings' => {
-    const saved = localStorage.getItem('arrSidebarFilter');
-    return saved === 'movies' || saved === 'series' || saved === 'wanted' || saved === 'settings' ? saved : 'all';
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Determine current filter from URL
+  const getCurrentFilter = (): 'all' | 'movies' | 'series' | 'wanted' | 'settings' => {
+    const path = location.pathname;
+    if (path === '/dashboard/movies') return 'movies';
+    if (path === '/dashboard/series') return 'series';
+    if (path === '/dashboard/wanted') return 'wanted';
+    if (path.startsWith('/dashboard/settings')) return 'settings';
+    return 'all';
   };
   
-  const [filter, setFilter] = useState<'all' | 'movies' | 'series' | 'wanted' | 'settings'>(getInitial);
+  const filter = getCurrentFilter();
   const [moviesExpanded, setMoviesExpanded] = useState(true);
   const [seriesExpanded, setSeriesExpanded] = useState(true);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
@@ -31,7 +40,6 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
       searchOpen: moviesExpanded || seriesExpanded
     };
     onFilterChange?.(filterData);
-    window.dispatchEvent(new CustomEvent('arrSidebarFilterChanged', { detail: { filter } }));
   }, [filter, moviesExpanded, seriesExpanded, onFilterChange]);
 
   const handleMainClick = (value: 'movies' | 'series' | 'wanted' | 'settings') => {
@@ -40,28 +48,27 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
       setMoviesExpanded(true);
       setSeriesExpanded(false);
       setSettingsExpanded(false);
+      navigate('/dashboard/movies');
     } else if (value === 'series') {
       setSeriesExpanded(true);
       setMoviesExpanded(false);
       setSettingsExpanded(false);
+      navigate('/dashboard/series');
     } else if (value === 'wanted') {
       setMoviesExpanded(false);
       setSeriesExpanded(false);
       setSettingsExpanded(false);
+      navigate('/dashboard/wanted');
     } else if (value === 'settings') {
       setMoviesExpanded(false);
       setSeriesExpanded(false);
       setSettingsExpanded(true);
+      navigate('/dashboard/settings/media-management');
     }
-    setFilter(value);
-    try {
-      localStorage.setItem('arrSidebarFilter', value);
-    } catch {}
-    window.dispatchEvent(new CustomEvent('arrSidebarFilterChanged', { detail: { filter: value } }));
   };
 
   const handleSearchClick = (mediaType: 'movie' | 'tv') => {
-    window.dispatchEvent(new CustomEvent('arrSearchRequested', { detail: { mediaType } }));
+    navigate(`/dashboard/search/${mediaType}`);
     onSearchClick?.(mediaType);
   };
 
@@ -235,7 +242,7 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
         <Collapse in={settingsExpanded} timeout={200}>
           <Box sx={{ pl: 2 }}>
             <ListItemButton 
-              onClick={() => window.dispatchEvent(new CustomEvent('arrSettingsRequested', { detail: { section: 'mediaManagement' } }))}
+              onClick={() => navigate('/dashboard/settings/media-management')}
               sx={{ 
                 borderRadius: 1, 
                 mx: 0.5, 

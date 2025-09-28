@@ -103,7 +103,8 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               height: '100%',
             }}
           >
-            {location.pathname === '/dashboard' && activeDashboardView === 'arrdash' ? (
+            {(location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+             location.pathname.startsWith('/dashboard/') ? (
               <ArrSidebar />
             ) : (
               <Sidebar
@@ -135,7 +136,8 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               },
             }}
           >
-            {location.pathname === '/dashboard' && activeDashboardView === 'arrdash' ? (
+            {(location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+             location.pathname.startsWith('/dashboard/') ? (
               <ArrSidebar />
             ) : (
               <Sidebar
