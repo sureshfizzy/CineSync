@@ -3,7 +3,6 @@ import { Box, TextField, List, ListItem, ListItemAvatar, ListItemText, Avatar, T
 import Modal from '@mui/material/Modal';
 import { useNavigate } from 'react-router-dom';
 import ArrConfigCard from './ArrConfigCard';
-import { useConfig } from '../../contexts/ConfigContext';
 import {
   Search as SearchIcon,
   Movie as MovieIcon,
@@ -15,8 +14,6 @@ import {
 import axios from 'axios';
 import { SearchResult } from './types';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
-import { fetchFiles as fetchFilesApi } from '../FileBrowser/fileApi';
-import { joinPaths } from '../FileBrowser/fileUtils';
 
 interface ArrSearchPageProps {
   mediaType: 'movie' | 'tv';
@@ -33,7 +30,7 @@ interface AddConfig {
 }
 
 const defaultConfig: AddConfig = {
-  rootFolder: '/mnt/Jellyfin/EnglishMovies',
+  rootFolder: '',
   qualityProfile: 'HD-1080p',
   monitorPolicy: 'all',
   seriesType: 'standard',
@@ -43,7 +40,6 @@ const defaultConfig: AddConfig = {
 
 export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps) {
   const navigate = useNavigate();
-  const { config: runtime } = useConfig();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,39 +89,30 @@ export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps)
     }
   };
 
-  // Load destination root folders (base_path directories)
+  // Load root folders from API
   useEffect(() => {
     const loadRoots = async () => {
       try {
-        const rootResp = await fetchFilesApi('/', true, 1, 100);
-        const bases = (rootResp.data || [])
-          .filter((f: any) => f.type === 'directory')
-          .map((folder: any) => folder.path || folder.fullPath || joinPaths('/', folder.name));
-        setRootFolders(bases);
+        const response = await fetch('/api/root-folders');
+        if (response.ok) {
+          const folders = await response.json();
+          const bases = folders.map((folder: any) => folder.path);
+          setRootFolders(bases);
 
-        // Pick sensible default by media type
-        const byType = bases.find((p: string) => (mediaType === 'movie' ? /mov/i.test(p) : /(show|tv|series)/i.test(p)));
-        const dest = runtime.destinationDir || '';
-        const sep = dest.includes('\\') ? '\\' : '/';
-        const join = (a: string, b: string) => {
-          const stripEnd = (s: string) => s.replace(/[\\/]+$/, '');
-          const stripStart = (s: string) => s.replace(/^[\\/]+/, '');
-          if (!a) return b;
-          if (!b) return a;
-          return `${stripEnd(a)}${sep}${stripStart(b)}`;
-        };
-        if (byType) {
-          setConfig((c) => ({ ...c, rootFolder: dest ? join(dest, byType) : byType }));
-        } else if (bases.length > 0) {
-          const first = bases[0];
-          setConfig((c) => ({ ...c, rootFolder: dest ? join(dest, first) : first }));
+          const byType = bases.find((p: string) => (mediaType === 'movie' ? /mov/i.test(p) : /(show|tv|series)/i.test(p)));
+          if (byType) {
+            setConfig((c) => ({ ...c, rootFolder: byType }));
+          } else if (bases.length > 0) {
+            const first = bases[0];
+            setConfig((c) => ({ ...c, rootFolder: first }));
+          }
         }
       } catch {
         // ignore; fallback to defaults
       }
     };
     loadRoots();
-  }, [mediaType, runtime.destinationDir]);
+  }, [mediaType]);
 
   const searchMedia = async (query: string) => {
     setLoading(true);
@@ -374,6 +361,7 @@ export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps)
                 onClose={resetConfig}
                 onSubmit={handleAddToLibrary}
                 submitting={adding}
+                onRootFoldersUpdate={setRootFolders}
                 />
               </Box>
             )}

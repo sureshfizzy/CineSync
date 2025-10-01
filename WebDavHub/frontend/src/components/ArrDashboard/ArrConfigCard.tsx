@@ -1,6 +1,7 @@
 import { Box, Card, CardContent, Typography, Avatar, IconButton, FormControl, InputLabel, Select, MenuItem, FormControlLabel, Switch, Button, CircularProgress } from '@mui/material';
-import { Movie as MovieIcon, Tv as TvIcon } from '@mui/icons-material';
-import { useConfig } from '../../contexts/ConfigContext';
+import { Movie as MovieIcon, Tv as TvIcon, Add as AddIcon } from '@mui/icons-material';
+import { useState } from 'react';
+import FolderSelector from '../FileOperations/FolderSelector';
 
 interface ConfigCardProps {
   mediaType: 'movie' | 'tv';
@@ -20,12 +21,47 @@ interface ConfigCardProps {
   onClose: () => void;
   onSubmit: () => void;
   submitting?: boolean;
+  onRootFoldersUpdate?: (newRootFolders: string[]) => void;
 }
 
-export default function ArrConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, config, onChange, onClose, onSubmit, submitting }: ConfigCardProps) {
-  const { config: runtime } = useConfig();
+export default function ArrConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, config, onChange, onClose, onSubmit, submitting, onRootFoldersUpdate }: ConfigCardProps) {
   const isTv = mediaType === 'tv';
-  const destinationBase = runtime.destinationDir || '';
+  
+  // State for adding new root folder
+  const [folderSelectorOpen, setFolderSelectorOpen] = useState(false);
+
+  const handleFolderSelect = async (path: string) => {
+    try {
+      const response = await fetch('/api/root-folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path: path
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to add root folder' }));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const newFolder = await response.json();
+      
+      // Update the root folders list
+      const updatedRootFolders = [...rootFolders, newFolder.path];
+      onRootFoldersUpdate?.(updatedRootFolders);
+      
+      // Set the new folder as selected
+      onChange({ rootFolder: newFolder.path });
+      
+      // Close folder selector
+      setFolderSelectorOpen(false);
+    } catch (err) {
+      console.error('Failed to add root folder:', err);
+    }
+  };
   return (
     <Card elevation={8} sx={{ borderRadius: 1, display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
       <CardContent sx={{ p: 0, flex: '1 1 auto', overflowY: 'auto' }}>
@@ -53,10 +89,21 @@ export default function ArrConfigCard({ mediaType, title, year, posterUrl, overv
           <FormControl size="small" fullWidth>
             <InputLabel>Root Folder</InputLabel>
             <Select
-              value={config.rootFolder}
+              value={config.rootFolder || ''}
               label="Root Folder"
-              onChange={(e) => onChange({ rootFolder: String(e.target.value) })}
+              onChange={(e) => {
+                const value = String(e.target.value);
+                if (value === '__ADD_NEW__') {
+                  setFolderSelectorOpen(true);
+                } else {
+                  onChange({ rootFolder: value });
+                }
+              }}
               renderValue={(val) => {
+                if (!val || val === '') {
+                  const titleText = `'${title}${year ? ` (${year})` : ''}'`;
+                  return <span style={{ color: 'rgba(128,128,128,0.7)' }}>{titleText}</span>;
+                }
                 const v = String(val).replace(/\\/g, '/');
                 const baseNoSlash = v.replace(/\/+$/, '');
                 const titleText = `'${title}${year ? ` (${year})` : ''}'`;
@@ -81,22 +128,24 @@ export default function ArrConfigCard({ mediaType, title, year, posterUrl, overv
               }}
             >
               {rootFolders.map((p) => {
-                const base = p;
-                const sep = '/';
-                const stripEnd = (s: string) => s.replace(/[\\/]+$/, '');
-                const stripStart = (s: string) => s.replace(/^[\\/]+/, '');
-                const value = destinationBase ? `${stripEnd(destinationBase)}${sep}${stripStart(base)}` : base;
-                const normalized = value.replace(/\\/g, '/');
+                const normalized = p.replace(/\\/g, '/');
                 const display = `${normalized}${normalized.endsWith('/') ? '' : '/'}${title}${year ? ` (${year})` : ''}`;
                 return (
-                  <MenuItem key={p} value={value}>{display}</MenuItem>
+                  <MenuItem key={p} value={p}>{display}</MenuItem>
                 );
               })}
+              <MenuItem value="__ADD_NEW__" sx={{ color: 'primary.main', fontWeight: 500 }}>
+                <AddIcon fontSize="small" sx={{ mr: 1 }} />
+                Add New Root Folder...
+              </MenuItem>
             </Select>
           </FormControl>
           <Box />
           <Typography variant="caption" color="text.secondary" sx={{ gridColumn: '1 / span 2', mt: -0.5 }}>
-            '{title}' subfolder will be created automatically at {config.rootFolder ? `${config.rootFolder}/${title}` : title}
+            {!config.rootFolder 
+              ? 'Select a root folder to continue.'
+              : `'${title}' subfolder will be created automatically at ${config.rootFolder}/${title}`
+            }
           </Typography>
 
           {isTv && <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Monitor</Typography>}
@@ -160,10 +209,22 @@ export default function ArrConfigCard({ mediaType, title, year, posterUrl, overv
               <FormControlLabel control={<Switch size="small" />} label={<Typography variant="body2">Start search for cutoff unmet episodes</Typography>} />
             </Box>
           )}
-          <Button variant="contained" onClick={onSubmit} disabled={submitting} startIcon={submitting ? <CircularProgress size={16} /> : undefined}>
+          <Button 
+            variant="contained" 
+            onClick={onSubmit} 
+            disabled={submitting || !config.rootFolder} 
+            startIcon={submitting ? <CircularProgress size={16} /> : undefined}
+          >
             {submitting ? 'Adding...' : `Add ${title}`}
           </Button>
       </Box>
+
+      {/* Folder Selector */}
+      <FolderSelector
+        open={folderSelectorOpen}
+        onClose={() => setFolderSelectorOpen(false)}
+        onSelect={handleFolderSelect}
+      />
     </Card>
   );
 }

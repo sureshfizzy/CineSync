@@ -55,8 +55,9 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
     fetchRootFolders();
   }, []);
 
-  const handleAddFolder = async () => {
-    if (!newFolderPath.trim()) {
+  const handleAddFolder = async (path?: string) => {
+    const folderPath = path || newFolderPath;
+    if (!folderPath.trim()) {
       setError('Folder path is required');
       return;
     }
@@ -64,14 +65,14 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
     try {
       setError('');
 
-      console.log('Adding root folder:', newFolderPath.trim());
+      console.log('Adding root folder:', folderPath.trim());
       const response = await fetch('/api/root-folders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          path: newFolderPath.trim()
+          path: folderPath.trim()
         })
       });
 
@@ -133,10 +134,9 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
   };
 
   const handleFolderSelect = (path: string) => {
-    setNewFolderPath(path);
     setFolderSelectorOpen(false);
     // Automatically add the folder after selection
-    handleAddFolder();
+    handleAddFolder(path);
   };
 
   if (loading) {

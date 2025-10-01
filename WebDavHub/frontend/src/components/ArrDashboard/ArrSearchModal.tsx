@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, Box, CircularProgress, Chip, IconButton, Divider, FormControl, InputLabel, Select, MenuItem, FormControlLabel, Switch, Stepper, Step, StepLabel } from '@mui/material';
-import { Close as CloseIcon, Search as SearchIcon, Movie as MovieIcon, Tv as TvIcon, Star as StarIcon, CalendarToday as CalendarIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Search as SearchIcon, Movie as MovieIcon, Tv as TvIcon, Star as StarIcon, CalendarToday as CalendarIcon, Add as AddIcon } from '@mui/icons-material';
 import axios from 'axios';
 import { SearchResult } from './types';
-import { fetchFiles as fetchFilesApi } from '../FileBrowser/fileApi';
-import { joinPaths } from '../FileBrowser/fileUtils';
+import FolderSelector from '../FileOperations/FolderSelector';
 
 interface ArrSearchModalProps {
   open: boolean;
@@ -39,8 +38,44 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
   const [config, setConfig] = useState<AddConfig>(defaultConfig);
   const [adding, setAdding] = useState(false);
   const [rootFolders, setRootFolders] = useState<string[]>([]);
+  
+  // State for adding new root folder
+  const [folderSelectorOpen, setFolderSelectorOpen] = useState(false);
 
   const steps = ['Search', 'Configure', 'Add'];
+
+  const handleFolderSelect = async (path: string) => {
+    try {
+      const response = await fetch('/api/root-folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path: path
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to add root folder' }));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      const newFolder = await response.json();
+      
+      // Update the root folders list
+      const updatedRootFolders = [...rootFolders, newFolder.path];
+      setRootFolders(updatedRootFolders);
+      
+      // Set the new folder as selected
+      setConfig({ ...config, rootFolder: newFolder.path });
+      
+      // Close folder selector
+      setFolderSelectorOpen(false);
+    } catch (err) {
+      console.error('Failed to add root folder:', err);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -49,16 +84,19 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
       setSelectedResult(null);
       setActiveStep(0);
       setConfig(defaultConfig);
-      // Load real root folders dynamically (remove hardcoded values)
+      // Load root folders from API
       (async () => {
         try {
-          const root = await fetchFilesApi('/', true, 1, 100);
-          const bases = (root.data || [])
-            .filter((f: any) => f.type === 'directory')
-            .map((folder: any) => folder.path || folder.fullPath || joinPaths('/', folder.name));
-          setRootFolders(bases);
-          if (bases.length > 0) {
-            setConfig((c) => ({ ...c, rootFolder: bases[0] }));
+          const response = await fetch('/api/root-folders');
+          if (response.ok) {
+            const folders = await response.json();
+            const paths = folders.map((folder: any) => folder.path);
+            setRootFolders(paths);
+            if (paths.length > 0) {
+              setConfig((c) => ({ ...c, rootFolder: paths[0] }));
+            }
+          } else {
+            setRootFolders([]);
           }
         } catch {
           setRootFolders([]);
@@ -272,12 +310,23 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
                 <InputLabel>Root Folder</InputLabel>
                 <Select
                   value={config.rootFolder}
-                  onChange={(e) => setConfig({ ...config, rootFolder: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '__ADD_NEW__') {
+                      setFolderSelectorOpen(true);
+                    } else {
+                      setConfig({ ...config, rootFolder: value });
+                    }
+                  }}
                   label="Root Folder"
                 >
                   {rootFolders.map((p) => (
                     <MenuItem key={p} value={p}>{p}</MenuItem>
                   ))}
+                  <MenuItem value="__ADD_NEW__" sx={{ color: 'primary.main', fontWeight: 500 }}>
+                    <AddIcon fontSize="small" sx={{ mr: 1 }} />
+                    Add New Root Folder...
+                  </MenuItem>
                 </Select>
               </FormControl>
 
@@ -424,6 +473,13 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
           </Button>
         )}
       </DialogActions>
+
+      {/* Folder Selector */}
+      <FolderSelector
+        open={folderSelectorOpen}
+        onClose={() => setFolderSelectorOpen(false)}
+        onSelect={handleFolderSelect}
+      />
     </Dialog>
   );
 }
