@@ -8,6 +8,7 @@ export interface MediaDetailsData {
   first_air_date?: string;
   last_air_date?: string;
   episode_run_time?: number[];
+  original_language?: string;
   credits?: {
     crew: { job: string; name: string }[];
     cast: { id: number; name: string; character: string; profile_path: string | null }[];

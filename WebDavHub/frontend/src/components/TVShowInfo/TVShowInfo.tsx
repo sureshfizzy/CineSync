@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense, useCallback } from 'react';
 import { Box, Snackbar, Alert, IconButton } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ShowHeader from './ShowHeader';
 import SeasonList from './SeasonList';
 import SeasonDialog from './SeasonDialog';
@@ -27,6 +27,10 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Detect if we're in ArrDashboard context
+  const isArrDashboardContext = location.state?.returnPage === 1 && location.state?.returnSearch === '';
 
   // Function to trigger refresh of file actions
   const handleRefresh = useCallback(() => {
@@ -88,6 +92,9 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               onError={(error) => setSnackbar({ open: true, message: error, severity: 'error' })}
               refreshTrigger={refreshTrigger}
               onNavigateBack={handleNavigateBack}
+              isArrDashboardContext={isArrDashboardContext}
+              isLoadingFiles={loadingFiles}
+              seasonFolders={seasonFolders}
             />
           </Box>
         </Box>
@@ -97,6 +104,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           setSeasonDialogOpen={setSeasonDialogOpen}
           setSelectedSeason={setSelectedSeason}
           setSelectedSeasonFolder={setSelectedSeasonFolder}
+          isArrDashboardContext={isArrDashboardContext}
         />
         <SeasonDialog
           open={seasonDialogOpen}

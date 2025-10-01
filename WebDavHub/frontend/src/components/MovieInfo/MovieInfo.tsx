@@ -1,6 +1,6 @@
 import { Box, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
@@ -14,8 +14,12 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Detect if we're in ArrDashboard context
+  const isArrDashboardContext = location.state?.returnPage === 1 && location.state?.returnSearch === '';
 
   // Handle both single file (legacy) and multiple files (new)
   const files = Array.isArray(fileInfo) ? fileInfo : (fileInfo ? [fileInfo] : []);
@@ -130,6 +134,8 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
                 onNavigateBack={handleNavigateBack}
                 selectedVersionIndex={selectedVersionIndex}
                 onVersionChange={setSelectedVersionIndex}
+                isArrDashboardContext={isArrDashboardContext}
+                isLoadingFiles={isLoadingFiles}
               />
             </Box>
           </Box>
