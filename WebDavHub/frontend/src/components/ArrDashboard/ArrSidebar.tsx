@@ -5,6 +5,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FolderIcon from '@mui/icons-material/Folder';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrSidebarFilter } from './types';
@@ -31,7 +32,7 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
   const filter = getCurrentFilter();
   const [moviesExpanded, setMoviesExpanded] = useState(true);
   const [seriesExpanded, setSeriesExpanded] = useState(true);
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(filter === 'settings');
 
   useEffect(() => {
     localStorage.setItem('arrSidebarFilter', filter);
@@ -41,6 +42,11 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
     };
     onFilterChange?.(filterData);
   }, [filter, moviesExpanded, seriesExpanded, onFilterChange]);
+
+  // Update settings expansion based on current filter
+  useEffect(() => {
+    setSettingsExpanded(filter === 'settings');
+  }, [filter]);
 
   const handleMainClick = (value: 'movies' | 'series' | 'wanted' | 'settings') => {
     // Auto-expand clicked section and collapse the other, but don't toggle closed when re-clicking
@@ -260,6 +266,30 @@ export default function ArrSidebar({ onFilterChange, onSearchClick }: ArrSidebar
                 primary={
                   <Typography variant="body2" fontWeight={500}>
                     Media Management
+                  </Typography>
+                } 
+              />
+            </ListItemButton>
+            
+            <ListItemButton 
+              onClick={() => navigate('/dashboard/settings/indexers')}
+              sx={{ 
+                borderRadius: 1, 
+                mx: 0.5, 
+                mb: 0.5,
+                py: 0.5,
+                '&:hover': {
+                  bgcolor: (t) => alpha(t.palette.primary.main, 0.08)
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <StorageIcon fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText 
+                primary={
+                  <Typography variant="body2" fontWeight={500}>
+                    Indexer Management
                   </Typography>
                 } 
               />

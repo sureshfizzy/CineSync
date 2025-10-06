@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ArrDashboard from './ArrDashboard';
 import ArrSearchPage from './ArrSearchPage';
 import RootFoldersManagement from './RootFoldersManagement';
+import IndexerManagement from './IndexerManagement';
 
 export default function ArrDashboardRouter() {
   return (
@@ -17,6 +18,7 @@ export default function ArrDashboardRouter() {
       {/* Settings routes */}
       <Route path="settings" element={<Navigate to="/dashboard/settings/media-management" replace />} />
       <Route path="settings/media-management" element={<RootFoldersManagement />} />
+      <Route path="settings/indexers" element={<IndexerManagement />} />
       
       {/* Search routes */}
       <Route path="search/movie" element={<ArrSearchPage mediaType="movie" />} />

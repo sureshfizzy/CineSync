@@ -250,6 +250,35 @@ func initializeMediaHubTables(db *sql.DB) error {
 			file_path TEXT PRIMARY KEY, destination_path TEXT, archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE TABLE IF NOT EXISTS deleted_files (
 			file_path TEXT PRIMARY KEY, deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reason TEXT)`,
+		`CREATE TABLE IF NOT EXISTS indexers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			protocol TEXT NOT NULL CHECK (protocol IN ('torznab', 'jackett', 'prowlarr', 'custom')),
+			url TEXT NOT NULL,
+			api_key TEXT,
+			username TEXT,
+			password TEXT,
+			enabled BOOLEAN DEFAULT TRUE,
+			update_interval INTEGER DEFAULT 15,
+			categories TEXT,
+			timeout INTEGER DEFAULT 30,
+			last_updated INTEGER,
+			last_tested INTEGER,
+			test_status TEXT DEFAULT 'unknown',
+			test_message TEXT,
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+		)`,
+		`CREATE TABLE IF NOT EXISTS indexer_tests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			indexer_id INTEGER NOT NULL,
+			test_type TEXT NOT NULL CHECK (test_type IN ('connection', 'search', 'api_key')),
+			status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'timeout')),
+			message TEXT,
+			response_time_ms INTEGER,
+			tested_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			FOREIGN KEY (indexer_id) REFERENCES indexers(id) ON DELETE CASCADE
+		)`,
 	}
 
 	indexes := []string{
@@ -259,6 +288,12 @@ func initializeMediaHubTables(db *sql.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_processed_files_media_type ON processed_files(media_type)",
 		"CREATE INDEX IF NOT EXISTS idx_processed_files_processed_at ON processed_files(processed_at)",
 		"CREATE INDEX IF NOT EXISTS idx_deleted_files_deleted_at ON deleted_files(deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_indexers_enabled ON indexers(enabled)",
+		"CREATE INDEX IF NOT EXISTS idx_indexers_protocol ON indexers(protocol)",
+		"CREATE INDEX IF NOT EXISTS idx_indexers_last_updated ON indexers(last_updated)",
+		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_indexer_id ON indexer_tests(indexer_id)",
+		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_tested_at ON indexer_tests(tested_at)",
+		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_status ON indexer_tests(status)",
 	}
 
 	for _, table := range tables {

@@ -257,6 +257,25 @@ func main() {
 	// Root folders management endpoints
 	apiMux.HandleFunc("/api/root-folders", api.HandleRootFolders)
 	apiMux.HandleFunc("/api/root-folders/", api.HandleRootFolders)
+	
+	// Indexer management endpoints
+	apiMux.HandleFunc("/api/indexers", api.HandleIndexers)
+	apiMux.HandleFunc("/api/indexers/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/test") {
+			api.HandleIndexerTest(w, r)
+		} else if strings.HasSuffix(path, "/search") {
+			api.HandleIndexerSearch(w, r)
+		} else if strings.HasSuffix(path, "/caps") {
+			api.HandleIndexerCaps(w, r)
+		} else {
+			api.HandleIndexerByID(w, r)
+		}
+	})
+
+apiMux.HandleFunc("/api/indexers/test-config", api.HandleIndexerTestConfig)
+apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
+	
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
