@@ -200,7 +200,16 @@ func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine app name based on service type for Prowlarr compatibility
+	appName := "Radarr"
+	if config.ServiceType == "sonarr" {
+		appName = "Sonarr"
+	} else if config.ServiceType == "auto" {
+		appName = "Radarr"
+	}
+
 	status := SystemStatusResponse{
+		AppName:                appName,
 		Version:                config.Version,
 		BuildTime:              processStartTime.Format(time.RFC3339),
 		AppGuid:                config.AppGuid,
@@ -739,8 +748,196 @@ func HandleSpoofedDownloadClient(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedIndexer handles the /api/v3/indexer endpoint for both Radarr and Sonarr
 func HandleSpoofedIndexer(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexer: %v", err)
+			handleErrorResponse(w, "Indexer request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// Return indexer schemas that Prowlarr expects for BuildRadarrIndexer
+	// Prowlarr calls this to get available indexer types/schemas
+	indexers := []map[string]interface{}{
+		{
+			"id":               1,
+			"name":             "Newznab",
+			"implementation":   "Newznab",
+			"configContract":   "NewznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox"},
+				{"name": "apiPath", "label": "API Path", "type": "textbox"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox"},
+				{"name": "categories", "label": "Categories", "type": "select"},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number"},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number"},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number"},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox"},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox"},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox"},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select"},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox"},
+			},
+			"enable":           true,
+			"protocol":         "usenet",
+			"priority":         25,
+			"supportsRss":      true,
+			"supportsSearch":   true,
+			"downloadClientId": 0,
+		},
+		{
+			"id":               2,
+			"name":             "Torznab",
+			"implementation":   "Torznab",
+			"configContract":   "TorznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox"},
+				{"name": "apiPath", "label": "API Path", "type": "textbox"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox"},
+				{"name": "categories", "label": "Categories", "type": "select"},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number"},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number"},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number"},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox"},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox"},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox"},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select"},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox"},
+			},
+			"enable":           true,
+			"protocol":         "torrent",
+			"priority":         25,
+			"supportsRss":      true,
+			"supportsSearch":   true,
+			"downloadClientId": 0,
+		},
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode([]map[string]interface{}{})
+	if err := json.NewEncoder(w).Encode(indexers); err != nil {
+		logger.Error("Failed to encode indexers response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleSpoofedIndexerSchema handles the /api/v3/indexer/schema endpoint that Prowlarr calls
+func HandleSpoofedIndexerSchema(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexerSchema: %v", err)
+			handleErrorResponse(w, "Indexer schema request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// It needs to return Newznab and Torznab schemas with proper fields
+	schemas := []map[string]interface{}{
+		{
+			"id":               0,
+			"name":             "Newznab",
+			"Implementation":   "Newznab",
+			"configContract":   "NewznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
+				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox", "value": ""},
+				{"name": "categories", "label": "Categories", "type": "select", "value": []int{}},
+				{"name": "animeCategories", "label": "Anime Categories", "type": "select", "value": []int{}},
+				{"name": "animeStandardFormatSearch", "label": "Anime Standard Format Search", "type": "checkbox", "value": false},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number", "value": 1},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number", "value": 1.0},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number", "value": 0},
+				{"name": "seedCriteria.seasonPackSeedTime", "label": "Season Pack Seed Time", "type": "number", "value": 0},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox", "value": false},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox", "value": false},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox", "value": false},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select", "value": []int{}},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox", "value": ""},
+			},
+		},
+		{
+			"id":               0,
+			"name":             "Torznab",
+			"Implementation":   "Torznab",
+			"configContract":   "TorznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
+				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox", "value": ""},
+				{"name": "categories", "label": "Categories", "type": "select", "value": []int{}},
+				{"name": "animeCategories", "label": "Anime Categories", "type": "select", "value": []int{}},
+				{"name": "animeStandardFormatSearch", "label": "Anime Standard Format Search", "type": "checkbox", "value": false},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number", "value": 1},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number", "value": 1.0},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number", "value": 0},
+				{"name": "seedCriteria.seasonPackSeedTime", "label": "Season Pack Seed Time", "type": "number", "value": 0},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox", "value": false},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox", "value": false},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox", "value": false},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select", "value": []int{}},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox", "value": ""},
+			},
+		},
+	}
+
+	logger.Info("Prowlarr requesting indexer schemas - returning Newznab and Torznab schemas")
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(schemas); err != nil {
+		logger.Error("Failed to encode indexer schemas response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleSpoofedIndexerTest handles the /api/v3/indexer/test endpoint that Prowlarr calls during TestConnection
+func HandleSpoofedIndexerTest(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexerTest: %v", err)
+			handleErrorResponse(w, "Indexer test request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse the indexer test request
+	var indexerTest map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&indexerTest); err != nil {
+		logger.Error("Failed to decode indexer test request: %v", err)
+		handleErrorResponse(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Prowlarr testing indexer connection: %v", indexerTest["Name"])
+
+	config := GetConfig()
+	appVersion := config.Version
+
+	// Set the required headers that Prowlarr checks
+	w.Header().Set("X-Application-Version", appVersion)
+	w.Header().Set("Content-Type", "application/json")
+
+	// Return a successful test response
+	testResult := map[string]interface{}{
+		"isValid": true,
+		"errors":  []interface{}{},
+	}
+
+	logger.Info("Indexer test successful, returned version: %s", appVersion)
+
+	if err := json.NewEncoder(w).Encode(testResult); err != nil {
+		logger.Error("Failed to encode indexer test response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // HandleSpoofedImportList handles the /api/v3/importlist endpoint for Radarr
@@ -1621,4 +1818,433 @@ func getMovieDetailsForSignalR(movieID int) map[string]interface{} {
 		"popularity":          movie.Popularity,
 		"sizeOnDisk":          movie.SizeOnDisk,
 	}
+}
+
+// Prowlarr API Handler Functions
+
+// ProwlarrApplicationTestRequest represents the test request for Prowlarr applications
+type ProwlarrApplicationTestRequest struct {
+	BaseURL          string                 `json:"baseUrl"`
+	APIKey           string                 `json:"apiKey"`
+	SyncCategories   []int                  `json:"syncCategories"`
+	AnimeSyncCategories []int               `json:"animeSyncCategories"`
+	Tags             []int                  `json:"tags"`
+	Name             string                 `json:"name"`
+	Implementation   string                 `json:"implementation"`
+	ConfigContract   string                 `json:"configContract"`
+	InfoLink         string                 `json:"infoLink"`
+	Fields           []interface{}          `json:"fields"`
+}
+
+// ProwlarrApplicationTestResponse represents the response for application tests
+type ProwlarrApplicationTestResponse struct {
+	IsValid      bool                   `json:"isValid"`
+	Errors       []ProwlarrValidationFailure    `json:"errors"`
+}
+
+// ProwlarrValidationFailure represents validation errors
+type ProwlarrValidationFailure struct {
+	PropertyName string `json:"propertyName"`
+	ErrorMessage string `json:"errorMessage"`
+	Severity     string `json:"severity"`
+}
+
+// HandleProwlarrApplicationTest handles POST /api/v1/applications/test
+func HandleProwlarrApplicationTest(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleProwlarrApplicationTest: %v", err)
+			handleErrorResponse(w, "Application test failed", http.StatusInternalServerError)
+		}
+	}()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var testReq ProwlarrApplicationTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&testReq); err != nil {
+		logger.Error("Failed to decode application test request: %v", err)
+		handleErrorResponse(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Testing Prowlarr application connection: %s -> %s", testReq.Name, testReq.BaseURL)
+
+	// Validate the application configuration
+	response := validateProwlarrApplication(testReq)
+
+	w.Header().Set("Content-Type", "application/json")
+	if !response.IsValid {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error("Failed to encode application test response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// validateProwlarrApplication validates an application configuration and tests connection
+func validateProwlarrApplication(req ProwlarrApplicationTestRequest) ProwlarrApplicationTestResponse {
+	var errors []ProwlarrValidationFailure
+
+	// Validate required fields
+	if req.BaseURL == "" {
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "BaseUrl",
+			ErrorMessage: "Base URL is required",
+			Severity:     "error",
+		})
+	}
+
+	if req.APIKey == "" {
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "ApiKey", 
+			ErrorMessage: "API Key is required",
+			Severity:     "error",
+		})
+	}
+
+	// If basic validation failed, return early
+	if len(errors) > 0 {
+		return ProwlarrApplicationTestResponse{
+			IsValid: false,
+			Errors:  errors,
+		}
+	}
+
+	// Test connection to the application
+	if err := testProwlarrApplicationConnection(req.BaseURL, req.APIKey); err != nil {
+		serviceName := "Application"
+		if req.Implementation != "" {
+			serviceName = req.Implementation
+		}
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "BaseUrl",
+			ErrorMessage: fmt.Sprintf("Unable to complete application test, cannot connect to %s. %s", serviceName, err.Error()),
+			Severity:     "error",
+		})
+	}
+
+	return ProwlarrApplicationTestResponse{
+		IsValid: len(errors) == 0,
+		Errors:  errors,
+	}
+}
+
+// testProwlarrApplicationConnection tests the connection to Radarr/Sonarr
+func testProwlarrApplicationConnection(baseURL, apiKey string) error {
+	// Normalize URL
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	testURL := baseURL + "/api/v3/system/status"
+
+	// Create request
+	req, err := http.NewRequest("GET", testURL, nil)
+	if err != nil {
+		return err
+	}
+
+	// Add API key header
+	req.Header.Set("X-Api-Key", apiKey)
+
+	// Make request with timeout
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication failed - check API key")
+	} else if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Try to decode response to ensure it's valid JSON
+	var statusResponse map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&statusResponse); err != nil {
+		return fmt.Errorf("invalid response format")
+	}
+
+	return nil
+}
+
+// HandleProwlarrApplications handles GET/POST /api/v1/applications
+func HandleProwlarrApplications(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleProwlarrApplications: %v", err)
+			handleErrorResponse(w, "Applications request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	switch r.Method {
+	case http.MethodGet:
+		// Return empty list of applications for now
+		applications := []interface{}{}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(applications); err != nil {
+			logger.Error("Failed to encode applications response: %v", err)
+			handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+	case http.MethodPost:
+		// Handle application creation - return mock response
+		var appReq ProwlarrApplicationTestRequest
+		if err := json.NewDecoder(r.Body).Decode(&appReq); err != nil {
+			logger.Error("Failed to decode create application request: %v", err)
+			handleErrorResponse(w, "Invalid request format", http.StatusBadRequest)
+			return
+		}
+
+		// Return created application with ID
+		response := map[string]interface{}{
+			"id":               1,
+			"name":            appReq.Name,
+			"implementation":  appReq.Implementation,
+			"configContract":  appReq.ConfigContract,
+			"infoLink":        appReq.InfoLink,
+			"baseUrl":         appReq.BaseURL,
+			"apiKey":          appReq.APIKey,
+			"syncCategories":  appReq.SyncCategories,
+			"animeSyncCategories": appReq.AnimeSyncCategories,
+			"tags":            appReq.Tags,
+			"fields":          appReq.Fields,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			logger.Error("Failed to encode create application response: %v", err)
+			handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleProwlarrSystemStatus handles GET /api/v1/system/status
+func HandleProwlarrSystemStatus(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleProwlarrSystemStatus: %v", err)
+			handleErrorResponse(w, "System status request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	config := GetConfig()
+	if config == nil {
+		logger.Error("Failed to get spoofing config in HandleProwlarrSystemStatus")
+		handleErrorResponse(w, "Configuration unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	status := map[string]interface{}{
+		"appName":          "Prowlarr",
+		"instanceName":     config.InstanceName,
+		"version":          config.Version,
+		"buildTime":        processStartTime.Format("2006-01-02T15:04:05Z"),
+		"isDebug":          false,
+		"isProduction":     true,
+		"isAdmin":          true,
+		"isUserInteractive": false,
+		"startupPath":      "/app",
+		"appData":          "/config",
+		"osName":           "linux",
+		"osVersion":        "5.4.0",
+		"isMonoRuntime":    false,
+		"isMono":           false,
+		"isLinux":          true,
+		"isOsx":            false,
+		"isWindows":        false,
+		"mode":             "production",
+		"branch":           config.Branch,
+		"authentication":   "external",
+		"startTime":        processStartTime.Format("2006-01-02T15:04:05Z"),
+		"packageVersion":   config.Version,
+		"packageAuthor":    "linuxserver.io",
+		"packageUpdateMechanism": "docker",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		logger.Error("Failed to encode Prowlarr system status response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleProwlarrIndexers handles GET /api/v1/indexer
+func HandleProwlarrIndexers(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleProwlarrIndexers: %v", err)
+			handleErrorResponse(w, "Indexers request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// Return mock indexer list for Prowlarr compatibility
+	indexers := []map[string]interface{}{
+		{
+			"id":             1,
+			"name":           "CineSync Mock Indexer",
+			"implementation": "TorrentRssIndexer",
+			"configContract": "TorrentRssIndexerSettings",
+			"protocol":       "torrent",
+			"privacy":        "public",
+			"enable":         true,
+			"supportsRss":    true,
+			"supportsSearch": true,
+			"priority":       25,
+			"capabilities": map[string]interface{}{
+				"categories": []map[string]interface{}{
+					{"id": 2000, "name": "Movies"},
+					{"id": 2010, "name": "Movies/Foreign"},
+					{"id": 2040, "name": "Movies/HD"},
+					{"id": 5000, "name": "TV"},
+					{"id": 5040, "name": "TV/HD"},
+				},
+				"supportsRss":    true,
+				"supportsSearch": true,
+			},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(indexers); err != nil {
+		logger.Error("Failed to encode indexers response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleProwlarrSearch handles GET /api/v1/search
+func HandleProwlarrSearch(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleProwlarrSearch: %v", err)
+			handleErrorResponse(w, "Search request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// Extract search parameters
+	query := r.URL.Query().Get("query")
+	categories := r.URL.Query().Get("categories")
+	indexerIds := r.URL.Query().Get("indexerIds")
+	limit := r.URL.Query().Get("limit")
+	offset := r.URL.Query().Get("offset")
+
+	logger.Info("Prowlarr search request - query: %s, categories: %s, indexers: %s, limit: %s, offset: %s",
+		query, categories, indexerIds, limit, offset)
+
+	// Return empty search results for now
+	searchResponse := map[string]interface{}{
+		"results": []interface{}{},
+		"total":   0,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(searchResponse); err != nil {
+		logger.Error("Failed to encode search response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleTorznabCaps handles GET /torznab/{indexerSlug}/api?t=caps
+func HandleTorznabCaps(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleTorznabCaps: %v", err)
+			handleErrorResponse(w, "Torznab caps request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// Extract indexer slug from path
+	pathParts := strings.Split(r.URL.Path, "/")
+	indexerSlug := "unknown"
+	if len(pathParts) >= 3 {
+		indexerSlug = pathParts[2]
+	}
+
+	logger.Info("Torznab caps request for indexer: %s", indexerSlug)
+
+	// Return Torznab capabilities XML
+	capsXML := `<?xml version="1.0" encoding="UTF-8"?>
+<caps>
+  <server version="1.0" title="CineSync Prowlarr" strapline="A usenet and torrent meta indexer" />
+  <limits max="100" default="100"/>
+  <registration available="no" open="no"/>
+  <searching>
+    <search available="yes" supportedParams="q"/>
+    <tv-search available="yes" supportedParams="q,season,ep"/>
+    <movie-search available="yes" supportedParams="q,imdbid,tmdbid"/>
+    <music-search available="no" supportedParams=""/>
+    <audio-search available="no" supportedParams=""/>
+    <book-search available="no" supportedParams=""/>
+  </searching>
+  <categories>
+    <category id="2000" name="Movies">
+      <subcat id="2010" name="Foreign"/>
+      <subcat id="2020" name="Other"/>
+      <subcat id="2030" name="SD"/>
+      <subcat id="2040" name="HD"/>
+      <subcat id="2045" name="UHD"/>
+      <subcat id="2050" name="BluRay"/>
+      <subcat id="2060" name="3D"/>
+    </category>
+    <category id="5000" name="TV">
+      <subcat id="5010" name="WEB-DL"/>
+      <subcat id="5020" name="Foreign"/>
+      <subcat id="5030" name="SD"/>
+      <subcat id="5040" name="HD"/>
+      <subcat id="5045" name="UHD"/>
+      <subcat id="5050" name="Other"/>
+      <subcat id="5070" name="Anime"/>
+      <subcat id="5080" name="Documentary"/>
+    </category>
+  </categories>
+</caps>`
+
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(capsXML))
+}
+
+// HandleTorznabSearch handles GET /torznab/{indexerSlug}/api?t=search
+func HandleTorznabSearch(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleTorznabSearch: %v", err)
+			handleErrorResponse(w, "Torznab search request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// Extract parameters
+	query := r.URL.Query().Get("q")
+	categories := r.URL.Query().Get("cat")
+	limit := r.URL.Query().Get("limit")
+
+	// Extract indexer slug from path
+	pathParts := strings.Split(r.URL.Path, "/")
+	indexerSlug := "unknown"
+	if len(pathParts) >= 3 {
+		indexerSlug = pathParts[2]
+	}
+
+	logger.Info("Torznab search request for indexer: %s, query: %s, categories: %s, limit: %s",
+		indexerSlug, query, categories, limit)
+
+	// Return empty RSS feed for now
+	rssXML := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <atom:link href="http://localhost:9696/torznab/` + indexerSlug + `/api" rel="self" type="application/rss+xml"/>
+    <title>CineSync Prowlarr</title>
+    <description>A usenet and torrent meta indexer</description>
+    <language>en-us</language>
+    <category>search</category>
+  </channel>
+</rss>`
+
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(rssXML))
 }

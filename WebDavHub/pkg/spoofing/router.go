@@ -47,6 +47,10 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/downloadclient/": HandleSpoofedDownloadClient,
 		"/api/v3/indexer":         HandleSpoofedIndexer,
 		"/api/v3/indexer/":        HandleSpoofedIndexer,
+		"/api/v3/indexer/schema":  HandleSpoofedIndexerSchema,
+		"/api/v3/indexer/schema/": HandleSpoofedIndexerSchema,
+		"/api/v3/indexer/test":    HandleSpoofedIndexerTest,
+		"/api/v3/indexer/test/":   HandleSpoofedIndexerTest,
 		"/api/v3/importlist":      HandleSpoofedImportList,
 		"/api/v3/importlist/":     HandleSpoofedImportList,
 		"/api/v3/queue":           HandleSpoofedQueue,
@@ -135,6 +139,34 @@ func RegisterRoutes(mux *http.ServeMux) {
 
 	// Add circuit breaker status endpoint for monitoring
 	mux.HandleFunc("/api/spoofing/circuit-breaker/status", HandleCircuitBreakerStatus)
+
+	// Prowlarr v1 API endpoints for Radarr/Sonarr integration
+	prowlarrEndpoints := map[string]http.HandlerFunc{
+		"/api/v1/applications":         HandleProwlarrApplications,
+		"/api/v1/applications/":        HandleProwlarrApplications,
+		"/api/v1/applications/test":    HandleProwlarrApplicationTest,
+		"/api/v1/system/status":        HandleProwlarrSystemStatus,
+		"/api/v1/system/status/":       HandleProwlarrSystemStatus,
+		"/api/v1/indexer":              HandleProwlarrIndexers,
+		"/api/v1/indexer/":             HandleProwlarrIndexers,
+		"/api/v1/search":               HandleProwlarrSearch,
+		"/api/v1/search/":              HandleProwlarrSearch,
+	}
+
+	// Register Prowlarr endpoints with resilience wrappers
+	for path, handler := range prowlarrEndpoints {
+		resilientHandler := HandlerWrapper(RetryHandlerWrapper(handler, 3), 30)
+		mux.HandleFunc(path, AuthMiddleware(resilientHandler))
+	}
+
+	// Torznab endpoints (indexer proxy for Radarr)
+	mux.HandleFunc("/torznab/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("t") == "caps" {
+			HandleTorznabCaps(w, r)
+		} else {
+			HandleTorznabSearch(w, r)
+		}
+	})
 
 	// Register common endpoints with resilience wrappers
 	for path, handler := range commonEndpoints {
