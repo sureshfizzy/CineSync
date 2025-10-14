@@ -427,7 +427,7 @@ export default function IndexerManagement({ onBack }: IndexerManagementProps) {
                                 border: `1px solid ${alpha(getProtocolColor(indexer.protocol), 0.3)}`
                               }}
                             />
-                            {getStatusIcon(indexer.testStatus)}
+                            {indexer.testStatus && indexer.testStatus !== 'unknown' && getStatusIcon(indexer.testStatus)}
                           </Box>
                         }
                         secondary={
@@ -439,18 +439,20 @@ export default function IndexerManagement({ onBack }: IndexerManagementProps) {
                               {IndexerApi.formatIndexerUrl(indexer.url)}
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Chip
-                                label={TEST_STATUS_LABELS[indexer.testStatus || 'unknown']}
-                                size="small"
-                                sx={{
-                                  height: 18,
-                                  fontSize: '0.65rem',
-                                  bgcolor: alpha(TEST_STATUS_COLORS[indexer.testStatus || 'unknown'], 0.1),
-                                  color: TEST_STATUS_COLORS[indexer.testStatus || 'unknown'],
-                                  border: `1px solid ${alpha(TEST_STATUS_COLORS[indexer.testStatus || 'unknown'], 0.3)}`
-                                }}
-                              />
-                              {indexer.lastTested && (
+                              {indexer.testStatus && indexer.testStatus !== 'unknown' && (
+                                <Chip
+                                  label={TEST_STATUS_LABELS[indexer.testStatus]}
+                                  size="small"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: '0.65rem',
+                                    bgcolor: alpha(TEST_STATUS_COLORS[indexer.testStatus], 0.1),
+                                    color: TEST_STATUS_COLORS[indexer.testStatus],
+                                    border: `1px solid ${alpha(TEST_STATUS_COLORS[indexer.testStatus], 0.3)}`
+                                  }}
+                                />
+                              )}
+                              {indexer.testStatus && indexer.testStatus !== 'unknown' && indexer.lastTested && (
                                 <Typography variant="caption" color="text.secondary" sx={{
                                   fontSize: '0.65rem'
                                 }}>

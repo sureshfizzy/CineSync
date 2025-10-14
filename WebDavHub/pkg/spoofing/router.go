@@ -1,7 +1,8 @@
 package spoofing
 
 import (
-	"net/http"
+    "net/http"
+    prowlarrapi "cinesync/pkg/prowlarr"
 )
 
 // RegisterRoutes registers all spoofing routes with the given mux
@@ -141,17 +142,17 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spoofing/circuit-breaker/status", HandleCircuitBreakerStatus)
 
 	// Prowlarr v1 API endpoints for Radarr/Sonarr integration
-	prowlarrEndpoints := map[string]http.HandlerFunc{
-		"/api/v1/applications":         HandleProwlarrApplications,
-		"/api/v1/applications/":        HandleProwlarrApplications,
-		"/api/v1/applications/test":    HandleProwlarrApplicationTest,
-		"/api/v1/system/status":        HandleProwlarrSystemStatus,
-		"/api/v1/system/status/":       HandleProwlarrSystemStatus,
-		"/api/v1/indexer":              HandleProwlarrIndexers,
-		"/api/v1/indexer/":             HandleProwlarrIndexers,
-		"/api/v1/search":               HandleProwlarrSearch,
-		"/api/v1/search/":              HandleProwlarrSearch,
-	}
+    prowlarrEndpoints := map[string]http.HandlerFunc{
+        "/api/v1/applications":         prowlarrapi.HandleProwlarrApplications,
+        "/api/v1/applications/":        prowlarrapi.HandleProwlarrApplications,
+        "/api/v1/applications/test":    prowlarrapi.HandleProwlarrApplicationTest,
+        "/api/v1/system/status":        prowlarrapi.HandleProwlarrSystemStatus,
+        "/api/v1/system/status/":       prowlarrapi.HandleProwlarrSystemStatus,
+        "/api/v1/indexer":              prowlarrapi.HandleProwlarrIndexers,
+        "/api/v1/indexer/":             prowlarrapi.HandleProwlarrIndexers,
+        "/api/v1/search":               prowlarrapi.HandleProwlarrSearch,
+        "/api/v1/search/":              prowlarrapi.HandleProwlarrSearch,
+    }
 
 	// Register Prowlarr endpoints with resilience wrappers
 	for path, handler := range prowlarrEndpoints {
@@ -160,13 +161,13 @@ func RegisterRoutes(mux *http.ServeMux) {
 	}
 
 	// Torznab endpoints (indexer proxy for Radarr)
-	mux.HandleFunc("/torznab/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("t") == "caps" {
-			HandleTorznabCaps(w, r)
-		} else {
-			HandleTorznabSearch(w, r)
-		}
-	})
+    mux.HandleFunc("/torznab/", func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Query().Get("t") == "caps" {
+            prowlarrapi.HandleTorznabCaps(w, r)
+        } else {
+            prowlarrapi.HandleTorznabSearch(w, r)
+        }
+    })
 
 	// Register common endpoints with resilience wrappers
 	for path, handler := range commonEndpoints {
