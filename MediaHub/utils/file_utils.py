@@ -445,15 +445,17 @@ def normalize_unicode_characters(text: str) -> str:
     # Use the improved remove_accents function for accent removal
     text = remove_accents(text)
 
-    # Final cleanup: ensure we have clean ASCII
     try:
-        # Try to encode as ASCII to catch any remaining problematic characters
         text.encode('ascii')
         return text
     except UnicodeEncodeError:
-        # If there are still non-ASCII characters, use transliteration
-        # This is a more aggressive approach for stubborn characters
-        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        unicode_letters_digits = sum(1 for c in text if c.isalnum() and not c.isascii())
+        total_non_ascii = sum(1 for c in text if not c.isascii())
+
+        if unicode_letters_digits > 0 and unicode_letters_digits >= (total_non_ascii * 0.8):
+            return text
+        else:
+            text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
 
     # Remove empty parentheses that result from removing non-ASCII content
     import re
