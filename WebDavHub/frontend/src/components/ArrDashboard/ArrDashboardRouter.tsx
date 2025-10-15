@@ -3,6 +3,8 @@ import ArrDashboard from './ArrDashboard';
 import ArrSearchPage from './ArrSearchPage';
 import RootFoldersManagement from './RootFoldersManagement';
 import IndexerManagement from './IndexerManagement';
+import DebridDashboard from '../Debrid/DebridDashboard';
+import RealDebridSettings from '../Debrid/Settings/RealDebridSettings';
 
 export default function ArrDashboardRouter() {
   return (
@@ -19,6 +21,10 @@ export default function ArrDashboardRouter() {
       <Route path="settings" element={<Navigate to="/dashboard/settings/media-management" replace />} />
       <Route path="settings/media-management" element={<RootFoldersManagement />} />
       <Route path="settings/indexers" element={<IndexerManagement />} />
+
+      {/* Debrid */}
+      <Route path="debrid" element={<DebridDashboard />} />
+      <Route path="debrid/settings" element={<RealDebridSettings />} />
       
       {/* Search routes */}
       <Route path="search/movie" element={<ArrSearchPage mediaType="movie" />} />

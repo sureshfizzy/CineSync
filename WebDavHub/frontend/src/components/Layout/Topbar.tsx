@@ -2,6 +2,7 @@ import { AppBar, Box, Toolbar, Typography, IconButton, Avatar, Tooltip, useMedia
 import { useState, useEffect } from 'react';
 import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
+import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -30,19 +31,27 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   };
 
   const handleLogoClick = () => {
-    navigate('/dashboard');
+    // If currently on Debrid dashboard, keep user within Debrid
+    if (location.pathname.startsWith('/dashboard/debrid')) {
+      navigate('/dashboard/debrid');
+    } else {
+      navigate('/dashboard');
+    }
   };
 
   const onDashboard = true;
   const isArrDashboardRoute = location.pathname.startsWith('/dashboard/') && location.pathname !== '/dashboard';
   
   // Determine initial view based on current route
-  const getInitialView = (): 'current' | 'arrdash' => {
+  const getInitialView = (): 'current' | 'arrdash' | 'debrid' => {
+    if (location.pathname.startsWith('/dashboard/debrid')) return 'debrid';
     if (isArrDashboardRoute) return 'arrdash';
-    return (localStorage.getItem('dashboardView') === 'arrdash') ? 'arrdash' : 'current';
+    const saved = localStorage.getItem('dashboardView');
+    if (saved === 'arrdash' || saved === 'debrid') return saved as any;
+    return 'current';
   };
   
-  const [dashView, setDashView] = useState<'current' | 'arrdash'>(getInitialView());
+  const [dashView, setDashView] = useState<'current' | 'arrdash' | 'debrid'>(getInitialView());
   const [dashMenuAnchor, setDashMenuAnchor] = useState<null | HTMLElement>(null);
 
   // Update dashboard view when route changes
@@ -54,7 +63,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     }
   }, [location.pathname]);
 
-  const handleHeaderToggle = (_: any, v: 'current' | 'arrdash' | null) => {
+  const handleHeaderToggle = (_: any, v: 'current' | 'arrdash' | 'debrid' | null) => {
     if (!v || v === dashView) return;
     setDashView(v);
     localStorage.setItem('dashboardView', v);
@@ -64,6 +73,8 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
       navigate('/dashboard');
     } else if (v === 'arrdash') {
       navigate('/dashboard/movies');
+    } else if (v === 'debrid') {
+      navigate('/dashboard/debrid');
     }
     
     window.dispatchEvent(new CustomEvent('dashboardHeaderToggle', { detail: { view: v } }));
@@ -72,7 +83,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
 
   const openDashMenu = (e: React.MouseEvent<HTMLButtonElement>) => setDashMenuAnchor(e.currentTarget);
   const closeDashMenu = () => setDashMenuAnchor(null);
-  const chooseDashView = (v: 'current' | 'arrdash') => {
+  const chooseDashView = (v: 'current' | 'arrdash' | 'debrid') => {
     closeDashMenu();
     if (v !== dashView) handleHeaderToggle(null, v);
   };
@@ -273,6 +284,10 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                   <DashboardRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
                   ArrDash
                 </ToggleButton>
+                <ToggleButton value="debrid" aria-label="Debrid view">
+                  <CloudDownloadRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+                  Debrid
+                </ToggleButton>
               </ToggleButtonGroup>
             </Paper>
           )}
@@ -307,6 +322,9 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                 </MenuItem>
                 <MenuItem selected={dashView === 'arrdash'} onClick={() => chooseDashView('arrdash')}>
                   <DashboardRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> ArrDash
+                </MenuItem>
+                <MenuItem selected={dashView === 'debrid'} onClick={() => chooseDashView('debrid')}>
+                  <CloudDownloadRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> Debrid
                 </MenuItem>
               </Menu>
             </>

@@ -317,6 +317,14 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 		api.HandleRegenerateAPIKey(w, r)
 	})
 
+	// Real-Debrid configuration endpoints
+	apiMux.HandleFunc("/api/realdebrid/config", api.HandleRealDebridConfig)
+	apiMux.HandleFunc("/api/realdebrid/test", api.HandleRealDebridTest)
+	apiMux.HandleFunc("/api/realdebrid/status", api.HandleRealDebridStatus)
+	apiMux.HandleFunc("/api/realdebrid/unrestrict", api.HandleRealDebridUnrestrict)
+	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)
+	apiMux.HandleFunc("/api/realdebrid/downloads", api.HandleRealDebridDownloads)
+
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)
 
@@ -488,6 +496,12 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	} else {
 		logger.Warn("Authentication is disabled")
 	}
+
+	// Kick RD prefetch if configured
+	go func() {
+		time.Sleep(2 * time.Second)
+		api.PrefetchRealDebridData()
+	}()
 
 	// Wrap the root mux with global panic recovery
 	server := &http.Server{

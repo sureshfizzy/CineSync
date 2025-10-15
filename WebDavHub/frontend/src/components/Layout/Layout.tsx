@@ -2,6 +2,7 @@ import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
+import DebridSidebar from '../Debrid/DebridSidebar';
 import { ArrSidebar } from '../ArrDashboard';
 import Topbar from './Topbar';
 
@@ -103,7 +104,9 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               height: '100%',
             }}
           >
-            {(location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+            {(location.pathname.startsWith('/dashboard/debrid')) ? (
+              <DebridSidebar />
+            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
              location.pathname.startsWith('/dashboard/') ? (
               <ArrSidebar />
             ) : (
@@ -112,7 +115,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
                 onViewChange={handleViewChange}
                 onRefresh={handleRefresh}
               />
-            )}
+            ))}
           </Box>
         )}
 
@@ -136,7 +139,9 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               },
             }}
           >
-            {(location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+            {(location.pathname.startsWith('/dashboard/debrid')) ? (
+              <DebridSidebar />
+            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
              location.pathname.startsWith('/dashboard/') ? (
               <ArrSidebar />
             ) : (
@@ -146,7 +151,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
                 onViewChange={handleViewChange}
                 onRefresh={handleRefresh}
               />
-            )}
+            ))}
           </Drawer>
         )}
 
