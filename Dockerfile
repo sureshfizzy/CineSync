@@ -41,7 +41,7 @@ FROM python:3.11-slim
 
 # Install required system packages
 RUN apt-get update && \
-    apt-get install -y inotify-tools bash gosu curl psmisc ffmpeg && \
+    apt-get install -y inotify-tools bash gosu curl psmisc ffmpeg rclone fuse3 && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -71,6 +71,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Set working directory
 WORKDIR /app
+
+# Enable allow_other for FUSE inside the container
+RUN echo 'user_allow_other' >> /etc/fuse.conf || true
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python3", "WebDavHub/scripts/start-prod.py"]

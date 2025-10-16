@@ -2,10 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strings"
+	"time"
 
 	"cinesync/pkg/logger"
 	"cinesync/pkg/realdebrid"
@@ -45,6 +48,7 @@ func handleGetRealDebridConfig(w http.ResponseWriter, r *http.Request, configMan
 	response := map[string]interface{}{
 		"config": config,
 		"status": status,
+		"configPath": realdebrid.GetRcloneConfigPath(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -162,9 +166,11 @@ func HandleRealDebridTest(w http.ResponseWriter, r *http.Request) {
 
 // HandleRealDebridWebDAV handles Real-Debrid WebDAV operations
 func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
+	// Set CORS and WebDAV headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, PROPFIND")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Depth")
+	w.Header().Set("DAV", "1, 2")
 
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
@@ -179,27 +185,22 @@ func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	webdavClient := realdebrid.NewWebDAVClient(config.APIKey)
-
 	// Extract path from URL
-	path := strings.TrimPrefix(r.URL.Path, "/api/realdebrid/webdav")
-	if path == "" {
-		path = "/"
+	reqPath := strings.TrimPrefix(r.URL.Path, "/api/realdebrid/webdav")
+	if reqPath == "" {
+		reqPath = "/"
 	}
 
 	switch r.Method {
-	case http.MethodGet:
-		handleWebDAVGet(w, r, webdavClient, path)
-	case http.MethodPost:
-		handleWebDAVPost(w, r, webdavClient, path)
-	case http.MethodPut:
-		handleWebDAVPut(w, r, webdavClient, path)
-	case http.MethodDelete:
-		handleWebDAVDelete(w, r, webdavClient, path)
+	case "PROPFIND":
+		handleTorrentPropfind(w, r, config.APIKey, reqPath)
+	case "GET", "HEAD":
+		handleTorrentGet(w, r, config.APIKey, reqPath)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
 
 // HandleRealDebridDownloads lists user's torrents from cache via REST API with pagination
 func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
@@ -521,6 +522,232 @@ func HandleRealDebridStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+// HandleRcloneMount handles rclone mount requests
+func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		logger.Warn("Invalid method for rclone mount: %s", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var rcloneConfigMap map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&rcloneConfigMap); err != nil {
+		logger.Error("Failed to decode rclone config: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Merge with defaults from config
+	configManager := realdebrid.GetConfigManager()
+	defaultConfig := configManager.GetConfig().RcloneSettings
+	rcloneConfig := defaultConfig
+	
+	// Apply only non-empty values from the request
+	if enabled, ok := rcloneConfigMap["enabled"].(bool); ok {
+		rcloneConfig.Enabled = enabled
+	}
+	if mountPath, ok := rcloneConfigMap["mountPath"].(string); ok && mountPath != "" {
+		rcloneConfig.MountPath = mountPath
+	}
+
+	if vfsCacheMode, ok := rcloneConfigMap["vfsCacheMode"].(string); ok && vfsCacheMode != "" {
+		rcloneConfig.VfsCacheMode = vfsCacheMode
+	}
+	if vfsCacheMaxSize, ok := rcloneConfigMap["vfsCacheMaxSize"].(string); ok && vfsCacheMaxSize != "" {
+		rcloneConfig.VfsCacheMaxSize = vfsCacheMaxSize
+	}
+	if vfsCacheMaxAge, ok := rcloneConfigMap["vfsCacheMaxAge"].(string); ok && vfsCacheMaxAge != "" {
+		rcloneConfig.VfsCacheMaxAge = vfsCacheMaxAge
+	}
+	if bufferSize, ok := rcloneConfigMap["bufferSize"].(string); ok && bufferSize != "" {
+		rcloneConfig.BufferSize = bufferSize
+	}
+	if dirCacheTime, ok := rcloneConfigMap["dirCacheTime"].(string); ok && dirCacheTime != "" {
+		rcloneConfig.DirCacheTime = dirCacheTime
+	}
+	if pollInterval, ok := rcloneConfigMap["pollInterval"].(string); ok && pollInterval != "" {
+		rcloneConfig.PollInterval = pollInterval
+	}
+	if rclonePath, ok := rcloneConfigMap["rclonePath"].(string); ok {
+		rcloneConfig.RclonePath = rclonePath
+	}
+
+    rcloneConfig.RemoteName = "CineSync"
+
+
+    cfg := configManager.GetConfig()
+    if !cfg.Enabled {
+        http.Error(w, "Real-Debrid is not enabled", http.StatusBadRequest)
+        return
+    }
+
+	// Start mount
+	rcloneManager := realdebrid.GetRcloneManager()
+	status, err := rcloneManager.Mount(rcloneConfig)
+	if err != nil {
+		logger.Error("Mount failed: %v", err)
+		response := map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	// Check if mount actually succeeded
+	if status.Error != "" {
+		logger.Error("Mount status indicates error: %s", status.Error)
+		response := map[string]interface{}{
+			"success": false,
+			"error":   status.Error,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	logger.Info("Mount completed successfully: %+v", status)
+
+	response := map[string]interface{}{
+		"success": true,
+		"status":  status,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRcloneUnmount handles rclone unmount requests
+func HandleRcloneUnmount(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get mount path from query parameter or request body
+	mountPath := r.URL.Query().Get("path")
+	if mountPath == "" {
+		var request struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err == nil {
+			mountPath = request.Path
+		}
+	}
+
+	if mountPath == "" {
+		http.Error(w, "Mount path is required", http.StatusBadRequest)
+		return
+	}
+
+	rcloneManager := realdebrid.GetRcloneManager()
+	status, err := rcloneManager.Unmount(mountPath)
+	if err != nil {
+		response := map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"status":  status,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRcloneStatus handles rclone status requests
+func HandleRcloneStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rcloneManager := realdebrid.GetRcloneManager()
+	statuses := rcloneManager.GetAllStatuses()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(statuses)
+}
+
+// HandleRcloneTest handles rclone test requests
+func HandleRcloneTest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		RclonePath string `json:"rclonePath"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	rcloneManager := realdebrid.GetRcloneManager()
+	isAvailable := rcloneManager.IsRcloneAvailable(request.RclonePath)
+
+	if isAvailable {
+		response := map[string]interface{}{
+			"success": true,
+			"message": "Rclone is available",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	} else {
+		response := map[string]interface{}{
+			"success": false,
+			"error":   "Rclone is not available at the specified path",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
 // Background prefetch on server start (called from main)
 var rdPrefetchOnce bool
 var cachedTorrents []realdebrid.TorrentItem
@@ -550,16 +777,6 @@ func PrefetchRealDebridData() {
         } else {
             cachedTorrents = torrents
             logger.Info("[RD] Torrents fetched: %d", len(torrents))
-            // Progress logs in 1000 batches
-            total := len(torrents)
-            processed := 0
-            batch := 1000
-            for processed < total {
-                next := processed + batch
-                if next > total { next = total }
-                logger.Info("[RD] Progress: %d/%d torrents processed", next, total)
-                processed = next
-            }
         }
 
         // Fetch downloads in batches of 1000 using pagination when available
@@ -568,20 +785,239 @@ func PrefetchRealDebridData() {
             logger.Warn("[RD] Failed to fetch downloads: %v", err)
         } else {
             cachedDownloads = downloads
-            logger.Info("[RD] Downloads fetched: %d", len(downloads))
-            batchSize := 1000
-            for i := 0; i < len(downloads); i += batchSize {
-                end := i + batchSize
-                if end > len(downloads) { end = len(downloads) }
-                batch := downloads[i:end]
-                logger.Info("[RD] Processing batch %d-%d/%d", i+1, end, len(downloads))
-                // Here we could cache/index, for now just log first item
-                if len(batch) > 0 {
-                    logger.Debug("[RD] Batch sample: %s", batch[0].Filename)
-                }
-            }
         }
 
         logger.Info("[RD] Prefetch completed")
     }()
+}
+
+// WebDAV XML structures for VFS PROPFIND responses
+type multistatus struct {
+	XMLName   xml.Name   `xml:"D:multistatus"`
+	Xmlns     string     `xml:"xmlns:D,attr"`
+	Responses []response `xml:"D:response"`
+}
+
+type response struct {
+	Href     string   `xml:"D:href"`
+	Propstat propstat `xml:"D:propstat"`
+}
+
+type propstat struct {
+	Prop   prop   `xml:"D:prop"`
+	Status string `xml:"D:status"`
+}
+
+type prop struct {
+	DisplayName      string        `xml:"D:displayname,omitempty"`
+	CreationDate     string        `xml:"D:creationdate,omitempty"`
+	GetLastModified  string        `xml:"D:getlastmodified,omitempty"`
+	GetContentLength int64         `xml:"D:getcontentlength,omitempty"`
+	GetContentType   string        `xml:"D:getcontenttype,omitempty"`
+	ResourceType     *resourceType `xml:"D:resourcetype,omitempty"`
+}
+
+type resourceType struct {
+	Collection *struct{} `xml:"D:collection,omitempty"`
+}
+
+type torrentNode struct {
+	Name      string
+	IsDir     bool
+	Size      int64
+	TorrentID string
+	FileID    int
+}
+
+// handleTorrentPropfind handles PROPFIND requests to list torrents
+func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
+	depth := r.Header.Get("Depth")
+	if depth == "" {
+		depth = "1"
+	}
+
+	tm := realdebrid.GetTorrentManager(apiKey)
+	if err := tm.RefreshTorrentList(); err != nil {
+		logger.Error("[Torrents] Failed to refresh: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Parse path: / or /torrent_name or /torrent_name/subpath
+	reqPath = strings.Trim(reqPath, "/")
+	parts := strings.Split(reqPath, "/")
+	
+	var nodes []torrentNode
+	var basePath string
+
+	if reqPath == "" {
+		basePath = "/api/realdebrid/webdav"
+		torrents := tm.ListTorrents()
+		for _, t := range torrents {
+			nodes = append(nodes, torrentNode{
+				Name:  realdebrid.SanitizeFilename(t.Filename),
+				IsDir: true,
+				Size:  t.Bytes,
+			})
+		}
+	} else {
+		torrentName := parts[0]
+		subPath := ""
+		if len(parts) > 1 {
+			subPath = strings.Join(parts[1:], "/")
+		}
+
+		torrentID, err := tm.FindTorrentByName(torrentName)
+		if err != nil {
+			http.Error(w, "Torrent not found", http.StatusNotFound)
+			return
+		}
+
+		fileNodes, err := tm.ListTorrentFiles(torrentID, subPath)
+		if err != nil {
+			logger.Error("[Torrents] Failed to list files: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		basePath = "/api/realdebrid/webdav/" + reqPath
+		for _, fn := range fileNodes {
+			nodes = append(nodes, torrentNode{
+				Name:      fn.Name,
+				IsDir:     fn.IsDir,
+				Size:      fn.Size,
+				TorrentID: fn.TorrentID,
+				FileID:    fn.FileID,
+			})
+		}
+	}
+
+	// Build WebDAV response
+	ms := multistatus{
+		Xmlns:     "DAV:",
+		Responses: []response{},
+	}
+
+	// Add current directory
+	ms.Responses = append(ms.Responses, response{
+		Href: basePath,
+		Propstat: propstat{
+			Prop: prop{
+				DisplayName:      path.Base(basePath),
+				CreationDate:     time.Now().Format(time.RFC3339),
+				GetLastModified:  time.Now().Format(time.RFC1123),
+				ResourceType:     &resourceType{Collection: &struct{}{}},
+			},
+			Status: "HTTP/1.1 200 OK",
+		},
+	})
+
+	// Add child nodes if depth > 0
+	if depth != "0" {
+		for _, node := range nodes {
+			nodePath := path.Join(basePath, node.Name)
+			resp := response{
+				Href: nodePath,
+				Propstat: propstat{
+					Prop: prop{
+						DisplayName:     node.Name,
+						CreationDate:    time.Now().Format(time.RFC3339),
+						GetLastModified: time.Now().Format(time.RFC1123),
+					},
+					Status: "HTTP/1.1 200 OK",
+				},
+			}
+
+			if node.IsDir {
+				resp.Propstat.Prop.ResourceType = &resourceType{Collection: &struct{}{}}
+			} else {
+				resp.Propstat.Prop.GetContentLength = node.Size
+				resp.Propstat.Prop.GetContentType = "application/octet-stream"
+			}
+
+			ms.Responses = append(ms.Responses, resp)
+		}
+	}
+
+	// Marshal XML
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.WriteHeader(http.StatusMultiStatus)
+
+	xmlData, err := xml.MarshalIndent(ms, "", "  ")
+	if err != nil {
+		logger.Error("[VFS] Failed to marshal XML: %v", err)
+		return
+	}
+
+	w.Write([]byte(xml.Header))
+	w.Write(xmlData)
+}
+
+// handleTorrentGet handles GET/HEAD requests to download files from torrents
+func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
+	tm := realdebrid.GetTorrentManager(apiKey)
+	
+	// Parse path: /torrent_name/file_path
+	reqPath = strings.Trim(reqPath, "/")
+	parts := strings.Split(reqPath, "/")
+	
+	if len(parts) < 2 {
+		http.Error(w, "Invalid file path", http.StatusBadRequest)
+		return
+	}
+
+	torrentName := parts[0]
+	filePath := strings.Join(parts[1:], "/")
+
+	torrentID, err := tm.FindTorrentByName(torrentName)
+	if err != nil {
+		http.Error(w, "Torrent not found", http.StatusNotFound)
+		return
+	}
+
+	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
+	if err != nil {
+		logger.Error("[Torrents] Failed to get download URL: %v", err)
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// For HEAD requests
+	if r.Method == "HEAD" {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", fileSize))
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// For GET requests, proxy the content
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy headers
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.WriteHeader(resp.StatusCode)
+
+	io.Copy(w, resp.Body)
 }

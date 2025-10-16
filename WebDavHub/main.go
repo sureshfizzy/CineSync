@@ -22,6 +22,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/realdebrid"
 	"cinesync/pkg/server"
 	"cinesync/pkg/spoofing"
 	"cinesync/pkg/webdav"
@@ -324,6 +325,10 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/unrestrict", api.HandleRealDebridUnrestrict)
 	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)
 	apiMux.HandleFunc("/api/realdebrid/downloads", api.HandleRealDebridDownloads)
+	apiMux.HandleFunc("/api/realdebrid/rclone/mount", api.HandleRcloneMount)
+	apiMux.HandleFunc("/api/realdebrid/rclone/unmount", api.HandleRcloneUnmount)
+	apiMux.HandleFunc("/api/realdebrid/rclone/status", api.HandleRcloneStatus)
+	apiMux.HandleFunc("/api/realdebrid/rclone/test", api.HandleRcloneTest)
 
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)
@@ -464,7 +469,13 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-shutdown
-		logger.Info("Shutting down: stopping job manager and checkpointing SQLite WAL...")
+		logger.Info("Shutting down: cleaning up rclone mounts, stopping job manager and checkpointing SQLite WAL...")
+
+		// Cleanup all rclone mounts
+		rcloneManager := realdebrid.GetRcloneManager()
+		rcloneManager.CleanupAllMounts()
+
+		// Stop job manager and cleanup databases
 		api.StopJobManager()
 		if db.DB() != nil {
 			db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")

@@ -185,42 +185,6 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 	return &downloadLink, nil
 }
 
-// GetDownloadLinks retrieves download links for a torrent
-func (c *Client) GetDownloadLinks(torrentID string) ([]DownloadLink, error) {
-	if c.apiKey == "" {
-		return nil, fmt.Errorf("API key not set")
-	}
-
-	req, err := http.NewRequest("GET", c.baseURL+"/downloads/links/"+torrentID, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		var errorResp ErrorResponse
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-		}
-		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-	}
-
-	var links []DownloadLink
-	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return links, nil
-}
 
 // GetDownloads retrieves the user's downloads list
 func (c *Client) GetDownloads() ([]DownloadItem, error) {
@@ -325,37 +289,6 @@ func (c *Client) GetAllDownloads(limitPerPage int) ([]DownloadItem, error) {
     return all, nil
 }
 
-// GetTorrents retrieves torrent list (best effort). If endpoint unsupported, returns empty slice.
-func (c *Client) GetTorrents() ([]TorrentItem, error) {
-    if c.apiKey == "" {
-        return nil, fmt.Errorf("API key not set")
-    }
-
-    req, err := http.NewRequest("GET", c.baseURL+"/torrents", nil)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create request: %w", err)
-    }
-    req.Header.Set("Authorization", "Bearer "+c.apiKey)
-    req.Header.Set("Content-Type", "application/json")
-
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return nil, fmt.Errorf("failed to make request: %w", err)
-    }
-    defer resp.Body.Close()
-
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        _ = body
-        return []TorrentItem{}, nil
-    }
-
-    var items []TorrentItem
-    if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-        return nil, fmt.Errorf("failed to decode response: %w", err)
-    }
-    return items, nil
-}
 
 // GetTorrentsBatch tries common pagination patterns for torrents
 func (c *Client) GetTorrentsBatch(limit, offset int) ([]TorrentItem, error) {
@@ -457,6 +390,66 @@ func (c *Client) GetAllTorrents(limitPerPage int) ([]TorrentItem, error) {
     }
 
     return all, nil
+}
+
+// TorrentFile represents a file within a torrent
+type TorrentFile struct {
+	ID       int    `json:"id"`
+	Path     string `json:"path"`
+	Bytes    int64  `json:"bytes"`
+	Selected int    `json:"selected"`
+}
+
+// TorrentInfo represents detailed information about a torrent
+type TorrentInfo struct {
+	ID           string         `json:"id"`
+	Filename     string         `json:"filename"`
+	OriginalFilename string     `json:"original_filename,omitempty"`
+	Hash         string         `json:"hash"`
+	Bytes        int64          `json:"bytes"`
+	OriginalBytes int64         `json:"original_bytes,omitempty"`
+	Host         string         `json:"host"`
+	Split        int            `json:"split"`
+	Progress     float64        `json:"progress"`
+	Status       string         `json:"status"`
+	Added        string         `json:"added"`
+	Files        []TorrentFile  `json:"files"`
+	Links        []string       `json:"links"`
+	Ended        string         `json:"ended,omitempty"`
+	Speed        int64          `json:"speed,omitempty"`
+	Seeders      int            `json:"seeders,omitempty"`
+}
+
+// GetTorrentInfo retrieves detailed information about a specific torrent
+func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+
+	req, err := http.NewRequest("GET", c.baseURL+"/torrents/info/"+torrentID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var info TorrentInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &info, nil
 }
 
 // IsValidAPIKey checks if the provided API key is valid
