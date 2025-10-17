@@ -183,9 +183,15 @@ func (rm *RcloneManager) Unmount(mountPath string) (*MountStatus, error) {
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
 
-	mount, exists := rm.mounts[mountPath]
+	normalizedPath := normalizeMountPath(mountPath)
+	mount, exists := rm.mounts[normalizedPath]
 	if !exists {
-		return &MountStatus{Error: "mount not found"}, fmt.Errorf("mount not found")
+		mount, exists = rm.mounts[mountPath]
+		if !exists {
+			return &MountStatus{Error: "mount not found"}, fmt.Errorf("mount not found")
+		}
+	} else {
+		mountPath = normalizedPath
 	}
 
 	// Try graceful unmount first
@@ -211,9 +217,13 @@ func (rm *RcloneManager) GetStatus(mountPath string) *MountStatus {
 	rm.mutex.RLock()
 	defer rm.mutex.RUnlock()
 
-	mount, exists := rm.mounts[mountPath]
+	normalizedPath := normalizeMountPath(mountPath)
+	mount, exists := rm.mounts[normalizedPath]
 	if !exists {
-		return &MountStatus{Mounted: false}
+		mount, exists = rm.mounts[mountPath]
+		if !exists {
+			return &MountStatus{Mounted: false}
+		}
 	}
 
 	if !rm.isProcessRunning(mount.ProcessID) {
@@ -245,6 +255,15 @@ func (rm *RcloneManager) GetAllStatuses() map[string]*MountStatus {
 		}
 	}
 	return statuses
+}
+
+func normalizeMountPath(path string) string {
+	if runtime.GOOS == "windows" {
+		if len(path) == 2 && path[1] == ':' {
+			return path + "\\"
+		}
+	}
+	return path
 }
 
 // buildRcloneArgs builds the rclone command arguments
