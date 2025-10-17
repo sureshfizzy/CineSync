@@ -592,7 +592,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 
 	// Start mount
 	rcloneManager := realdebrid.GetRcloneManager()
-	status, err := rcloneManager.Mount(rcloneConfig)
+	status, err := rcloneManager.Mount(rcloneConfig, cfg.APIKey)
 	if err != nil {
 		logger.Error("Mount failed: %v", err)
 		response := map[string]interface{}{

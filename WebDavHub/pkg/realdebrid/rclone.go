@@ -68,7 +68,7 @@ type MountStatus struct {
 }
 
 // Mount starts an rclone mount
-func (rm *RcloneManager) Mount(config RcloneSettings) (*MountStatus, error) {
+func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStatus, error) {
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
 
@@ -117,6 +117,11 @@ func (rm *RcloneManager) Mount(config RcloneSettings) (*MountStatus, error) {
 	// Check if rclone is available
 	if !rm.isRcloneAvailable(config.RclonePath) {
 		return &MountStatus{Error: "rclone is not installed or not in PATH"}, fmt.Errorf("rclone is not available")
+	}
+
+	// Create rclone config if it doesn't exist
+	if err := CreateRcloneConfig(apiKey, config.RclonePath); err != nil {
+		return &MountStatus{Error: fmt.Sprintf("failed to create rclone config: %v", err)}, err
 	}
 
 	// Build rclone command
@@ -272,6 +277,7 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"mount",
 		config.RemoteName + ":",
 		config.MountPath,
+		"--config", GetRcloneConfigPath(),
 		"--vfs-cache-mode", config.VfsCacheMode,
 		"--vfs-cache-max-size", config.VfsCacheMaxSize,
 		"--vfs-cache-max-age", config.VfsCacheMaxAge,
@@ -468,22 +474,18 @@ func GetRcloneConfigPath() string {
 	}
 	
 	if runtime.GOOS == "windows" {
-		return filepath.Join(homeDir, "AppData", "Roaming", "rclone", "rclone.conf")
+		return filepath.Join(homeDir, "AppData", "Roaming", "rclone", "cinesync.conf")
 	} else {
-		return filepath.Join(homeDir, ".config", "rclone", "rclone.conf")
+		return filepath.Join(homeDir, ".config", "rclone", "cinesync.conf")
 	}
 }
 
 // CreateRcloneConfig creates a basic rclone config for Real-Debrid
-func CreateRcloneConfig(apiKey string) error {
+func CreateRcloneConfig(apiKey string, rclonePath string) error {
 	configPath := GetRcloneConfigPath()
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
-
-	logger.Info("=== RCLONE CONFIG DEBUG ===")
-	logger.Info("Config path: %s", configPath)
-	logger.Info("API key length: %d", len(apiKey))
 
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
@@ -493,38 +495,22 @@ func CreateRcloneConfig(apiKey string) error {
 
 	// Check if config already exists
 	if _, err := os.Stat(configPath); err == nil {
-		logger.Info("Rclone config already exists at: %s", configPath)
-		// Read existing config to verify it's correct
-		existingConfig, err := os.ReadFile(configPath)
-		if err != nil {
-			logger.Warn("Failed to read existing config: %v", err)
-		} else {
-			logger.Info("Existing config content: %s", string(existingConfig))
-		}
-		return nil
+		return UpdateRcloneConfig(apiKey, rclonePath)
 	}
 
     // Enforce default remote name
     remoteName := "CineSync"
-    logger.Info("Using remote name: %s", remoteName)
 
 	// Get CineSync credentials for authentication
 	username := env.GetString("CINESYNC_USERNAME", "admin")
 	password := env.GetString("CINESYNC_PASSWORD", "admin")
 	webdavPort := env.GetInt("CINESYNC_API_PORT", 8082)
 	
-	logger.Info("=== PASSWORD OBSCURING DEBUG ===")
-	logger.Info("Username: %s", username)
-	logger.Info("Password: %s", password)
-	logger.Info("WebDAV Port: %d", webdavPort)
-	
-	obscuredPassword, err := obscurePassword(password, "")
+	obscuredPassword, err := obscurePassword(password, rclonePath)
 	if err != nil {
 		logger.Error("Failed to obscure password: %v", err)
 		logger.Warn("Using plain text password as fallback")
 		obscuredPassword = password
-	} else {
-		logger.Info("Password obscured successfully: %s", obscuredPassword)
 	}
 	
 	config := fmt.Sprintf(`[%s]
@@ -539,7 +525,6 @@ vendor = other
 		return fmt.Errorf("failed to write rclone config: %v", err)
 	}
 
-	logger.Info("Created rclone config at: %s", configPath)
 	return nil
 }
 
