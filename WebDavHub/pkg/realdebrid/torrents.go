@@ -171,51 +171,27 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 		}
 	}
 
-	// Single file - return directly
-	if len(selectedFiles) == 1 && subPath == "" {
-		file := selectedFiles[0]
-		cleanPath := strings.Trim(file.Path, "/")
-		fileName := path.Base(cleanPath)
-
-		return []FileNode{{
-			Name:      fileName,
-			IsDir:     false,
-			Size:      file.Bytes,
-			TorrentID: torrentID,
-			FileID:    file.ID,
-		}}, nil
-	}
-
-	// Multiple files or subdirectory
-	dirMap := make(map[string]bool)
+	// Flatten all files to a single level
+	// Use only the filename, ignoring directory structure
 	fileMap := make(map[string]TorrentFile)
+	duplicateCount := make(map[string]int)
 
 	for _, file := range selectedFiles {
 		cleanPath := strings.Trim(file.Path, "/")
+		fileName := path.Base(cleanPath)
 
-		// Filter by subpath if specified
-		if subPath != "" {
-			if !strings.HasPrefix(cleanPath, subPath+"/") {
-				continue
-			}
-			cleanPath = strings.TrimPrefix(cleanPath, subPath+"/")
+		// Handle duplicate filenames by adding a counter
+		if existingFile, exists := fileMap[fileName]; exists {
+			duplicateCount[fileName]++
+			ext := path.Ext(fileName)
+			nameWithoutExt := strings.TrimSuffix(fileName, ext)
+			fileName = fmt.Sprintf("%s (%d)%s", nameWithoutExt, existingFile.ID, ext)
 		}
 
-		parts := strings.Split(cleanPath, "/")
-		if len(parts) > 1 {
-			dirMap[parts[0]] = true
-		} else {
-			fileMap[cleanPath] = file
-		}
+		fileMap[fileName] = file
 	}
 
 	var nodes []FileNode
-	for dirName := range dirMap {
-		nodes = append(nodes, FileNode{
-			Name:  dirName,
-			IsDir: true,
-		})
-	}
 	for fileName, file := range fileMap {
 		nodes = append(nodes, FileNode{
 			Name:      fileName,
@@ -239,10 +215,13 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 	// Find the file
 	var targetFile *TorrentFile
 	for i, file := range info.Files {
-		cleanFilePath := strings.Trim(file.Path, "/")
-		if cleanFilePath == filePath || file.Path == filePath || file.Path == "/"+filePath {
-			targetFile = &info.Files[i]
-			break
+		if file.Selected == 1 {
+			cleanPath := strings.Trim(file.Path, "/")
+			fileName := path.Base(cleanPath)
+			if fileName == filePath {
+				targetFile = &info.Files[i]
+				break
+			}
 		}
 	}
 
