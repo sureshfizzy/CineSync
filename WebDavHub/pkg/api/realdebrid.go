@@ -251,7 +251,7 @@ func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
     } else {
         client := realdebrid.NewClient(cfg.APIKey)
         var err error
-        items, err = client.GetAllTorrents(1000)
+        items, err = client.GetAllTorrents(1000, nil)
         if err != nil {
             http.Error(w, err.Error(), http.StatusBadGateway)
             return
@@ -771,12 +771,18 @@ func PrefetchRealDebridData() {
         client := realdebrid.NewClient(cfg.APIKey)
 
         // Fetch all torrents in batches
-        torrents, err := client.GetAllTorrents(1000)
+        torrents, err := client.GetAllTorrents(1000, func(current, total int) {
+            if current%1000 == 0 || current == total {
+                logger.Info("[RD] Progress: %d torrents fetched", current)
+            }
+        })
         if err != nil {
             logger.Warn("[RD] Failed to fetch torrents: %v", err)
         } else {
             cachedTorrents = torrents
             logger.Info("[RD] Torrents fetched: %d", len(torrents))
+            tm := realdebrid.GetTorrentManager(cfg.APIKey)
+            tm.SetPrefetchedTorrents(torrents)
         }
 
         // Fetch downloads in batches of 1000 using pagination when available
@@ -837,13 +843,6 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	}
 
 	tm := realdebrid.GetTorrentManager(apiKey)
-	if err := tm.RefreshTorrentList(); err != nil {
-		logger.Error("[Torrents] Failed to refresh: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Parse path: / or /torrent_name or /torrent_name/subpath
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
 	
@@ -852,35 +851,51 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 
 	if reqPath == "" {
 		basePath = "/api/realdebrid/webdav"
-		torrents := tm.ListTorrents()
-		for _, t := range torrents {
+		nodes = append(nodes, torrentNode{
+			Name:  realdebrid.ALL_TORRENTS,
+			IsDir: true,
+			Size:  0,
+		})
+	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) == 1 {
+		basePath = "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS
+		allTorrents := tm.GetAllTorrentsFromDirectory(realdebrid.ALL_TORRENTS)
+		nodes = make([]torrentNode, 0, len(allTorrents))
+		
+		for _, t := range allTorrents {
 			nodes = append(nodes, torrentNode{
 				Name:  realdebrid.SanitizeFilename(t.Filename),
 				IsDir: true,
 				Size:  t.Bytes,
 			})
 		}
-	} else {
-		torrentName := parts[0]
+	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
+		torrentName := parts[1]
 		subPath := ""
-		if len(parts) > 1 {
-			subPath = strings.Join(parts[1:], "/")
+		if len(parts) > 2 {
+			subPath = strings.Join(parts[2:], "/")
 		}
 
+		// Find torrent by name
 		torrentID, err := tm.FindTorrentByName(torrentName)
 		if err != nil {
+			logger.Error("[WebDAV] Torrent not found: %s", torrentName)
 			http.Error(w, "Torrent not found", http.StatusNotFound)
 			return
 		}
 
+		// List files in the torrent
 		fileNodes, err := tm.ListTorrentFiles(torrentID, subPath)
 		if err != nil {
-			logger.Error("[Torrents] Failed to list files: %v", err)
+			logger.Error("[WebDAV] Failed to list files for torrent %s: %v", torrentID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		basePath = "/api/realdebrid/webdav/" + reqPath
+		
+		// Pre-allocate nodes slice
+		nodes = make([]torrentNode, 0, len(fileNodes))
+		
 		for _, fn := range fileNodes {
 			nodes = append(nodes, torrentNode{
 				Name:      fn.Name,
@@ -890,6 +905,10 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				FileID:    fn.FileID,
 			})
 		}
+	} else {
+		logger.Error("[WebDAV] Invalid path requested: %s", reqPath)
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
 	}
 
 	// Build WebDAV response
@@ -957,17 +976,17 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
 	tm := realdebrid.GetTorrentManager(apiKey)
 	
-	// Parse path: /torrent_name/file_path
+	// Parse path: /__all__/torrent_name/file_path
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
 	
-	if len(parts) < 2 {
+	if len(parts) < 3 || parts[0] != realdebrid.ALL_TORRENTS {
 		http.Error(w, "Invalid file path", http.StatusBadRequest)
 		return
 	}
 
-	torrentName := parts[0]
-	filePath := strings.Join(parts[1:], "/")
+	torrentName := parts[1]
+	filePath := strings.Join(parts[2:], "/")
 
 	torrentID, err := tm.FindTorrentByName(torrentName)
 	if err != nil {

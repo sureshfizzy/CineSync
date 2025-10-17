@@ -324,7 +324,7 @@ func (c *Client) GetTorrentsBatch(limit, offset int) ([]TorrentItem, error) {
 }
 
 // GetAllTorrents fetches all torrents in batches
-func (c *Client) GetAllTorrents(limitPerPage int) ([]TorrentItem, error) {
+func (c *Client) GetAllTorrents(limitPerPage int, progressCallback func(int, int)) ([]TorrentItem, error) {
     if limitPerPage <= 0 { limitPerPage = 1000 }
     all := make([]TorrentItem, 0, limitPerPage)
     seen := make(map[string]struct{})
@@ -348,6 +348,11 @@ func (c *Client) GetAllTorrents(limitPerPage int) ([]TorrentItem, error) {
             all = append(all, it)
             added++
         }
+
+        if progressCallback != nil {
+            progressCallback(len(all), len(all))
+        }
+        
         if len(items) < limitPerPage || added == 0 {
             return all, nil
         }

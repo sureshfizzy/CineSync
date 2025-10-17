@@ -8,6 +8,11 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	cmap "github.com/orcaman/concurrent-map/v2"
+)
+
+const (
+	ALL_TORRENTS = "__all__"
 )
 
 // TorrentManager manages cached torrent listings
@@ -17,7 +22,7 @@ type TorrentManager struct {
 	torrentList   []TorrentItem
 	cacheMutex    sync.RWMutex
 	lastCacheTime time.Time
-	cacheDuration time.Duration
+	DirectoryMap cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *TorrentItem]]
 }
 
 var (
@@ -45,33 +50,76 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		client:        NewClient(apiKey),
 		torrentCache:  make(map[string]*TorrentInfo),
 		torrentList:   []TorrentItem{},
-		cacheDuration: 5 * time.Minute,
+		DirectoryMap:  cmap.New[cmap.ConcurrentMap[string, *TorrentItem]](),
 	}
+	
+	// Initialize special directories
+	torrentManager.initializeDirectoryMaps()
 
 	return torrentManager
 }
 
-// RefreshTorrentList refreshes the list of torrents
-func (tm *TorrentManager) RefreshTorrentList() error {
+// initializeDirectoryMaps initializes the special directories
+func (tm *TorrentManager) initializeDirectoryMaps() {
+	tm.DirectoryMap.Set(ALL_TORRENTS, cmap.New[*TorrentItem]())
+}
+
+// SetPrefetchedTorrents seeds the torrent manager with prefetched data
+func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	tm.cacheMutex.Lock()
 	defer tm.cacheMutex.Unlock()
 
-	if time.Since(tm.lastCacheTime) < tm.cacheDuration && len(tm.torrentList) > 0 {
-		return nil
-	}
-
-    logger.Debug("[Torrents] Refreshing torrent list...")
-	torrents, err := tm.client.GetAllTorrents(1000)
-	if err != nil {
-		return fmt.Errorf("failed to fetch torrents: %w", err)
-	}
-
 	tm.torrentList = torrents
 	tm.lastCacheTime = time.Now()
-    logger.Debug("[Torrents] Cached %d torrents", len(torrents))
 
-	return nil
+	// Update directory maps
+	tm.updateDirectoryMaps(torrents)
+
+	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", len(torrents))
 }
+
+
+// updateDirectoryMaps updates the directory maps with torrents
+func (tm *TorrentManager) updateDirectoryMaps(torrents []TorrentItem) {
+	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+	if !ok {
+		logger.Error("[Torrents] ALL_TORRENTS directory not found")
+		return
+	}
+
+	logger.Info("[Torrents] Updating directory maps with %d torrents", len(torrents))
+
+	// Clear existing torrents
+	allTorrents.Clear()
+
+	for i := range torrents {
+		torrent := &torrents[i]
+		accessKey := SanitizeFilename(torrent.Filename)
+		allTorrents.Set(accessKey, torrent)
+		individualDir := cmap.New[*TorrentItem]()
+		individualDir.Set(accessKey, torrent)
+		tm.DirectoryMap.Set(accessKey, individualDir)
+	}
+}
+
+
+// GetAllTorrentsFromDirectory returns all torrents from a specific directory
+func (tm *TorrentManager) GetAllTorrentsFromDirectory(directory string) []TorrentItem {
+	dirTorrents, ok := tm.DirectoryMap.Get(directory)
+	if !ok {
+		return []TorrentItem{}
+	}
+
+	// Pre-allocate slice with capacity for better performance
+	count := dirTorrents.Count()
+	result := make([]TorrentItem, 0, count)
+	
+	for item := range dirTorrents.IterBuffered() {
+		result = append(result, *item.Val)
+	}
+	return result
+}
+
 
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
@@ -94,31 +142,19 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 	return info, nil
 }
 
-// ListTorrents lists all available torrents
-func (tm *TorrentManager) ListTorrents() []TorrentItem {
-	tm.cacheMutex.RLock()
-	defer tm.cacheMutex.RUnlock()
-
-	var result []TorrentItem
-	for _, torrent := range tm.torrentList {
-		if torrent.Status == "downloaded" || torrent.Status == "uploading" || torrent.Status == "seeding" {
-			result = append(result, torrent)
-		}
-	}
-	return result
-}
 
 // FindTorrentByName finds a torrent by sanitized name
 func (tm *TorrentManager) FindTorrentByName(name string) (string, error) {
-	tm.cacheMutex.RLock()
-	defer tm.cacheMutex.RUnlock()
-
-	for _, torrent := range tm.torrentList {
-		if SanitizeFilename(torrent.Filename) == name {
-			return torrent.ID, nil
-		}
+	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+	if !ok {
+		return "", fmt.Errorf("__all__ directory not found")
 	}
-	return "", fmt.Errorf("torrent not found: %s", name)
+	torrent, ok := allTorrents.Get(name)
+	if !ok {
+		return "", fmt.Errorf("torrent not found: %s", name)
+	}
+	
+	return torrent.ID, nil
 }
 
 // ListTorrentFiles lists files in a torrent
