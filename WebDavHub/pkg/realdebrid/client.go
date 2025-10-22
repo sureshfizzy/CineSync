@@ -1,7 +1,7 @@
 package realdebrid
 
 import (
-	"bytes"
+    "strings"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -145,22 +145,26 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		return nil, fmt.Errorf("API key not set")
 	}
 
-	payload := map[string]string{
-		"link": link,
+	// Handle empty or invalid links
+	if link == "" {
+		return nil, fmt.Errorf("link parameter is empty")
 	}
 
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	processedLink := link
+	if strings.HasPrefix(link, "https://real-debrid.com/d/") && len(link) > 39 {
+		processedLink = link[0:39]
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+"/unrestrict/link", bytes.NewBuffer(jsonData))
+	// Use form-encoded data
+	payload := fmt.Sprintf("link=%s", processedLink)
+
+	req, err := http.NewRequest("POST", c.baseURL+"/unrestrict/link", strings.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -286,6 +286,14 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--poll-interval", config.PollInterval,
 	}
 
+	// Add chunk-based streaming settings if configured
+	if config.VfsReadChunkSize != "" {
+		args = append(args, "--vfs-read-chunk-size", config.VfsReadChunkSize)
+	}
+	if config.VfsReadChunkSizeLimit != "" {
+		args = append(args, "--vfs-read-chunk-size-limit", config.VfsReadChunkSizeLimit)
+	}
+
 	// Platform-specific options
 	if runtime.GOOS == "windows" {
 		args = append(args, "--links")

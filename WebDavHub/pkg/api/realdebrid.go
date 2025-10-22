@@ -14,6 +14,18 @@ import (
 	"cinesync/pkg/realdebrid"
 )
 
+// Shared streaming client
+var streamClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
+	},
+	Timeout: 0,
+}
+
 // HandleRealDebridConfig handles Real-Debrid configuration requests
 func HandleRealDebridConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -314,134 +326,8 @@ func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
     })
 }
 
-// handleWebDAVGet handles GET requests for WebDAV operations
-func handleWebDAVGet(w http.ResponseWriter, r *http.Request, client *realdebrid.WebDAVClient, path string) {
-	// Check if it's a directory listing request
-	if r.URL.Query().Get("list") == "true" || strings.HasSuffix(path, "/") {
-		files, err := client.ListDirectory(path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"path":  path,
-			"files": files,
-		})
-		return
-	}
-
-	// Check if it's a file info request
-	if r.URL.Query().Get("info") == "true" {
-		info, err := client.Stat(path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
-		return
-	}
-
-	// Stream file content
-	reader, err := client.ReadFileStream(path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer reader.Close()
-
-	// Set appropriate headers for file download
-	filename := strings.TrimPrefix(path, "/")
-	if filename == "" {
-		filename = "file"
-	}
-
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	w.Header().Set("Content-Type", "application/octet-stream")
-
-	// Stream the file
-	_, err = w.Write([]byte{})
-	if err != nil {
-		logger.Warn("Failed to write file content: %v", err)
-		return
-	}
-
-	// Copy file content to response
-	buffer := make([]byte, 32*1024) // 32KB buffer
-	for {
-		n, err := reader.Read(buffer)
-		if n > 0 {
-			if _, writeErr := w.Write(buffer[:n]); writeErr != nil {
-				logger.Warn("Failed to write file chunk: %v", writeErr)
-				break
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
-}
-
-// handleWebDAVPost handles POST requests for WebDAV operations
-func handleWebDAVPost(w http.ResponseWriter, r *http.Request, client *realdebrid.WebDAVClient, path string) {
-	// Handle directory creation
-	if r.URL.Query().Get("mkdir") == "true" {
-		if err := client.MkdirAll(path); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"message": "Directory created successfully",
-		})
-		return
-	}
-
-	http.Error(w, "Invalid POST request", http.StatusBadRequest)
-}
-
-// handleWebDAVPut handles PUT requests for WebDAV operations
-func handleWebDAVPut(w http.ResponseWriter, r *http.Request, client *realdebrid.WebDAVClient, path string) {
-	// Handle file upload
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
-		return
-	}
-
-	if err := client.WriteFile(path, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "File uploaded successfully",
-	})
-}
-
-// handleWebDAVDelete handles DELETE requests for WebDAV operations
-func handleWebDAVDelete(w http.ResponseWriter, r *http.Request, client *realdebrid.WebDAVClient, path string) {
-	if err := client.DeleteFile(path); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "File deleted successfully",
-	})
-}
-
-// HandleRealDebridUnrestrict handles link unrestriction
-func HandleRealDebridUnrestrict(w http.ResponseWriter, r *http.Request) {
+// HandleRealDebridRefresh handles torrent refresh requests
+func HandleRealDebridRefresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -457,7 +343,7 @@ func HandleRealDebridUnrestrict(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		Link string `json:"link"`
+		TorrentID string `json:"torrentId"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -465,8 +351,8 @@ func HandleRealDebridUnrestrict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if request.Link == "" {
-		http.Error(w, "Link is required", http.StatusBadRequest)
+	if request.TorrentID == "" {
+		http.Error(w, "Torrent ID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -478,8 +364,8 @@ func HandleRealDebridUnrestrict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := realdebrid.NewClient(config.APIKey)
-	downloadLink, err := client.UnrestrictLink(request.Link)
+	tm := realdebrid.GetTorrentManager(config.APIKey)
+	err := tm.RefreshTorrent(request.TorrentID)
 	if err != nil {
 		response := map[string]interface{}{
 			"success": false,
@@ -492,7 +378,7 @@ func HandleRealDebridUnrestrict(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"success": true,
-		"downloadLink": downloadLink,
+		"message": "Torrent refreshed successfully",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -579,6 +465,15 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	}
 	if rclonePath, ok := rcloneConfigMap["rclonePath"].(string); ok {
 		rcloneConfig.RclonePath = rclonePath
+	}
+	if vfsReadChunkSize, ok := rcloneConfigMap["vfsReadChunkSize"].(string); ok && vfsReadChunkSize != "" {
+		rcloneConfig.VfsReadChunkSize = vfsReadChunkSize
+	}
+	if vfsReadChunkSizeLimit, ok := rcloneConfigMap["vfsReadChunkSizeLimit"].(string); ok && vfsReadChunkSizeLimit != "" {
+		rcloneConfig.VfsReadChunkSizeLimit = vfsReadChunkSizeLimit
+	}
+	if streamBufferSize, ok := rcloneConfigMap["streamBufferSize"].(string); ok && streamBufferSize != "" {
+		rcloneConfig.StreamBufferSize = streamBufferSize
 	}
 
     rcloneConfig.RemoteName = "CineSync"
@@ -751,7 +646,6 @@ func HandleRcloneTest(w http.ResponseWriter, r *http.Request) {
 // Background prefetch on server start (called from main)
 var rdPrefetchOnce bool
 var cachedTorrents []realdebrid.TorrentItem
-var cachedDownloads []realdebrid.DownloadItem
 
 // PrefetchRealDebridData fetches counts and batches logs
 func PrefetchRealDebridData() {
@@ -783,14 +677,6 @@ func PrefetchRealDebridData() {
             logger.Info("[RD] Torrents fetched: %d", len(torrents))
             tm := realdebrid.GetTorrentManager(cfg.APIKey)
             tm.SetPrefetchedTorrents(torrents)
-        }
-
-        // Fetch downloads in batches of 1000 using pagination when available
-        downloads, err := client.GetAllDownloads(1000)
-        if err != nil {
-            logger.Warn("[RD] Failed to fetch downloads: %v", err)
-        } else {
-            cachedDownloads = downloads
         }
 
         logger.Info("[RD] Prefetch completed")
@@ -994,10 +880,10 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
+	downloadURL, fileSize, err := getDownloadURLWithRetry(tm, torrentID, filePath)
 	if err != nil {
-		logger.Error("[Torrents] Failed to get download URL: %v", err)
-		http.Error(w, err.Error(), http.StatusNotFound)
+		logger.Error("[Torrents] Failed to get download URL after retries: %v", err)
+		http.Error(w, "Could not fetch download link", http.StatusPreconditionFailed)
 		return
 	}
 
@@ -1009,34 +895,203 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	// For GET requests, proxy the content
-	req, err := http.NewRequest("GET", downloadURL, nil)
+	// For GET requests, stream the content
+	req, err := http.NewRequestWithContext(r.Context(), "GET", downloadURL, nil)
 	if err != nil {
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
 
+	// Set range header if present
 	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
 		req.Header.Set("Range", rangeHeader)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Accept-Encoding", "identity") // Disable compression for streaming
+	req.Header.Set("Cache-Control", "no-cache")
+	resp, err := streamClient.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
-	// Copy headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
+	if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
+		w.Header().Set("Content-Length", contentLength)
+	}
+	if contentRange := resp.Header.Get("Content-Range"); contentRange != "" {
+		w.Header().Set("Content-Range", contentRange)
+	}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	// Set appropriate status code
+	statusCode := resp.StatusCode
+	if statusCode == http.StatusOK && r.Header.Get("Range") != "" {
+		statusCode = http.StatusPartialContent
+	}
+	w.WriteHeader(statusCode)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		logger.Warn("[Torrents] Response writer doesn't support flushing, falling back to io.Copy")
+		io.Copy(w, resp.Body)
+		return
 	}
 
-	w.Header().Set("Accept-Ranges", "bytes")
-	w.WriteHeader(resp.StatusCode)
+	configManager := realdebrid.GetConfigManager()
+	config := configManager.GetConfig()
+	initialChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSize)
+	maxChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSizeLimit)
+	if initialChunkSizeBytes == 0 {
+		initialChunkSizeBytes = 64 * 1024 * 1024
+	}
+	if maxChunkSizeBytes == 0 {
+		maxChunkSizeBytes = initialChunkSizeBytes
+	}
 
-	io.Copy(w, resp.Body)
+	streamBufferSizeBytes := parseChunkSize(config.RcloneSettings.StreamBufferSize)
+	if streamBufferSizeBytes == 0 {
+		streamBufferSizeBytes = 1024 * 1024
+	}
+
+	smallBuf := make([]byte, 64*1024)
+	totalServed := int64(0)
+	currentChunkSize := initialChunkSizeBytes
+	lastLoggedAt := int64(0)
+	
+	if n, err := resp.Body.Read(smallBuf); n > 0 {
+		if _, werr := w.Write(smallBuf[:n]); werr != nil {
+			return
+		}
+		flusher.Flush()
+		totalServed += int64(n)
+	} else if err != nil && err != io.EOF {
+		logger.Error("[Torrents] Error reading initial buffer: %v", err)
+		return
+	}
+
+	buf := make([]byte, streamBufferSizeBytes)
+	
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return
+			}
+			flusher.Flush()
+			totalServed += int64(n)
+			
+			if totalServed >= lastLoggedAt + currentChunkSize {
+				logger.Info("[Stream] Served %s for %s", formatBytes(currentChunkSize), path.Base(filePath))
+				lastLoggedAt = totalServed
+
+				if currentChunkSize < maxChunkSizeBytes {
+					currentChunkSize *= 2
+					if currentChunkSize > maxChunkSizeBytes {
+						currentChunkSize = maxChunkSizeBytes
+					}
+				}
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return
+			}
+			if isClientDisconnection(readErr) {
+				return
+			}
+			logger.Error("[Torrents] Error reading from source: %v", readErr)
+			return
+		}
+	}
+}
+
+// isClientDisconnection checks if an error is due to client disconnection (normal for range requests)
+func isClientDisconnection(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "connection reset by peer") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "context canceled") ||
+		strings.Contains(errStr, "context deadline exceeded") ||
+		strings.Contains(errStr, "client disconnected") ||
+		strings.Contains(errStr, "wsasend") || // Windows-specific
+		strings.Contains(errStr, "eof")
+}
+
+// parseChunkSize parses chunk size string
+func parseChunkSize(sizeStr string) int64 {
+	if sizeStr == "" {
+		return 0
+	}
+	
+	sizeStr = strings.ToUpper(strings.TrimSpace(sizeStr))
+	
+	var multiplier int64 = 1
+	var size int64
+	
+	if strings.HasSuffix(sizeStr, "K") {
+		multiplier = 1024
+		sizeStr = strings.TrimSuffix(sizeStr, "K")
+	} else if strings.HasSuffix(sizeStr, "M") {
+		multiplier = 1024 * 1024
+		sizeStr = strings.TrimSuffix(sizeStr, "M")
+	} else if strings.HasSuffix(sizeStr, "G") {
+		multiplier = 1024 * 1024 * 1024
+		sizeStr = strings.TrimSuffix(sizeStr, "G")
+	}
+	
+	if parsedSize, err := fmt.Sscanf(sizeStr, "%d", &size); err != nil || parsedSize != 1 {
+		return 0
+	}
+	
+	return size * multiplier
+}
+
+// formatBytes formats bytes into human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// getDownloadURLWithRetry implements lazy link generation
+func getDownloadURLWithRetry(tm *realdebrid.TorrentManager, torrentID, filePath string) (string, int64, error) {
+	const maxRetries = 3
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Try to get download URL
+		downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
+		if err == nil && downloadURL != "" {
+			return downloadURL, fileSize, nil
+		}
+		
+		logger.Debug("[Torrents] Attempt %d failed to get download URL for torrent %s, file %s: %v", 
+			attempt+1, torrentID, filePath, err)
+
+		if attempt < maxRetries-1 {
+			logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
+			if refreshErr := tm.RefreshTorrent(torrentID); refreshErr != nil {
+				logger.Warn("[Torrents] Failed to refresh torrent %s: %v", torrentID, refreshErr)
+			}
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+		}
+	}
+	
+	return "", 0, fmt.Errorf("failed to get download URL after %d attempts", maxRetries)
 }

@@ -18,16 +18,19 @@ type Config struct {
 
 // RcloneSettings represents rclone mount configuration
 type RcloneSettings struct {
-    Enabled         bool   `json:"enabled" yaml:"enabled"`
-    MountPath       string `json:"mountPath" yaml:"mountPath"`
-    RemoteName      string `json:"remoteName" yaml:"remoteName"`
-    VfsCacheMode    string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
-    VfsCacheMaxSize string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
-    VfsCacheMaxAge  string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
-    BufferSize      string `json:"bufferSize" yaml:"bufferSize"`
-    DirCacheTime    string `json:"dirCacheTime" yaml:"dirCacheTime"`
-    PollInterval    string `json:"pollInterval" yaml:"pollInterval"`
-    RclonePath      string `json:"rclonePath" yaml:"rclonePath"`
+    Enabled              bool   `json:"enabled" yaml:"enabled"`
+    MountPath            string `json:"mountPath" yaml:"mountPath"`
+    RemoteName           string `json:"remoteName" yaml:"remoteName"`
+    VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
+    VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
+    VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
+    BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
+    DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
+    PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
+    RclonePath           string `json:"rclonePath" yaml:"rclonePath"`
+    VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
+    VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
+    StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -50,16 +53,19 @@ func GetConfigManager() *ConfigManager {
                 Enabled: false,
                 APIKey:  "",
                 RcloneSettings: RcloneSettings{
-                    Enabled:         false,
-                    MountPath:       "",
-                    RemoteName:      "realdebrid",
-                    VfsCacheMode:    "writes",
-                    VfsCacheMaxSize: "1G",
-                    VfsCacheMaxAge:  "24h",
-                    BufferSize:      "16M",
-                    DirCacheTime:    "5m",
-                    PollInterval:    "1m",
-                    RclonePath:      "",
+                    Enabled:              false,
+                    MountPath:            "",
+                    RemoteName:           "realdebrid",
+                    VfsCacheMode:         "writes",
+                    VfsCacheMaxSize:      "1G",
+                    VfsCacheMaxAge:       "24h",
+                    BufferSize:           "16M",
+                    DirCacheTime:         "5m",
+                    PollInterval:         "1m",
+                    RclonePath:           "",
+                    VfsReadChunkSize:     "64M",
+                    VfsReadChunkSizeLimit: "128M",
+                    StreamBufferSize:     "1M",
                 },
             },
             configPath: filepath.Join("..", "db", "debrid.yml"),
@@ -162,6 +168,15 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if rclonePath, ok := rcloneSettingsMap["rclonePath"].(string); ok {
 					rcloneSettings.RclonePath = rclonePath // Allow empty string for PATH
+				}
+				if vfsReadChunkSize, ok := rcloneSettingsMap["vfsReadChunkSize"].(string); ok && vfsReadChunkSize != "" {
+					rcloneSettings.VfsReadChunkSize = vfsReadChunkSize
+				}
+				if vfsReadChunkSizeLimit, ok := rcloneSettingsMap["vfsReadChunkSizeLimit"].(string); ok && vfsReadChunkSizeLimit != "" {
+					rcloneSettings.VfsReadChunkSizeLimit = vfsReadChunkSizeLimit
+				}
+				if streamBufferSize, ok := rcloneSettingsMap["streamBufferSize"].(string); ok && streamBufferSize != "" {
+					rcloneSettings.StreamBufferSize = streamBufferSize
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings
@@ -276,16 +291,19 @@ func (cm *ConfigManager) ResetConfig() error {
         Enabled: false,
         APIKey:  "",
         RcloneSettings: RcloneSettings{
-            Enabled:         false,
-            MountPath:       "",
-            RemoteName:      "realdebrid",
-            VfsCacheMode:    "writes",
-            VfsCacheMaxSize: "1G",
-            VfsCacheMaxAge:  "24h",
-            BufferSize:      "16M",
-            DirCacheTime:    "5m",
-            PollInterval:    "1m",
-            RclonePath:      "",
+            Enabled:              false,
+            MountPath:            "",
+            RemoteName:           "realdebrid",
+            VfsCacheMode:         "writes",
+            VfsCacheMaxSize:      "1G",
+            VfsCacheMaxAge:       "24h",
+            BufferSize:           "16M",
+            DirCacheTime:         "5m",
+            PollInterval:         "1m",
+            RclonePath:           "",
+            VfsReadChunkSize:     "64M",
+            VfsReadChunkSizeLimit: "128M",
+            StreamBufferSize:     "1M",
         },
     }
 	

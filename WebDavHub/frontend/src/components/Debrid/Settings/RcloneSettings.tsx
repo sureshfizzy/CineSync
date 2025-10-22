@@ -13,6 +13,9 @@ interface RcloneConfig {
   dirCacheTime: string;
   pollInterval: string;
   rclonePath: string;
+  vfsReadChunkSize: string;
+  vfsReadChunkSizeLimit: string;
+  streamBufferSize: string;
 }
 
 interface RcloneStatus {
@@ -35,6 +38,9 @@ const RcloneSettings: React.FC = () => {
     dirCacheTime: '5m',
     pollInterval: '1m',
     rclonePath: '',
+    vfsReadChunkSize: '64M',
+    vfsReadChunkSizeLimit: '128M',
+    streamBufferSize: '1M',
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -457,6 +463,47 @@ const RcloneSettings: React.FC = () => {
                               value={config.pollInterval}
                               onChange={(e) => handleConfigChange('pollInterval', e.target.value)}
                               placeholder="1m"
+                            />
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                          <Box>
+                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              VFS Read Chunk Size
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={config.vfsReadChunkSize}
+                              onChange={(e) => handleConfigChange('vfsReadChunkSize', e.target.value)}
+                              placeholder="64M"
+                              helperText="Chunk size for streaming"
+                            />
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              VFS Read Chunk Size Limit
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={config.vfsReadChunkSizeLimit}
+                              onChange={(e) => handleConfigChange('vfsReadChunkSizeLimit', e.target.value)}
+                              placeholder="128M"
+                              helperText="Max chunk size limit"
+                            />
+                          </Box>
+                          <Box>
+                            <Typography variant="body2" fontWeight="500" gutterBottom>
+                              Stream Buffer Size
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={config.streamBufferSize}
+                              onChange={(e) => handleConfigChange('streamBufferSize', e.target.value)}
+                              placeholder="1M"
+                              helperText="Buffer size for streaming (higher for 4K/remux)"
                             />
                           </Box>
                         </Box>

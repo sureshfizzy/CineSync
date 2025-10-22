@@ -9,11 +9,18 @@ import (
 
 	"cinesync/pkg/logger"
 	cmap "github.com/orcaman/concurrent-map/v2"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
 	ALL_TORRENTS = "__all__"
 )
+
+// SanitizeFilename sanitizes a filename for use in paths
+func SanitizeFilename(name string) string {
+	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	return r.Replace(name)
+}
 
 // TorrentManager manages cached torrent listings
 type TorrentManager struct {
@@ -23,6 +30,9 @@ type TorrentManager struct {
 	cacheMutex    sync.RWMutex
 	lastCacheTime time.Time
 	DirectoryMap cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *TorrentItem]]
+	downloadLinkCache map[string]*DownloadLink
+	downloadCacheMutex sync.RWMutex
+	downloadSG singleflight.Group
 }
 
 var (
@@ -51,6 +61,7 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		torrentCache:  make(map[string]*TorrentInfo),
 		torrentList:   []TorrentItem{},
 		DirectoryMap:  cmap.New[cmap.ConcurrentMap[string, *TorrentItem]](),
+		downloadLinkCache: make(map[string]*DownloadLink),
 	}
 	
 	// Initialize special directories
@@ -205,49 +216,91 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 	return nodes, nil
 }
 
-// GetFileDownloadURL gets the download URL for a file
+// GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
-	info, err := tm.GetTorrentInfo(torrentID)
+	// Create cache key
+	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+	
+	// Use singleflight to deduplicate concurrent requests
+	v, err, _ := tm.downloadSG.Do(cacheKey, func() (interface{}, error) {
+		// Check cache first
+		tm.downloadCacheMutex.RLock()
+		if cached, exists := tm.downloadLinkCache[cacheKey]; exists {
+			tm.downloadCacheMutex.RUnlock()
+			return []interface{}{cached.Download, cached.Filesize}, nil
+		}
+		tm.downloadCacheMutex.RUnlock()
+
+		info, err := tm.GetTorrentInfo(torrentID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find the file
+		var targetFile *TorrentFile
+		for i, file := range info.Files {
+			if file.Selected == 1 {
+				cleanPath := strings.Trim(file.Path, "/")
+				fileName := path.Base(cleanPath)
+				if fileName == filePath {
+					targetFile = &info.Files[i]
+					break
+				}
+			}
+		}
+
+		if targetFile == nil {
+			return nil, fmt.Errorf("file not found: %s", filePath)
+		}
+
+		if len(info.Links) == 0 {
+			logger.Warn("[Torrents] No links available for torrent %s", torrentID)
+			return nil, fmt.Errorf("no links available")
+		}
+
+		// Use the link corresponding to the file ID
+		var downloadLink string
+		if targetFile.ID-1 < len(info.Links) {
+			downloadLink = info.Links[targetFile.ID-1]
+		} else {
+			downloadLink = info.Links[0]
+		}
+
+		if downloadLink == "" {
+			logger.Warn("[Torrents] Empty download link for torrent %s, file %s", torrentID, filePath)
+			return nil, fmt.Errorf("empty download link")
+		}
+
+		logger.Debug("[Torrents] Attempting to unrestrict link for: %s", filePath)
+		
+		// Unrestrict the link
+		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
+		if err != nil {
+			logger.Error("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
+			return nil, fmt.Errorf("failed to unrestrict link: %w", err)
+		}
+
+		if unrestrictedLink.Download == "" {
+			logger.Warn("[Torrents] Unrestrict returned empty download URL")
+			return nil, fmt.Errorf("unrestrict returned empty download URL")
+		}
+
+		logger.Debug("[Torrents] Successfully unrestricted link for: %s", filePath)
+		
+		// Cache the result
+		tm.downloadCacheMutex.Lock()
+		tm.downloadLinkCache[cacheKey] = unrestrictedLink
+		tm.downloadCacheMutex.Unlock()
+		
+		return []interface{}{unrestrictedLink.Download, targetFile.Bytes}, nil
+	})
+
 	if err != nil {
 		return "", 0, err
 	}
 
-	// Find the file
-	var targetFile *TorrentFile
-	for i, file := range info.Files {
-		if file.Selected == 1 {
-			cleanPath := strings.Trim(file.Path, "/")
-			fileName := path.Base(cleanPath)
-			if fileName == filePath {
-				targetFile = &info.Files[i]
-				break
-			}
-		}
-	}
-
-	if targetFile == nil {
-		return "", 0, fmt.Errorf("file not found: %s", filePath)
-	}
-
-	if len(info.Links) == 0 {
-		return "", 0, fmt.Errorf("no links available")
-	}
-
-	// Use the link corresponding to the file ID
-	var downloadLink string
-	if targetFile.ID-1 < len(info.Links) {
-		downloadLink = info.Links[targetFile.ID-1]
-	} else {
-		downloadLink = info.Links[0]
-	}
-
-	// Unrestrict the link
-	unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to unrestrict link: %w", err)
-	}
-
-	return unrestrictedLink.Download, targetFile.Bytes, nil
+	result := v.([]interface{})
+	return result[0].(string), result[1].(int64), nil
 }
 
 // FileNode represents a file or directory node
@@ -259,18 +312,26 @@ type FileNode struct {
 	FileID    int
 }
 
-// SanitizeFilename sanitizes a filename for use in paths
-func SanitizeFilename(name string) string {
-	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
-		":", "_",
-		"*", "_",
-		"?", "_",
-		"\"", "_",
-		"<", "_",
-		">", "_",
-		"|", "_",
-	)
-	return replacer.Replace(name)
+// RefreshTorrent refreshes torrent information from Real-Debrid API
+func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
+	logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
+	
+	// Clear cached info for this torrent
+	tm.cacheMutex.Lock()
+	delete(tm.torrentCache, torrentID)
+	tm.cacheMutex.Unlock()
+	
+	// Fetch fresh torrent info
+	info, err := tm.client.GetTorrentInfo(torrentID)
+	if err != nil {
+		return fmt.Errorf("failed to refresh torrent %s: %w", torrentID, err)
+	}
+	
+	// Update cache with fresh data
+	tm.cacheMutex.Lock()
+	tm.torrentCache[torrentID] = info
+	tm.cacheMutex.Unlock()
+	
+	logger.Debug("[Torrents] Successfully refreshed torrent %s", torrentID)
+	return nil
 }
