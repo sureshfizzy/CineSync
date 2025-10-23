@@ -49,6 +49,11 @@ func GetRcloneManager() *RcloneManager {
 	return rcloneManager
 }
 
+// GetServerOS returns the server's operating system
+func GetServerOS() string {
+	return runtime.GOOS
+}
+
 // startCleanupRoutine starts a background routine to clean up stale mounts
 func (rm *RcloneManager) startCleanupRoutine() {
 	ticker := time.NewTicker(30 * time.Second)
@@ -145,23 +150,36 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	// Wait a moment for mount to initialize
 	time.Sleep(3 * time.Second)
 
-	// Check if process is still running
-	if !rm.isProcessRunning(cmd.Process.Pid) {
-		errorMsg := "rclone process exited immediately. Check if WinFsp is installed and the mount path is valid."
-		return &MountStatus{Error: errorMsg}, fmt.Errorf("rclone process exited")
-	}
-
-	// Additional Windows-specific validation
 	if runtime.GOOS == "windows" {
+		if !rm.isProcessRunning(cmd.Process.Pid) {
+			errorMsg := "rclone process exited immediately. Check if WinFsp is installed and the mount path is valid."
+			return &MountStatus{Error: errorMsg}, fmt.Errorf("rclone process exited")
+		}
+		
 		// Check if the mount point is accessible
 		if _, err := os.Stat(config.MountPath); err != nil {
 			logger.Warn("Mount point may not be accessible: %v", err)
 		}
+	} else {
+		if !rm.isMountPoint(config.MountPath) {
+			errorMsg := "rclone mount failed - mount point not accessible"
+			logger.Error(errorMsg)
+			return &MountStatus{Error: errorMsg}, fmt.Errorf("mount verification failed")
+		}
+		logger.Info("Mount point verified: %s", config.MountPath)
 	}
 
 	// Store mount info
+	actualPid := cmd.Process.Pid
+	if runtime.GOOS != "windows" {
+		if daemonPid := rm.findRcloneMountPid(config.MountPath); daemonPid > 0 {
+			actualPid = daemonPid
+			logger.Info("Found rclone daemon PID: %d", daemonPid)
+		}
+	}
+	
 	mount := &RcloneMount{
-		ProcessID: cmd.Process.Pid,
+		ProcessID: actualPid,
 		MountPath: config.MountPath,
 		RemoteName: config.RemoteName,
 		StartTime: time.Now(),
@@ -169,12 +187,12 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	}
 	rm.mounts[config.MountPath] = mount
 
-	logger.Info("Rclone mount started successfully: PID=%d, Path=%s", cmd.Process.Pid, config.MountPath)
+	logger.Info("Rclone mount started successfully: PID=%d, Path=%s", actualPid, config.MountPath)
 
 	return &MountStatus{
 		Mounted:   true,
 		MountPath: config.MountPath,
-		ProcessID: cmd.Process.Pid,
+		ProcessID: actualPid,
 	}, nil
 }
 
@@ -195,9 +213,18 @@ func (rm *RcloneManager) Unmount(mountPath string) (*MountStatus, error) {
 	}
 
 	// Try graceful unmount first
-	if rm.isProcessRunning(mount.ProcessID) {
+	if runtime.GOOS != "windows" {
 		if err := rm.gracefulUnmount(mountPath); err != nil {
-			logger.Warn("Graceful unmount failed, trying force kill: %v", err)
+			logger.Warn("Graceful unmount failed: %v", err)
+			if mount.ProcessID > 0 && rm.isProcessRunning(mount.ProcessID) {
+				logger.Info("Attempting to kill rclone process: PID=%d", mount.ProcessID)
+				if err := rm.forceKill(mount.ProcessID); err != nil {
+					logger.Error("Failed to kill process: %v", err)
+				}
+			}
+		}
+	} else {
+		if rm.isProcessRunning(mount.ProcessID) {
 			if err := rm.forceKill(mount.ProcessID); err != nil {
 				return &MountStatus{Error: fmt.Sprintf("failed to kill process: %v", err)}, err
 			}
@@ -222,10 +249,30 @@ func (rm *RcloneManager) GetStatus(mountPath string) *MountStatus {
 	if !exists {
 		mount, exists = rm.mounts[mountPath]
 		if !exists {
+			if runtime.GOOS != "windows" && rm.isMountPoint(mountPath) {
+				return &MountStatus{Mounted: true, MountPath: mountPath}
+			}
 			return &MountStatus{Mounted: false}
 		}
 	}
 
+	if runtime.GOOS != "windows" {
+		if rm.isMountPoint(mount.MountPath) {
+			if !rm.isProcessRunning(mount.ProcessID) {
+				if newPid := rm.findRcloneMountPid(mount.MountPath); newPid > 0 {
+					mount.ProcessID = newPid
+				}
+			}
+			return &MountStatus{
+				Mounted:   true,
+				MountPath: mount.MountPath,
+				ProcessID: mount.ProcessID,
+			}
+		}
+		return &MountStatus{Mounted: false, Error: "mount point not active"}
+	}
+
+	// Windows: check process status
 	if !rm.isProcessRunning(mount.ProcessID) {
 		return &MountStatus{Mounted: false, Error: "process not running"}
 	}
@@ -244,14 +291,28 @@ func (rm *RcloneManager) GetAllStatuses() map[string]*MountStatus {
 
 	statuses := make(map[string]*MountStatus)
 	for path, mount := range rm.mounts {
-		if rm.isProcessRunning(mount.ProcessID) {
-			statuses[path] = &MountStatus{
-				Mounted:   true,
-				MountPath: mount.MountPath,
-				ProcessID: mount.ProcessID,
+		// On Unix, verify mount point status
+		if runtime.GOOS != "windows" {
+			if rm.isMountPoint(mount.MountPath) {
+				statuses[path] = &MountStatus{
+					Mounted:   true,
+					MountPath: mount.MountPath,
+					ProcessID: mount.ProcessID,
+				}
+			} else {
+				statuses[path] = &MountStatus{Mounted: false, Error: "mount point not active"}
 			}
 		} else {
-			statuses[path] = &MountStatus{Mounted: false, Error: "process not running"}
+			// Windows: check process status
+			if rm.isProcessRunning(mount.ProcessID) {
+				statuses[path] = &MountStatus{
+					Mounted:   true,
+					MountPath: mount.MountPath,
+					ProcessID: mount.ProcessID,
+				}
+			} else {
+				statuses[path] = &MountStatus{Mounted: false, Error: "process not running"}
+			}
 		}
 	}
 	return statuses
@@ -312,26 +373,27 @@ func obscurePassword(password string, rclonePath string) (string, error) {
 	
 	// If no path configured, try to find rclone
 	if rclonePath == "" {
-		logger.Info("No rclone path configured, searching for rclone...")
-		rcloneCmd := "rclone"
 		if runtime.GOOS == "windows" {
-			rcloneCmd = "rclone.exe"
-		}
-		
-		// Try common rclone locations
-		possiblePaths := []string{
-			rcloneCmd, // PATH
-			"C:\\Program Files\\rclone\\rclone.exe",
-			"C:\\Program Files (x86)\\rclone\\rclone.exe",
-			"C:\\Users\\" + os.Getenv("USERNAME") + "\\AppData\\Local\\rclone\\rclone.exe",
-		}
-		
-		for _, path := range possiblePaths {
-			if _, err := exec.LookPath(path); err == nil {
-				rclonePath = path
-				logger.Info("Found rclone at: %s", path)
-				break
+			// On Windows, search for rclone in common locations
+			logger.Info("No rclone path configured, searching for rclone...")
+			rcloneCmd := "rclone.exe"
+			
+			// Try common rclone locations on Windows
+			possiblePaths := []string{
+				rcloneCmd, // PATH
+				"C:\\Program Files\\rclone\\rclone.exe",
+				"C:\\Program Files (x86)\\rclone\\rclone.exe",
+				"C:\\Users\\" + os.Getenv("USERNAME") + "\\AppData\\Local\\rclone\\rclone.exe",
 			}
+			
+			for _, path := range possiblePaths {
+				if _, err := exec.LookPath(path); err == nil {
+					rclonePath = path
+					break
+				}
+			}
+		} else {
+			rclonePath = "rclone"
 		}
 	} else {
 		if _, err := os.Stat(rclonePath); err != nil {
@@ -390,6 +452,10 @@ func (rm *RcloneManager) IsRcloneAvailable(rclonePath string) bool {
 
 // isProcessRunning checks if a process is still running
 func (rm *RcloneManager) isProcessRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -397,30 +463,109 @@ func (rm *RcloneManager) isProcessRunning(pid int) bool {
 	
 	// On Unix systems, signal 0 can be used to check if process exists
 	if runtime.GOOS != "windows" {
-		err = process.Signal(os.Signal(nil))
+		err = process.Signal(syscall.Signal(0))
 		return err == nil
 	}
 
 	return true
 }
 
-// gracefulUnmount attempts to gracefully unmount using fusermount/unmount
-func (rm *RcloneManager) gracefulUnmount(mountPath string) error {
-	var cmd *exec.Cmd
-	
+// isMountPoint checks if a path is a mount point (Unix only)
+func (rm *RcloneManager) isMountPoint(path string) bool {
 	if runtime.GOOS == "windows" {
-		return fmt.Errorf("graceful unmount not supported on Windows")
-	} else {
-		// Try fusermount first (Linux/macOS)
-		cmd = exec.Command("fusermount", "-u", mountPath)
-		if err := cmd.Run(); err != nil {
-			// Try generic unmount as fallback
-			cmd = exec.Command("umount", mountPath)
-			return cmd.Run()
+		return false
+	}
+	
+	// Check if path exists and is accessible
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	
+	// Use mountpoint command if available
+	cmd := exec.Command("mountpoint", "-q", path)
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	
+	// Fallback: check /proc/mounts
+	cmd = exec.Command("grep", "-qs", path, "/proc/mounts")
+	return cmd.Run() == nil
+}
+
+// findRcloneMountPid finds the PID of the rclone process for a given mount path (Unix only)
+func (rm *RcloneManager) findRcloneMountPid(mountPath string) int {
+	if runtime.GOOS == "windows" {
+		return 0
+	}
+	
+	// Use pgrep to find rclone processes
+	cmd := exec.Command("pgrep", "-f", "rclone mount.*"+mountPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	
+	// Parse the first PID
+	pidStr := strings.TrimSpace(string(output))
+	if pidStr == "" {
+		return 0
+	}
+	
+	// Get first line if multiple PIDs
+	lines := strings.Split(pidStr, "\n")
+	if len(lines) > 0 {
+		pid, err := strconv.Atoi(lines[0])
+		if err == nil {
+			return pid
 		}
 	}
 	
-	return nil
+	return 0
+}
+
+// gracefulUnmount attempts to gracefully unmount using fusermount/unmount
+func (rm *RcloneManager) gracefulUnmount(mountPath string) error {
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("graceful unmount not supported on Windows")
+	}
+	
+	// Try multiple unmount methods in order of preference
+	unmountMethods := []struct {
+		name string
+		cmd  []string
+	}{
+		{"fusermount3", []string{"fusermount3", "-u", mountPath}},
+		{"fusermount", []string{"fusermount", "-u", mountPath}},
+		{"umount", []string{"umount", mountPath}},
+		{"fusermount3 lazy", []string{"fusermount3", "-uz", mountPath}},
+		{"fusermount lazy", []string{"fusermount", "-uz", mountPath}},
+		{"umount lazy", []string{"umount", "-l", mountPath}},
+	}
+	
+	var lastErr error
+	for _, method := range unmountMethods {
+		cmd := exec.Command(method.cmd[0], method.cmd[1:]...)
+		
+		// Capture output for debugging
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			logger.Info("Successfully unmounted %s", mountPath, method.name)
+			return nil
+		}
+		
+		// Log the error but continue trying other methods
+		logger.Debug("Unmount method %s failed: %v, output: %s", method.name, err, string(output))
+		lastErr = err
+		
+		// After first 3 attempts, check if mount is already gone
+		if !rm.isMountPoint(mountPath) {
+			logger.Info("Mount point %s is no longer active", mountPath)
+			return nil
+		}
+	}
+	
+	// If we get here, all methods failed
+	return fmt.Errorf("all unmount methods failed, last error: %v", lastErr)
 }
 
 // forceKill forcefully kills a process
@@ -451,7 +596,29 @@ func (rm *RcloneManager) CleanupStaleMounts() {
 	defer rm.mutex.Unlock()
 
 	for path, mount := range rm.mounts {
-		if !rm.isProcessRunning(mount.ProcessID) {
+		shouldCleanup := false
+		
+		if runtime.GOOS != "windows" {
+			// On Unix, check if mount point is still active
+			if !rm.isMountPoint(mount.MountPath) {
+				shouldCleanup = true
+			} else {
+				// Update PID if changed
+				if !rm.isProcessRunning(mount.ProcessID) {
+					if newPid := rm.findRcloneMountPid(mount.MountPath); newPid > 0 {
+						logger.Info("Updating mount PID for %s: %d -> %d", path, mount.ProcessID, newPid)
+						mount.ProcessID = newPid
+					}
+				}
+			}
+		} else {
+			// On Windows, check process status
+			if !rm.isProcessRunning(mount.ProcessID) {
+				shouldCleanup = true
+			}
+		}
+		
+		if shouldCleanup {
 			logger.Info("Cleaning up stale mount: %s (PID: %d)", path, mount.ProcessID)
 			delete(rm.mounts, path)
 		}

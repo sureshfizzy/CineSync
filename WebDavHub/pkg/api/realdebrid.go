@@ -58,9 +58,12 @@ func handleGetRealDebridConfig(w http.ResponseWriter, r *http.Request, configMan
 	status := configManager.GetConfigStatus()
 
 	response := map[string]interface{}{
-		"config": config,
-		"status": status,
+		"config":     config,
+		"status":     status,
 		"configPath": realdebrid.GetRcloneConfigPath(),
+		"serverInfo": map[string]interface{}{
+			"os": realdebrid.GetServerOS(),
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

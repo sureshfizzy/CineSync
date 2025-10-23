@@ -49,6 +49,7 @@ const RcloneSettings: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [mounting, setMounting] = useState(false);
   const [unmounting, setUnmounting] = useState(false);
+  const [serverOS, setServerOS] = useState<string>('');
 
   const showMessage = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -63,6 +64,9 @@ const RcloneSettings: React.FC = () => {
       }
       if (response.data.status.rcloneStatus) {
         setStatus(response.data.status.rcloneStatus);
+      }
+      if (response.data.serverInfo?.os) {
+        setServerOS(response.data.serverInfo.os);
       }
     } catch (error) {
       console.error('Failed to load Rclone config:', error);
@@ -319,8 +323,8 @@ const RcloneSettings: React.FC = () => {
                   <>
                     <Divider />
 
-                    {/* Rclone Path (Windows) */}
-                    {navigator.platform.toLowerCase().includes('win') && (
+                    {/* Rclone Path (Windows only - hidden on Linux/Unix) */}
+                    {serverOS === 'windows' && (
                       <Box>
                         <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>
                           Rclone Executable Path
