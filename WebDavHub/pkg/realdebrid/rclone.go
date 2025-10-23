@@ -135,12 +135,7 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 
 	// Start rclone process
 	cmd := exec.Command(rcloneCmd, args...)
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000,
-		}
-	}
+	rm.setProcessAttributes(cmd)
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("Failed to start rclone command: %v", err)
@@ -269,6 +264,13 @@ func normalizeMountPath(path string) string {
 		}
 	}
 	return path
+}
+
+// setProcessAttributes sets platform-specific process attributes
+func (rm *RcloneManager) setProcessAttributes(cmd *exec.Cmd) {
+	if runtime.GOOS == "windows" {
+		rm.setWindowsProcessAttributes(cmd)
+	}
 }
 
 // buildRcloneArgs builds the rclone command arguments
