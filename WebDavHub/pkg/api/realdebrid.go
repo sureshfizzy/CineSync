@@ -502,6 +502,18 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Check if mount is waiting
+	if status.Waiting {
+		logger.Info("%s", status.WaitingReason)
+		response := map[string]interface{}{
+			"success": true,
+			"status":  status,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
 	// Check if mount actually succeeded
 	if status.Error != "" {
 		logger.Error("Mount status indicates error: %s", status.Error)
@@ -594,11 +606,22 @@ func HandleRcloneStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get mount path from query parameter
+	mountPath := r.URL.Query().Get("path")
+	if mountPath == "" {
+		http.Error(w, "Mount path is required", http.StatusBadRequest)
+		return
+	}
+
 	rcloneManager := realdebrid.GetRcloneManager()
-	statuses := rcloneManager.GetAllStatuses()
+	status := rcloneManager.GetStatus(mountPath)
+
+	response := map[string]interface{}{
+		"status": status,
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(statuses)
+	json.NewEncoder(w).Encode(response)
 }
 
 // HandleRcloneTest handles rclone test requests

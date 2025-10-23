@@ -23,6 +23,8 @@ interface RcloneStatus {
   mountPath?: string;
   error?: string;
   processId?: number;
+  waiting?: boolean;
+  waitingReason?: string;
 }
 
 const RcloneSettings: React.FC = () => {
@@ -50,6 +52,7 @@ const RcloneSettings: React.FC = () => {
   const [mounting, setMounting] = useState(false);
   const [unmounting, setUnmounting] = useState(false);
   const [serverOS, setServerOS] = useState<string>('');
+  const [isPolling, setIsPolling] = useState(false);
 
   const showMessage = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -144,6 +147,7 @@ const RcloneSettings: React.FC = () => {
     }
 
     setMounting(true);
+    setIsPolling(true);
     try {
       // Filter out empty string values to allow defaults to be applied
       const configToMount = Object.fromEntries(
@@ -155,14 +159,22 @@ const RcloneSettings: React.FC = () => {
       
       const response = await axios.post('/api/realdebrid/rclone/mount', configToMount);
       if (response.data.success) {
-        showMessage('Rclone mount started successfully', 'success');
-        await loadConfig(); // Refresh status
+        if (response.data.status?.waiting) {
+          showMessage('Mount is waiting for torrents to load...', 'info');
+        } else {
+          showMessage('Rclone mount started successfully', 'success');
+        }
+        if (response.data.status) {
+          setStatus(response.data.status);
+        }
       } else {
         showMessage(`Failed to mount: ${response.data.error}`, 'error');
+        setIsPolling(false);
       }
     } catch (error) {
       console.error('Mount failed:', error);
       showMessage('Failed to mount rclone', 'error');
+      setIsPolling(false);
     } finally {
       setMounting(false);
     }
@@ -176,7 +188,10 @@ const RcloneSettings: React.FC = () => {
       });
       if (response.data.success) {
         showMessage('Rclone unmounted successfully', 'success');
-        await loadConfig(); // Refresh status
+        // Update status directly instead of reloading entire config
+        if (response.data.status) {
+          setStatus(response.data.status);
+        }
       } else {
         showMessage(`Failed to unmount: ${response.data.error}`, 'error');
       }
@@ -204,6 +219,47 @@ const RcloneSettings: React.FC = () => {
   useEffect(() => {
     loadConfig();
   }, []);
+
+  // Poll for status updates when waiting or mounting
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (isPolling || status?.waiting) {
+      interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`/api/realdebrid/rclone/status?path=${encodeURIComponent(config.mountPath)}`);
+          if (response.data.status) {
+            const newStatus = response.data.status;
+            setStatus(prevStatus => {
+              if (!prevStatus || 
+                  prevStatus.mounted !== newStatus.mounted ||
+                  prevStatus.waiting !== newStatus.waiting ||
+                  prevStatus.error !== newStatus.error ||
+                  prevStatus.processId !== newStatus.processId) {
+                return newStatus;
+              }
+              return prevStatus;
+            });
+          }
+        } catch (error) {
+          console.error('Failed to fetch status:', error);
+        }
+      }, 2000);
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isPolling, status?.waiting]);
+
+  useEffect(() => {
+    if (status?.mounted && isPolling) {
+      setIsPolling(false);
+      showMessage('Mount completed successfully!', 'success');
+    }
+  }, [status?.mounted, isPolling]);
 
   if (loading) {
     return (
@@ -248,21 +304,28 @@ const RcloneSettings: React.FC = () => {
             sx={{
               mb: { xs: 2, md: 3 },
               border: '1px solid',
-              borderColor: status.mounted ? 'success.main' : 'error.main',
-              bgcolor: status.mounted ? alpha(theme.palette.success.main, 0.05) : alpha(theme.palette.error.main, 0.05),
+              borderColor: status.waiting || (isPolling && !status?.mounted) ? 'warning.main' : status.mounted ? 'success.main' : 'error.main',
+              bgcolor: status.waiting || (isPolling && !status?.mounted) ? alpha(theme.palette.warning.main, 0.05) : status.mounted ? alpha(theme.palette.success.main, 0.05) : alpha(theme.palette.error.main, 0.05),
             }}
           >
             <CardContent sx={{ py: { xs: 1.5, md: 2 }, '&:last-child': { pb: { xs: 1.5, md: 2 } } }}>
               <Stack direction="row" alignItems="flex-start" spacing={2}>
-                {status.mounted ? (
+                {status.waiting || (isPolling && !status?.mounted) ? (
+                  <CircularProgress size={24} sx={{ mt: 0.5 }} />
+                ) : status.mounted ? (
                   <CheckCircle sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 ) : (
                   <Error sx={{ color: 'error.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600" sx={{ color: status.mounted ? 'success.main' : 'error.main' }}>
-                    {status.mounted ? 'Mounted' : 'Not Mounted'}
+                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600" sx={{ color: status.waiting || (isPolling && !status?.mounted) ? 'warning.main' : status.mounted ? 'success.main' : 'error.main' }}>
+                    {status.waiting ? 'Waiting for Torrents' : isPolling && !status?.mounted ? 'Mounting...' : status.mounted ? 'Mounted' : 'Not Mounted'}
                   </Typography>
+                  {(status.waitingReason || (isPolling && !status?.mounted)) && (
+                    <Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>
+                      {status.waitingReason || 'Mounting in progress...'}
+                    </Typography>
+                  )}
                   {status.mountPath && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                       Mount Path: {status.mountPath}
@@ -520,11 +583,11 @@ const RcloneSettings: React.FC = () => {
                         <Button
                           variant="contained"
                           onClick={mountRclone}
-                          disabled={mounting || !config.mountPath || status?.mounted}
-                          startIcon={mounting ? <CircularProgress size={20} /> : <FolderOpen />}
+                          disabled={mounting || !config.mountPath || status?.mounted || status?.waiting || isPolling}
+                          startIcon={mounting || isPolling ? <CircularProgress size={20} /> : <FolderOpen />}
                           fullWidth={isMobile}
                         >
-                          {mounting ? 'Mounting...' : 'Mount'}
+                          {mounting ? 'Mounting...' : status?.waiting ? 'Waiting for Torrents...' : isPolling ? 'Mounting...' : 'Mount'}
                         </Button>
                         <Button
                           variant="outlined"

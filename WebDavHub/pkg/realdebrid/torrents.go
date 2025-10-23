@@ -87,6 +87,9 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	tm.updateDirectoryMaps(torrents)
 
 	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", len(torrents))
+	
+	// Trigger pending mount
+	triggerPendingMount()
 }
 
 

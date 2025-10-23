@@ -24,12 +24,17 @@ type RcloneMount struct {
 	RemoteName string
 	StartTime time.Time
 	Config    RcloneSettings
+	Waiting   bool
+	WaitingReason string
+	APIKey   string
 }
 
 // RcloneManager manages rclone mounts
 type RcloneManager struct {
 	mounts map[string]*RcloneMount
 	mutex  sync.RWMutex
+	pendingMount *RcloneMount
+	pendingMutex sync.RWMutex
 }
 
 var (
@@ -64,12 +69,43 @@ func (rm *RcloneManager) startCleanupRoutine() {
 	}
 }
 
+
+// triggerPendingMount executes the pending mount when torrents are loaded
+func triggerPendingMount() {
+	rm := GetRcloneManager()
+	
+	rm.pendingMutex.RLock()
+	pendingMount := rm.pendingMount
+	rm.pendingMutex.RUnlock()
+	
+	if pendingMount == nil {
+		return
+	}
+	
+	logger.Info("[Rclone] Torrents loaded, executing pending mount for %s", pendingMount.MountPath)
+	
+	// Clear the pending mount
+	rm.pendingMutex.Lock()
+	rm.pendingMount = nil
+	rm.pendingMutex.Unlock()
+	
+	// Execute the mount in a goroutine to avoid blocking
+	go func() {
+		_, err := rm.Mount(pendingMount.Config, pendingMount.APIKey)
+		if err != nil {
+			logger.Error("[Rclone] Failed to execute pending mount for %s: %v", pendingMount.MountPath, err)
+		}
+	}()
+}
+
 // MountStatus represents the status of a mount
 type MountStatus struct {
 	Mounted  bool   `json:"mounted"`
 	MountPath string `json:"mountPath,omitempty"`
 	Error    string `json:"error,omitempty"`
 	ProcessID int   `json:"processId,omitempty"`
+	Waiting  bool   `json:"waiting,omitempty"`
+	WaitingReason string `json:"waitingReason,omitempty"`
 }
 
 // Mount starts an rclone mount
@@ -86,7 +122,39 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 				ProcessID:  mount.ProcessID,
 			}, nil
 		}
+		// If it's a waiting mount, return waiting status
+		if mount.Waiting {
+			return &MountStatus{
+				Waiting: true,
+				WaitingReason: mount.WaitingReason,
+			}, nil
+		}
 		delete(rm.mounts, config.MountPath)
+	}
+
+	// Check if torrents are loaded before mounting
+	tm := GetTorrentManager(apiKey)
+	tm.cacheMutex.RLock()
+	torrentCount := len(tm.torrentList)
+	tm.cacheMutex.RUnlock()
+	
+	if torrentCount == 0 {
+		pendingMount := &RcloneMount{
+			MountPath: config.MountPath,
+			RemoteName: config.RemoteName,
+			Config: config,
+			Waiting: true,
+			WaitingReason: "Waiting for torrents to be loaded",
+			APIKey: apiKey,
+		}
+		rm.pendingMutex.Lock()
+		rm.pendingMount = pendingMount
+		rm.pendingMutex.Unlock()
+
+		return &MountStatus{
+			Waiting: true,
+			WaitingReason: "Waiting for torrents to be loaded",
+		}, nil
 	}
 
 	// Validate mount path
