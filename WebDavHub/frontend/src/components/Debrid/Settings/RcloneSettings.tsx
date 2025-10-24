@@ -16,6 +16,7 @@ interface RcloneConfig {
   vfsReadChunkSize: string;
   vfsReadChunkSizeLimit: string;
   streamBufferSize: string;
+  serveFromRclone: boolean;
 }
 
 interface RcloneStatus {
@@ -33,7 +34,7 @@ const RcloneSettings: React.FC = () => {
   const [config, setConfig] = useState<RcloneConfig>({
     enabled: false,
     mountPath: '',
-    vfsCacheMode: 'writes',
+    vfsCacheMode: 'full',
     vfsCacheMaxSize: '1G',
     vfsCacheMaxAge: '24h',
     bufferSize: '16M',
@@ -43,6 +44,7 @@ const RcloneSettings: React.FC = () => {
     vfsReadChunkSize: '64M',
     vfsReadChunkSizeLimit: '128M',
     streamBufferSize: '1M',
+    serveFromRclone: false,
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -149,20 +151,23 @@ const RcloneSettings: React.FC = () => {
     setMounting(true);
     setIsPolling(true);
     try {
-      // Filter out empty string values to allow defaults to be applied
-      const configToMount = Object.fromEntries(
+      const configToSave = Object.fromEntries(
         Object.entries(config).filter(([_, value]) => {
           // Keep boolean values and non-empty strings
           return typeof value === 'boolean' || (typeof value === 'string' && value.trim() !== '');
         })
       );
       
-      const response = await axios.post('/api/realdebrid/rclone/mount', configToMount);
+      await axios.put('/api/realdebrid/config', {
+        rcloneSettings: configToSave
+      });
+
+      const response = await axios.post('/api/realdebrid/rclone/mount', configToSave);
       if (response.data.success) {
         if (response.data.status?.waiting) {
-          showMessage('Mount is waiting for torrents to load...', 'info');
+          showMessage('Configuration saved and mount is waiting for torrents to load...', 'info');
         } else {
-          showMessage('Rclone mount started successfully', 'success');
+          showMessage('Configuration saved and rclone mount started successfully', 'success');
         }
         if (response.data.status) {
           setStatus(response.data.status);
@@ -386,6 +391,43 @@ const RcloneSettings: React.FC = () => {
                   <>
                     <Divider />
 
+                    {/* Serve From Rclone Toggle */}
+                    <Box>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={config.serveFromRclone}
+                            onChange={(e) => handleConfigChange('serveFromRclone', e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight="500">
+                              Serve From Rclone Mount
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                              Files served through rclone mount filesystem (uses VFS cache)
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                      {/* Current Mode Indicator */}
+                      <Alert
+                        severity={config.serveFromRclone ? "info" : "success"}
+                        sx={{ mt: 1, py: 0.5 }}
+                        icon={config.serveFromRclone ? <Storage fontSize="small" /> : <CheckCircle fontSize="small" />}
+                      >
+                        <Typography variant="body2" fontWeight="500">
+                          {config.serveFromRclone
+                            ? '🔄 Active Mode: Serving from Rclone Mount (VFS cache)'
+                            : '⚡ Active Mode: Direct streaming from cached RD links (Recommended)'}
+                        </Typography>
+                      </Alert>
+                    </Box>
+
+                    <Divider />
+
                     {/* Rclone Path (Windows only - hidden on Linux/Unix) */}
                     {serverOS === 'windows' && (
                       <Box>
@@ -465,7 +507,7 @@ const RcloneSettings: React.FC = () => {
                               size="small"
                               value={config.vfsCacheMode}
                               onChange={(e) => handleConfigChange('vfsCacheMode', e.target.value)}
-                              placeholder="writes"
+                              placeholder="full"
                             />
                           </Box>
                           <Box>

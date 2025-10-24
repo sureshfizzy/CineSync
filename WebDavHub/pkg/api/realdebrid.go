@@ -887,6 +887,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 // handleTorrentGet handles GET/HEAD requests to download files from torrents
 func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
 	tm := realdebrid.GetTorrentManager(apiKey)
+	configManager := realdebrid.GetConfigManager()
 	
 	// Parse path: /__all__/torrent_name/file_path
 	reqPath = strings.Trim(reqPath, "/")
@@ -968,7 +969,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	configManager := realdebrid.GetConfigManager()
 	config := configManager.GetConfig()
 	initialChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSize)
 	maxChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSizeLimit)

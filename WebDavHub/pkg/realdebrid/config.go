@@ -31,6 +31,7 @@ type RcloneSettings struct {
     VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
     VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
     StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
+    ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -48,15 +49,15 @@ var (
 // GetConfigManager returns the singleton config manager
 func GetConfigManager() *ConfigManager {
 	configOnce.Do(func() {
-		configManager = &ConfigManager{
+        configManager = &ConfigManager{
             config: &Config{
                 Enabled: false,
                 APIKey:  "",
                 RcloneSettings: RcloneSettings{
                     Enabled:              false,
                     MountPath:            "",
-                    RemoteName:           "realdebrid",
-                    VfsCacheMode:         "writes",
+                    RemoteName:           "CineSync",
+                    VfsCacheMode:         "full",
                     VfsCacheMaxSize:      "1G",
                     VfsCacheMaxAge:       "24h",
                     BufferSize:           "16M",
@@ -66,10 +67,11 @@ func GetConfigManager() *ConfigManager {
                     VfsReadChunkSize:     "64M",
                     VfsReadChunkSizeLimit: "128M",
                     StreamBufferSize:     "1M",
+                    ServeFromRclone:      false,
                 },
             },
             configPath: filepath.Join("..", "db", "debrid.yml"),
-		}
+        }
 		configManager.loadConfig()
 	})
 	return configManager
@@ -85,10 +87,10 @@ func (cm *ConfigManager) GetConfig() *Config {
 	
 	// Ensure defaults are applied for rclone settings
 	if configCopy.RcloneSettings.RemoteName == "" {
-		configCopy.RcloneSettings.RemoteName = "realdebrid"
+		configCopy.RcloneSettings.RemoteName = "CineSync"
 	}
 	if configCopy.RcloneSettings.VfsCacheMode == "" {
-		configCopy.RcloneSettings.VfsCacheMode = "writes"
+		configCopy.RcloneSettings.VfsCacheMode = "full"
 	}
 	if configCopy.RcloneSettings.VfsCacheMaxSize == "" {
 		configCopy.RcloneSettings.VfsCacheMaxSize = "1G"
@@ -178,6 +180,9 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				if streamBufferSize, ok := rcloneSettingsMap["streamBufferSize"].(string); ok && streamBufferSize != "" {
 					rcloneSettings.StreamBufferSize = streamBufferSize
 				}
+				if serveFromRclone, ok := rcloneSettingsMap["serveFromRclone"].(bool); ok {
+					rcloneSettings.ServeFromRclone = serveFromRclone
+				}
 				
 				cm.config.RcloneSettings = rcloneSettings
 			}
@@ -210,6 +215,13 @@ func (cm *ConfigManager) SetAPIKey(apiKey string) error {
 	return cm.saveConfig()
 }
 
+// IsServeFromRclone returns whether to serve from rclone mount
+func (cm *ConfigManager) IsServeFromRclone() bool {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	return cm.config.RcloneSettings.ServeFromRclone
+}
+
 
 // loadConfig loads configuration from file
 func (cm *ConfigManager) loadConfig() error {
@@ -235,10 +247,10 @@ func (cm *ConfigManager) loadConfig() error {
 
     // Apply defaults for missing rclone settings
     if config.RcloneSettings.RemoteName == "" {
-        config.RcloneSettings.RemoteName = "realdebrid"
+        config.RcloneSettings.RemoteName = "CineSync"
     }
     if config.RcloneSettings.VfsCacheMode == "" {
-        config.RcloneSettings.VfsCacheMode = "writes"
+        config.RcloneSettings.VfsCacheMode = "full"
     }
     if config.RcloneSettings.VfsCacheMaxSize == "" {
         config.RcloneSettings.VfsCacheMaxSize = "1G"
@@ -304,6 +316,7 @@ func (cm *ConfigManager) ResetConfig() error {
             VfsReadChunkSize:     "64M",
             VfsReadChunkSizeLimit: "128M",
             StreamBufferSize:     "1M",
+            ServeFromRclone:      false,
         },
     }
 	

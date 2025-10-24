@@ -6,8 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
+
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
+
+// DownloadCacheEntry represents a cached download link with expiration
+type DownloadCacheEntry struct {
+	Download  *DownloadLink
+	Generated time.Time
+}
 
 // Client represents a Real-Debrid API client
 type Client struct {
@@ -15,6 +24,8 @@ type Client struct {
 	baseURL    string
 	webdavURL  string
 	httpClient *http.Client
+	unrestrictCache cmap.ConcurrentMap[string, *DownloadCacheEntry]
+	cacheMutex      sync.RWMutex
 }
 
 // UserInfo represents Real-Debrid user information
@@ -78,6 +89,7 @@ func NewClient(apiKey string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		unrestrictCache: cmap.New[*DownloadCacheEntry](),
 	}
 }
 
@@ -155,6 +167,14 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		processedLink = link[0:39]
 	}
 
+	// Check cache first
+	if cached, exists := c.unrestrictCache.Get(processedLink); exists {
+		if time.Since(cached.Generated) < 24*time.Hour {
+			return cached.Download, nil
+		}
+		c.unrestrictCache.Remove(processedLink)
+	}
+
 	// Use form-encoded data
 	payload := fmt.Sprintf("link=%s", processedLink)
 
@@ -185,6 +205,12 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&downloadLink); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
+
+	// Cache the result
+	c.unrestrictCache.Set(processedLink, &DownloadCacheEntry{
+		Download:  &downloadLink,
+		Generated: time.Now(),
+	})
 
 	return &downloadLink, nil
 }
@@ -499,5 +525,25 @@ func (c *Client) GetAPIKeyStatus() map[string]interface{} {
 		"points":     userInfo.Points,
 		"type":       userInfo.Type,
 		"expiration": userInfo.Expiration,
+	}
+}
+
+// ClearUnrestrictCache clears all cached unrestricted links
+func (c *Client) ClearUnrestrictCache() {
+	c.unrestrictCache.Clear()
+}
+
+// GetUnrestrictCacheSize returns the number of cached unrestricted links
+func (c *Client) GetUnrestrictCacheSize() int {
+	return c.unrestrictCache.Count()
+}
+
+// CleanupExpiredCacheEntries removes expired cache entries
+func (c *Client) CleanupExpiredCacheEntries() {
+	now := time.Now()
+	for item := range c.unrestrictCache.IterBuffered() {
+		if now.Sub(item.Val.Generated) >= 24*time.Hour {
+			c.unrestrictCache.Remove(item.Key)
+		}
 	}
 }
