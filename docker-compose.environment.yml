@@ -8,9 +8,15 @@ services:
     ports:
       - "8082:8082"
       - "5173:5173"
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
     volumes:
       - /home:/home
-      - /mnt:/mnt
+      - /mnt:/mnt:rshared
       - ./db:/app/db
     environment:
       - PUID=1000
