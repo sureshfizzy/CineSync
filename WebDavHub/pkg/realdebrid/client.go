@@ -18,6 +18,13 @@ type DownloadCacheEntry struct {
 	Generated time.Time
 }
 
+// FailedUnrestrictEntry represents a failed unrestriction attempt
+type FailedUnrestrictEntry struct {
+	Error     string
+	ErrorCode int
+	Timestamp time.Time
+}
+
 // Client represents a Real-Debrid API client
 type Client struct {
 	apiKey     string
@@ -25,6 +32,7 @@ type Client struct {
 	webdavURL  string
 	httpClient *http.Client
 	unrestrictCache cmap.ConcurrentMap[string, *DownloadCacheEntry]
+	failedUnrestrictCache cmap.ConcurrentMap[string, *FailedUnrestrictEntry]
 	cacheMutex      sync.RWMutex
 }
 
@@ -103,6 +111,7 @@ func NewClient(apiKey string) *Client {
 			Timeout: 30 * time.Second,
 		},
 		unrestrictCache: cmap.New[*DownloadCacheEntry](),
+		failedUnrestrictCache: cmap.New[*FailedUnrestrictEntry](),
 	}
 }
 
@@ -181,6 +190,13 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 	}
 
 	// Check cache first
+	if failedEntry, exists := c.failedUnrestrictCache.Get(processedLink); exists {
+		if time.Since(failedEntry.Timestamp) < 1*time.Hour {
+			return nil, fmt.Errorf("API error: %s (code: %d)", failedEntry.Error, failedEntry.ErrorCode)
+		}
+		c.failedUnrestrictCache.Remove(processedLink)
+	}
+
 	if cached, exists := c.unrestrictCache.Get(processedLink); exists {
 		if time.Since(cached.Generated) < 24*time.Hour {
 			return cached.Download, nil
@@ -209,6 +225,13 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		body, _ := io.ReadAll(resp.Body)
 		var errorResp ErrorResponse
 		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if isCacheableError(errorResp.ErrorCode) {
+				c.failedUnrestrictCache.Set(processedLink, &FailedUnrestrictEntry{
+					Error:     errorResp.Error,
+					ErrorCode: errorResp.ErrorCode,
+					Timestamp: time.Now(),
+				})
+			}
 			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
 		}
 		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
@@ -226,6 +249,17 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 	})
 
 	return &downloadLink, nil
+}
+
+// isCacheableError determines if an error code should be cached to prevent retries
+func isCacheableError(errorCode int) bool {
+	cacheableErrors := map[int]bool{
+		19: true, // hoster_unavailable
+		21: true, // unavailable_file
+		27: true, // permission_denied
+		28: true, // hoster_not_supported
+	}
+	return cacheableErrors[errorCode]
 }
 
 

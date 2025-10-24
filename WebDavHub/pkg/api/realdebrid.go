@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"cinesync/pkg/logger"
@@ -909,7 +910,10 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	downloadURL, fileSize, err := getDownloadURLWithRetry(tm, torrentID, filePath)
 	if err != nil {
-		logger.Error("[Torrents] Failed to get download URL after retries: %v", err)
+		logKey := fmt.Sprintf("download_fail:%s", filePath)
+		if shouldLogError(logKey, 1*time.Minute) {
+			logger.Error("[Torrents] Failed to get download URL: %v", err)
+		}
 		http.Error(w, "Could not fetch download link", http.StatusPreconditionFailed)
 		return
 	}
@@ -1096,30 +1100,33 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// getDownloadURLWithRetry implements lazy link generation
-func getDownloadURLWithRetry(tm *realdebrid.TorrentManager, torrentID, filePath string) (string, int64, error) {
-	const maxRetries = 3
-	
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Try to get download URL
-		downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
-		if err == nil && downloadURL != "" {
-			return downloadURL, fileSize, nil
-		}
-		
-		logger.Debug("[Torrents] Attempt %d failed to get download URL for torrent %s, file %s: %v", 
-			attempt+1, torrentID, filePath, err)
+// Error logging rate limiter to prevent spam
+var (
+	errorLogMutex sync.Mutex
+	lastErrorLog  = make(map[string]time.Time)
+)
 
-		if attempt < maxRetries-1 {
-			logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
-			if refreshErr := tm.RefreshTorrent(torrentID); refreshErr != nil {
-				logger.Warn("[Torrents] Failed to refresh torrent %s: %v", torrentID, refreshErr)
-			}
-			time.Sleep(time.Duration(attempt+1) * time.Second)
-		}
-	}
+// shouldLogError checks if we should log an error
+func shouldLogError(key string, interval time.Duration) bool {
+	errorLogMutex.Lock()
+	defer errorLogMutex.Unlock()
 	
-	return "", 0, fmt.Errorf("failed to get download URL after %d attempts", maxRetries)
+	lastTime, exists := lastErrorLog[key]
+	if !exists || time.Since(lastTime) > interval {
+		lastErrorLog[key] = time.Now()
+		return true
+	}
+	return false
+}
+
+// getDownloadURLWithRetry gets download URL
+func getDownloadURLWithRetry(tm *realdebrid.TorrentManager, torrentID, filePath string) (string, int64, error) {
+	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
+	if err == nil && downloadURL != "" {
+		return downloadURL, fileSize, nil
+	}
+
+	return "", 0, err
 }
 
 // HandleDebridDashboardStats handles requests for debrid dashboard statistics

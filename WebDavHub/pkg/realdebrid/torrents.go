@@ -22,6 +22,12 @@ func SanitizeFilename(name string) string {
 	return r.Replace(name)
 }
 
+// FailedFileEntry represents a failed file unrestriction
+type FailedFileEntry struct {
+	Error     error
+	Timestamp time.Time
+}
+
 // TorrentManager manages cached torrent listings
 type TorrentManager struct {
 	client        *Client
@@ -32,6 +38,8 @@ type TorrentManager struct {
 	DirectoryMap cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *TorrentItem]]
 	downloadLinkCache map[string]*DownloadLink
 	downloadCacheMutex sync.RWMutex
+	failedFileCache map[string]*FailedFileEntry
+	failedFileMutex sync.RWMutex
 	downloadSG singleflight.Group
 }
 
@@ -62,6 +70,7 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		torrentList:   []TorrentItem{},
 		DirectoryMap:  cmap.New[cmap.ConcurrentMap[string, *TorrentItem]](),
 		downloadLinkCache: make(map[string]*DownloadLink),
+		failedFileCache: make(map[string]*FailedFileEntry),
 	}
 	
 	// Initialize special directories
@@ -223,6 +232,15 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	// Create cache key
 	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+
+	tm.failedFileMutex.RLock()
+	if failedEntry, exists := tm.failedFileCache[cacheKey]; exists {
+		if time.Since(failedEntry.Timestamp) < 24*time.Hour {
+			tm.failedFileMutex.RUnlock()
+			return "", 0, failedEntry.Error
+		}
+	}
+	tm.failedFileMutex.RUnlock()
 	
 	// Use singleflight to deduplicate concurrent requests
 	v, err, _ := tm.downloadSG.Do(cacheKey, func() (interface{}, error) {
@@ -279,17 +297,41 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		// Unrestrict the link
 		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
 		if err != nil {
-			logger.Error("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
-			return nil, fmt.Errorf("failed to unrestrict link: %w", err)
+			logger.Debug("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
+
+			wrappedErr := fmt.Errorf("failed to unrestrict link: %w", err)
+			tm.failedFileMutex.Lock()
+			tm.failedFileCache[cacheKey] = &FailedFileEntry{
+				Error:     wrappedErr,
+				Timestamp: time.Now(),
+			}
+			tm.failedFileMutex.Unlock()
+
+			return nil, wrappedErr
 		}
 
 		if unrestrictedLink.Download == "" {
 			logger.Warn("[Torrents] Unrestrict returned empty download URL")
-			return nil, fmt.Errorf("unrestrict returned empty download URL")
+			emptyErr := fmt.Errorf("unrestrict returned empty download URL")
+
+			// Cache this error too
+			tm.failedFileMutex.Lock()
+			tm.failedFileCache[cacheKey] = &FailedFileEntry{
+				Error:     emptyErr,
+				Timestamp: time.Now(),
+			}
+			tm.failedFileMutex.Unlock()
+
+			return nil, emptyErr
 		}
 
 		logger.Debug("[Torrents] Successfully unrestricted link for: %s", filePath)
 		
+		// Clear any cached failures for this file since it succeeded
+		tm.failedFileMutex.Lock()
+		delete(tm.failedFileCache, cacheKey)
+		tm.failedFileMutex.Unlock()
+
 		// Cache the result
 		tm.downloadCacheMutex.Lock()
 		tm.downloadLinkCache[cacheKey] = unrestrictedLink
