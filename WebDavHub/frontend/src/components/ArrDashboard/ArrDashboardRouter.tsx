@@ -4,6 +4,7 @@ import ArrSearchPage from './ArrSearchPage';
 import RootFoldersManagement from './RootFoldersManagement';
 import IndexerManagement from './IndexerManagement';
 import DebridDashboard from '../Debrid/DebridDashboard';
+import DebridBrowser from '../Debrid/DebridBrowser';
 import RealDebridSettings from '../Debrid/Settings/RealDebridSettings';
 import RcloneSettings from '../Debrid/Settings/RcloneSettings';
 
@@ -25,6 +26,7 @@ export default function ArrDashboardRouter() {
 
       {/* Debrid */}
       <Route path="debrid" element={<DebridDashboard />} />
+      <Route path="debrid/browser" element={<DebridBrowser />} />
       <Route path="debrid/settings" element={<RealDebridSettings />} />
       <Route path="debrid/settings/rclone" element={<RcloneSettings />} />
       

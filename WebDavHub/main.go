@@ -329,6 +329,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/rclone/unmount", api.HandleRcloneUnmount)
 	apiMux.HandleFunc("/api/realdebrid/rclone/status", api.HandleRcloneStatus)
 	apiMux.HandleFunc("/api/realdebrid/rclone/test", api.HandleRcloneTest)
+	apiMux.HandleFunc("/api/realdebrid/dashboard-stats", api.HandleDebridDashboardStats)
 
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)

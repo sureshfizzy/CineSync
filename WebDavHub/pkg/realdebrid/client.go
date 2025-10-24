@@ -74,6 +74,19 @@ type TorrentItem struct {
     Status   string `json:"status"`
 }
 
+// TrafficInfo represents current traffic information
+type TrafficInfo struct {
+    TodayBytes int64 `json:"today_bytes"`
+}
+
+// TrafficDetailResponse represents the structure
+type TrafficDetailResponse struct {
+    Bytes int64 `json:"bytes"`
+}
+
+// TrafficDetailsMap represents the full traffic details response
+type TrafficDetailsMap map[string]TrafficDetailResponse
+
 // ErrorResponse represents an error response from Real-Debrid API
 type ErrorResponse struct {
 	Error   string `json:"error"`
@@ -546,4 +559,50 @@ func (c *Client) CleanupExpiredCacheEntries() {
 			c.unrestrictCache.Remove(item.Key)
 		}
 	}
+}
+
+// GetTrafficInfo retrieves current traffic information
+func (c *Client) GetTrafficInfo() (*TrafficInfo, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+
+	req, err := http.NewRequest("GET", c.baseURL+"/traffic/details", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	var detailsMap TrafficDetailsMap
+	if err := json.NewDecoder(resp.Body).Decode(&detailsMap); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	info := &TrafficInfo{
+		TodayBytes: 0,
+	}
+
+	today := time.Now().Format("2006-01-02")
+	if todayDetail, exists := detailsMap[today]; exists {
+		info.TodayBytes = todayDetail.Bytes
+	}
+
+	return info, nil
 }

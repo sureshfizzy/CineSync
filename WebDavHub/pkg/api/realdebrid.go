@@ -1121,3 +1121,89 @@ func getDownloadURLWithRetry(tm *realdebrid.TorrentManager, torrentID, filePath 
 	
 	return "", 0, fmt.Errorf("failed to get download URL after %d attempts", maxRetries)
 }
+
+// HandleDebridDashboardStats handles requests for debrid dashboard statistics
+func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	configManager := realdebrid.GetConfigManager()
+	cfg := configManager.GetConfig()
+	if !cfg.Enabled || cfg.APIKey == "" {
+		http.Error(w, "Real-Debrid is not configured or enabled", http.StatusBadRequest)
+		return
+	}
+
+	client := realdebrid.NewClient(cfg.APIKey)
+
+	// Get user info
+	userInfo, err := client.GetUserInfo()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get user info: %v", err), http.StatusBadGateway)
+		return
+	}
+
+	// Get torrents count and stats from prefetched data
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	torrents := tm.GetAllTorrentsFromDirectory(realdebrid.ALL_TORRENTS)
+	
+	if len(torrents) == 0 {
+		torrents, err = client.GetAllTorrents(1000, nil)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get torrents: %v", err), http.StatusBadGateway)
+			return
+		}
+	}
+
+	// Calculate torrent statistics
+	totalTorrents := len(torrents)
+	totalSize := int64(0)
+	statusCounts := make(map[string]int)
+	
+	for _, torrent := range torrents {
+		totalSize += torrent.Bytes
+		statusCounts[torrent.Status]++
+	}
+
+	// Get traffic information
+	trafficInfo, err := client.GetTrafficInfo()
+	if err != nil {
+		trafficInfo = &realdebrid.TrafficInfo{
+			TodayBytes: 0,
+		}
+	}
+
+	// Prepare response
+	response := map[string]interface{}{
+		"account": map[string]interface{}{
+			"username":   userInfo.Username,
+			"email":      userInfo.Email,
+			"points":     userInfo.Points,
+			"type":       userInfo.Type,
+			"expiration": userInfo.Expiration,
+		},
+		"torrents": map[string]interface{}{
+			"total":        totalTorrents,
+			"totalSize":    totalSize,
+			"statusCounts": statusCounts,
+		},
+		"traffic": map[string]interface{}{
+			"today": trafficInfo.TodayBytes,
+		},
+		"lastUpdated": time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

@@ -2,6 +2,7 @@ import { Box, List, ListItemButton, ListItemIcon, ListItemText, alpha, useTheme,
 import FolderIcon from '@mui/icons-material/Folder';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StorageIcon from '@mui/icons-material/Storage';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -22,7 +23,8 @@ export default function DebridSidebar() {
   };
 
   const items = [
-    { text: 'Browse', icon: <FolderIcon />, path: '/dashboard/debrid' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard/debrid' },
+    { text: 'Browser', icon: <FolderIcon />, path: '/dashboard/debrid/browser' },
   ];
 
   return (
