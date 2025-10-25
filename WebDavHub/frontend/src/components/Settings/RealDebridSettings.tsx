@@ -6,15 +6,16 @@ import axios from 'axios';
 interface RealDebridConfig {
   enabled: boolean;
   apiKey: string;
-  webdavPath: string;
-  autoConnect: boolean;
+  httpDavSettings: {
+    enabled: boolean;
+    userId: string;
+    password: string;
+  };
 }
 
 interface RealDebridStatus {
   enabled: boolean;
   apiKeySet: boolean;
-  webdavPath: string;
-  autoConnect: boolean;
   valid: boolean;
   errors: string[];
   apiStatus?: {
@@ -26,6 +27,14 @@ interface RealDebridStatus {
     expiration?: string;
     error?: string;
   };
+  httpDavStatus?: {
+    enabled: boolean;
+    userIdSet: boolean;
+    passwordSet: boolean;
+    baseUrl: string;
+    connected: boolean;
+    connectionError?: string;
+  };
 }
 
 const RealDebridSettings: React.FC = () => {
@@ -34,14 +43,19 @@ const RealDebridSettings: React.FC = () => {
   const [config, setConfig] = useState<RealDebridConfig>({
     enabled: false,
     apiKey: '',
-    webdavPath: '/',
-    autoConnect: false,
+    httpDavSettings: {
+      enabled: false,
+      userId: '',
+      password: '',
+    },
   });
   const [status, setStatus] = useState<RealDebridStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingHttpDav, setTestingHttpDav] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showHttpDavPassword, setShowHttpDavPassword] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
   const [testDialog, setTestDialog] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
@@ -102,6 +116,35 @@ const RealDebridSettings: React.FC = () => {
       showMessage('Connection test failed', 'error');
     } finally {
       setTesting(false);
+    }
+  };
+
+  const testHttpDavConnection = async () => {
+    if (!config.httpDavSettings.userId || !config.httpDavSettings.password) {
+      showMessage('Please enter User ID and Password first', 'warning');
+      return;
+    }
+
+    setTestingHttpDav(true);
+    try {
+      const response = await axios.post('/api/realdebrid/httpdav/test', {
+        userId: config.httpDavSettings.userId,
+        password: config.httpDavSettings.password,
+      });
+      setTestResult(response.data);
+      setTestDialog(true);
+      if (response.data.success) {
+        showMessage('HTTP DAV connection test successful!', 'success');
+      } else {
+        showMessage('HTTP DAV connection test failed', 'error');
+      }
+    } catch (error) {
+      console.error('HTTP DAV connection test failed:', error);
+      setTestResult({ success: false, error: 'HTTP DAV connection test failed' });
+      setTestDialog(true);
+      showMessage('HTTP DAV connection test failed', 'error');
+    } finally {
+      setTestingHttpDav(false);
     }
   };
 
@@ -290,6 +333,97 @@ const RealDebridSettings: React.FC = () => {
                   />
                 </Box>
 
+                <Divider />
+
+                {/* HTTP DAV Settings */}
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                    HTTP DAV Virtual Mount
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                    Configure Real-Debrid HTTP DAV access for virtual filesystem
+                  </Typography>
+                  
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={config.httpDavSettings.enabled}
+                        onChange={(e) => handleConfigChange('httpDavSettings', {
+                          ...config.httpDavSettings,
+                          enabled: e.target.checked
+                        })}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="500">
+                          Enable HTTP DAV Virtual Mount
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Browser-based virtual filesystem using HTTP DAV protocol
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ mb: 2 }}
+                  />
+                  
+                  {config.httpDavSettings.enabled && (
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        size={isMobile ? 'small' : 'medium'}
+                        label="User ID"
+                        value={config.httpDavSettings.userId}
+                        onChange={(e) => handleConfigChange('httpDavSettings', {
+                          ...config.httpDavSettings,
+                          userId: e.target.value
+                        })}
+                        placeholder="Enter your HTTP DAV User ID (e.g., goa)"
+                        helperText="Get your HTTP DAV credentials from Real-Debrid settings"
+                      />
+                      
+                      <TextField
+                        fullWidth
+                        size={isMobile ? 'small' : 'medium'}
+                        type={showHttpDavPassword ? 'text' : 'password'}
+                        label="Password"
+                        value={config.httpDavSettings.password}
+                        onChange={(e) => handleConfigChange('httpDavSettings', {
+                          ...config.httpDavSettings,
+                          password: e.target.value
+                        })}
+                        placeholder="Enter your HTTP DAV Password"
+                        InputProps={{
+                          endAdornment: (
+                            <Stack direction="row" spacing={0.5}>
+                              <Tooltip title={showHttpDavPassword ? 'Hide' : 'Show'}>
+                                <IconButton
+                                  onClick={() => setShowHttpDavPassword(!showHttpDavPassword)}
+                                  edge="end"
+                                  size="small"
+                                >
+                                  {showHttpDavPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Test HTTP DAV Connection">
+                                <IconButton
+                                  onClick={testHttpDavConnection}
+                                  disabled={testingHttpDav || !config.httpDavSettings.userId || !config.httpDavSettings.password}
+                                  edge="end"
+                                  size="small"
+                                >
+                                  {testingHttpDav ? <CircularProgress size={18} /> : <Science fontSize="small" />}
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          ),
+                        }}
+                      />
+                    </Stack>
+                  )}
+                </Box>
+
                 {/* WebDAV Path removed per spec */}
 
                 {/* Auto Connect - removed (always enabled on server) */}
@@ -375,6 +509,58 @@ const RealDebridSettings: React.FC = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* HTTP DAV Status */}
+            {status?.httpDavStatus && (
+              <Card>
+                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                    <CloudDownload sx={{ 
+                      color: status.httpDavStatus.connected ? 'success.main' : 'error.main', 
+                      fontSize: { xs: 20, md: 24 } 
+                    }} />
+                    <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">HTTP DAV</Typography>
+                  </Stack>
+                  <Stack spacing={1.5}>
+                    <Box>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Status
+                      </Typography>
+                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} 
+                        color={status.httpDavStatus.connected ? 'success.main' : 'error.main'}>
+                        {status.httpDavStatus.connected ? 'Connected' : 'Disconnected'}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Credentials
+                      </Typography>
+                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                        {status.httpDavStatus.userIdSet && status.httpDavStatus.passwordSet ? 'Configured' : 'Not Configured'}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Base URL
+                      </Typography>
+                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} sx={{ wordBreak: 'break-all' }}>
+                        https://dav.real-debrid.com/
+                      </Typography>
+                    </Box>
+                    {status.httpDavStatus.connectionError && (
+                      <Box>
+                        <Typography variant="caption" fontWeight="600" color="error.main" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Error
+                        </Typography>
+                        <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color="error.main">
+                          {status.httpDavStatus.connectionError}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
           </Stack>
         </Box>
       </Box>
@@ -400,13 +586,20 @@ const RealDebridSettings: React.FC = () => {
             <Box>
               {testResult.success ? (
                 <Alert severity="success" sx={{ mb: 2 }}>
-                  Connection test successful!
+                  {testResult.message || 'Connection test successful!'}
                 </Alert>
               ) : (
                 <Alert severity="error" sx={{ mb: 2 }}>
                   Connection test failed: {testResult.error}
                 </Alert>
               )}
+              
+              {testResult.warning && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  {testResult.warning}
+                </Alert>
+              )}
+              
               {testResult.userInfo && (
                 <Box>
                   <Typography variant="h6" sx={{ mb: 2 }}>
@@ -436,6 +629,34 @@ const RealDebridSettings: React.FC = () => {
                         Points
                       </Typography>
                       <Typography variant="body2">{testResult.userInfo.points}</Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+              )}
+              
+              {testResult.directoryInfo && (
+                <Box>
+                  <Typography variant="h6" sx={{ mb: 2 }}>
+                    HTTP DAV Information
+                  </Typography>
+                  <Stack spacing={1}>
+                    <Box>
+                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                        Base URL
+                      </Typography>
+                      <Typography variant="body2">https://dav.real-debrid.com/</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                        Files Found
+                      </Typography>
+                      <Typography variant="body2">{testResult.fileCount || 0}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                        Directory Accessible
+                      </Typography>
+                      <Typography variant="body2">{testResult.directoryInfo.accessible ? 'Yes' : 'No'}</Typography>
                     </Box>
                   </Stack>
                 </Box>

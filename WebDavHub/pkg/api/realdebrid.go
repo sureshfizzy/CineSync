@@ -180,6 +180,211 @@ func HandleRealDebridTest(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// HandleRealDebridHttpDavTest handles Real-Debrid HTTP DAV connection testing
+func HandleRealDebridHttpDavTest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		UserID   string `json:"userId"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if request.UserID == "" {
+		http.Error(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if request.Password == "" {
+		http.Error(w, "Password is required", http.StatusBadRequest)
+		return
+	}
+
+	httpDavClient := realdebrid.NewHttpDavClient(request.UserID, request.Password, "https://dav.real-debrid.com/")
+	
+	if err := httpDavClient.TestConnection(); err != nil {
+		response := map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	files, err := httpDavClient.ListDirectory("/")
+	if err != nil {
+		response := map[string]interface{}{
+			"success": true,
+			"message": "HTTP DAV connection successful, but directory listing failed",
+			"warning": err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success":     true,
+		"message":     "HTTP DAV connection successful",
+		"fileCount":   len(files),
+		"baseUrl":     "https://dav.real-debrid.com/",
+		"directoryInfo": map[string]interface{}{
+			"accessible": true,
+			"fileCount":  len(files),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRealDebridHttpDav handles Real-Debrid HTTP DAV virtual browsing operations
+func HandleRealDebridHttpDav(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	configManager := realdebrid.GetConfigManager()
+	config := configManager.GetConfig()
+
+	if !config.HttpDavSettings.Enabled || config.HttpDavSettings.UserID == "" || config.HttpDavSettings.Password == "" {
+		http.Error(w, "HTTP DAV is not configured or enabled", http.StatusBadRequest)
+		return
+	}
+
+	reqPath := strings.TrimPrefix(r.URL.Path, "/api/realdebrid/httpdav")
+	if reqPath == "" {
+		reqPath = "/"
+	}
+
+	httpDavClient := realdebrid.NewHttpDavClient(
+		config.HttpDavSettings.UserID,
+		config.HttpDavSettings.Password,
+		"https://dav.real-debrid.com/",
+	)
+
+	switch r.Method {
+	case http.MethodGet:
+		if strings.HasSuffix(reqPath, "/") || reqPath == "/" {
+			files, err := getHttpDavDirectoryWithPagination(httpDavClient, reqPath)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to list directory: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			response := map[string]interface{}{
+				"path":  reqPath,
+				"files": files,
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+		} else {
+			reader, err := httpDavClient.ReadFileStream(reqPath)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to read file: %v", err), http.StatusInternalServerError)
+				return
+			}
+			defer reader.Close()
+
+			// Get file info for headers
+			fileInfo, err := httpDavClient.Stat(reqPath)
+			if err == nil {
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
+				w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", fileInfo.Name))
+			}
+
+			// Stream the file
+			w.Header().Set("Content-Type", "application/octet-stream")
+			io.Copy(w, reader)
+		}
+
+	case http.MethodHead:
+		fileInfo, err := httpDavClient.Stat(reqPath)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get file info: %v", err), http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
+		w.Header().Set("Last-Modified", fileInfo.ModTime.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// getHttpDavDirectoryWithPagination handles automatic pagination for Real-Debrid HTTP DAV
+func getHttpDavDirectoryWithPagination(httpDavClient *realdebrid.HttpDavClient, reqPath string) ([]realdebrid.HttpDavFileInfo, error) {
+	switch reqPath {
+	case "/torrents", "/torrents/":
+		configManager := realdebrid.GetConfigManager()
+		config := configManager.GetConfig()
+		
+		if !config.HttpDavSettings.Enabled {
+			return nil, fmt.Errorf("HTTP DAV not enabled")
+		}
+		
+		tm := realdebrid.GetTorrentManager(config.APIKey)
+		return tm.GetHttpDavTorrents(), nil
+		
+	case "/links", "/links/":
+		configManager := realdebrid.GetConfigManager()
+		config := configManager.GetConfig()
+		
+		if !config.HttpDavSettings.Enabled {
+			return nil, fmt.Errorf("HTTP DAV not enabled")
+		}
+		
+		tm := realdebrid.GetTorrentManager(config.APIKey)
+		return tm.GetHttpDavLinks(), nil
+	}
+
+	files, err := httpDavClient.ListDirectory(reqPath)
+	if err != nil {
+		return nil, err
+	}
+
+	validCount := 0
+	for _, file := range files {
+		if !strings.HasPrefix(file.Name, "_More_") {
+			validCount++
+		}
+	}
+
+	filteredFiles := make([]realdebrid.HttpDavFileInfo, 0, validCount)
+	for _, file := range files {
+		if !strings.HasPrefix(file.Name, "_More_") {
+			filteredFiles = append(filteredFiles, file)
+		}
+	}
+	
+	return filteredFiles, nil
+}
+
 // HandleRealDebridWebDAV handles Real-Debrid WebDAV operations
 func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 	// Set CORS and WebDAV headers
@@ -704,6 +909,9 @@ func PrefetchRealDebridData() {
             logger.Info("[RD] Torrents fetched: %d", len(torrents))
             tm := realdebrid.GetTorrentManager(cfg.APIKey)
             tm.SetPrefetchedTorrents(torrents)
+            if err := tm.PrefetchHttpDavData(); err != nil {
+                logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
+            }
         }
 
         logger.Info("[RD] Prefetch completed")

@@ -321,6 +321,8 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	// Real-Debrid configuration endpoints
 	apiMux.HandleFunc("/api/realdebrid/config", api.HandleRealDebridConfig)
 	apiMux.HandleFunc("/api/realdebrid/test", api.HandleRealDebridTest)
+	apiMux.HandleFunc("/api/realdebrid/httpdav/test", api.HandleRealDebridHttpDavTest)
+	apiMux.HandleFunc("/api/realdebrid/httpdav/", api.HandleRealDebridHttpDav)
 	apiMux.HandleFunc("/api/realdebrid/status", api.HandleRealDebridStatus)
 	apiMux.HandleFunc("/api/realdebrid/refresh", api.HandleRealDebridRefresh)
 	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)

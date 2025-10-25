@@ -41,6 +41,12 @@ type TorrentManager struct {
 	failedFileCache map[string]*FailedFileEntry
 	failedFileMutex sync.RWMutex
 	downloadSG singleflight.Group
+	
+	// HTTP DAV
+	httpDavTorrentsCache []HttpDavFileInfo
+	httpDavLinksCache    []HttpDavFileInfo
+	httpDavCacheMutex    sync.RWMutex
+	httpDavLastCacheTime time.Time
 }
 
 var (
@@ -379,4 +385,136 @@ func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
 	
 	logger.Debug("[Torrents] Successfully refreshed torrent %s", torrentID)
 	return nil
+}
+
+// PrefetchHttpDavData prefetches and aggregates HTTP DAV directory data
+func (tm *TorrentManager) PrefetchHttpDavData() error {
+	configManager := GetConfigManager()
+	config := configManager.GetConfig()
+	
+	if !config.HttpDavSettings.Enabled || config.HttpDavSettings.UserID == "" || config.HttpDavSettings.Password == "" {
+		return nil
+	}
+	
+	httpDavClient := NewHttpDavClient(
+		config.HttpDavSettings.UserID,
+		config.HttpDavSettings.Password,
+		"https://dav.real-debrid.com/",
+	)
+	
+	// Prefetch torrents with pagination aggregation
+	torrentsFiles, err := tm.aggregateHttpDavTorrents(httpDavClient)
+	if err != nil {
+		return err
+	}
+	
+	// Prefetch links
+	linksFiles, err := httpDavClient.ListDirectory("/links")
+	if err != nil {
+		return err
+	}
+	
+	// Filter out pagination directories from links
+	filteredLinks := make([]HttpDavFileInfo, 0, len(linksFiles))
+	for _, file := range linksFiles {
+		if !strings.HasPrefix(file.Name, "_More_") {
+			filteredLinks = append(filteredLinks, file)
+		}
+	}
+	
+	// Store in cache
+	tm.httpDavCacheMutex.Lock()
+	tm.httpDavTorrentsCache = torrentsFiles
+	tm.httpDavLinksCache = filteredLinks
+	tm.httpDavLastCacheTime = time.Now()
+	tm.httpDavCacheMutex.Unlock()
+	
+	logger.Info("[HTTP DAV] Prefetch completed: %d torrents, %d links", len(torrentsFiles), len(filteredLinks))
+	return nil
+}
+
+// aggregateHttpDavTorrents aggregates all paginated torrent directories
+func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient) ([]HttpDavFileInfo, error) {
+	files, err := httpDavClient.ListDirectory("/torrents")
+	if err != nil {
+		return nil, err
+	}
+	
+	// Pre-allocate slices with estimated capacity
+	contentFiles := make([]HttpDavFileInfo, 0, len(files)*4)
+	paginationDirs := make([]HttpDavFileInfo, 0, 20)
+	
+	// Separate content files from pagination directories
+	for _, file := range files {
+		if strings.HasPrefix(file.Name, "_More_") {
+			paginationDirs = append(paginationDirs, file)
+		} else {
+			contentFiles = append(contentFiles, file)
+		}
+	}
+	
+	// Process pagination directories concurrently with worker pool pattern
+	type pageResult struct {
+		files []HttpDavFileInfo
+		err   error
+	}
+
+	const maxWorkers = 3
+	results := make(chan pageResult, len(paginationDirs))
+	semaphore := make(chan struct{}, maxWorkers)
+	
+	for _, pageDir := range paginationDirs {
+		go func(dir HttpDavFileInfo) {
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			pagePath := path.Join("/torrents", dir.Name)
+			pageFiles, err := httpDavClient.ListDirectory(pagePath)
+			if err != nil {
+				results <- pageResult{nil, err}
+				return
+			}
+			
+			// Pre-allocate and filter efficiently
+			validFiles := make([]HttpDavFileInfo, 0, len(pageFiles))
+			for _, pageFile := range pageFiles {
+				if !strings.HasPrefix(pageFile.Name, "_More_") {
+					pageFile.Path = path.Join("/torrents", pageFile.Name)
+					validFiles = append(validFiles, pageFile)
+				}
+			}
+			
+			results <- pageResult{validFiles, nil}
+		}(pageDir)
+	}
+	
+	// Collect results
+	for i := 0; i < len(paginationDirs); i++ {
+		result := <-results
+		if result.err != nil {
+			logger.Warn("[HTTP DAV] Failed to read pagination directory: %v", result.err)
+			continue
+		}
+		contentFiles = append(contentFiles, result.files...)
+	}
+	
+	return contentFiles, nil
+}
+
+// GetHttpDavTorrents returns cached HTTP DAV torrents
+func (tm *TorrentManager) GetHttpDavTorrents() []HttpDavFileInfo {
+	tm.httpDavCacheMutex.RLock()
+	defer tm.httpDavCacheMutex.RUnlock()
+	result := make([]HttpDavFileInfo, len(tm.httpDavTorrentsCache))
+	copy(result, tm.httpDavTorrentsCache)
+	return result
+}
+
+// GetHttpDavLinks returns cached HTTP DAV links
+func (tm *TorrentManager) GetHttpDavLinks() []HttpDavFileInfo {
+	tm.httpDavCacheMutex.RLock()
+	defer tm.httpDavCacheMutex.RUnlock()
+	result := make([]HttpDavFileInfo, len(tm.httpDavLinksCache))
+	copy(result, tm.httpDavLinksCache)
+	return result
 }

@@ -14,6 +14,7 @@ type Config struct {
     Enabled bool   `json:"enabled" yaml:"enabled"`
     APIKey  string `json:"apiKey" yaml:"apiKey"`
     RcloneSettings RcloneSettings `json:"rcloneSettings" yaml:"rcloneSettings"`
+    HttpDavSettings HttpDavSettings `json:"httpDavSettings" yaml:"httpDavSettings"`
 }
 
 // RcloneSettings represents rclone mount configuration
@@ -32,6 +33,14 @@ type RcloneSettings struct {
     VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
     StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
     ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
+}
+
+// HttpDavSettings represents HTTP DAV configuration
+type HttpDavSettings struct {
+    Enabled  bool   `json:"enabled" yaml:"enabled"`
+    UserID   string `json:"userId" yaml:"userId"`
+    Password string `json:"password" yaml:"password"`
+    BaseURL  string `json:"baseUrl" yaml:"baseUrl"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -68,6 +77,12 @@ func GetConfigManager() *ConfigManager {
                     VfsReadChunkSizeLimit: "128M",
                     StreamBufferSize:     "1M",
                     ServeFromRclone:      false,
+                },
+                HttpDavSettings: HttpDavSettings{
+                    Enabled:  false,
+                    UserID:   "",
+                    Password: "",
+                    BaseURL:  "https://dav.real-debrid.com/",
                 },
             },
             configPath: filepath.Join("..", "db", "debrid.yml"),
@@ -125,7 +140,7 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 	
-    // Apply updates (enabled, apiKey, and rcloneSettings)
+    // Apply updates (enabled, apiKey, rcloneSettings, and httpDavSettings)
 	for key, value := range updates {
 		switch key {
 		case "enabled":
@@ -185,6 +200,23 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings
+			}
+		case "httpDavSettings":
+			if httpDavSettingsMap, ok := value.(map[string]interface{}); ok {
+				httpDavSettings := cm.config.HttpDavSettings
+				
+				if enabled, ok := httpDavSettingsMap["enabled"].(bool); ok {
+					httpDavSettings.Enabled = enabled
+				}
+				if userId, ok := httpDavSettingsMap["userId"].(string); ok {
+					httpDavSettings.UserID = userId
+				}
+				if password, ok := httpDavSettingsMap["password"].(string); ok {
+					httpDavSettings.Password = password
+				}
+				httpDavSettings.BaseURL = "https://dav.real-debrid.com/"
+				
+				cm.config.HttpDavSettings = httpDavSettings
 			}
 		}
 	}
@@ -268,6 +300,8 @@ func (cm *ConfigManager) loadConfig() error {
         config.RcloneSettings.PollInterval = "1m"
     }
 
+    config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"
+
     cm.config = &config
     logger.Info("Real-Debrid configuration loaded successfully")
     return nil
@@ -318,6 +352,12 @@ func (cm *ConfigManager) ResetConfig() error {
             StreamBufferSize:     "1M",
             ServeFromRclone:      false,
         },
+        HttpDavSettings: HttpDavSettings{
+            Enabled:  false,
+            UserID:   "",
+            Password: "",
+            BaseURL:  "https://dav.real-debrid.com/",
+        },
     }
 	
 	return cm.saveConfig()
@@ -332,6 +372,16 @@ func (cm *ConfigManager) ValidateConfig() []string {
 	
 	if cm.config.Enabled && cm.config.APIKey == "" {
 		errors = append(errors, "API key is required when Real-Debrid is enabled")
+	}
+	
+	// Validate HTTP DAV settings if enabled
+	if cm.config.HttpDavSettings.Enabled {
+		if cm.config.HttpDavSettings.UserID == "" {
+			errors = append(errors, "HTTP DAV User ID is required when HTTP DAV is enabled")
+		}
+		if cm.config.HttpDavSettings.Password == "" {
+			errors = append(errors, "HTTP DAV Password is required when HTTP DAV is enabled")
+		}
 	}
 	
     // Only requires API key when enabled
@@ -363,6 +413,36 @@ func (cm *ConfigManager) GetConfigStatus() map[string]interface{} {
 		rcloneManager := GetRcloneManager()
 		rcloneStatus := rcloneManager.GetStatus(cm.config.RcloneSettings.MountPath)
 		status["rcloneStatus"] = rcloneStatus
+	}
+	
+	// Add HTTP DAV status if enabled
+	if cm.config.HttpDavSettings.Enabled {
+		httpDavStatus := map[string]interface{}{
+			"enabled":     cm.config.HttpDavSettings.Enabled,
+			"userIdSet":   cm.config.HttpDavSettings.UserID != "",
+			"passwordSet": cm.config.HttpDavSettings.Password != "",
+			"baseUrl":     "https://dav.real-debrid.com/",
+		}
+		
+		// Test connection if credentials are set
+		if cm.config.HttpDavSettings.UserID != "" && cm.config.HttpDavSettings.Password != "" {
+			httpDavClient := NewHttpDavClient(
+				cm.config.HttpDavSettings.UserID,
+				cm.config.HttpDavSettings.Password,
+				"https://dav.real-debrid.com/",
+			)
+			
+			if err := httpDavClient.TestConnection(); err != nil {
+				httpDavStatus["connectionError"] = err.Error()
+				httpDavStatus["connected"] = false
+			} else {
+				httpDavStatus["connected"] = true
+			}
+		} else {
+			httpDavStatus["connected"] = false
+		}
+		
+		status["httpDavStatus"] = httpDavStatus
 	}
 	
 	return status
