@@ -417,6 +417,11 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--poll-interval", config.PollInterval,
 	}
 
+	// Add cache directory if specified
+	if config.CachePath != "" {
+		args = append(args, "--cache-dir", config.CachePath)
+	}
+
 	// Add chunk-based streaming settings if configured
 	if config.VfsReadChunkSize != "" {
 		args = append(args, "--vfs-read-chunk-size", config.VfsReadChunkSize)

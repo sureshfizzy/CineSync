@@ -9,6 +9,7 @@ interface RcloneConfig {
   vfsCacheMode: string;
   vfsCacheMaxSize: string;
   vfsCacheMaxAge: string;
+  CachePath: string;
   bufferSize: string;
   dirCacheTime: string;
   pollInterval: string;
@@ -35,15 +36,16 @@ const RcloneSettings: React.FC = () => {
     enabled: false,
     mountPath: '',
     vfsCacheMode: 'full',
-    vfsCacheMaxSize: '1G',
+    vfsCacheMaxSize: '100G',
     vfsCacheMaxAge: '24h',
+    CachePath: '',
     bufferSize: '16M',
-    dirCacheTime: '5m',
-    pollInterval: '1m',
+    dirCacheTime: '15s',
+    pollInterval: '15s',
     rclonePath: '',
     vfsReadChunkSize: '64M',
     vfsReadChunkSizeLimit: '128M',
-    streamBufferSize: '1M',
+    streamBufferSize: '10M',
     serveFromRclone: false,
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
@@ -519,7 +521,7 @@ const RcloneSettings: React.FC = () => {
                               size="small"
                               value={config.vfsCacheMaxSize}
                               onChange={(e) => handleConfigChange('vfsCacheMaxSize', e.target.value)}
-                              placeholder="1G"
+                              placeholder="100G"
                             />
                           </Box>
                         </Box>
@@ -549,6 +551,20 @@ const RcloneSettings: React.FC = () => {
                             />
                           </Box>
                         </Box>
+                        {/*Cache Path */}
+                        <Box>
+                          <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            Cache Directory (Optional)
+                          </Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={config.CachePath}
+                            onChange={(e) => handleConfigChange('CachePath', e.target.value)}
+                            placeholder={navigator.platform.toLowerCase().includes('win') ? "C:\\temp\\rclone-cache" : "/tmp/rclone-cache"}
+                            helperText="Custom directory for VFS cache files. Leave empty to use default location."
+                          />
+                        </Box>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                           <Box>
                             <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
@@ -559,7 +575,7 @@ const RcloneSettings: React.FC = () => {
                               size="small"
                               value={config.dirCacheTime}
                               onChange={(e) => handleConfigChange('dirCacheTime', e.target.value)}
-                              placeholder="5m"
+                              placeholder="15s"
                             />
                           </Box>
                           <Box>
@@ -571,7 +587,7 @@ const RcloneSettings: React.FC = () => {
                               size="small"
                               value={config.pollInterval}
                               onChange={(e) => handleConfigChange('pollInterval', e.target.value)}
-                              placeholder="1m"
+                              placeholder="15s"
                             />
                           </Box>
                         </Box>
@@ -611,7 +627,7 @@ const RcloneSettings: React.FC = () => {
                               size="small"
                               value={config.streamBufferSize}
                               onChange={(e) => handleConfigChange('streamBufferSize', e.target.value)}
-                              placeholder="1M"
+                              placeholder="10M"
                               helperText="Buffer size for streaming (higher for 4K/remux)"
                             />
                           </Box>

@@ -671,6 +671,9 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	if vfsCacheMaxAge, ok := rcloneConfigMap["vfsCacheMaxAge"].(string); ok && vfsCacheMaxAge != "" {
 		rcloneConfig.VfsCacheMaxAge = vfsCacheMaxAge
 	}
+	if CachePath, ok := rcloneConfigMap["CachePath"].(string); ok {
+		rcloneConfig.CachePath = CachePath // Allow empty string to clear cache path
+	}
 	if bufferSize, ok := rcloneConfigMap["bufferSize"].(string); ok && bufferSize != "" {
 		rcloneConfig.BufferSize = bufferSize
 	}

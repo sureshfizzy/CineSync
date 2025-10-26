@@ -25,6 +25,7 @@ type RcloneSettings struct {
     VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
     VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
     VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
+    CachePath         string `json:"CachePath" yaml:"CachePath"`
     BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
     DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
     PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
@@ -67,15 +68,16 @@ func GetConfigManager() *ConfigManager {
                     MountPath:            "",
                     RemoteName:           "CineSync",
                     VfsCacheMode:         "full",
-                    VfsCacheMaxSize:      "1G",
+                    VfsCacheMaxSize:      "100G",
                     VfsCacheMaxAge:       "24h",
+                    CachePath:         "",
                     BufferSize:           "16M",
-                    DirCacheTime:         "5m",
-                    PollInterval:         "1m",
+                    DirCacheTime:         "15s",
+                    PollInterval:         "15s",
                     RclonePath:           "",
                     VfsReadChunkSize:     "64M",
                     VfsReadChunkSizeLimit: "128M",
-                    StreamBufferSize:     "1M",
+                    StreamBufferSize:     "10M",
                     ServeFromRclone:      false,
                 },
                 HttpDavSettings: HttpDavSettings{
@@ -108,7 +110,7 @@ func (cm *ConfigManager) GetConfig() *Config {
 		configCopy.RcloneSettings.VfsCacheMode = "full"
 	}
 	if configCopy.RcloneSettings.VfsCacheMaxSize == "" {
-		configCopy.RcloneSettings.VfsCacheMaxSize = "1G"
+		configCopy.RcloneSettings.VfsCacheMaxSize = "100G"
 	}
 	if configCopy.RcloneSettings.VfsCacheMaxAge == "" {
 		configCopy.RcloneSettings.VfsCacheMaxAge = "24h"
@@ -117,10 +119,10 @@ func (cm *ConfigManager) GetConfig() *Config {
 		configCopy.RcloneSettings.BufferSize = "16M"
 	}
 	if configCopy.RcloneSettings.DirCacheTime == "" {
-		configCopy.RcloneSettings.DirCacheTime = "5m"
+		configCopy.RcloneSettings.DirCacheTime = "15s"
 	}
 	if configCopy.RcloneSettings.PollInterval == "" {
-		configCopy.RcloneSettings.PollInterval = "1m"
+		configCopy.RcloneSettings.PollInterval = "15s"
 	}
 	
 	return &configCopy
@@ -173,6 +175,9 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if vfsCacheMaxAge, ok := rcloneSettingsMap["vfsCacheMaxAge"].(string); ok && vfsCacheMaxAge != "" {
 					rcloneSettings.VfsCacheMaxAge = vfsCacheMaxAge
+				}
+				if CachePath, ok := rcloneSettingsMap["CachePath"].(string); ok {
+					rcloneSettings.CachePath = CachePath
 				}
 				if bufferSize, ok := rcloneSettingsMap["bufferSize"].(string); ok && bufferSize != "" {
 					rcloneSettings.BufferSize = bufferSize
@@ -285,7 +290,7 @@ func (cm *ConfigManager) loadConfig() error {
         config.RcloneSettings.VfsCacheMode = "full"
     }
     if config.RcloneSettings.VfsCacheMaxSize == "" {
-        config.RcloneSettings.VfsCacheMaxSize = "1G"
+        config.RcloneSettings.VfsCacheMaxSize = "100G"
     }
     if config.RcloneSettings.VfsCacheMaxAge == "" {
         config.RcloneSettings.VfsCacheMaxAge = "24h"
@@ -294,10 +299,10 @@ func (cm *ConfigManager) loadConfig() error {
         config.RcloneSettings.BufferSize = "16M"
     }
     if config.RcloneSettings.DirCacheTime == "" {
-        config.RcloneSettings.DirCacheTime = "5m"
+        config.RcloneSettings.DirCacheTime = "15s"
     }
     if config.RcloneSettings.PollInterval == "" {
-        config.RcloneSettings.PollInterval = "1m"
+        config.RcloneSettings.PollInterval = "15s"
     }
 
     config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"
@@ -341,15 +346,16 @@ func (cm *ConfigManager) ResetConfig() error {
             MountPath:            "",
             RemoteName:           "realdebrid",
             VfsCacheMode:         "writes",
-            VfsCacheMaxSize:      "1G",
+            VfsCacheMaxSize:      "100G",
             VfsCacheMaxAge:       "24h",
+            CachePath:         "",
             BufferSize:           "16M",
-            DirCacheTime:         "5m",
-            PollInterval:         "1m",
+            DirCacheTime:         "15s",
+            PollInterval:         "15s",
             RclonePath:           "",
             VfsReadChunkSize:     "64M",
             VfsReadChunkSizeLimit: "128M",
-            StreamBufferSize:     "1M",
+            StreamBufferSize:     "10M",
             ServeFromRclone:      false,
         },
         HttpDavSettings: HttpDavSettings{
