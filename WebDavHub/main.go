@@ -490,6 +490,9 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 			db.GetSourceDB().Exec("PRAGMA optimize;")
 			db.CloseSourceDB()
 		}
+		if debridDB := db.GetDebridDB(); debridDB != nil {
+			debridDB.Close()
+		}
 		os.Exit(0)
 	}()
 

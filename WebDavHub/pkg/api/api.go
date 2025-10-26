@@ -84,6 +84,9 @@ func SetRootDir(dir string) {
 			}()
 		}
 	}
+	if err := db.InitDebridDB(); err != nil {
+		logger.Warn("Failed to initialize debrid DB: %v", err)
+	}
 
 	// Initialize folder cache for fast navigation
 	if !isPlaceholderConfig {

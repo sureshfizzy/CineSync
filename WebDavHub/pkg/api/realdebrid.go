@@ -1116,13 +1116,17 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	downloadURL, fileSize, err := getDownloadURLWithRetry(tm, torrentID, filePath)
+	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
 	if err != nil {
 		logKey := fmt.Sprintf("download_fail:%s", filePath)
 		if shouldLogError(logKey, 1*time.Minute) {
 			logger.Error("[Torrents] Failed to get download URL: %v", err)
 		}
-		http.Error(w, "Could not fetch download link", http.StatusPreconditionFailed)
+		if strings.Contains(err.Error(), "has been removed from Real-Debrid") {
+			http.Error(w, "File has been removed from Real-Debrid", http.StatusNotFound)
+		} else {
+			http.Error(w, "Could not fetch download link", http.StatusPreconditionFailed)
+		}
 		return
 	}
 
@@ -1325,16 +1329,6 @@ func shouldLogError(key string, interval time.Duration) bool {
 		return true
 	}
 	return false
-}
-
-// getDownloadURLWithRetry gets download URL
-func getDownloadURLWithRetry(tm *realdebrid.TorrentManager, torrentID, filePath string) (string, int64, error) {
-	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
-	if err == nil && downloadURL != "" {
-		return downloadURL, fileSize, nil
-	}
-
-	return "", 0, err
 }
 
 // HandleDebridDashboardStats handles requests for debrid dashboard statistics
