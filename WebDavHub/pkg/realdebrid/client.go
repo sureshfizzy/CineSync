@@ -1,6 +1,7 @@
 package realdebrid
 
 import (
+    "strconv"
     "strings"
 	"encoding/json"
 	"fmt"
@@ -639,4 +640,57 @@ func (c *Client) GetTrafficInfo() (*TrafficInfo, error) {
 	}
 
 	return info, nil
+}
+
+// GetTorrentsLightweight retrieves torrents for checking
+func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
+	if c.apiKey == "" {
+		return nil, 0, fmt.Errorf("API key not set")
+	}
+	
+	if limit <= 0 {
+		limit = 1
+	}
+	
+	url := fmt.Sprintf("%s/torrents?limit=%d", c.baseURL, limit)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			return nil, 0, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return nil, 0, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	totalCount := 0
+	if totalHeader := resp.Header.Get("X-Total-Count"); totalHeader != "" {
+		if count, err := strconv.Atoi(totalHeader); err == nil {
+			totalCount = count
+		}
+	}
+	
+	var items []TorrentItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, 0, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if totalCount == 0 {
+		totalCount = len(items)
+	}
+	
+	return items, totalCount, nil
 }

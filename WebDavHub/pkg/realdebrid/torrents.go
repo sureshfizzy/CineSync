@@ -1,12 +1,14 @@
 package realdebrid
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cinesync/pkg/db"
@@ -17,7 +19,43 @@ import (
 
 const (
 	ALL_TORRENTS = "__all__"
+	// Refresh intervals
+	DEFAULT_REFRESH_INTERVAL = 15 * time.Second
+	CHECKSUM_TIMEOUT = 10 * time.Second
 )
+
+// LibraryState represents the current state of the torrent library for change detection
+type LibraryState struct {
+	TotalCount         int       `json:"totalCount"`
+	FirstTorrentID     string    `json:"firstTorrentId"`
+	FirstTorrentName   string    `json:"firstTorrentName"`
+	LastUpdated        time.Time `json:"lastUpdated"`
+}
+
+// Eq compares two library states for equality
+func (ls *LibraryState) Eq(other *LibraryState) bool {
+	if other == nil {
+		return false
+	}
+	
+	if ls.TotalCount != other.TotalCount {
+		return false
+	}
+	
+	if ls.FirstTorrentID != other.FirstTorrentID {
+		return false
+	}
+	
+	return true
+}
+
+// truncateFilename truncates long filenames
+func truncateFilename(filename string) string {
+	if len(filename) > 80 {
+		return filename[:77] + "..."
+	}
+	return filename
+}
 
 // SanitizeFilename sanitizes a filename for use in paths
 func SanitizeFilename(name string) string {
@@ -44,6 +82,12 @@ type TorrentManager struct {
 	failedFileCache map[string]*FailedFileEntry
 	failedFileMutex sync.RWMutex
 	downloadSG singleflight.Group
+	currentState      atomic.Pointer[LibraryState]
+	refreshTicker     *time.Ticker
+	refreshCancel     context.CancelFunc
+	refreshInterval   time.Duration
+	initialized       chan struct{}
+	isRunning         atomic.Bool
 	
 	// HTTP DAV
 	httpDavTorrentsCache []HttpDavFileInfo
@@ -80,10 +124,23 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		DirectoryMap:  cmap.New[cmap.ConcurrentMap[string, *TorrentItem]](),
 		downloadLinkCache: make(map[string]*DownloadLink),
 		failedFileCache: make(map[string]*FailedFileEntry),
+		refreshInterval: DEFAULT_REFRESH_INTERVAL,
+		initialized:     make(chan struct{}),
 	}
+
+	initialState := &LibraryState{
+		TotalCount:       0,
+		FirstTorrentID:   "",
+		FirstTorrentName: "",
+		LastUpdated:      time.Now(),
+	}
+	torrentManager.currentState.Store(initialState)
 	
 	// Initialize special directories
 	torrentManager.initializeDirectoryMaps()
+	
+	// Start background refresh job
+	torrentManager.startRefreshJob()
 
 	return torrentManager
 }
@@ -104,7 +161,23 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	// Update directory maps
 	tm.updateDirectoryMaps(torrents)
 
-	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", len(torrents))
+	// Update state after prefetch
+	newState := &LibraryState{
+		TotalCount:     len(torrents),
+		FirstTorrentID: "",
+		FirstTorrentName: "",
+		LastUpdated:    time.Now(),
+	}
+	
+	if len(torrents) > 0 {
+		newState.FirstTorrentID = torrents[0].ID
+		newState.FirstTorrentName = torrents[0].Filename
+	}
+	
+	tm.updateCurrentState(newState)
+
+	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", 
+		len(torrents))
 	
 	// Trigger pending mount
 	triggerPendingMount()
@@ -119,18 +192,28 @@ func (tm *TorrentManager) updateDirectoryMaps(torrents []TorrentItem) {
 		return
 	}
 
-	logger.Info("[Torrents] Updating directory maps with %d torrents", len(torrents))
+	logger.Debug("[Torrents] Updating directory maps with %d torrents", len(torrents))
 
 	// Clear existing torrents
 	allTorrents.Clear()
+
+	// Pre-allocate individual directories map to reduce allocations
+	individualDirs := make(map[string]cmap.ConcurrentMap[string, *TorrentItem], len(torrents))
 
 	for i := range torrents {
 		torrent := &torrents[i]
 		accessKey := SanitizeFilename(torrent.Filename)
 		allTorrents.Set(accessKey, torrent)
+		
+		// Create individual directory
 		individualDir := cmap.New[*TorrentItem]()
 		individualDir.Set(accessKey, torrent)
-		tm.DirectoryMap.Set(accessKey, individualDir)
+		individualDirs[accessKey] = individualDir
+	}
+	
+	// Batch update directory map
+	for accessKey, dir := range individualDirs {
+		tm.DirectoryMap.Set(accessKey, dir)
 	}
 }
 
@@ -152,6 +235,21 @@ func (tm *TorrentManager) GetAllTorrentsFromDirectory(directory string) []Torren
 	return result
 }
 
+// GetTorrentStatistics returns status counts and total size from cached torrents
+func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
+	tm.cacheMutex.RLock()
+	defer tm.cacheMutex.RUnlock()
+	
+	statusCounts := make(map[string]int)
+	var totalSize int64
+	
+	for _, torrent := range tm.torrentList {
+		statusCounts[torrent.Status]++
+		totalSize += torrent.Bytes
+	}
+	
+	return statusCounts, totalSize
+}
 
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
@@ -458,7 +556,7 @@ func (tm *TorrentManager) PrefetchHttpDavData() error {
 	tm.httpDavLastCacheTime = time.Now()
 	tm.httpDavCacheMutex.Unlock()
 	
-	logger.Info("[HTTP DAV] Prefetch completed: %d torrents, %d links", len(torrentsFiles), len(filteredLinks))
+	logger.Info("[HTTP DAV] Prefetch completed: %d torrents", len(torrentsFiles))
 	return nil
 }
 
@@ -596,7 +694,7 @@ func (tm *TorrentManager) verifyFileViaWebDAV(torrentID, filePath string, target
 	}
 
 	contentLength := resp.Header.Get("Content-Length")
-	lastModified := resp.Header.Get("Last-Modified")
+	_ = resp.Header.Get("Last-Modified")
 
 	if contentLength != "" {
 		if size, parseErr := strconv.ParseInt(contentLength, 10, 64); parseErr == nil {
@@ -751,4 +849,239 @@ func (tm *TorrentManager) CheckFileRemovedByHash(magnetLink, filePath string) (b
 	}
 	
 	return isRemoved, record
+}
+
+// startRefreshJob starts the background job
+func (tm *TorrentManager) startRefreshJob() {
+	if tm.isRunning.Load() {
+		logger.Debug("[Refresh] Refresh job already running")
+		return
+	}
+	
+	tm.isRunning.Store(true)
+
+	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		tm.refreshCancel = cancel
+		tm.refreshTicker = time.NewTicker(tm.refreshInterval)
+		
+		defer func() {
+			tm.refreshTicker.Stop()
+			tm.isRunning.Store(false)
+			logger.Info("[Refresh] Torrent refresh job stopped")
+		}()
+
+		close(tm.initialized)
+		
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tm.refreshTicker.C:
+				tm.performSmartRefresh(ctx)
+			}
+		}
+	}()
+}
+
+// performSmartRefresh
+func (tm *TorrentManager) performSmartRefresh(ctx context.Context) {
+	newState, err := tm.getCurrentLibraryState(ctx)
+	if err != nil {
+		logger.Warn("[Refresh] Failed to get library state for change detection: %v", err)
+		return
+	}
+	
+	currentState := tm.currentState.Load()
+
+	if currentState.Eq(newState) {
+		return
+	}
+	
+	// Perform full refresh only when changes detected
+	tm.performFullRefresh(ctx)
+	
+	tm.updateCurrentState(newState)
+}
+
+// getCurrentLibraryState gets a lightweight state fingerprint for change detection
+func (tm *TorrentManager) getCurrentLibraryState(ctx context.Context) (*LibraryState, error) {
+	ctx, cancel := context.WithTimeout(ctx, CHECKSUM_TIMEOUT)
+	defer cancel()
+	
+	state := &LibraryState{
+		LastUpdated: time.Now(),
+	}
+
+	torrents, totalCount, err := tm.client.GetTorrentsLightweight(10)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lightweight torrents for state: %w", err)
+	}
+	
+	state.TotalCount = totalCount
+	if len(torrents) > 0 {
+		state.FirstTorrentID = torrents[0].ID
+		state.FirstTorrentName = torrents[0].Filename
+	}
+	
+	return state, nil
+}
+
+// performFullRefresh performs a complete refresh of torrent data
+func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
+	tm.cacheMutex.RLock()
+	oldCount := len(tm.torrentList)
+	oldTorrents := make(map[string]TorrentItem, oldCount)
+	for _, torrent := range tm.torrentList {
+		oldTorrents[torrent.ID] = torrent
+	}
+	tm.cacheMutex.RUnlock()
+	
+	// Optimized progress callback
+	var lastLoggedProgress int
+	progressCallback := func(current, total int) {
+		if current == total || (current >= lastLoggedProgress+2000) {
+			logger.Debug("[Refresh] Progress: %d torrents fetched", current)
+			lastLoggedProgress = current
+		}
+	}
+	
+	// Fetch all torrents
+	torrents, err := tm.client.GetAllTorrents(1000, progressCallback)
+	if err != nil {
+		logger.Error("[Refresh] Failed to fetch torrents: %v", err)
+		return
+	}
+	
+	// Analyze new/removed torrents
+	newTorrents := make([]TorrentItem, 0, 10)
+	removedTorrents := make([]TorrentItem, 0, 10)
+	
+	// Single pass to find new torrents and build map
+	newTorrentsMap := make(map[string]TorrentItem, len(torrents))
+	for _, torrent := range torrents {
+		newTorrentsMap[torrent.ID] = torrent
+		if _, exists := oldTorrents[torrent.ID]; !exists {
+			newTorrents = append(newTorrents, torrent)
+		}
+	}
+
+	if oldCount > 0 {
+		for id, torrent := range oldTorrents {
+			if _, exists := newTorrentsMap[id]; !exists {
+				removedTorrents = append(removedTorrents, torrent)
+			}
+		}
+	}
+	
+	// Update torrent list and directory maps
+	tm.cacheMutex.Lock()
+	tm.torrentList = torrents
+	tm.lastCacheTime = time.Now()
+	tm.cacheMutex.Unlock()
+	
+	tm.updateDirectoryMaps(torrents)
+	
+	// Log new torrents (but not during initial load)
+	if len(newTorrents) > 0 && oldCount > 0 {
+		for i, torrent := range newTorrents {
+			if i < 3 {
+				logger.Info("New file added: %s", truncateFilename(torrent.Filename))
+			} else if i == 3 {
+				logger.Info("... and %d more new files", len(newTorrents)-3)
+				break
+			}
+		}
+	}
+	
+	// Log removed torrents
+	if len(removedTorrents) > 0 {
+		for i, torrent := range removedTorrents {
+			if i < 3 {
+				logger.Info("File removed: %s", truncateFilename(torrent.Filename))
+			} else if i == 3 {
+				logger.Info("... and %d more files removed", len(removedTorrents)-3)
+				break
+			}
+		}
+	}
+
+	triggerPendingMount()
+}
+
+// updateCurrentState atomically updates the current library state
+func (tm *TorrentManager) updateCurrentState(newState *LibraryState) {
+	tm.currentState.Store(newState)
+}
+
+// GetCurrentState returns the current library state
+func (tm *TorrentManager) GetCurrentState() *LibraryState {
+	state := tm.currentState.Load()
+	if state == nil {
+		return &LibraryState{}
+	}
+
+	return &LibraryState{
+		TotalCount:       state.TotalCount,
+		FirstTorrentID:   state.FirstTorrentID,
+		FirstTorrentName: state.FirstTorrentName,
+		LastUpdated:      state.LastUpdated,
+	}
+}
+
+// SetRefreshInterval updates the refresh interval
+func (tm *TorrentManager) SetRefreshInterval(interval time.Duration) {
+	if interval < 10*time.Second {
+		interval = 10 * time.Second
+		logger.Warn("[Refresh] Minimum refresh interval is 10 seconds, adjusted")
+	}
+	
+	tm.refreshInterval = interval
+	
+	if tm.refreshTicker != nil {
+		tm.refreshTicker.Reset(interval)
+		logger.Info("[Refresh] Refresh interval updated to %v", interval)
+	}
+}
+
+// ForceRefresh forces an immediate full refresh
+func (tm *TorrentManager) ForceRefresh() {
+	logger.Info("[Refresh] Force refresh requested")
+	ctx := context.Background()
+	tm.performFullRefresh(ctx)
+	
+	// Update state after forced refresh
+	if newState, err := tm.getCurrentLibraryState(ctx); err == nil {
+		tm.updateCurrentState(newState)
+	}
+}
+
+// Stop stops the background refresh job
+func (tm *TorrentManager) Stop() {
+	if tm.refreshCancel != nil {
+		tm.refreshCancel()
+		logger.Info("[Refresh] Torrent manager stopped")
+	}
+}
+
+// WaitForInitialization waits for the initial load to complete
+func (tm *TorrentManager) WaitForInitialization() {
+	<-tm.initialized
+}
+
+// IsInitialized returns whether the manager has completed initial loading
+func (tm *TorrentManager) IsInitialized() bool {
+	select {
+	case <-tm.initialized:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetLastRefreshTime returns the timestamp of the last successful refresh
+func (tm *TorrentManager) GetLastRefreshTime() time.Time {
+	tm.cacheMutex.RLock()
+	defer tm.cacheMutex.RUnlock()
+	return tm.lastCacheTime
 }

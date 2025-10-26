@@ -15,16 +15,24 @@ import (
 	"cinesync/pkg/realdebrid"
 )
 
+// Global semaphore to limit concurrent streaming requests
+var streamingSemaphore = make(chan struct{}, 32)
+
 // Shared streaming client
 var streamClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
-		IdleConnTimeout:     90 * time.Second,
-		DisableKeepAlives:   false,
-		ForceAttemptHTTP2:   false,
+		MaxIdleConns:          50,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       15,
+		IdleConnTimeout:       30 * time.Second,
+		DisableKeepAlives:     false,
+		ForceAttemptHTTP2:     false,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		DisableCompression:    true,
 	},
-	Timeout: 0,
+	Timeout: 60 * time.Second,
 }
 
 // HandleRealDebridConfig handles Real-Debrid configuration requests
@@ -732,7 +740,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	logger.Info("Mount completed successfully: %+v", status)
+	logger.Info("Mount completed successfully")
 
 	response := map[string]interface{}{
 		"success": true,
@@ -1039,13 +1047,18 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	}
 
 	// Add current directory
+	lastModified := tm.GetLastRefreshTime()
+	if lastModified.IsZero() {
+		lastModified = time.Now()
+	}
+	
 	ms.Responses = append(ms.Responses, response{
 		Href: basePath,
 		Propstat: propstat{
 			Prop: prop{
 				DisplayName:      path.Base(basePath),
-				CreationDate:     time.Now().Format(time.RFC3339),
-				GetLastModified:  time.Now().Format(time.RFC1123),
+				CreationDate:     lastModified.Format(time.RFC3339),
+				GetLastModified:  lastModified.Format(time.RFC1123),
 				ResourceType:     &resourceType{Collection: &struct{}{}},
 			},
 			Status: "HTTP/1.1 200 OK",
@@ -1061,8 +1074,8 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				Propstat: propstat{
 					Prop: prop{
 						DisplayName:     node.Name,
-						CreationDate:    time.Now().Format(time.RFC3339),
-						GetLastModified: time.Now().Format(time.RFC1123),
+						CreationDate:    lastModified.Format(time.RFC3339),
+						GetLastModified: lastModified.Format(time.RFC1123),
 					},
 					Status: "HTTP/1.1 200 OK",
 				},
@@ -1139,6 +1152,15 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	}
 
 	// For GET requests, stream the content
+	select {
+	case streamingSemaphore <- struct{}{}:
+		defer func() { <-streamingSemaphore }()
+		
+	case <-time.After(5 * time.Second):
+		http.Error(w, "Server too busy, please try again later", http.StatusServiceUnavailable)
+		return
+	}
+
 	req, err := http.NewRequestWithContext(r.Context(), "GET", downloadURL, nil)
 	if err != nil {
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
@@ -1153,10 +1175,24 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Accept-Encoding", "identity") // Disable compression for streaming
 	req.Header.Set("Cache-Control", "no-cache")
-	resp, err := streamClient.Do(req)
-	if err != nil {
-		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
-		return
+	
+	// Add retry mechanism for connection issues
+	var resp *http.Response
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		resp, err = streamClient.Do(req)
+		if err == nil {
+			break
+		}
+
+		if attempt < maxRetries {
+			logger.Warn("[Torrents] Connection attempt %d failed for %s: %v, retrying...", attempt, path.Base(filePath), err)
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // Progressive backoff
+		} else {
+			logger.Error("[Torrents] All connection attempts failed for %s: %v", path.Base(filePath), err)
+			http.Error(w, "Failed to fetch file after retries", http.StatusBadGateway)
+			return
+		}
 	}
 	defer resp.Body.Close()
 
@@ -1204,7 +1240,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	totalServed := int64(0)
 	currentChunkSize := initialChunkSizeBytes
 	lastLoggedAt := int64(0)
-	
 	if n, err := resp.Body.Read(smallBuf); n > 0 {
 		if _, werr := w.Write(smallBuf[:n]); werr != nil {
 			return
@@ -1212,8 +1247,9 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		flusher.Flush()
 		totalServed += int64(n)
 	} else if err != nil && err != io.EOF {
-		logger.Error("[Torrents] Error reading initial buffer: %v", err)
-		return
+		if totalServed == 0 {
+			return
+		}
 	}
 
 	buf := make([]byte, streamBufferSizeBytes)
@@ -1246,10 +1282,23 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 			if isClientDisconnection(readErr) {
 				return
 			}
-			logger.Error("[Torrents] Error reading from source: %v", readErr)
 			return
 		}
 	}
+}
+
+// formatBytes formats byte count into human readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // isClientDisconnection checks if an error is due to client disconnection (normal for range requests)
@@ -1296,20 +1345,6 @@ func parseChunkSize(sizeStr string) int64 {
 	}
 	
 	return size * multiplier
-}
-
-// formatBytes formats bytes into human-readable format
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // Error logging rate limiter to prevent spam
@@ -1363,27 +1398,10 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get torrents count and stats from prefetched data
+	// Get torrents count and stats from torrent manager
 	tm := realdebrid.GetTorrentManager(cfg.APIKey)
-	torrents := tm.GetAllTorrentsFromDirectory(realdebrid.ALL_TORRENTS)
-	
-	if len(torrents) == 0 {
-		torrents, err = client.GetAllTorrents(1000, nil)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get torrents: %v", err), http.StatusBadGateway)
-			return
-		}
-	}
-
-	// Calculate torrent statistics
-	totalTorrents := len(torrents)
-	totalSize := int64(0)
-	statusCounts := make(map[string]int)
-	
-	for _, torrent := range torrents {
-		totalSize += torrent.Bytes
-		statusCounts[torrent.Status]++
-	}
+	currentState := tm.GetCurrentState()
+	statusCounts, totalSize := tm.GetTorrentStatistics()
 
 	// Get traffic information
 	trafficInfo, err := client.GetTrafficInfo()
@@ -1403,16 +1421,108 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 			"expiration": userInfo.Expiration,
 		},
 		"torrents": map[string]interface{}{
-			"total":        totalTorrents,
+			"total":        currentState.TotalCount,
 			"totalSize":    totalSize,
 			"statusCounts": statusCounts,
+			"lastUpdated":  currentState.LastUpdated.Format(time.RFC3339),
 		},
 		"traffic": map[string]interface{}{
 			"today": trafficInfo.TodayBytes,
+		},
+		"refresh": map[string]interface{}{
+			"initialized": tm.IsInitialized(),
+			"lastUpdate":  currentState.LastUpdated.Format(time.RFC3339),
 		},
 		"lastUpdated": time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRealDebridRefreshControl handles smart refresh control requests
+func HandleRealDebridRefreshControl(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	configManager := realdebrid.GetConfigManager()
+	cfg := configManager.GetConfig()
+	if !cfg.Enabled || cfg.APIKey == "" {
+		http.Error(w, "Real-Debrid is not configured or enabled", http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+
+	switch r.Method {
+	case http.MethodGet:
+		// Get refresh status
+		currentState := tm.GetCurrentState()
+		response := map[string]interface{}{
+			"initialized":    tm.IsInitialized(),
+			"currentState":   currentState,
+			"totalTorrents":  currentState.TotalCount,
+			"firstTorrentId": currentState.FirstTorrentID,
+			"lastUpdated":    currentState.LastUpdated.Format(time.RFC3339),
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	case http.MethodPost:
+		// Handle refresh control actions
+		var request struct {
+			Action   string `json:"action"`
+			Interval int    `json:"interval,omitempty"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		switch request.Action {
+		case "force_refresh":
+			tm.ForceRefresh()
+			
+			response := map[string]interface{}{
+				"success": true,
+				"message": "Force refresh initiated",
+				"action":  "force_refresh",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+
+		case "set_interval":
+			if request.Interval < 10 {
+				http.Error(w, "Minimum refresh interval is 10 seconds", http.StatusBadRequest)
+				return
+			}
+			
+			interval := time.Duration(request.Interval) * time.Second
+			tm.SetRefreshInterval(interval)
+			logger.Info("[API] Refresh interval updated to %v via API", interval)
+			
+			response := map[string]interface{}{
+				"success":  true,
+				"message":  fmt.Sprintf("Refresh interval set to %v", interval),
+				"action":   "set_interval",
+				"interval": interval.String(),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+
+		default:
+			http.Error(w, "Unknown action", http.StatusBadRequest)
+		}
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
