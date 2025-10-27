@@ -63,6 +63,40 @@ func SanitizeFilename(name string) string {
 	return r.Replace(name)
 }
 
+// GetDirectoryName returns the directory name for a torrent
+func GetDirectoryName(filename string) string {
+	configManager := GetConfigManager()
+	config := configManager.GetConfig()
+	
+	dirName := filename
+	if !config.RcloneSettings.RetainFolderExtension {
+		lastDotIndex := strings.LastIndex(dirName, ".")
+		if lastDotIndex > 0 && lastDotIndex < len(dirName)-1 {
+			ext := strings.ToLower(dirName[lastDotIndex+1:])
+			knownExtensions := map[string]bool{
+				// Video formats
+				"mkv": true, "mp4": true, "avi": true, "mov": true, "wmv": true, "flv": true, "webm": true,
+				"m4v": true, "mpg": true, "mpeg": true, "m2ts": true, "ts": true, "vob": true,
+				// Audio formats
+				"mp3": true, "flac": true, "wav": true, "aac": true, "m4a": true, "ogg": true, "wma": true,
+				"opus": true, "ape": true, "alac": true, "aiff": true, "ac3": true, "dts": true,
+				// Book/Document formats
+				"epub": true, "mobi": true, "azw": true, "azw3": true, "pdf": true, "djvu": true, "cbr": true, "cbz": true,
+				// Archive formats
+				"zip": true, "rar": true, "7z": true, "tar": true, "gz": true, "bz2": true, "iso": true,
+				// Other
+				"nfo": true, "torrent": true, "txt": true,
+			}
+
+			if knownExtensions[ext] {
+				dirName = dirName[:lastDotIndex]
+			}
+		}
+	}
+	
+	return SanitizeFilename(dirName)
+}
+
 // FailedFileEntry represents a failed file unrestriction
 type FailedFileEntry struct {
 	Error     error
@@ -202,7 +236,8 @@ func (tm *TorrentManager) updateDirectoryMaps(torrents []TorrentItem) {
 
 	for i := range torrents {
 		torrent := &torrents[i]
-		accessKey := SanitizeFilename(torrent.Filename)
+
+		accessKey := GetDirectoryName(torrent.Filename)
 		allTorrents.Set(accessKey, torrent)
 		
 		// Create individual directory
@@ -661,8 +696,8 @@ func (tm *TorrentManager) verifyFileViaWebDAV(torrentID, filePath string, target
 		return false, fmt.Errorf("failed to get torrent info: %w", err)
 	}
 
-	sanitizedTorrentName := SanitizeFilename(info.Filename)
-	exactPath := fmt.Sprintf("/torrents/%s/%s", sanitizedTorrentName, filePath)
+	directoryName := GetDirectoryName(info.Filename)
+	exactPath := fmt.Sprintf("/torrents/%s/%s", directoryName, filePath)
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	

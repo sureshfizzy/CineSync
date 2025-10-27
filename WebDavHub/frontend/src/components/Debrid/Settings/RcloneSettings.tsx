@@ -18,6 +18,7 @@ interface RcloneConfig {
   vfsReadChunkSizeLimit: string;
   streamBufferSize: string;
   serveFromRclone: boolean;
+  retainFolderExtension: boolean;
 }
 
 interface RcloneStatus {
@@ -47,6 +48,7 @@ const RcloneSettings: React.FC = () => {
     vfsReadChunkSizeLimit: '128M',
     streamBufferSize: '10M',
     serveFromRclone: false,
+    retainFolderExtension: false,
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -424,6 +426,41 @@ const RcloneSettings: React.FC = () => {
                           {config.serveFromRclone
                             ? '🔄 Active Mode: Serving from Rclone Mount (VFS cache)'
                             : '⚡ Active Mode: Direct streaming from cached RD links (Recommended)'}
+                        </Typography>
+                      </Alert>
+                    </Box>
+
+                    <Divider />
+
+                    {/* Retain Folder Extension Toggle */}
+                    <Box>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={config.retainFolderExtension}
+                            onChange={(e) => handleConfigChange('retainFolderExtension', e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight="500">
+                              Retain Folder Extensions
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                              Keep file extensions in mounted directory names (e.g., "Movie.mkv/" instead of "Movie/")
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                      <Alert
+                        severity="info"
+                        sx={{ mt: 1, py: 0.5 }}
+                      >
+                        <Typography variant="body2" fontWeight="500">
+                          {config.retainFolderExtension
+                            ? '📁 Directories will be named: "Movie.mkv/", "Archive.zip/"'
+                            : '📂 Directories will be named: "Movie/", "Archive/" (Recommended)'}
                         </Typography>
                       </Alert>
                     </Box>

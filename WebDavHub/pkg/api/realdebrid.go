@@ -995,7 +995,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		
 		for _, t := range allTorrents {
 			nodes = append(nodes, torrentNode{
-				Name:  realdebrid.SanitizeFilename(t.Filename),
+				Name:  realdebrid.GetDirectoryName(t.Filename),
 				IsDir: true,
 				Size:  t.Bytes,
 			})

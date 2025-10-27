@@ -19,21 +19,22 @@ type Config struct {
 
 // RcloneSettings represents rclone mount configuration
 type RcloneSettings struct {
-    Enabled              bool   `json:"enabled" yaml:"enabled"`
-    MountPath            string `json:"mountPath" yaml:"mountPath"`
-    RemoteName           string `json:"remoteName" yaml:"remoteName"`
-    VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
-    VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
-    VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
-    CachePath         string `json:"CachePath" yaml:"CachePath"`
-    BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
-    DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
-    PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
-    RclonePath           string `json:"rclonePath" yaml:"rclonePath"`
-    VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
-    VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
-    StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
-    ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
+	Enabled              bool   `json:"enabled" yaml:"enabled"`
+	MountPath            string `json:"mountPath" yaml:"mountPath"`
+	RemoteName           string `json:"remoteName" yaml:"remoteName"`
+	VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
+	VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
+	VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
+	CachePath         string `json:"CachePath" yaml:"CachePath"`
+	BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
+	DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
+	PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
+	RclonePath           string `json:"rclonePath" yaml:"rclonePath"`
+	VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
+	VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
+	StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
+	ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
+	RetainFolderExtension bool   `json:"retainFolderExtension" yaml:"retainFolderExtension"`
 }
 
 // HttpDavSettings represents HTTP DAV configuration
@@ -79,6 +80,7 @@ func GetConfigManager() *ConfigManager {
                     VfsReadChunkSizeLimit: "128M",
                     StreamBufferSize:     "10M",
                     ServeFromRclone:      false,
+                    RetainFolderExtension: false,
                 },
                 HttpDavSettings: HttpDavSettings{
                     Enabled:  false,
@@ -202,6 +204,9 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if serveFromRclone, ok := rcloneSettingsMap["serveFromRclone"].(bool); ok {
 					rcloneSettings.ServeFromRclone = serveFromRclone
+				}
+				if retainFolderExtension, ok := rcloneSettingsMap["retainFolderExtension"].(bool); ok {
+					rcloneSettings.RetainFolderExtension = retainFolderExtension
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings
@@ -357,6 +362,7 @@ func (cm *ConfigManager) ResetConfig() error {
             VfsReadChunkSizeLimit: "128M",
             StreamBufferSize:     "10M",
             ServeFromRclone:      false,
+            RetainFolderExtension: false,
         },
         HttpDavSettings: HttpDavSettings{
             Enabled:  false,
