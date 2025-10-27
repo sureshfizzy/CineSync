@@ -280,22 +280,10 @@ func (rm *RcloneManager) Unmount(mountPath string) (*MountStatus, error) {
 		mountPath = normalizedPath
 	}
 
-	// Try graceful unmount first
-	if runtime.GOOS != "windows" {
-		if err := rm.gracefulUnmount(mountPath); err != nil {
-			logger.Warn("Graceful unmount failed: %v", err)
-			if mount.ProcessID > 0 && rm.isProcessRunning(mount.ProcessID) {
-				logger.Info("Attempting to kill rclone process: PID=%d", mount.ProcessID)
-				if err := rm.forceKill(mount.ProcessID); err != nil {
-					logger.Error("Failed to kill process: %v", err)
-				}
-			}
-		}
-	} else {
-		if rm.isProcessRunning(mount.ProcessID) {
-			if err := rm.forceKill(mount.ProcessID); err != nil {
-				return &MountStatus{Error: fmt.Sprintf("failed to kill process: %v", err)}, err
-			}
+	// Kill the rclone process
+	if rm.isProcessRunning(mount.ProcessID) {
+		if err := rm.forceKill(mount.ProcessID); err != nil {
+			return &MountStatus{Error: fmt.Sprintf("failed to kill process: %v", err)}, err
 		}
 	}
 
@@ -594,51 +582,6 @@ func (rm *RcloneManager) findRcloneMountPid(mountPath string) int {
 	}
 	
 	return 0
-}
-
-// gracefulUnmount attempts to gracefully unmount using fusermount/unmount
-func (rm *RcloneManager) gracefulUnmount(mountPath string) error {
-	if runtime.GOOS == "windows" {
-		return fmt.Errorf("graceful unmount not supported on Windows")
-	}
-	
-	// Try multiple unmount methods in order of preference
-	unmountMethods := []struct {
-		name string
-		cmd  []string
-	}{
-		{"fusermount3", []string{"fusermount3", "-u", mountPath}},
-		{"fusermount", []string{"fusermount", "-u", mountPath}},
-		{"umount", []string{"umount", mountPath}},
-		{"fusermount3 lazy", []string{"fusermount3", "-uz", mountPath}},
-		{"fusermount lazy", []string{"fusermount", "-uz", mountPath}},
-		{"umount lazy", []string{"umount", "-l", mountPath}},
-	}
-	
-	var lastErr error
-	for _, method := range unmountMethods {
-		cmd := exec.Command(method.cmd[0], method.cmd[1:]...)
-		
-		// Capture output for debugging
-		output, err := cmd.CombinedOutput()
-		if err == nil {
-			logger.Info("Successfully unmounted %s", mountPath, method.name)
-			return nil
-		}
-		
-		// Log the error but continue trying other methods
-		logger.Debug("Unmount method %s failed: %v, output: %s", method.name, err, string(output))
-		lastErr = err
-		
-		// After first 3 attempts, check if mount is already gone
-		if !rm.isMountPoint(mountPath) {
-			logger.Info("Mount point %s is no longer active", mountPath)
-			return nil
-		}
-	}
-	
-	// If we get here, all methods failed
-	return fmt.Errorf("all unmount methods failed, last error: %v", lastErr)
 }
 
 // forceKill forcefully kills a process
