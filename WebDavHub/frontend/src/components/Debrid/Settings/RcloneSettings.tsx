@@ -22,6 +22,14 @@ interface RcloneConfig {
   autoMountOnStart: boolean;
 }
 
+interface RateLimitUI {
+  requestsPerMinute: number;
+  burst: number;
+  maxRetries: number;
+  baseBackoffMs: number;
+  maxBackoffMs: number;
+}
+
 interface RcloneStatus {
   mounted: boolean;
   mountPath?: string;
@@ -53,6 +61,13 @@ const RcloneSettings: React.FC = () => {
     autoMountOnStart: false,
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
+  const [rateLimit, setRateLimit] = useState<RateLimitUI>({
+    requestsPerMinute: 220,
+    burst: 50,
+    maxRetries: 5,
+    baseBackoffMs: 500,
+    maxBackoffMs: 8000,
+  });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -75,6 +90,15 @@ const RcloneSettings: React.FC = () => {
       }
       if (response.data.status.rcloneStatus) {
         setStatus(response.data.status.rcloneStatus);
+      }
+      if (response.data.config?.rateLimit) {
+        setRateLimit({
+          requestsPerMinute: response.data.config.rateLimit.requestsPerMinute ?? 220,
+          burst: response.data.config.rateLimit.burst ?? 50,
+          maxRetries: response.data.config.rateLimit.maxRetries ?? 5,
+          baseBackoffMs: response.data.config.rateLimit.baseBackoffMs ?? 500,
+          maxBackoffMs: response.data.config.rateLimit.maxBackoffMs ?? 8000,
+        });
       }
       if (response.data.serverInfo?.os) {
         setServerOS(response.data.serverInfo.os);
@@ -99,7 +123,14 @@ const RcloneSettings: React.FC = () => {
       );
       
       const response = await axios.put('/api/realdebrid/config', {
-        rcloneSettings: configToSave
+        rcloneSettings: configToSave,
+        rateLimit: {
+          requestsPerMinute: rateLimit.requestsPerMinute,
+          burst: rateLimit.burst,
+          maxRetries: rateLimit.maxRetries,
+          baseBackoffMs: rateLimit.baseBackoffMs,
+          maxBackoffMs: rateLimit.maxBackoffMs,
+        },
       });
       if (response.data.config.rcloneSettings) {
         setConfig(response.data.config.rcloneSettings);
@@ -165,7 +196,14 @@ const RcloneSettings: React.FC = () => {
       );
       
       await axios.put('/api/realdebrid/config', {
-        rcloneSettings: configToSave
+        rcloneSettings: configToSave,
+        rateLimit: {
+          requestsPerMinute: rateLimit.requestsPerMinute,
+          burst: rateLimit.burst,
+          maxRetries: rateLimit.maxRetries,
+          baseBackoffMs: rateLimit.baseBackoffMs,
+          maxBackoffMs: rateLimit.maxBackoffMs,
+        },
       });
 
       const response = await axios.post('/api/realdebrid/rclone/mount', configToSave);
@@ -692,6 +730,58 @@ const RcloneSettings: React.FC = () => {
                             />
                           </Box>
                         </Box>
+                      </Stack>
+                    </Box>
+
+                    <Divider sx={{ my: 2 }} />
+
+                    {/* API Rate Limiting */}
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                        API Rate Limiting
+                      </Typography>
+                      <Stack spacing={2}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                          <TextField
+                            type="number"
+                            label="Requests per Minute"
+                            size={isMobile ? 'small' : 'medium'}
+                            value={rateLimit.requestsPerMinute}
+                            onChange={(e) => setRateLimit(prev => ({ ...prev, requestsPerMinute: Number(e.target.value) || 0 }))}
+                            helperText="Max sustained request rate (<= 250)"
+                          />
+                          <TextField
+                            type="number"
+                            label="Burst"
+                            size={isMobile ? 'small' : 'medium'}
+                            value={rateLimit.burst}
+                            onChange={(e) => setRateLimit(prev => ({ ...prev, burst: Number(e.target.value) || 0 }))}
+                            helperText="Short spikes allowed"
+                          />
+                        </Stack>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                          <TextField
+                            type="number"
+                            label="Max Retries (429)"
+                            size={isMobile ? 'small' : 'medium'}
+                            value={rateLimit.maxRetries}
+                            onChange={(e) => setRateLimit(prev => ({ ...prev, maxRetries: Number(e.target.value) || 0 }))}
+                          />
+                          <TextField
+                            type="number"
+                            label="Base Backoff (ms)"
+                            size={isMobile ? 'small' : 'medium'}
+                            value={rateLimit.baseBackoffMs}
+                            onChange={(e) => setRateLimit(prev => ({ ...prev, baseBackoffMs: Number(e.target.value) || 0 }))}
+                          />
+                          <TextField
+                            type="number"
+                            label="Max Backoff (ms)"
+                            size={isMobile ? 'small' : 'medium'}
+                            value={rateLimit.maxBackoffMs}
+                            onChange={(e) => setRateLimit(prev => ({ ...prev, maxBackoffMs: Number(e.target.value) || 0 }))}
+                          />
+                        </Stack>
                       </Stack>
                     </Box>
 

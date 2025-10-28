@@ -35,6 +35,7 @@ type Client struct {
 	unrestrictCache cmap.ConcurrentMap[string, *DownloadCacheEntry]
 	failedUnrestrictCache cmap.ConcurrentMap[string, *FailedUnrestrictEntry]
 	cacheMutex      sync.RWMutex
+    limiter         *rateLimiter
 }
 
 // UserInfo represents Real-Debrid user information
@@ -104,7 +105,7 @@ type ErrorResponse struct {
 
 // NewClient creates a new Real-Debrid client
 func NewClient(apiKey string) *Client {
-	return &Client{
+    return &Client{
 		apiKey:    apiKey,
 		baseURL:   "https://api.real-debrid.com/rest/1.0",
 		webdavURL: "https://webdav.debrid.it",
@@ -116,9 +117,125 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
+// rateLimiter implements a token bucket with retry/backoff helpers
+type rateLimiter struct {
+    mu sync.Mutex
+    capacity int
+    tokens float64
+    refillRatePerSec float64
+    last time.Time
+    burst int
+    maxRetries int
+    baseBackoff time.Duration
+    maxBackoff time.Duration
+}
+
+func newRateLimiterFromConfig() *rateLimiter {
+    cfg := GetConfigManager().GetConfig()
+    rl := cfg.RateLimit
+    if rl.RequestsPerMinute <= 0 {
+        rl.RequestsPerMinute = 220
+    }
+    if rl.Burst < 0 { rl.Burst = 0 }
+    if rl.MaxRetries < 0 { rl.MaxRetries = 0 }
+    if rl.BaseBackoffMs <= 0 { rl.BaseBackoffMs = 500 }
+    if rl.MaxBackoffMs <= 0 { rl.MaxBackoffMs = 8000 }
+    r := &rateLimiter{
+        capacity: rl.Burst + 1,
+        tokens: float64(rl.Burst + 1),
+        refillRatePerSec: float64(rl.RequestsPerMinute) / 60.0,
+        last: time.Now(),
+        burst: rl.Burst,
+        maxRetries: rl.MaxRetries,
+        baseBackoff: time.Duration(rl.BaseBackoffMs) * time.Millisecond,
+        maxBackoff: time.Duration(rl.MaxBackoffMs) * time.Millisecond,
+    }
+    return r
+}
+
+func (r *rateLimiter) waitToken(ctxDone <-chan struct{}) bool {
+    if r == nil {
+        return true
+    }
+    for {
+        r.mu.Lock()
+        now := time.Now()
+        elapsed := now.Sub(r.last).Seconds()
+        r.last = now
+        r.tokens += elapsed * r.refillRatePerSec
+        if r.tokens > float64(r.capacity) {
+            r.tokens = float64(r.capacity)
+        }
+        if r.tokens >= 1.0 {
+            r.tokens -= 1.0
+            r.mu.Unlock()
+            return true
+        }
+        r.mu.Unlock()
+        select {
+        case <-time.After(50 * time.Millisecond):
+        case <-ctxDone:
+            return false
+        }
+    }
+}
+
+func (c *Client) ensureLimiter() {
+    if c.limiter == nil {
+        c.limiter = newRateLimiterFromConfig()
+    }
+}
+
+func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
+    c.ensureLimiter()
+    if ok := c.limiter.waitToken(req.Context().Done()); !ok {
+        return nil, fmt.Errorf("request canceled")
+    }
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    if resp.StatusCode != http.StatusTooManyRequests {
+        return resp, nil
+    }
+    _ = resp.Body.Close()
+    backoff := c.limiter.baseBackoff
+    for attempt := 1; attempt <= c.limiter.maxRetries; attempt++ {
+        if ra := resp.Header.Get("Retry-After"); ra != "" {
+            if d, perr := time.ParseDuration(ra+"s"); perr == nil {
+                time.Sleep(d)
+            } else {
+                time.Sleep(backoff)
+            }
+        } else {
+            time.Sleep(backoff)
+        }
+        if ok := c.limiter.waitToken(req.Context().Done()); !ok {
+            return nil, fmt.Errorf("request canceled during retry")
+        }
+        r2, e2 := c.httpClient.Do(req)
+        if e2 != nil {
+            err = e2
+            resp = nil
+            continue
+        }
+        if r2.StatusCode != http.StatusTooManyRequests {
+            return r2, nil
+        }
+        _ = r2.Body.Close()
+        if backoff < c.limiter.maxBackoff {
+            backoff *= 2
+            if backoff > c.limiter.maxBackoff { backoff = c.limiter.maxBackoff }
+        }
+    }
+    return nil, fmt.Errorf("rate limited (429) after retries")
+}
+
 // SetAPIKey updates the API key
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
+    c.limiter = nil
 }
 
 // GetUserInfo retrieves user information from Real-Debrid
@@ -277,7 +394,7 @@ func (c *Client) GetDownloads() ([]DownloadItem, error) {
     req.Header.Set("Authorization", "Bearer "+c.apiKey)
     req.Header.Set("Content-Type", "application/json")
 
-    resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
     if err != nil {
         return nil, fmt.Errorf("failed to make request: %w", err)
     }
@@ -316,7 +433,7 @@ func (c *Client) GetDownloadsBatch(limit, offset int) ([]DownloadItem, error) {
     req.Header.Set("Authorization", "Bearer "+c.apiKey)
     req.Header.Set("Content-Type", "application/json")
 
-    resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
     if err != nil {
         return nil, fmt.Errorf("failed to make request: %w", err)
     }
@@ -383,7 +500,7 @@ func (c *Client) GetTorrentsBatch(limit, offset int) ([]TorrentItem, error) {
     }
     req.Header.Set("Authorization", "Bearer "+c.apiKey)
     req.Header.Set("Content-Type", "application/json")
-    resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
     if err != nil {
         return nil, fmt.Errorf("failed to make request: %w", err)
     }
@@ -448,7 +565,7 @@ func (c *Client) GetAllTorrents(limitPerPage int, progressCallback func(int, int
         if err != nil { break }
         req.Header.Set("Authorization", "Bearer "+c.apiKey)
         req.Header.Set("Content-Type", "application/json")
-        resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
         if err != nil { break }
         if resp.StatusCode != http.StatusOK {
             resp.Body.Close()
@@ -516,7 +633,7 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}

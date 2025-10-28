@@ -15,6 +15,7 @@ type Config struct {
     APIKey  string `json:"apiKey" yaml:"apiKey"`
     RcloneSettings RcloneSettings `json:"rcloneSettings" yaml:"rcloneSettings"`
     HttpDavSettings HttpDavSettings `json:"httpDavSettings" yaml:"httpDavSettings"`
+    RateLimit RateLimitSettings `json:"rateLimit" yaml:"rateLimit"`
 }
 
 // RcloneSettings represents rclone mount configuration
@@ -44,6 +45,15 @@ type HttpDavSettings struct {
     UserID   string `json:"userId" yaml:"userId"`
     Password string `json:"password" yaml:"password"`
     BaseURL  string `json:"baseUrl" yaml:"baseUrl"`
+}
+
+// RateLimitSettings controls API throttling and retry behavior
+type RateLimitSettings struct {
+    RequestsPerMinute int   `json:"requestsPerMinute" yaml:"requestsPerMinute"`
+    Burst             int   `json:"burst" yaml:"burst"`
+    MaxRetries        int   `json:"maxRetries" yaml:"maxRetries"`
+    BaseBackoffMs     int   `json:"baseBackoffMs" yaml:"baseBackoffMs"`
+    MaxBackoffMs      int   `json:"maxBackoffMs" yaml:"maxBackoffMs"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -82,13 +92,20 @@ func GetConfigManager() *ConfigManager {
                     StreamBufferSize:     "10M",
                     ServeFromRclone:      false,
                     RetainFolderExtension: false,
-                    AutoMountOnStart:     true,
+					AutoMountOnStart:     true,
                 },
                 HttpDavSettings: HttpDavSettings{
                     Enabled:  false,
                     UserID:   "",
                     Password: "",
                     BaseURL:  "https://dav.real-debrid.com/",
+                },
+                RateLimit: RateLimitSettings{
+                    RequestsPerMinute: 220,
+                    Burst:             50,
+                    MaxRetries:        5,
+                    BaseBackoffMs:     500,
+                    MaxBackoffMs:      8000,
                 },
             },
             configPath: filepath.Join("..", "db", "debrid.yml"),
@@ -233,10 +250,36 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				
 				cm.config.HttpDavSettings = httpDavSettings
 			}
+        case "rateLimit":
+            if rateLimitMap, ok := value.(map[string]interface{}); ok {
+                rl := cm.config.RateLimit
+                if rpm, ok := asInt(rateLimitMap["requestsPerMinute"]); ok && rpm > 0 { rl.RequestsPerMinute = rpm }
+                if burst, ok := asInt(rateLimitMap["burst"]); ok && burst >= 0 { rl.Burst = burst }
+                if maxRetries, ok := asInt(rateLimitMap["maxRetries"]); ok && maxRetries >= 0 { rl.MaxRetries = maxRetries }
+                if baseMs, ok := asInt(rateLimitMap["baseBackoffMs"]); ok && baseMs >= 0 { rl.BaseBackoffMs = baseMs }
+                if maxMs, ok := asInt(rateLimitMap["maxBackoffMs"]); ok && maxMs >= 0 { rl.MaxBackoffMs = maxMs }
+                cm.config.RateLimit = rl
+            }
 		}
 	}
 	
 	return cm.saveConfig()
+}
+
+// helper to coerce float64/json numbers to int safely
+func asInt(v interface{}) (int, bool) {
+    switch t := v.(type) {
+    case int:
+        return t, true
+    case int64:
+        return int(t), true
+    case float64:
+        return int(t), true
+    case float32:
+        return int(t), true
+    default:
+        return 0, false
+    }
 }
 
 // IsEnabled returns whether Real-Debrid is enabled
@@ -316,6 +359,23 @@ func (cm *ConfigManager) loadConfig() error {
     }
 
     config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"
+
+    // Apply defaults for rate limiting
+    if config.RateLimit.RequestsPerMinute <= 0 {
+        config.RateLimit.RequestsPerMinute = 220
+    }
+    if config.RateLimit.Burst <= 0 {
+        config.RateLimit.Burst = 50
+    }
+    if config.RateLimit.MaxRetries <= 0 {
+        config.RateLimit.MaxRetries = 5
+    }
+    if config.RateLimit.BaseBackoffMs <= 0 {
+        config.RateLimit.BaseBackoffMs = 500
+    }
+    if config.RateLimit.MaxBackoffMs <= 0 {
+        config.RateLimit.MaxBackoffMs = 8000
+    }
 
     cm.config = &config
     logger.Info("Real-Debrid configuration loaded successfully")
