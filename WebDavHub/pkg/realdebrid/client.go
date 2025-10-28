@@ -29,6 +29,7 @@ type FailedUnrestrictEntry struct {
 // Client represents a Real-Debrid API client
 type Client struct {
 	apiKey     string
+	tokenManager *TokenManager
 	baseURL    string
 	webdavURL  string
 	httpClient *http.Client
@@ -103,10 +104,53 @@ type ErrorResponse struct {
 	ErrorCode int  `json:"error_code"`
 }
 
+var (
+	globalClient *Client
+	clientMutex  sync.RWMutex
+	clientOnce   sync.Once
+)
+
+// GetOrCreateClient returns the global client instance or creates one
+func GetOrCreateClient() *Client {
+	clientMutex.RLock()
+	if globalClient != nil {
+		clientMutex.RUnlock()
+		return globalClient
+	}
+	clientMutex.RUnlock()
+
+	clientMutex.Lock()
+	defer clientMutex.Unlock()
+
+	if globalClient != nil {
+		return globalClient
+	}
+
+	cfg := GetConfigManager().GetConfig()
+	if cfg.APIKey == "" {
+		return nil
+	}
+
+	globalClient = NewClient(cfg.APIKey)
+	return globalClient
+}
+
+// ResetGlobalClient resets the global client
+func ResetGlobalClient() {
+	clientMutex.Lock()
+	defer clientMutex.Unlock()
+	globalClient = nil
+}
+
 // NewClient creates a new Real-Debrid client
 func NewClient(apiKey string) *Client {
-    return &Client{
+	cfg := GetConfigManager().GetConfig()
+	tokens := []string{apiKey}
+	tokens = append(tokens, cfg.AdditionalAPIKeys...)
+	
+    client := &Client{
 		apiKey:    apiKey,
+		tokenManager: NewTokenManager(tokens),
 		baseURL:   "https://api.real-debrid.com/rest/1.0",
 		webdavURL: "https://webdav.debrid.it",
 		httpClient: &http.Client{
@@ -115,6 +159,12 @@ func NewClient(apiKey string) *Client {
 		unrestrictCache: cmap.New[*DownloadCacheEntry](),
 		failedUnrestrictCache: cmap.New[*FailedUnrestrictEntry](),
 	}
+
+	// Start background jobs for token management
+	client.StartResetBandwidthJob()
+	client.StartTokenRecoveryJob()
+
+	return client
 }
 
 // rateLimiter implements a token bucket with retry/backoff helpers
@@ -293,10 +343,6 @@ func (c *Client) GetWebDAVCredentials() (username, password string) {
 
 // UnrestrictLink converts a restricted link to a direct download link
 func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
-	if c.apiKey == "" {
-		return nil, fmt.Errorf("API key not set")
-	}
-
 	// Handle empty or invalid links
 	if link == "" {
 		return nil, fmt.Errorf("link parameter is empty")
@@ -315,6 +361,12 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		c.failedUnrestrictCache.Remove(processedLink)
 	}
 
+	// Get current active token
+	token, err := c.tokenManager.GetCurrentToken()
+	if err != nil {
+		return nil, fmt.Errorf("no available tokens: %w", err)
+	}
+
 	if cached, exists := c.unrestrictCache.Get(processedLink); exists {
 		if time.Since(cached.Generated) < 24*time.Hour {
 			return cached.Download, nil
@@ -330,7 +382,7 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.httpClient.Do(req)

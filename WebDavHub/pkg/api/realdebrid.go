@@ -66,10 +66,20 @@ func handleGetRealDebridConfig(w http.ResponseWriter, r *http.Request, configMan
 	config := configManager.GetConfig()
 	status := configManager.GetConfigStatus()
 
+	// Get token statuses from global client if available
+	var tokenStatuses []realdebrid.TokenStatus
+	if config.Enabled && config.APIKey != "" {
+		client := realdebrid.GetOrCreateClient()
+		if client != nil && client.GetTokenManager() != nil {
+			tokenStatuses = client.GetTokenManager().GetTokensStatus()
+		}
+	}
+
 	response := map[string]interface{}{
-		"config":     config,
-		"status":     status,
-		"configPath": realdebrid.GetRcloneConfigPath(),
+		"config":        config,
+		"status":        status,
+		"tokenStatuses": tokenStatuses,
+		"configPath":    realdebrid.GetRcloneConfigPath(),
 		"serverInfo": map[string]interface{}{
 			"os": realdebrid.GetServerOS(),
 		},
@@ -103,14 +113,27 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 		return
 	}
 
+	// Reset global client so it picks up new config on next request
+	realdebrid.ResetGlobalClient()
+
 	// Return updated configuration
 	config := configManager.GetConfig()
 	status := configManager.GetConfigStatus()
 
+	// Get token statuses after update
+	var tokenStatuses []realdebrid.TokenStatus
+	if config.Enabled && config.APIKey != "" {
+		client := realdebrid.GetOrCreateClient()
+		if client != nil && client.GetTokenManager() != nil {
+			tokenStatuses = client.GetTokenManager().GetTokensStatus()
+		}
+	}
+
 	response := map[string]interface{}{
-		"config": config,
-		"status": status,
-		"message": "Configuration updated successfully",
+		"config":        config,
+		"status":        status,
+		"tokenStatuses": tokenStatuses,
+		"message":       "Configuration updated successfully",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

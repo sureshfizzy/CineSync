@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Chip, Stack, Divider, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, useTheme, useMediaQuery, alpha } from '@mui/material';
-import { CloudDownload, Settings, CheckCircle, Error, Refresh, Visibility, VisibilityOff, Science, Speed } from '@mui/icons-material';
+import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Chip, Stack, Divider, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, useTheme, useMediaQuery, alpha, List, ListItem, ListItemText, ListItemSecondaryAction } from '@mui/material';
+import { CloudDownload, Settings, CheckCircle, Error, Refresh, Visibility, VisibilityOff, Science, Speed, Add, Delete, SwapHoriz } from '@mui/icons-material';
 import axios from 'axios';
+
+interface TokenStatus {
+  label: string;
+  expired: boolean;
+  current: boolean;
+  masked: string;
+}
 
 interface RealDebridConfig {
   enabled: boolean;
   apiKey: string;
+  additionalApiKeys?: string[];
   httpDavSettings: {
     enabled: boolean;
     userId: string;
@@ -43,6 +51,7 @@ const RealDebridSettings: React.FC = () => {
   const [config, setConfig] = useState<RealDebridConfig>({
     enabled: false,
     apiKey: '',
+    additionalApiKeys: [],
     httpDavSettings: {
       enabled: false,
       userId: '',
@@ -50,12 +59,15 @@ const RealDebridSettings: React.FC = () => {
     },
   });
   const [status, setStatus] = useState<RealDebridStatus | null>(null);
+  const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingHttpDav, setTestingHttpDav] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showHttpDavPassword, setShowHttpDavPassword] = useState(false);
+  const [showAdditionalTokens, setShowAdditionalTokens] = useState<Record<number, boolean>>({});
+  const [newToken, setNewToken] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
   const [testDialog, setTestDialog] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
@@ -68,8 +80,12 @@ const RealDebridSettings: React.FC = () => {
     setLoading(true);
     try {
       const response = await axios.get('/api/realdebrid/config');
-      setConfig(response.data.config);
+      setConfig({
+        ...response.data.config,
+        additionalApiKeys: response.data.config.additionalApiKeys || []
+      });
       setStatus(response.data.status);
+      setTokenStatuses(response.data.tokenStatuses || []);
     } catch (error) {
       console.error('Failed to load Real-Debrid config:', error);
       showMessage('Failed to load configuration', 'error');
@@ -82,8 +98,12 @@ const RealDebridSettings: React.FC = () => {
     setSaving(true);
     try {
       const response = await axios.put('/api/realdebrid/config', config);
-      setConfig(response.data.config);
+      setConfig({
+        ...response.data.config,
+        additionalApiKeys: response.data.config.additionalApiKeys || []
+      });
       setStatus(response.data.status);
+      setTokenStatuses(response.data.tokenStatuses || []);
       showMessage('Configuration saved successfully');
     } catch (error) {
       console.error('Failed to save Real-Debrid config:', error);
@@ -91,6 +111,23 @@ const RealDebridSettings: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const addToken = () => {
+    if (!newToken.trim()) {
+      showMessage('Please enter a token', 'warning');
+      return;
+    }
+    const updatedTokens = [...(config.additionalApiKeys || []), newToken];
+    setConfig({ ...config, additionalApiKeys: updatedTokens });
+    setNewToken('');
+    showMessage('Token added. Click Save to apply changes.', 'success');
+  };
+
+  const removeToken = (index: number) => {
+    const updatedTokens = (config.additionalApiKeys || []).filter((_, i) => i !== index);
+    setConfig({ ...config, additionalApiKeys: updatedTokens });
+    showMessage('Token removed. Click Save to apply changes.', 'warning');
   };
 
   const testConnection = async () => {
@@ -331,6 +368,131 @@ const RealDebridSettings: React.FC = () => {
                     }}
                     helperText="Get your API key from Real-Debrid settings"
                   />
+                </Box>
+
+                <Divider />
+
+                {/* Additional Tokens Section */}
+                <Box>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                    <SwapHoriz sx={{ color: 'primary.main' }} />
+                    <Typography variant="subtitle2" fontWeight="600">
+                      Additional API Tokens (Bandwidth Rotation)
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                    Add extra Real-Debrid API tokens to automatically rotate when daily bandwidth limit is reached
+                  </Typography>
+
+                  {/* Token Status Display */}
+                  {tokenStatuses && tokenStatuses.length > 0 && (
+                    <Box sx={{ mb: 2, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
+                      <Typography variant="caption" fontWeight="600" sx={{ mb: 1, display: 'block' }}>
+                        Current Token Status
+                      </Typography>
+                      <List dense sx={{ py: 0 }}>
+                        {tokenStatuses.map((tokenStatus, index) => (
+                          <ListItem key={index} sx={{ px: 0 }}>
+                            <ListItemText
+                              primary={
+                                <Stack direction="row" alignItems="center" spacing={1}>
+                                  <Typography variant="body2" fontWeight="500">
+                                    {tokenStatus.label}
+                                  </Typography>
+                                  {tokenStatus.current && (
+                                    <Chip label="Active" size="small" color="primary" sx={{ height: 20 }} />
+                                  )}
+                                  {tokenStatus.expired ? (
+                                    <Chip label="Bandwidth Limit" size="small" color="error" sx={{ height: 20 }} />
+                                  ) : (
+                                    <Chip label="Available" size="small" color="success" sx={{ height: 20 }} />
+                                  )}
+                                </Stack>
+                              }
+                              secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                  {tokenStatus.masked}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Tokens reset daily at 12AM CET
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Additional Tokens List */}
+                  {config.additionalApiKeys && config.additionalApiKeys.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" fontWeight="600" sx={{ mb: 1, display: 'block' }}>
+                        Additional Tokens
+                      </Typography>
+                      <List dense sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        {config.additionalApiKeys.map((token, index) => (
+                          <ListItem key={index}>
+                            <ListItemText
+                              primary={
+                                <Typography variant="body2" fontFamily="monospace">
+                                  {showAdditionalTokens[index] ? token : token.slice(0, 8) + '...' + token.slice(-8)}
+                                </Typography>
+                              }
+                            />
+                            <ListItemSecondaryAction>
+                              <Stack direction="row" spacing={0.5}>
+                                <Tooltip title={showAdditionalTokens[index] ? 'Hide' : 'Show'}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setShowAdditionalTokens({
+                                      ...showAdditionalTokens,
+                                      [index]: !showAdditionalTokens[index]
+                                    })}
+                                  >
+                                    {showAdditionalTokens[index] ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                                  </IconButton>
+                                </Tooltip>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => removeToken(index)}
+                                >
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Stack>
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+
+                  {/* Add Token Input */}
+                  <Stack direction="row" spacing={1}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="password"
+                      value={newToken}
+                      onChange={(e) => setNewToken(e.target.value)}
+                      placeholder="Enter additional API token"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          addToken();
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outlined"
+                      startIcon={<Add />}
+                      onClick={addToken}
+                      disabled={!newToken.trim()}
+                      sx={{ minWidth: 100 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
                 </Box>
 
                 <Divider />

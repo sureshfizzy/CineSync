@@ -13,6 +13,7 @@ import (
 type Config struct {
     Enabled bool   `json:"enabled" yaml:"enabled"`
     APIKey  string `json:"apiKey" yaml:"apiKey"`
+    AdditionalAPIKeys []string `json:"additionalApiKeys" yaml:"additionalApiKeys"`
     RcloneSettings RcloneSettings `json:"rcloneSettings" yaml:"rcloneSettings"`
     HttpDavSettings HttpDavSettings `json:"httpDavSettings" yaml:"httpDavSettings"`
     RateLimit RateLimitSettings `json:"rateLimit" yaml:"rateLimit"`
@@ -75,6 +76,7 @@ func GetConfigManager() *ConfigManager {
             config: &Config{
                 Enabled: false,
                 APIKey:  "",
+                AdditionalAPIKeys: []string{},
                 RcloneSettings: RcloneSettings{
                     Enabled:              false,
                     MountPath:            "",
@@ -173,6 +175,18 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 		case "apiKey":
 			if apiKey, ok := value.(string); ok {
 				cm.config.APIKey = apiKey
+			}
+		case "additionalApiKeys":
+			if tokensInterface, ok := value.([]interface{}); ok {
+				tokens := make([]string, 0, len(tokensInterface))
+				for _, tokenInterface := range tokensInterface {
+					if token, ok := tokenInterface.(string); ok {
+						tokens = append(tokens, token)
+					}
+				}
+				cm.config.AdditionalAPIKeys = tokens
+			} else if tokens, ok := value.([]string); ok {
+				cm.config.AdditionalAPIKeys = tokens
 			}
 		case "rcloneSettings":
 			if rcloneSettingsMap, ok := value.(map[string]interface{}); ok {
