@@ -19,6 +19,7 @@ interface RcloneConfig {
   streamBufferSize: string;
   serveFromRclone: boolean;
   retainFolderExtension: boolean;
+  autoMountOnStart: boolean;
 }
 
 interface RcloneStatus {
@@ -49,6 +50,7 @@ const RcloneSettings: React.FC = () => {
     streamBufferSize: '10M',
     serveFromRclone: false,
     retainFolderExtension: false,
+    autoMountOnStart: false,
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -394,6 +396,27 @@ const RcloneSettings: React.FC = () => {
                 {config.enabled && (
                   <>
                     <Divider />
+
+                    {/* Auto-mount on start */}
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.autoMountOnStart}
+                          onChange={(e) => handleConfigChange('autoMountOnStart', e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="500">
+                            Auto-mount on application start
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            Automatically mount rclone at startup when enabled and configured
+                          </Typography>
+                        </Box>
+                      }
+                    />
 
                     {/* Serve From Rclone Toggle */}
                     <Box>

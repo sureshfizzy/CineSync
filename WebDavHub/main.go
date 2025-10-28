@@ -376,6 +376,31 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 		http.NotFound(w, r)
 	})
 
+	// Auto-mount rclone
+	go func() {
+		cfgMgr := realdebrid.GetConfigManager()
+		cfg := cfgMgr.GetConfig()
+		if !cfg.Enabled {
+			return
+		}
+		rc := cfg.RcloneSettings
+		if !rc.Enabled || !rc.AutoMountOnStart || rc.MountPath == "" {
+			return
+		}
+
+		rcloneManager := realdebrid.GetRcloneManager()
+		status := rcloneManager.GetStatus(rc.MountPath)
+		if status != nil && status.Mounted {
+			logger.Info("Rclone already mounted at startup on %s", rc.MountPath)
+			return
+		}
+
+		logger.Info("Auto-mounting rclone at startup: %s", rc.MountPath)
+		if _, err := rcloneManager.Mount(rc, cfg.APIKey); err != nil {
+			logger.Error("Auto-mount rclone failed: %v", err)
+		}
+	}()
+
 	// Auto-start MediaHub service if enabled (delayed to appear after startup summary)
 	if env.IsBool("MEDIAHUB_AUTO_START", true) {
 		go func() {

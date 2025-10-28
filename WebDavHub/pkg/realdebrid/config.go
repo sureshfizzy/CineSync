@@ -35,6 +35,7 @@ type RcloneSettings struct {
 	StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
 	ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
 	RetainFolderExtension bool   `json:"retainFolderExtension" yaml:"retainFolderExtension"`
+	AutoMountOnStart     bool   `json:"autoMountOnStart" yaml:"autoMountOnStart"`
 }
 
 // HttpDavSettings represents HTTP DAV configuration
@@ -81,6 +82,7 @@ func GetConfigManager() *ConfigManager {
                     StreamBufferSize:     "10M",
                     ServeFromRclone:      false,
                     RetainFolderExtension: false,
+                    AutoMountOnStart:     true,
                 },
                 HttpDavSettings: HttpDavSettings{
                     Enabled:  false,
@@ -207,6 +209,9 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if retainFolderExtension, ok := rcloneSettingsMap["retainFolderExtension"].(bool); ok {
 					rcloneSettings.RetainFolderExtension = retainFolderExtension
+				}
+				if autoMountOnStart, ok := rcloneSettingsMap["autoMountOnStart"].(bool); ok {
+					rcloneSettings.AutoMountOnStart = autoMountOnStart
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings
@@ -363,6 +368,7 @@ func (cm *ConfigManager) ResetConfig() error {
             StreamBufferSize:     "10M",
             ServeFromRclone:      false,
             RetainFolderExtension: false,
+            AutoMountOnStart:     false,
         },
         HttpDavSettings: HttpDavSettings{
             Enabled:  false,
