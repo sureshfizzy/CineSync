@@ -988,6 +988,16 @@ type torrentNode struct {
 	Size      int64
 	TorrentID string
 	FileID    int
+	ModTime   time.Time
+}
+
+func parseTorrentTime(added string) time.Time {
+	if added != "" {
+		if parsedTime, err := time.Parse(time.RFC3339, added); err == nil {
+			return parsedTime
+		}
+	}
+	return time.Now()
 }
 
 // handleTorrentPropfind handles PROPFIND requests to list torrents
@@ -1007,9 +1017,10 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	if reqPath == "" {
 		basePath = "/api/realdebrid/webdav"
 		nodes = append(nodes, torrentNode{
-			Name:  realdebrid.ALL_TORRENTS,
-			IsDir: true,
-			Size:  0,
+			Name:    realdebrid.ALL_TORRENTS,
+			IsDir:   true,
+			Size:    0,
+			ModTime: time.Now(),
 		})
 	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) == 1 {
 		basePath = "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS
@@ -1018,9 +1029,10 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		
 		for _, t := range allTorrents {
 			nodes = append(nodes, torrentNode{
-				Name:  realdebrid.GetDirectoryName(t.Filename),
-				IsDir: true,
-				Size:  t.Bytes,
+				Name:    realdebrid.GetDirectoryName(t.Filename),
+				IsDir:   true,
+				Size:    t.Bytes,
+				ModTime: parseTorrentTime(t.Added),
 			})
 		}
 	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
@@ -1030,7 +1042,6 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			subPath = strings.Join(parts[2:], "/")
 		}
 
-		// Find torrent by name
 		torrentID, err := tm.FindTorrentByName(torrentName)
 		if err != nil {
 			logger.Error("[WebDAV] Torrent not found: %s", torrentName)
@@ -1038,7 +1049,6 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			return
 		}
 
-		// List files in the torrent
 		fileNodes, err := tm.ListTorrentFiles(torrentID, subPath)
 		if err != nil {
 			logger.Error("[WebDAV] Failed to list files for torrent %s: %v", torrentID, err)
@@ -1047,8 +1057,6 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		}
 
 		basePath = "/api/realdebrid/webdav/" + reqPath
-		
-		// Pre-allocate nodes slice
 		nodes = make([]torrentNode, 0, len(fileNodes))
 		
 		for _, fn := range fileNodes {
@@ -1058,6 +1066,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				Size:      fn.Size,
 				TorrentID: fn.TorrentID,
 				FileID:    fn.FileID,
+				ModTime:   fn.ModTime,
 			})
 		}
 	} else {
@@ -1091,17 +1100,22 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		},
 	})
 
-	// Add child nodes if depth > 0
 	if depth != "0" {
 		for _, node := range nodes {
 			nodePath := path.Join(basePath, node.Name)
+
+			nodeModTime := lastModified
+			if !node.ModTime.IsZero() {
+				nodeModTime = node.ModTime
+			}
+
 			resp := response{
 				Href: nodePath,
 				Propstat: propstat{
 					Prop: prop{
 						DisplayName:     node.Name,
-						CreationDate:    lastModified.Format(time.RFC3339),
-						GetLastModified: lastModified.Format(time.RFC1123),
+						CreationDate:    nodeModTime.Format(time.RFC3339),
+						GetLastModified: nodeModTime.Format(time.RFC1123),
 					},
 					Status: "HTTP/1.1 200 OK",
 				},

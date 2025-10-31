@@ -329,6 +329,17 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 		return nil, err
 	}
 
+	modTime := time.Now()
+	if info.Ended != "" {
+		if parsedTime, parseErr := time.Parse(time.RFC3339, info.Ended); parseErr == nil {
+			modTime = parsedTime
+		}
+	} else if info.Added != "" {
+		if parsedTime, parseErr := time.Parse(time.RFC3339, info.Added); parseErr == nil {
+			modTime = parsedTime
+		}
+	}
+
 	var selectedFiles []TorrentFile
 	for _, file := range info.Files {
 		if file.Selected == 1 {
@@ -336,8 +347,6 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 		}
 	}
 
-	// Flatten all files to a single level
-	// Use only the filename, ignoring directory structure
 	fileMap := make(map[string]TorrentFile)
 	duplicateCount := make(map[string]int)
 
@@ -345,7 +354,6 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 		cleanPath := strings.Trim(file.Path, "/")
 		fileName := path.Base(cleanPath)
 
-		// Handle duplicate filenames by adding a counter
 		if existingFile, exists := fileMap[fileName]; exists {
 			duplicateCount[fileName]++
 			ext := path.Ext(fileName)
@@ -364,6 +372,7 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 			Size:      file.Bytes,
 			TorrentID: torrentID,
 			FileID:    file.ID,
+			ModTime:   modTime,
 		})
 	}
 
@@ -523,6 +532,7 @@ type FileNode struct {
 	Size      int64
 	TorrentID string
 	FileID    int
+	ModTime   time.Time
 }
 
 // RefreshTorrent refreshes torrent information from Real-Debrid API
