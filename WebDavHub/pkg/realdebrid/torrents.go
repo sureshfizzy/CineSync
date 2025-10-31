@@ -465,7 +465,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		logger.Debug("[Torrents] Attempting to unrestrict link for: %s", filePath)
 		
 		// Unrestrict the link
-		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
+		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink, filePath)
 		if err != nil {
 			logger.Error("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
 

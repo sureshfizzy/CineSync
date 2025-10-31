@@ -1,17 +1,25 @@
 package realdebrid
 
 import (
-    "strconv"
-    "strings"
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"cinesync/pkg/logger"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
+
+type contextKey string
+
+const filenameContextKey contextKey = "filename"
 
 // DownloadCacheEntry represents a cached download link with expiration
 type DownloadCacheEntry struct {
@@ -238,48 +246,60 @@ func (c *Client) ensureLimiter() {
 
 func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
     c.ensureLimiter()
-    if ok := c.limiter.waitToken(req.Context().Done()); !ok {
-        return nil, fmt.Errorf("request canceled")
+    attempt := 0
+
+    filename := req.URL.Path
+    if ctxFilename, ok := req.Context().Value(filenameContextKey).(string); ok && ctxFilename != "" {
+        filename = ctxFilename
     }
 
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    if resp.StatusCode != http.StatusTooManyRequests {
-        return resp, nil
-    }
-    _ = resp.Body.Close()
-    backoff := c.limiter.baseBackoff
-    for attempt := 1; attempt <= c.limiter.maxRetries; attempt++ {
-        if ra := resp.Header.Get("Retry-After"); ra != "" {
-            if d, perr := time.ParseDuration(ra+"s"); perr == nil {
-                time.Sleep(d)
-            } else {
-                time.Sleep(backoff)
-            }
-        } else {
-            time.Sleep(backoff)
-        }
+    for {
         if ok := c.limiter.waitToken(req.Context().Done()); !ok {
-            return nil, fmt.Errorf("request canceled during retry")
+            return nil, fmt.Errorf("request canceled")
         }
-        r2, e2 := c.httpClient.Do(req)
-        if e2 != nil {
-            err = e2
-            resp = nil
-            continue
+
+        resp, err := c.httpClient.Do(req)
+        if err != nil {
+            return nil, err
         }
-        if r2.StatusCode != http.StatusTooManyRequests {
-            return r2, nil
+
+        if resp.StatusCode >= 400 {
+            bodyBytes, _ := io.ReadAll(resp.Body)
+            resp.Body.Close()
+            var errorResp ErrorResponse
+            if json.Unmarshal(bodyBytes, &errorResp) == nil && errorResp.ErrorCode == 36 {
+                backoff := time.Duration(1<<uint(attempt)) * time.Second
+                if backoff > 60*time.Second {
+                    backoff = 60 * time.Second
+                }
+                backoff += time.Duration(rand.Float64() * float64(backoff) * 0.2)
+                logger.Info("[RealDebrid] Fair usage limit reached for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
+                time.Sleep(backoff)
+                attempt++
+                continue
+            }
+            resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
         }
-        _ = r2.Body.Close()
-        if backoff < c.limiter.maxBackoff {
-            backoff *= 2
-            if backoff > c.limiter.maxBackoff { backoff = c.limiter.maxBackoff }
+
+        if resp.StatusCode != http.StatusTooManyRequests {
+            if attempt > 0 && resp.StatusCode < 400 {
+                logger.Info("[RealDebrid] Request for '%s' succeeded after %d attempts", filename, attempt+1)
+            }
+            return resp, nil
         }
+
+        if attempt >= c.limiter.maxRetries {
+            return nil, fmt.Errorf("rate limited (429) for %s after %d retries", filename, attempt)
+        }
+
+        resp.Body.Close()
+        backoff := c.limiter.baseBackoff * time.Duration(1<<uint(attempt))
+        if backoff > c.limiter.maxBackoff {
+            backoff = c.limiter.maxBackoff
+        }
+        time.Sleep(backoff)
+        attempt++
     }
-    return nil, fmt.Errorf("rate limited (429) after retries")
 }
 
 // SetAPIKey updates the API key
@@ -342,8 +362,7 @@ func (c *Client) GetWebDAVCredentials() (username, password string) {
 }
 
 // UnrestrictLink converts a restricted link to a direct download link
-func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
-	// Handle empty or invalid links
+func (c *Client) UnrestrictLink(link string, filename ...string) (*DownloadLink, error) {
 	if link == "" {
 		return nil, fmt.Errorf("link parameter is empty")
 	}
@@ -355,13 +374,13 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 
 	// Check cache first
 	if failedEntry, exists := c.failedUnrestrictCache.Get(processedLink); exists {
-		if time.Since(failedEntry.Timestamp) < 1*time.Hour {
+		cacheDuration := getErrorCacheDuration(failedEntry.ErrorCode)
+		if time.Since(failedEntry.Timestamp) < cacheDuration {
 			return nil, fmt.Errorf("API error: %s (code: %d)", failedEntry.Error, failedEntry.ErrorCode)
 		}
 		c.failedUnrestrictCache.Remove(processedLink)
 	}
 
-	// Get current active token
 	token, err := c.tokenManager.GetCurrentToken()
 	if err != nil {
 		return nil, fmt.Errorf("no available tokens: %w", err)
@@ -374,10 +393,14 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		c.unrestrictCache.Remove(processedLink)
 	}
 
-	// Use form-encoded data
 	payload := fmt.Sprintf("link=%s", processedLink)
 
-	req, err := http.NewRequest("POST", c.baseURL+"/unrestrict/link", strings.NewReader(payload))
+	ctx := context.Background()
+	if len(filename) > 0 && filename[0] != "" {
+		ctx = context.WithValue(ctx, filenameContextKey, filename[0])
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/unrestrict/link", strings.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -385,7 +408,7 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithLimit(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -412,7 +435,6 @@ func (c *Client) UnrestrictLink(link string) (*DownloadLink, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Cache the result
 	c.unrestrictCache.Set(processedLink, &DownloadCacheEntry{
 		Download:  &downloadLink,
 		Generated: time.Now(),
@@ -426,10 +448,29 @@ func isCacheableError(errorCode int) bool {
 	cacheableErrors := map[int]bool{
 		19: true, // hoster_unavailable
 		21: true, // unavailable_file
+		23: true, // traffic_exhausted (bandwidth limit)
 		27: true, // permission_denied
-		28: true, // hoster_not_supported
+		28: true, // hoster_not_supportedk-specific, so caching per-link is ineffective
 	}
 	return cacheableErrors[errorCode]
+}
+
+// getErrorCacheDuration returns how long to cache specific error codes
+func getErrorCacheDuration(errorCode int) time.Duration {
+	switch errorCode {
+	case 23: // traffic_exhausted - bandwidth limit (resets at midnight)
+		return 30 * time.Minute
+	case 19: // hoster_unavailable - temporary hoster issue
+		return 15 * time.Minute
+	case 21: // unavailable_file - file removed/unavailable
+		return 1 * time.Hour
+	case 27: // permission_denied - permanent
+		return 1 * time.Hour
+	case 28: // hoster_not_supported - permanent
+		return 1 * time.Hour
+	default:
+		return 1 * time.Hour
+	}
 }
 
 
