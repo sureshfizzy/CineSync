@@ -267,13 +267,17 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
             bodyBytes, _ := io.ReadAll(resp.Body)
             resp.Body.Close()
             var errorResp ErrorResponse
-            if json.Unmarshal(bodyBytes, &errorResp) == nil && errorResp.ErrorCode == 36 {
+            if json.Unmarshal(bodyBytes, &errorResp) == nil && (errorResp.ErrorCode == 36 || errorResp.ErrorCode == 34) {
                 backoff := time.Duration(1<<uint(attempt)) * time.Second
                 if backoff > 60*time.Second {
                     backoff = 60 * time.Second
                 }
                 backoff += time.Duration(rand.Float64() * float64(backoff) * 0.2)
-                logger.Info("[RealDebrid] Fair usage limit reached for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
+                if errorResp.ErrorCode == 34 {
+                    logger.Info("[RealDebrid] Rate limit (too_many_requests) for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
+                } else {
+                    logger.Info("[RealDebrid] Fair usage limit reached for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
+                }
                 time.Sleep(backoff)
                 attempt++
                 continue
@@ -450,7 +454,8 @@ func isCacheableError(errorCode int) bool {
 		21: true, // unavailable_file
 		23: true, // traffic_exhausted (bandwidth limit)
 		27: true, // permission_denied
-		28: true, // hoster_not_supportedk-specific, so caching per-link is ineffective
+		28: true, // hoster_not_supported
+		34: true, // too_many_requests (rate limit)
 	}
 	return cacheableErrors[errorCode]
 }
@@ -462,6 +467,8 @@ func getErrorCacheDuration(errorCode int) time.Duration {
 		return 30 * time.Minute
 	case 19: // hoster_unavailable - temporary hoster issue
 		return 15 * time.Minute
+	case 34: // too_many_requests - rate limit
+		return 10 * time.Minute
 	case 21: // unavailable_file - file removed/unavailable
 		return 1 * time.Hour
 	case 27: // permission_denied - permanent
