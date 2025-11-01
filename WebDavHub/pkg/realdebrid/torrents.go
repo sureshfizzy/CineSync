@@ -465,7 +465,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		logger.Debug("[Torrents] Attempting to unrestrict link for: %s", filePath)
 		
 		// Unrestrict the link
-		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink, filePath)
+		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
 		if err != nil {
 			logger.Error("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
 
@@ -580,24 +580,27 @@ func (tm *TorrentManager) PrefetchHttpDavData() error {
 		return err
 	}
 	
-	// Prefetch links
-	linksFiles, err := httpDavClient.ListDirectory("/links")
-	if err != nil {
-		return err
+	tm.cacheMutex.RLock()
+	torrentSizeMap := make(map[string]int64, len(tm.torrentList))
+	for _, torrent := range tm.torrentList {
+		dirName := GetDirectoryName(torrent.Filename)
+		torrentSizeMap[dirName] = torrent.Bytes
 	}
-	
-	// Filter out pagination directories from links
-	filteredLinks := make([]HttpDavFileInfo, 0, len(linksFiles))
-	for _, file := range linksFiles {
-		if !strings.HasPrefix(file.Name, "_More_") {
-			filteredLinks = append(filteredLinks, file)
+	tm.cacheMutex.RUnlock()
+
+	for i := range torrentsFiles {
+		if torrentsFiles[i].IsDir {
+			normalizedName := GetDirectoryName(torrentsFiles[i].Name)
+			if size, exists := torrentSizeMap[normalizedName]; exists {
+				torrentsFiles[i].Size = size
+			}
 		}
 	}
 	
 	// Store in cache
 	tm.httpDavCacheMutex.Lock()
 	tm.httpDavTorrentsCache = torrentsFiles
-	tm.httpDavLinksCache = filteredLinks
+	tm.httpDavLinksCache = nil
 	tm.httpDavLastCacheTime = time.Now()
 	tm.httpDavCacheMutex.Unlock()
 	
@@ -686,6 +689,9 @@ func (tm *TorrentManager) GetHttpDavTorrents() []HttpDavFileInfo {
 func (tm *TorrentManager) GetHttpDavLinks() []HttpDavFileInfo {
 	tm.httpDavCacheMutex.RLock()
 	defer tm.httpDavCacheMutex.RUnlock()
+	if tm.httpDavLinksCache == nil {
+		return []HttpDavFileInfo{}
+	}
 	result := make([]HttpDavFileInfo, len(tm.httpDavLinksCache))
 	copy(result, tm.httpDavLinksCache)
 	return result
