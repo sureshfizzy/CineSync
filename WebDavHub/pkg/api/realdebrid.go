@@ -1146,6 +1146,49 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	w.Write(xmlData)
 }
 
+// tryHttpDavFallback attempts to serve file from HTTP DAV when API fails
+func tryHttpDavFallback(w http.ResponseWriter, r *http.Request, config *realdebrid.Config, torrentName, filePath string) bool {
+	logger.Debug("[HTTPDav Fallback] Attempting fallback for: %s", path.Base(filePath))
+
+	httpDavClient := realdebrid.NewHttpDavClient(config.HttpDavSettings.UserID, config.HttpDavSettings.Password, "https://dav.real-debrid.com/")
+	httpDavPath := "/torrents/" + torrentName + "/" + filePath
+
+	fileInfo, err := httpDavClient.Stat(httpDavPath)
+	if err != nil {
+		logger.Debug("[HTTPDav Fallback] Failed to stat file: %v", err)
+		return false
+	}
+
+	if r.Method == "HEAD" {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.WriteHeader(http.StatusOK)
+		logger.Debug("[HTTPDav Fallback] HEAD request successful for: %s", path.Base(filePath))
+		return true
+	}
+
+	reader, err := httpDavClient.ReadFileStream(httpDavPath)
+	if err != nil {
+		logger.Warn("[HTTPDav Fallback] Failed to open stream: %v", err)
+		return false
+	}
+	defer reader.Close()
+
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.WriteHeader(http.StatusOK)
+
+	logger.Debug("[HTTPDav Fallback] Serving file via HTTP DAV: %s", path.Base(filePath))
+
+	if _, err := io.Copy(w, reader); err != nil && !isClientDisconnection(err) {
+		logger.Warn("[HTTPDav Fallback] Stream error: %v", err)
+	} else {
+		logger.Debug("[HTTPDav Fallback] Successfully streamed file: %s", path.Base(filePath))
+	}
+	return true
+}
+
 // handleTorrentGet handles GET/HEAD requests to download files from torrents
 func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
 	tm := realdebrid.GetTorrentManager(apiKey)
@@ -1171,10 +1214,23 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
 	if err != nil {
-		logKey := fmt.Sprintf("download_fail:%s", filePath)
-		if shouldLogError(logKey, 1*time.Minute) {
+		if shouldLogError(fmt.Sprintf("download_fail:%s", filePath), 1*time.Minute) {
 			logger.Error("[Torrents] Failed to get download URL: %v", err)
 		}
+
+		// Try HTTP DAV fallback if configured
+		config := configManager.GetConfig()
+		if config.HttpDavSettings.Enabled && config.HttpDavSettings.UserID != "" {
+			if tryHttpDavFallback(w, r, config, torrentName, filePath) {
+				logger.Debug("[HTTPDav Fallback] Fallback successful for: %s", path.Base(filePath))
+				return
+			}
+			logger.Debug("[HTTPDav Fallback] Fallback failed, returning error to client")
+		} else {
+			logger.Debug("[HTTPDav Fallback] HTTP DAV not configured, skipping fallback")
+		}
+
+		// Return error if fallback failed or not configured
 		if strings.Contains(err.Error(), "has been removed from Real-Debrid") {
 			http.Error(w, "File has been removed from Real-Debrid", http.StatusNotFound)
 		} else {
