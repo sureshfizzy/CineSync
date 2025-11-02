@@ -467,8 +467,6 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		// Unrestrict the link
 		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
 		if err != nil {
-			logger.Error("[Torrents] Failed to unrestrict link for %s: %v", filePath, err)
-
 			webdavVerified, webdavErr := tm.verifyFileViaWebDAV(torrentID, filePath, targetFile)
 			if webdavVerified {
 				logger.Info("[Torrents] File %s verified via HTTP WebDAV despite unrestrict failure", filePath)

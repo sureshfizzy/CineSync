@@ -181,6 +181,12 @@ func (h *HttpDavClient) ReadFileStream(remotePath string) (io.ReadCloser, error)
 
 	remotePath = normalizePath(remotePath)
 
+	// Check file size first to detect 0KB files
+	fileInfo, err := h.Stat(remotePath)
+	if err == nil && fileInfo != nil && !fileInfo.IsDir && fileInfo.Size == 0 {
+		return nil, fmt.Errorf("file has 0 bytes (removed from Real-Debrid): %s", remotePath)
+	}
+
 	reader, err := h.client.ReadStream(remotePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file stream %s: %w", remotePath, err)

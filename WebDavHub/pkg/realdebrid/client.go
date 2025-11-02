@@ -267,17 +267,14 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
             bodyBytes, _ := io.ReadAll(resp.Body)
             resp.Body.Close()
             var errorResp ErrorResponse
-            if json.Unmarshal(bodyBytes, &errorResp) == nil && (errorResp.ErrorCode == 36 || errorResp.ErrorCode == 34) {
-                backoff := time.Duration(1<<uint(attempt)) * time.Second
+            if json.Unmarshal(bodyBytes, &errorResp) == nil && (errorResp.ErrorCode == 36 || errorResp.ErrorCode == 34 || errorResp.ErrorCode == 5) {
+                baseBackoff := 1
+                backoff := time.Duration(baseBackoff * (1 << uint(attempt))) * time.Second
                 if backoff > 60*time.Second {
                     backoff = 60 * time.Second
                 }
-                backoff += time.Duration(rand.Float64() * float64(backoff) * 0.2)
-                if errorResp.ErrorCode == 34 {
-                    logger.Info("[RealDebrid] Rate limit (too_many_requests) for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
-                } else {
-                    logger.Info("[RealDebrid] Fair usage limit reached for '%s', retrying in %v (attempt %d)", filename, backoff, attempt+1)
-                }
+                jitter := time.Duration(rand.Float64() * float64(backoff) * 0.2)
+                backoff += jitter
                 time.Sleep(backoff)
                 attempt++
                 continue

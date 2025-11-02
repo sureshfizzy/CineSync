@@ -1214,10 +1214,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
 	if err != nil {
-		if shouldLogError(fmt.Sprintf("download_fail:%s", filePath), 1*time.Minute) {
-			logger.Error("[Torrents] Failed to get download URL: %v", err)
-		}
-
 		// Try HTTP DAV fallback if configured
 		config := configManager.GetConfig()
 		if config.HttpDavSettings.Enabled && config.HttpDavSettings.UserID != "" {
@@ -1225,16 +1221,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 				logger.Debug("[HTTPDav Fallback] Fallback successful for: %s", path.Base(filePath))
 				return
 			}
-			logger.Debug("[HTTPDav Fallback] Fallback failed, returning error to client")
-		} else {
-			logger.Debug("[HTTPDav Fallback] HTTP DAV not configured, skipping fallback")
-		}
-
-		// Return error if fallback failed or not configured
-		if strings.Contains(err.Error(), "has been removed from Real-Debrid") {
-			http.Error(w, "File has been removed from Real-Debrid", http.StatusNotFound)
-		} else {
-			http.Error(w, "Could not fetch download link", http.StatusPreconditionFailed)
 		}
 		return
 	}
