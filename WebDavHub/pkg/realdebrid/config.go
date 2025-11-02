@@ -27,7 +27,7 @@ type RcloneSettings struct {
 	VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
 	VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
 	VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
-	CachePath         string `json:"CachePath" yaml:"CachePath"`
+	CachePath            string `json:"CachePath" yaml:"CachePath"`
 	BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
 	DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
 	PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
@@ -38,6 +38,20 @@ type RcloneSettings struct {
 	ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
 	RetainFolderExtension bool   `json:"retainFolderExtension" yaml:"retainFolderExtension"`
 	AutoMountOnStart     bool   `json:"autoMountOnStart" yaml:"autoMountOnStart"`
+	AttrTimeout          string `json:"attrTimeout" yaml:"attrTimeout"`
+	VfsReadAhead         string `json:"vfsReadAhead" yaml:"vfsReadAhead"`
+	VfsCachePollInterval string `json:"vfsCachePollInterval" yaml:"vfsCachePollInterval"`
+	Timeout              string `json:"timeout" yaml:"timeout"`
+	Contimeout           string `json:"contimeout" yaml:"contimeout"`
+	LowLevelRetries      string `json:"lowLevelRetries" yaml:"lowLevelRetries"`
+	Retries              string `json:"retries" yaml:"retries"`
+	Transfers            string `json:"transfers" yaml:"transfers"`
+	VfsReadWait          string `json:"vfsReadWait" yaml:"vfsReadWait"`
+	VfsWriteWait         string `json:"vfsWriteWait" yaml:"vfsWriteWait"`
+	TpsLimit             string `json:"tpsLimit" yaml:"tpsLimit"`
+	TpsLimitBurst        string `json:"tpsLimitBurst" yaml:"tpsLimitBurst"`
+	DriveChunkSize       string `json:"driveChunkSize" yaml:"driveChunkSize"`
+	MaxReadAhead         string `json:"maxReadAhead" yaml:"maxReadAhead"`
 }
 
 // HttpDavSettings represents HTTP DAV configuration
@@ -84,7 +98,7 @@ func GetConfigManager() *ConfigManager {
                     VfsCacheMode:         "full",
                     VfsCacheMaxSize:      "100G",
                     VfsCacheMaxAge:       "24h",
-                    CachePath:         "",
+                    CachePath:            "",
                     BufferSize:           "16M",
                     DirCacheTime:         "15s",
                     PollInterval:         "15s",
@@ -94,7 +108,21 @@ func GetConfigManager() *ConfigManager {
                     StreamBufferSize:     "10M",
                     ServeFromRclone:      false,
                     RetainFolderExtension: false,
-					AutoMountOnStart:     true,
+                    AutoMountOnStart:     true,
+                    AttrTimeout:          "1s",
+                    VfsReadAhead:         "128M",
+                    VfsCachePollInterval: "30s",
+                    Timeout:              "10m",
+                    Contimeout:           "60s",
+                    LowLevelRetries:      "3",
+					Retries:              "3",
+					Transfers:            "4",
+					VfsReadWait:          "20ms",
+					VfsWriteWait:         "1s",
+					TpsLimit:             "10",
+                    TpsLimitBurst:        "20",
+                    DriveChunkSize:       "64M",
+                    MaxReadAhead:         "256M",
                 },
                 HttpDavSettings: HttpDavSettings{
                     Enabled:  false,
@@ -146,6 +174,48 @@ func (cm *ConfigManager) GetConfig() *Config {
 	}
 	if configCopy.RcloneSettings.PollInterval == "" {
 		configCopy.RcloneSettings.PollInterval = "15s"
+	}
+	if configCopy.RcloneSettings.AttrTimeout == "" {
+		configCopy.RcloneSettings.AttrTimeout = "1s"
+	}
+	if configCopy.RcloneSettings.VfsReadAhead == "" {
+		configCopy.RcloneSettings.VfsReadAhead = "128M"
+	}
+	if configCopy.RcloneSettings.VfsCachePollInterval == "" {
+		configCopy.RcloneSettings.VfsCachePollInterval = "30s"
+	}
+	if configCopy.RcloneSettings.Timeout == "" {
+		configCopy.RcloneSettings.Timeout = "10m"
+	}
+	if configCopy.RcloneSettings.Contimeout == "" {
+		configCopy.RcloneSettings.Contimeout = "60s"
+	}
+	if configCopy.RcloneSettings.LowLevelRetries == "" {
+		configCopy.RcloneSettings.LowLevelRetries = "3"
+	}
+	if configCopy.RcloneSettings.Retries == "" {
+		configCopy.RcloneSettings.Retries = "3"
+	}
+	if configCopy.RcloneSettings.Transfers == "" {
+		configCopy.RcloneSettings.Transfers = "4"
+	}
+	if configCopy.RcloneSettings.VfsReadWait == "" {
+		configCopy.RcloneSettings.VfsReadWait = "20ms"
+	}
+	if configCopy.RcloneSettings.VfsWriteWait == "" {
+		configCopy.RcloneSettings.VfsWriteWait = "1s"
+	}
+	if configCopy.RcloneSettings.TpsLimit == "" {
+		configCopy.RcloneSettings.TpsLimit = "10"
+	}
+	if configCopy.RcloneSettings.TpsLimitBurst == "" {
+		configCopy.RcloneSettings.TpsLimitBurst = "20"
+	}
+	if configCopy.RcloneSettings.DriveChunkSize == "" {
+		configCopy.RcloneSettings.DriveChunkSize = "64M"
+	}
+	if configCopy.RcloneSettings.MaxReadAhead == "" {
+		configCopy.RcloneSettings.MaxReadAhead = "256M"
 	}
 	
 	return &configCopy
@@ -243,6 +313,48 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if autoMountOnStart, ok := rcloneSettingsMap["autoMountOnStart"].(bool); ok {
 					rcloneSettings.AutoMountOnStart = autoMountOnStart
+				}
+				if attrTimeout, ok := rcloneSettingsMap["attrTimeout"].(string); ok && attrTimeout != "" {
+					rcloneSettings.AttrTimeout = attrTimeout
+				}
+				if vfsReadAhead, ok := rcloneSettingsMap["vfsReadAhead"].(string); ok && vfsReadAhead != "" {
+					rcloneSettings.VfsReadAhead = vfsReadAhead
+				}
+				if vfsCachePollInterval, ok := rcloneSettingsMap["vfsCachePollInterval"].(string); ok && vfsCachePollInterval != "" {
+					rcloneSettings.VfsCachePollInterval = vfsCachePollInterval
+				}
+				if timeout, ok := rcloneSettingsMap["timeout"].(string); ok && timeout != "" {
+					rcloneSettings.Timeout = timeout
+				}
+				if contimeout, ok := rcloneSettingsMap["contimeout"].(string); ok && contimeout != "" {
+					rcloneSettings.Contimeout = contimeout
+				}
+				if lowLevelRetries, ok := rcloneSettingsMap["lowLevelRetries"].(string); ok && lowLevelRetries != "" {
+					rcloneSettings.LowLevelRetries = lowLevelRetries
+				}
+				if retries, ok := rcloneSettingsMap["retries"].(string); ok && retries != "" {
+					rcloneSettings.Retries = retries
+				}
+				if transfers, ok := rcloneSettingsMap["transfers"].(string); ok && transfers != "" {
+					rcloneSettings.Transfers = transfers
+				}
+				if vfsReadWait, ok := rcloneSettingsMap["vfsReadWait"].(string); ok && vfsReadWait != "" {
+					rcloneSettings.VfsReadWait = vfsReadWait
+				}
+				if vfsWriteWait, ok := rcloneSettingsMap["vfsWriteWait"].(string); ok && vfsWriteWait != "" {
+					rcloneSettings.VfsWriteWait = vfsWriteWait
+				}
+				if tpsLimit, ok := rcloneSettingsMap["tpsLimit"].(string); ok && tpsLimit != "" {
+					rcloneSettings.TpsLimit = tpsLimit
+				}
+				if tpsLimitBurst, ok := rcloneSettingsMap["tpsLimitBurst"].(string); ok && tpsLimitBurst != "" {
+					rcloneSettings.TpsLimitBurst = tpsLimitBurst
+				}
+				if driveChunkSize, ok := rcloneSettingsMap["driveChunkSize"].(string); ok && driveChunkSize != "" {
+					rcloneSettings.DriveChunkSize = driveChunkSize
+				}
+				if maxReadAhead, ok := rcloneSettingsMap["maxReadAhead"].(string); ok && maxReadAhead != "" {
+					rcloneSettings.MaxReadAhead = maxReadAhead
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings
@@ -370,6 +482,48 @@ func (cm *ConfigManager) loadConfig() error {
     }
     if config.RcloneSettings.PollInterval == "" {
         config.RcloneSettings.PollInterval = "15s"
+    }
+    if config.RcloneSettings.AttrTimeout == "" {
+        config.RcloneSettings.AttrTimeout = "1s"
+    }
+    if config.RcloneSettings.VfsReadAhead == "" {
+        config.RcloneSettings.VfsReadAhead = "128M"
+    }
+    if config.RcloneSettings.VfsCachePollInterval == "" {
+        config.RcloneSettings.VfsCachePollInterval = "30s"
+    }
+    if config.RcloneSettings.Timeout == "" {
+        config.RcloneSettings.Timeout = "10m"
+    }
+    if config.RcloneSettings.Contimeout == "" {
+        config.RcloneSettings.Contimeout = "60s"
+    }
+    if config.RcloneSettings.LowLevelRetries == "" {
+        config.RcloneSettings.LowLevelRetries = "3"
+    }
+    if config.RcloneSettings.Retries == "" {
+        config.RcloneSettings.Retries = "3"
+    }
+    if config.RcloneSettings.Transfers == "" {
+        config.RcloneSettings.Transfers = "4"
+    }
+    if config.RcloneSettings.VfsReadWait == "" {
+        config.RcloneSettings.VfsReadWait = "20ms"
+    }
+	if config.RcloneSettings.VfsWriteWait == "" {
+		config.RcloneSettings.VfsWriteWait = "1s"
+	}
+	if config.RcloneSettings.TpsLimit == "" {
+        config.RcloneSettings.TpsLimit = "10"
+    }
+    if config.RcloneSettings.TpsLimitBurst == "" {
+        config.RcloneSettings.TpsLimitBurst = "20"
+    }
+    if config.RcloneSettings.DriveChunkSize == "" {
+        config.RcloneSettings.DriveChunkSize = "64M"
+    }
+    if config.RcloneSettings.MaxReadAhead == "" {
+        config.RcloneSettings.MaxReadAhead = "256M"
     }
 
     config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"

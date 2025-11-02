@@ -390,7 +390,6 @@ func (rm *RcloneManager) setProcessAttributes(cmd *exec.Cmd) {
 	}
 }
 
-// buildRcloneArgs builds the rclone command arguments
 func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 	args := []string{
 		"mount",
@@ -403,14 +402,31 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--buffer-size", config.BufferSize,
 		"--dir-cache-time", config.DirCacheTime,
 		"--poll-interval", config.PollInterval,
+		"--attr-timeout", config.AttrTimeout,
+		"--vfs-read-ahead", config.VfsReadAhead,
+		"--no-modtime",
+		"--no-checksum",
+		"--vfs-cache-poll-interval", config.VfsCachePollInterval,
+		"--timeout", config.Timeout,
+		"--contimeout", config.Contimeout,
+		"--low-level-retries", config.LowLevelRetries,
+		"--retries", config.Retries,
+		"--transfers", config.Transfers,
+		"--use-server-modtime",
+		"--ignore-checksum",
+		"--no-gzip-encoding",
+		"--vfs-read-wait", config.VfsReadWait,
+		"--vfs-write-wait", config.VfsWriteWait,
+		"--tpslimit", config.TpsLimit,
+		"--tpslimit-burst", config.TpsLimitBurst,
+		"--drive-chunk-size", config.DriveChunkSize,
+		"--max-read-ahead", config.MaxReadAhead,
 	}
 
-	// Add cache directory if specified
 	if config.CachePath != "" {
 		args = append(args, "--cache-dir", config.CachePath)
 	}
 
-	// Add chunk-based streaming settings if configured
 	if config.VfsReadChunkSize != "" {
 		args = append(args, "--vfs-read-chunk-size", config.VfsReadChunkSize)
 	}
@@ -418,12 +434,12 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		args = append(args, "--vfs-read-chunk-size-limit", config.VfsReadChunkSizeLimit)
 	}
 
-	// Platform-specific options
 	if runtime.GOOS == "windows" {
 		args = append(args, "--links")
 	} else {
 		args = append(args, "--allow-other")
 		args = append(args, "--daemon")
+		args = append(args, "--allow-non-empty")
 	}
 
 	return args

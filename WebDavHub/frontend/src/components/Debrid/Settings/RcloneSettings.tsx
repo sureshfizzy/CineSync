@@ -20,6 +20,20 @@ interface RcloneConfig {
   serveFromRclone: boolean;
   retainFolderExtension: boolean;
   autoMountOnStart: boolean;
+  attrTimeout: string;
+  vfsReadAhead: string;
+  vfsCachePollInterval: string;
+  timeout: string;
+  contimeout: string;
+  lowLevelRetries: string;
+  retries: string;
+  transfers: string;
+  vfsReadWait: string;
+  vfsWriteWait: string;
+  tpsLimit: string;
+  tpsLimitBurst: string;
+  driveChunkSize: string;
+  maxReadAhead: string;
 }
 
 interface RateLimitUI {
@@ -59,6 +73,20 @@ const RcloneSettings: React.FC = () => {
     serveFromRclone: false,
     retainFolderExtension: false,
     autoMountOnStart: false,
+    attrTimeout: '1s',
+    vfsReadAhead: '128M',
+    vfsCachePollInterval: '30s',
+    timeout: '10m',
+    contimeout: '60s',
+    lowLevelRetries: '3',
+    retries: '3',
+    transfers: '4',
+    vfsReadWait: '20ms',
+    vfsWriteWait: '1s',
+    tpsLimit: '10',
+    tpsLimitBurst: '20',
+    driveChunkSize: '64M',
+    maxReadAhead: '256M',
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [rateLimit, setRateLimit] = useState<RateLimitUI>({
@@ -86,7 +114,8 @@ const RcloneSettings: React.FC = () => {
     try {
       const response = await axios.get('/api/realdebrid/config');
       if (response.data.config.rcloneSettings) {
-        setConfig(response.data.config.rcloneSettings);
+        const rcloneSettings = response.data.config.rcloneSettings;
+        setConfig(rcloneSettings);
       }
       if (response.data.status.rcloneStatus) {
         setStatus(response.data.status.rcloneStatus);
@@ -115,7 +144,7 @@ const RcloneSettings: React.FC = () => {
     setSaving(true);
     try {
       // Filter out empty string values to allow defaults to be applied
-      const configToSave = Object.fromEntries(
+      const filteredConfig = Object.fromEntries(
         Object.entries(config).filter(([_, value]) => {
           // Keep boolean values and non-empty strings
           return typeof value === 'boolean' || (typeof value === 'string' && value.trim() !== '');
@@ -123,7 +152,7 @@ const RcloneSettings: React.FC = () => {
       );
       
       const response = await axios.put('/api/realdebrid/config', {
-        rcloneSettings: configToSave,
+        rcloneSettings: filteredConfig,
         rateLimit: {
           requestsPerMinute: rateLimit.requestsPerMinute,
           burst: rateLimit.burst,
@@ -133,7 +162,8 @@ const RcloneSettings: React.FC = () => {
         },
       });
       if (response.data.config.rcloneSettings) {
-        setConfig(response.data.config.rcloneSettings);
+        const rcloneSettings = response.data.config.rcloneSettings;
+        setConfig(rcloneSettings);
       }
       if (response.data.status.rcloneStatus) {
         setStatus(response.data.status.rcloneStatus);
@@ -689,45 +719,253 @@ const RcloneSettings: React.FC = () => {
                             />
                           </Box>
                         </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-                          <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                              VFS Read Chunk Size
-                            </Typography>
-                            <TextField
-                              fullWidth
-                              size="small"
-                              value={config.vfsReadChunkSize}
-                              onChange={(e) => handleConfigChange('vfsReadChunkSize', e.target.value)}
-                              placeholder="64M"
-                              helperText="Chunk size for streaming"
-                            />
+                        <Box sx={{ mt: 2 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Attribute Timeout
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.attrTimeout}
+                                onChange={(e) => handleConfigChange('attrTimeout', e.target.value)}
+                                placeholder="1s"
+                                helperText="File attribute cache duration"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Read Ahead
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsReadAhead}
+                                onChange={(e) => handleConfigChange('vfsReadAhead', e.target.value)}
+                                placeholder="128M"
+                                helperText="Pre-fetch data for smoother streaming"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Cache Poll Interval
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsCachePollInterval}
+                                onChange={(e) => handleConfigChange('vfsCachePollInterval', e.target.value)}
+                                placeholder="30s"
+                                helperText="Cache polling frequency"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Transfers
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.transfers}
+                                onChange={(e) => handleConfigChange('transfers', e.target.value)}
+                                placeholder="4"
+                                helperText="Concurrent transfer limit"
+                              />
+                            </Box>
                           </Box>
-                          <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                              VFS Read Chunk Size Limit
-                            </Typography>
-                            <TextField
-                              fullWidth
-                              size="small"
-                              value={config.vfsReadChunkSizeLimit}
-                              onChange={(e) => handleConfigChange('vfsReadChunkSizeLimit', e.target.value)}
-                              placeholder="128M"
-                              helperText="Max chunk size limit"
-                            />
+                        </Box>
+
+                        {/* VFS & Compatibility Settings */}
+                        <Box sx={{ mt: 2 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Read Wait
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsReadWait}
+                                onChange={(e) => handleConfigChange('vfsReadWait', e.target.value)}
+                                placeholder="20ms"
+                                helperText="Wait time for sequential reads (helps ffprobe)"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Write Wait
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsWriteWait}
+                                onChange={(e) => handleConfigChange('vfsWriteWait', e.target.value)}
+                                placeholder="1s"
+                                helperText="Wait time for in-sequence writes"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                TPS Limit
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.tpsLimit}
+                                onChange={(e) => handleConfigChange('tpsLimit', e.target.value)}
+                                placeholder="10"
+                                helperText="Transactions per second to RD API"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                TPS Limit Burst
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.tpsLimitBurst}
+                                onChange={(e) => handleConfigChange('tpsLimitBurst', e.target.value)}
+                                placeholder="20"
+                                helperText="Allow bursts for initial requests"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Drive Chunk Size
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.driveChunkSize}
+                                onChange={(e) => handleConfigChange('driveChunkSize', e.target.value)}
+                                placeholder="64M"
+                                helperText="Chunk size for reading (optimized for video)"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Max Read Ahead
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.maxReadAhead}
+                                onChange={(e) => handleConfigChange('maxReadAhead', e.target.value)}
+                                placeholder="256M"
+                                helperText="Maximum data to read ahead"
+                              />
+                            </Box>
                           </Box>
-                          <Box>
-                            <Typography variant="body2" fontWeight="500" gutterBottom>
-                              Stream Buffer Size
-                            </Typography>
-                            <TextField
-                              fullWidth
-                              size="small"
-                              value={config.streamBufferSize}
-                              onChange={(e) => handleConfigChange('streamBufferSize', e.target.value)}
-                              placeholder="10M"
-                              helperText="Buffer size for streaming (higher for 4K/remux)"
-                            />
+                        </Box>
+
+                        {/* Network & Retry Settings */}
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                            Network & Retry Settings
+                          </Typography>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Timeout
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.timeout}
+                                onChange={(e) => handleConfigChange('timeout', e.target.value)}
+                                placeholder="10m"
+                                helperText="Overall operation timeout"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Connection Timeout
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.contimeout}
+                                onChange={(e) => handleConfigChange('contimeout', e.target.value)}
+                                placeholder="60s"
+                                helperText="Connection establishment timeout"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Low-Level Retries
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.lowLevelRetries}
+                                onChange={(e) => handleConfigChange('lowLevelRetries', e.target.value)}
+                                placeholder="3"
+                                helperText="Low-level retry attempts"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Retries
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.retries}
+                                onChange={(e) => handleConfigChange('retries', e.target.value)}
+                                placeholder="3"
+                                helperText="High-level retry attempts"
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
+
+                        {/* Streaming Settings */}
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                            Streaming Settings
+                          </Typography>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Read Chunk Size
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsReadChunkSize}
+                                onChange={(e) => handleConfigChange('vfsReadChunkSize', e.target.value)}
+                                placeholder="64M"
+                                helperText="Chunk size for streaming"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                VFS Read Chunk Size Limit
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.vfsReadChunkSizeLimit}
+                                onChange={(e) => handleConfigChange('vfsReadChunkSizeLimit', e.target.value)}
+                                placeholder="128M"
+                                helperText="Max chunk size limit"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Stream Buffer Size
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.streamBufferSize}
+                                onChange={(e) => handleConfigChange('streamBufferSize', e.target.value)}
+                                placeholder="10M"
+                                helperText="Buffer size for streaming (higher for 4K/remux)"
+                              />
+                            </Box>
                           </Box>
                         </Box>
                       </Stack>
