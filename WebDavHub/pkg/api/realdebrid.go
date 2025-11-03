@@ -956,6 +956,7 @@ func PrefetchRealDebridData() {
 type multistatus struct {
 	XMLName   xml.Name   `xml:"D:multistatus"`
 	Xmlns     string     `xml:"xmlns:D,attr"`
+	CsXmlns   string     `xml:"xmlns:cs,attr,omitempty"`
 	Responses []response `xml:"D:response"`
 }
 
@@ -975,6 +976,11 @@ type prop struct {
 	GetLastModified  string        `xml:"D:getlastmodified,omitempty"`
 	GetContentLength int64         `xml:"D:getcontentlength,omitempty"`
 	GetContentType   string        `xml:"D:getcontenttype,omitempty"`
+	TorrentID        string        `xml:"cs:torrentid,omitempty"`
+	FileID           int           `xml:"cs:fileid,omitempty"`
+	FileSize         int64         `xml:"cs:filesize,omitempty"`
+	RdLink           string        `xml:"cs:rdlink,omitempty"`
+	Downloadable     bool          `xml:"cs:downloadable,omitempty"`
 	ResourceType     *resourceType `xml:"D:resourcetype,omitempty"`
 }
 
@@ -989,6 +995,7 @@ type torrentNode struct {
 	TorrentID string
 	FileID    int
 	ModTime   time.Time
+	RdLink    string
 }
 
 func parseTorrentTime(added string) time.Time {
@@ -1011,8 +1018,10 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
 	
-	var nodes []torrentNode
-	var basePath string
+    var nodes []torrentNode
+    var basePath string
+    var subPath string
+    var currentIsFile bool
 
 	if reqPath == "" {
 		basePath = "/api/realdebrid/webdav"
@@ -1035,12 +1044,12 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				ModTime: parseTorrentTime(t.Added),
 			})
 		}
-	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
-		torrentName := parts[1]
-		subPath := ""
-		if len(parts) > 2 {
-			subPath = strings.Join(parts[2:], "/")
-		}
+    } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
+        torrentName := parts[1]
+        subPath = ""
+        if len(parts) > 2 {
+            subPath = strings.Join(parts[2:], "/")
+        }
 
 		torrentID, err := tm.FindTorrentByName(torrentName)
 		if err != nil {
@@ -1067,7 +1076,29 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				TorrentID: fn.TorrentID,
 				FileID:    fn.FileID,
 				ModTime:   fn.ModTime,
+				RdLink:    "",
 			})
+		}
+
+		info, infoErr := tm.GetTorrentInfo(torrentID)
+		if infoErr == nil && info != nil && len(info.Links) > 0 {
+			for i := range nodes {
+				n := &nodes[i]
+				if n.FileID > 0 && (n.FileID-1) < len(info.Links) {
+					n.RdLink = info.Links[n.FileID-1]
+				}
+			}
+
+            if subPath != "" {
+                for i := range nodes {
+                    if nodes[i].Name == subPath && !nodes[i].IsDir {
+                        currentIsFile = true
+                        break
+                    }
+                }
+            }
+		} else if infoErr != nil {
+			logger.Debug("[WebDAV] Failed to fetch TorrentInfo for %s: %v", torrentID, infoErr)
 		}
 	} else {
 		logger.Error("[WebDAV] Invalid path requested: %s", reqPath)
@@ -1076,31 +1107,80 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 	}
 
 	// Build WebDAV response
-	ms := multistatus{
-		Xmlns:     "DAV:",
-		Responses: []response{},
-	}
+    ms := multistatus{
+        Xmlns:     "DAV:",
+        CsXmlns:   "urn:cinesync",
+        Responses: []response{},
+    }
 
 	// Add current directory
 	lastModified := tm.GetLastRefreshTime()
 	if lastModified.IsZero() {
 		lastModified = time.Now()
 	}
-	
-	ms.Responses = append(ms.Responses, response{
-		Href: basePath,
-		Propstat: propstat{
-			Prop: prop{
-				DisplayName:      path.Base(basePath),
-				CreationDate:     lastModified.Format(time.RFC3339),
-				GetLastModified:  lastModified.Format(time.RFC1123),
-				ResourceType:     &resourceType{Collection: &struct{}{}},
-			},
-			Status: "HTTP/1.1 200 OK",
-		},
-	})
 
-	if depth != "0" {
+    if currentIsFile {
+        var fileNode *torrentNode
+        for i := range nodes {
+            if nodes[i].Name == subPath && !nodes[i].IsDir {
+                fileNode = &nodes[i]
+                break
+            }
+        }
+
+        if fileNode == nil {
+            ms.Responses = append(ms.Responses, response{
+                Href: basePath,
+                Propstat: propstat{
+                    Prop: prop{
+                        DisplayName:     path.Base(basePath),
+                        CreationDate:    lastModified.Format(time.RFC3339),
+                        GetLastModified: lastModified.Format(time.RFC1123),
+                        ResourceType:    &resourceType{Collection: &struct{}{}},
+                    },
+                    Status: "HTTP/1.1 200 OK",
+                },
+            })
+        } else {
+            nodeModTime := lastModified
+            if !fileNode.ModTime.IsZero() {
+                nodeModTime = fileNode.ModTime
+            }
+            ms.Responses = append(ms.Responses, response{
+                Href: basePath,
+                Propstat: propstat{
+                    Prop: prop{
+                        DisplayName:      fileNode.Name,
+                        CreationDate:     nodeModTime.Format(time.RFC3339),
+                        GetLastModified:  nodeModTime.Format(time.RFC1123),
+                        GetContentLength: fileNode.Size,
+                        GetContentType:   "application/octet-stream",
+                        TorrentID:        fileNode.TorrentID,
+                        FileID:           fileNode.FileID,
+                        FileSize:         fileNode.Size,
+                        RdLink:           fileNode.RdLink,
+                        Downloadable:     true,
+                    },
+                    Status: "HTTP/1.1 200 OK",
+                },
+            })
+        }
+    } else {
+        ms.Responses = append(ms.Responses, response{
+            Href: basePath,
+            Propstat: propstat{
+                Prop: prop{
+                    DisplayName:      path.Base(basePath),
+                    CreationDate:     lastModified.Format(time.RFC3339),
+                    GetLastModified:  lastModified.Format(time.RFC1123),
+                    ResourceType:     &resourceType{Collection: &struct{}{}},
+                },
+                Status: "HTTP/1.1 200 OK",
+            },
+        })
+    }
+
+    if !currentIsFile && depth != "0" {
 		for _, node := range nodes {
 			nodePath := path.Join(basePath, node.Name)
 
@@ -1122,10 +1202,16 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			}
 
 			if node.IsDir {
-				resp.Propstat.Prop.ResourceType = &resourceType{Collection: &struct{}{}}
+				resp.Propstat.Prop.ResourceType = &resourceType{Collection: &struct{}{} }
 			} else {
 				resp.Propstat.Prop.GetContentLength = node.Size
 				resp.Propstat.Prop.GetContentType = "application/octet-stream"
+				// Attach custom cinesync properties
+				resp.Propstat.Prop.TorrentID = node.TorrentID
+				resp.Propstat.Prop.FileID = node.FileID
+				resp.Propstat.Prop.FileSize = node.Size
+				resp.Propstat.Prop.RdLink = node.RdLink
+				resp.Propstat.Prop.Downloadable = true
 			}
 
 			ms.Responses = append(ms.Responses, resp)

@@ -572,11 +572,11 @@ func (tm *TorrentManager) PrefetchHttpDavData() error {
 		"https://dav.real-debrid.com/",
 	)
 	
-	// Prefetch torrents with pagination aggregation
-	torrentsFiles, err := tm.aggregateHttpDavTorrents(httpDavClient)
-	if err != nil {
-		return err
-	}
+    // Prefetch torrents with pagination aggregation
+    torrentsFiles, err := tm.aggregateHttpDavTorrents(httpDavClient)
+    if err != nil {
+        return err
+    }
 	
 	tm.cacheMutex.RLock()
 	torrentSizeMap := make(map[string]int64, len(tm.torrentList))
@@ -602,13 +602,13 @@ func (tm *TorrentManager) PrefetchHttpDavData() error {
 	tm.httpDavLastCacheTime = time.Now()
 	tm.httpDavCacheMutex.Unlock()
 	
-	logger.Info("[HTTP DAV] Prefetch completed: %d torrents", len(torrentsFiles))
+    logger.Info("[HTTP DAV] Prefetch completed: %d torrents", len(torrentsFiles))
 	return nil
 }
 
 // aggregateHttpDavTorrents aggregates all paginated torrent directories
 func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient) ([]HttpDavFileInfo, error) {
-	files, err := httpDavClient.ListDirectory("/torrents")
+    files, err := httpDavClient.ListDirectory("/torrents")
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +617,7 @@ func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient)
 	contentFiles := make([]HttpDavFileInfo, 0, len(files)*4)
 	paginationDirs := make([]HttpDavFileInfo, 0, 20)
 	
-	// Separate content files from pagination directories
+    // Separate content files from pagination directories
 	for _, file := range files {
 		if strings.HasPrefix(file.Name, "_More_") {
 			paginationDirs = append(paginationDirs, file)
@@ -636,13 +636,13 @@ func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient)
 	results := make(chan pageResult, len(paginationDirs))
 	semaphore := make(chan struct{}, maxWorkers)
 	
-	for _, pageDir := range paginationDirs {
+    for _, pageDir := range paginationDirs {
 		go func(dir HttpDavFileInfo) {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
 			pagePath := path.Join("/torrents", dir.Name)
-			pageFiles, err := httpDavClient.ListDirectory(pagePath)
+            pageFiles, err := httpDavClient.ListDirectory(pagePath)
 			if err != nil {
 				results <- pageResult{nil, err}
 				return
@@ -662,13 +662,13 @@ func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient)
 	}
 	
 	// Collect results
-	for i := 0; i < len(paginationDirs); i++ {
+    for i := 0; i < len(paginationDirs); i++ {
 		result := <-results
 		if result.err != nil {
 			logger.Warn("[HTTP DAV] Failed to read pagination directory: %v", result.err)
 			continue
 		}
-		contentFiles = append(contentFiles, result.files...)
+        contentFiles = append(contentFiles, result.files...)
 	}
 	
 	return contentFiles, nil
