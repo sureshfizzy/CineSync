@@ -946,6 +946,10 @@ func PrefetchRealDebridData() {
             if err := tm.PrefetchHttpDavData(); err != nil {
                 logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
             }
+            rdIDs := make([]string, 0, len(torrents))
+            for i := range torrents { rdIDs = append(rdIDs, torrents[i].ID) }
+            tm.ReconcileDBWithRD(rdIDs)
+            go tm.SaveAllTorrents()
         }
 
         logger.Info("[RD] Prefetch completed")
@@ -1023,27 +1027,29 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
     var subPath string
     var currentIsFile bool
 
-	if reqPath == "" {
-		basePath = "/api/realdebrid/webdav"
-		nodes = append(nodes, torrentNode{
-			Name:    realdebrid.ALL_TORRENTS,
-			IsDir:   true,
-			Size:    0,
-			ModTime: time.Now(),
-		})
-	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) == 1 {
-		basePath = "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS
-		allTorrents := tm.GetAllTorrentsFromDirectory(realdebrid.ALL_TORRENTS)
-		nodes = make([]torrentNode, 0, len(allTorrents))
-		
-		for _, t := range allTorrents {
-			nodes = append(nodes, torrentNode{
-				Name:    realdebrid.GetDirectoryName(t.Filename),
-				IsDir:   true,
-				Size:    t.Bytes,
-				ModTime: parseTorrentTime(t.Added),
-			})
-		}
+    if reqPath == "" {
+        basePath = "/api/realdebrid/webdav"
+        nodes = append(nodes, torrentNode{
+            Name:    realdebrid.ALL_TORRENTS,
+            IsDir:   true,
+            Size:    0,
+            ModTime: time.Now(),
+        })
+    } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) == 1 {
+        basePath = "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS
+        if tm != nil {
+            if d := tm.GetDirs(false); len(d) > 0 {
+                nodes = make([]torrentNode, 0, len(d))
+                for _, e := range d {
+                    nodes = append(nodes, torrentNode{
+                        Name:    realdebrid.GetDirectoryName(e.Filename),
+                        IsDir:   true,
+                        Size:    e.Bytes,
+                        ModTime: time.Unix(e.Modified, 0),
+                    })
+                }
+            }
+        }
     } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
         torrentName := parts[1]
         subPath = ""
@@ -1080,8 +1086,8 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			})
 		}
 
-		info, infoErr := tm.GetTorrentInfo(torrentID)
-		if infoErr == nil && info != nil && len(info.Links) > 0 {
+        info, infoErr := tm.GetTorrentInfo(torrentID)
+        if infoErr == nil && info != nil && len(info.Links) > 0 {
 			for i := range nodes {
 				n := &nodes[i]
 				if n.FileID > 0 && (n.FileID-1) < len(info.Links) {
@@ -1097,8 +1103,12 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
                     }
                 }
             }
-		} else if infoErr != nil {
-			logger.Debug("[WebDAV] Failed to fetch TorrentInfo for %s: %v", torrentID, infoErr)
+        } else if infoErr != nil {
+            errStr := strings.ToLower(infoErr.Error())
+            if strings.Contains(errStr, "404") || strings.Contains(errStr, "unknown_ressource") {
+                tm.DeleteFromDBByID(torrentID)
+            }
+            logger.Debug("[WebDAV] Failed to fetch TorrentInfo for %s: %v", torrentID, infoErr)
 		}
 	} else {
 		logger.Error("[WebDAV] Invalid path requested: %s", reqPath)
@@ -1579,7 +1589,7 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Prepare response
+    // Prepare response
 	response := map[string]interface{}{
 		"account": map[string]interface{}{
 			"username":   userInfo.Username,
@@ -1594,6 +1604,26 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 			"statusCounts": statusCounts,
 			"lastUpdated":  currentState.LastUpdated.Format(time.RFC3339),
 		},
+        "workers": map[string]interface{}{
+            "io":        realdebrid.CineSyncIOWorkers,
+            "api":       realdebrid.CineSyncAPIWorkers,
+            "ioInUse":   realdebrid.CineSyncIOInUse.Load(),
+            "apiInUse":  realdebrid.CineSyncAPIInUse.Load(),
+        },
+        "enrich": func() map[string]interface{} {
+            total := realdebrid.EnrichTotal.Load()
+            processed := realdebrid.EnrichProcessed.Load()
+            remaining := total - processed
+            if remaining < 0 {
+                remaining = 0
+            }
+            return map[string]interface{}{
+                "total":     total,
+                "processed": processed,
+                "saved":     realdebrid.EnrichSaved.Load(),
+                "remaining": remaining,
+            }
+        }(),
 		"traffic": map[string]interface{}{
 			"today": trafficInfo.TodayBytes,
 		},

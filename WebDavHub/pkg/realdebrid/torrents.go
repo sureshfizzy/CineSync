@@ -1,17 +1,18 @@
 package realdebrid
 
 import (
-	"context"
-	"fmt"
-	"path"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
+    "context"
+    "fmt"
+    "path"
+    "path/filepath"
+    "strings"
+    "sync"
+    "sync/atomic"
+    "time"
 
-	"cinesync/pkg/logger"
-	cmap "github.com/orcaman/concurrent-map/v2"
-	"golang.org/x/sync/singleflight"
+    "cinesync/pkg/logger"
+    cmap "github.com/orcaman/concurrent-map/v2"
+    "golang.org/x/sync/singleflight"
 )
 
 const (
@@ -125,6 +126,7 @@ type TorrentManager struct {
 	httpDavLinksCache    []HttpDavFileInfo
 	httpDavCacheMutex    sync.RWMutex
 	httpDavLastCacheTime time.Time
+    store *TorrentStore
 }
 
 var (
@@ -148,7 +150,7 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		return torrentManager
 	}
 
-	torrentManager = &TorrentManager{
+    torrentManager = &TorrentManager{
 		client:        NewClient(apiKey),
 		torrentCache:  make(map[string]*TorrentInfo),
 		torrentList:   []TorrentItem{},
@@ -167,11 +169,23 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 	}
 	torrentManager.currentState.Store(initialState)
 	
-	// Initialize special directories
+    // Initialize special directories
 	torrentManager.initializeDirectoryMaps()
 	
-	// Start background refresh job
+    // Open SQLite store and load cached items
+    if store, err := OpenTorrentStore(filepath.Join("..", "db", "torrents.db")); err == nil {
+        torrentManager.store = store
+        torrentManager.loadCachedCineSync()
+    } else {
+        logger.Warn("[Torrents] Failed to open store: %v - falling back to file cache", err)
+        torrentManager.loadCachedCineSync()
+    }
+	
+    // Start background refresh job
 	torrentManager.startRefreshJob()
+
+    // Start background catalog sync
+    torrentManager.StartCatalogSyncJob(60 * time.Second)
 
 	return torrentManager
 }
@@ -179,6 +193,24 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 // initializeDirectoryMaps initializes the special directories
 func (tm *TorrentManager) initializeDirectoryMaps() {
 	tm.DirectoryMap.Set(ALL_TORRENTS, cmap.New[*TorrentItem]())
+}
+
+// loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
+func (tm *TorrentManager) loadCachedCineSync() {
+    if tm.store != nil {
+        items, err := tm.store.GetAllItems()
+        if err == nil && len(items) > 0 {
+            tm.cacheMutex.Lock()
+            tm.torrentList = items
+            tm.lastCacheTime = time.Now()
+            tm.cacheMutex.Unlock()
+            tm.updateDirectoryMaps(items)
+            logger.Info("[Torrents] Loaded %d cached entries from SQLite", len(items))
+            return
+        }
+    }
+
+    return
 }
 
 // SetPrefetchedTorrents seeds the torrent manager with prefetched data
@@ -285,14 +317,20 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
-	tm.cacheMutex.RLock()
-	if info, ok := tm.torrentCache[torrentID]; ok {
-		tm.cacheMutex.RUnlock()
-		return info, nil
-	}
-	tm.cacheMutex.RUnlock()
+    tm.cacheMutex.RLock()
+    if info, ok := tm.torrentCache[torrentID]; ok {
+        if len(info.Links) > 0 {
+            tm.cacheMutex.RUnlock()
+            return info, nil
+        }
 
-	info, err := tm.client.GetTorrentInfo(torrentID)
+        tm.cacheMutex.RUnlock()
+        logger.Debug("[Torrents] Cached info missing links for %s, refreshing", torrentID)
+    } else {
+        tm.cacheMutex.RUnlock()
+    }
+
+    info, err := tm.client.GetTorrentInfo(torrentID)
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +338,7 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 	tm.cacheMutex.Lock()
 	tm.torrentCache[torrentID] = info
 	tm.cacheMutex.Unlock()
+    tm.saveCineSync(info)
 
 	return info, nil
 }
@@ -514,7 +553,7 @@ func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
 	tm.cacheMutex.Unlock()
 	
 	// Fetch fresh torrent info
-	info, err := tm.client.GetTorrentInfo(torrentID)
+    info, err := tm.client.GetTorrentInfo(torrentID)
 	if err != nil {
 		return fmt.Errorf("failed to refresh torrent %s: %w", torrentID, err)
 	}
@@ -523,6 +562,7 @@ func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
 	tm.cacheMutex.Lock()
 	tm.torrentCache[torrentID] = info
 	tm.cacheMutex.Unlock()
+    tm.saveCineSync(info)
 	
 	logger.Debug("[Torrents] Successfully refreshed torrent %s", torrentID)
 	return nil
@@ -789,13 +829,15 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		}
 	}
 	
-	// Update torrent list and directory maps
+    // Update torrent list and directory maps
 	tm.cacheMutex.Lock()
 	tm.torrentList = torrents
 	tm.lastCacheTime = time.Now()
 	tm.cacheMutex.Unlock()
 	
-	tm.updateDirectoryMaps(torrents)
+    tm.updateDirectoryMaps(torrents)
+
+    go tm.SaveAllTorrents()
 	
 	// Log new torrents (but not during initial load)
 	if len(newTorrents) > 0 && oldCount > 0 {
@@ -900,3 +942,22 @@ func (tm *TorrentManager) GetLastRefreshTime() time.Time {
 	defer tm.cacheMutex.RUnlock()
 	return tm.lastCacheTime
 }
+// StartCatalogSyncJob runs a lightweight periodic job.
+func (tm *TorrentManager) StartCatalogSyncJob(interval time.Duration) {
+    if interval < 10*time.Second {
+        interval = 10 * time.Second
+    }
+    go func() {
+        ticker := time.NewTicker(interval)
+        defer ticker.Stop()
+        for range ticker.C {
+            tm.cacheMutex.RLock()
+            listCopy := make([]TorrentItem, len(tm.torrentList))
+            copy(listCopy, tm.torrentList)
+            tm.cacheMutex.RUnlock()
+            rdIDs := make([]string, 0, len(listCopy))
+            for i := range listCopy { rdIDs = append(rdIDs, listCopy[i].ID) }
+            tm.ReconcileDBWithRD(rdIDs)
+            tm.SaveAllTorrents()
+        }
+    }()}

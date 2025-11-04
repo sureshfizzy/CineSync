@@ -21,6 +21,18 @@ interface DebridStats {
   traffic: {
     today: number;
   };
+  workers?: {
+    io: number;
+    api: number;
+    ioInUse?: number;
+    apiInUse?: number;
+  };
+  enrich?: {
+    total: number;
+    processed: number;
+    saved: number;
+    remaining: number;
+  };
   lastUpdated: string;
 }
 
@@ -125,22 +137,35 @@ export default function DebridDashboard() {
   const [error, setError] = useState('');
   const theme = useTheme();
 
-  const fetchStats = useCallback(async () => {
-    setLoading(true);
+  const fetchStats = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
+    }
     setError('');
 
     try {
       const response = await axios.get('/api/realdebrid/dashboard-stats');
       setStats(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch debrid statistics');
+      // Only show error on initial load, not on polling failures
+      if (isInitial) {
+        setError(err.response?.data?.error || 'Failed to fetch debrid statistics');
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchStats();
+    fetchStats(true); // Initial load with loading state
+    // Poll every 2 seconds for real-time updates
+    const interval = setInterval(() => {
+      fetchStats(false); // Silent updates
+    }, 2000);
+
+    return () => clearInterval(interval);
   }, [fetchStats]);
 
   if (loading && !stats) {
@@ -560,6 +585,138 @@ export default function DebridDashboard() {
             </Card>
           </motion.div>
         </Box>
+
+      </Box>
+
+      {/* Workers Card */}
+      <Box sx={{ 
+        flex: { xs: 'none', md: '1 1 100%' }, 
+        width: '100%',
+        mt: 2
+      }}>
+        <motion.div
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          custom={3}
+        >
+          <Card 
+            sx={{ 
+              background: theme.palette.mode === 'dark' 
+                ? `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 100%)`
+                : `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+              border: theme.palette.mode === 'dark' 
+                ? `1px solid ${alpha(theme.palette.warning.main, 0.2)}`
+                : `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
+              backdropFilter: theme.palette.mode === 'dark' ? 'blur(10px)' : 'none',
+            }}
+          >
+            <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                <Avatar sx={{ bgcolor: 'warning.main', width: 40, height: 40 }}>
+                  <CloudSync sx={{ fontSize: 22 }} />
+                </Avatar>
+                <Typography variant="subtitle1" fontWeight="700">
+                  Workers
+                </Typography>
+              </Stack>
+
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+                <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.info.main, 0.08), borderRadius: 1.5 }}>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                    IO Workers
+                  </Typography>
+                  <Typography variant="h6" fontWeight="700" color="info.main">
+                    {stats.workers?.io ?? 0}{stats.workers?.ioInUse != null ? ` (${stats.workers?.ioInUse} active)` : ''}
+                  </Typography>
+                </Paper>
+                <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.success.main, 0.08), borderRadius: 1.5 }}>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                    API Workers
+                  </Typography>
+                  <Typography variant="h6" fontWeight="700" color="success.main">
+                    {stats.workers?.api ?? 0}{stats.workers?.apiInUse != null ? ` (${stats.workers?.apiInUse} active)` : ''}
+                  </Typography>
+                </Paper>
+              </Box>
+
+              {stats.enrich && stats.enrich.total > 0 && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="caption" fontWeight="700" color="text.secondary" sx={{ 
+                    mb: 1.5, 
+                    display: 'block', 
+                    textTransform: 'uppercase', 
+                    letterSpacing: 0.5, 
+                    fontSize: { xs: '0.65rem', sm: '0.7rem' }
+                  }}>
+                    Enrich Queue
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                    <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.primary.main, 0.08), borderRadius: 1.5 }}>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                        Total
+                      </Typography>
+                      <Typography variant="h6" fontWeight="700" color="primary.main">
+                        {stats.enrich.total.toLocaleString()}
+                      </Typography>
+                    </Paper>
+                    <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.info.main, 0.08), borderRadius: 1.5 }}>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                        Processed
+                      </Typography>
+                      <Typography variant="h6" fontWeight="700" color="info.main">
+                        {stats.enrich.processed.toLocaleString()}
+                      </Typography>
+                    </Paper>
+                    <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.success.main, 0.08), borderRadius: 1.5 }}>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                        Saved
+                      </Typography>
+                      <Typography variant="h6" fontWeight="700" color="success.main">
+                        {stats.enrich.saved.toLocaleString()}
+                      </Typography>
+                    </Paper>
+                    <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.warning.main, 0.08), borderRadius: 1.5 }}>
+                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                        Remaining
+                      </Typography>
+                      <Typography variant="h6" fontWeight="700" color="warning.main">
+                        {stats.enrich.remaining.toLocaleString()}
+                      </Typography>
+                    </Paper>
+                  </Box>
+                  {stats.enrich.total > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                          Progress
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                          {stats.enrich.total > 0 ? Math.round((stats.enrich.processed / stats.enrich.total) * 100) : 0}%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ 
+                        width: '100%', 
+                        height: 8, 
+                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', 
+                        borderRadius: 1,
+                        overflow: 'hidden'
+                      }}>
+                        <Box sx={{ 
+                          width: `${stats.enrich.total > 0 ? (stats.enrich.processed / stats.enrich.total) * 100 : 0}%`, 
+                          height: '100%', 
+                          bgcolor: 'primary.main',
+                          transition: 'width 0.3s ease-in-out'
+                        }} />
+                      </Box>
+                    </Box>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
       </Box>
     </Box>
   );
