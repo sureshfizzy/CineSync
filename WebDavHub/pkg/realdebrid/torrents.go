@@ -3,15 +3,12 @@ package realdebrid
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"golang.org/x/sync/singleflight"
@@ -393,25 +390,6 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 	}
 	tm.failedFileMutex.RUnlock()
 
-	// Check if file is marked as removed in the database
-	debridDB := db.GetDebridDB()
-	if isRemoved, removedRecord, err := debridDB.IsFileRemoved(torrentID, filePath); err != nil {
-		logger.Error("[Torrents] Failed to check removed files database: %v", err)
-		return "", 0, fmt.Errorf("database error: %w", err)
-	} else if isRemoved {
-		logger.Info("[Torrents] File %s is marked as REMOVED in database (detected at %v)", 
-			filePath, removedRecord.DetectedAt)
-		removedErr := fmt.Errorf("file has been removed from Real-Debrid (detected: %v)", removedRecord.DetectedAt)
-		tm.failedFileMutex.Lock()
-		tm.failedFileCache[cacheKey] = &FailedFileEntry{
-			Error:     removedErr,
-			Timestamp: time.Now(),
-		}
-		tm.failedFileMutex.Unlock()
-		
-		return "", 0, removedErr
-	}
-	
 	// Use singleflight to deduplicate concurrent requests
 	v, err, _ := tm.downloadSG.Do(cacheKey, func() (interface{}, error) {
 		// Check cache first
@@ -467,13 +445,6 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		// Unrestrict the link
 		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
 		if err != nil {
-			webdavVerified, webdavErr := tm.verifyFileViaWebDAV(torrentID, filePath, targetFile)
-			if webdavVerified {
-				logger.Info("[Torrents] File %s verified via HTTP WebDAV despite unrestrict failure", filePath)
-			} else {
-				logger.Warn("[Torrents] File %s also not accessible via HTTP WebDAV: %v", filePath, webdavErr)
-			}
-
 			wrappedErr := fmt.Errorf("failed to unrestrict link: %w", err)
 			tm.failedFileMutex.Lock()
 			tm.failedFileCache[cacheKey] = &FailedFileEntry{
@@ -693,211 +664,6 @@ func (tm *TorrentManager) GetHttpDavLinks() []HttpDavFileInfo {
 	result := make([]HttpDavFileInfo, len(tm.httpDavLinksCache))
 	copy(result, tm.httpDavLinksCache)
 	return result
-}
-
-// verifyFileViaWebDAV attempts to verify if a file exists via HTTP WebDAV endpoint
-func (tm *TorrentManager) verifyFileViaWebDAV(torrentID, filePath string, targetFile *TorrentFile) (bool, error) {
-	configManager := GetConfigManager()
-	config := configManager.GetConfig()
-
-	if !config.HttpDavSettings.Enabled || config.HttpDavSettings.UserID == "" || config.HttpDavSettings.Password == "" {
-		return false, fmt.Errorf("HTTP DAV not configured")
-	}
-
-	info, err := tm.GetTorrentInfo(torrentID)
-	if err != nil {
-		logger.Error("[WebDAV Verify] Failed to get torrent info for %s: %v", torrentID, err)
-		return false, fmt.Errorf("failed to get torrent info: %w", err)
-	}
-
-	directoryName := GetDirectoryName(info.Filename)
-	exactPath := fmt.Sprintf("/torrents/%s/%s", directoryName, filePath)
-
-	httpClient := &http.Client{Timeout: 15 * time.Second}
-	
-	// Make HEAD request to check if file exists without downloading content
-	apiURL := fmt.Sprintf("http://localhost:8082/api/realdebrid/httpdav%s", exactPath)
-	req, err := http.NewRequest("HEAD", apiURL, nil)
-	if err != nil {
-		logger.Error("[WebDAV Verify] Failed to create request for %s: %v", apiURL, err)
-		return false, fmt.Errorf("failed to create request: %w", err)
-	}
-	
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		logger.Error("[WebDAV Verify] Error making HEAD request to %s: %v", apiURL, err)
-		return false, fmt.Errorf("error making request: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode == 404 {
-		logger.Error("[WebDAV Verify] File not accessible via HTTP WebDAV - marking as REMOVED from Real-Debrid")
-		tm.markFileAsRemoved(torrentID, filePath, targetFile, info)
-		
-		return false, fmt.Errorf("file not found at exact WebDAV path")
-	}
-	
-	if resp.StatusCode != 200 {
-		logger.Error("[WebDAV Verify] Unexpected HTTP status %d for path: %s", resp.StatusCode, exactPath)
-		return false, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
-	}
-
-	contentLength := resp.Header.Get("Content-Length")
-	_ = resp.Header.Get("Last-Modified")
-
-	if contentLength != "" {
-		if size, parseErr := strconv.ParseInt(contentLength, 10, 64); parseErr == nil {
-			if size == 0 {
-				logger.Error("[WebDAV Verify]File has 0 bytes - marking as REMOVED from Real-Debrid")
-				tm.markFileAsRemoved(torrentID, filePath, targetFile, info)
-				
-				return false, fmt.Errorf("file has been removed from Real-Debrid (0 bytes)")
-			}
-
-			if targetFile != nil && targetFile.Bytes > 0 {
-				if size != targetFile.Bytes {
-					if size == 0 {
-						logger.Error("[WebDAV Verify] File has 0 bytes - marking as REMOVED from Real-Debrid")
-						tm.markFileAsRemoved(torrentID, filePath, targetFile, info)
-						return false, fmt.Errorf("file has been removed from Real-Debrid (0 bytes)")
-					}
-				}
-			}
-		}
-	}
-	
-	return true, nil
-}
-
-// markFileAsRemoved tracks a file that has been removed from Real-Debrid
-func (tm *TorrentManager) markFileAsRemoved(torrentID, filePath string, targetFile *TorrentFile, torrentInfo *TorrentInfo) {
-	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
-	
-	originalSize := int64(0)
-	if targetFile != nil {
-		originalSize = targetFile.Bytes
-	}
-	
-	torrentName := torrentID
-	torrentHash := ""
-	if torrentInfo != nil {
-		torrentName = torrentInfo.Filename
-		torrentHash = torrentInfo.Hash
-	}
-	
-	// Store in database with torrent hash
-	debridDB := db.GetDebridDB()
-	if err := debridDB.AddRemovedFile(torrentID, torrentHash, torrentName, filePath, originalSize, true); err != nil {
-		logger.Error("[Removed Files] Failed to store removed file in database: %v", err)
-	} else {
-		logger.Error("[Removed Files] File marked as REMOVED in database: %s from torrent '%s' (Original size: %d bytes)", 
-			filePath, torrentName, originalSize)
-	}
-
-	tm.downloadCacheMutex.Lock()
-	delete(tm.downloadLinkCache, cacheKey)
-	tm.downloadCacheMutex.Unlock()
-
-	removedErr := fmt.Errorf("file has been removed from Real-Debrid")
-	tm.failedFileMutex.Lock()
-	tm.failedFileCache[cacheKey] = &FailedFileEntry{
-		Error:     removedErr,
-		Timestamp: time.Now(),
-	}
-	tm.failedFileMutex.Unlock()
-}
-
-// IsFileRemoved checks if a file has been marked as removed in the database
-func (tm *TorrentManager) IsFileRemoved(torrentID, filePath string) (bool, *db.RemovedFileRecord) {
-	debridDB := db.GetDebridDB()
-	
-	isRemoved, record, err := debridDB.IsFileRemoved(torrentID, filePath)
-	if err != nil {
-		logger.Error("[Removed Files] Error checking if file is removed: %v", err)
-		return false, nil
-	}
-	
-	return isRemoved, record
-}
-
-// GetRemovedFiles returns all files that have been marked as removed from the database
-func (tm *TorrentManager) GetRemovedFiles() ([]db.RemovedFileRecord, error) {
-	debridDB := db.GetDebridDB()
-	return debridDB.GetAllRemovedFiles()
-}
-
-// ClearRemovedFileEntry removes a specific file from the removed files database
-func (tm *TorrentManager) ClearRemovedFileEntry(torrentID, filePath string) error {
-	debridDB := db.GetDebridDB()
-	
-	if err := debridDB.RemoveFileRecord(torrentID, filePath); err != nil {
-		logger.Error("[Removed Files] Failed to clear removed file entry: %v", err)
-		return err
-	}
-	return nil
-}
-
-// GetRemovedFilesCount returns the number of files marked as removed in the database
-func (tm *TorrentManager) GetRemovedFilesCount() int {
-	debridDB := db.GetDebridDB()
-	
-	count, err := debridDB.GetRemovedFilesCount()
-	if err != nil {
-		logger.Error("[Removed Files] Error getting removed files count: %v", err)
-		return 0
-	}
-	
-	return count
-}
-
-// CleanupOldRemovedFiles removes removed file records older than the specified duration
-func (tm *TorrentManager) CleanupOldRemovedFiles(olderThan time.Duration) (int, error) {
-	debridDB := db.GetDebridDB()
-	return debridDB.CleanupOldRecords(olderThan)
-}
-
-// GetRemovedFilesStats returns database statistics for removed files
-func (tm *TorrentManager) GetRemovedFilesStats() (map[string]interface{}, error) {
-	debridDB := db.GetDebridDB()
-	return debridDB.GetDatabaseStats()
-}
-
-// ExtractTorrentHashFromMagnet extracts the torrent hash from a magnet link
-func ExtractTorrentHashFromMagnet(magnetLink string) string {
-	if !strings.HasPrefix(magnetLink, "magnet:") {
-		return ""
-	}
-
-	xtStart := strings.Index(magnetLink, "xt=urn:btih:")
-	if xtStart == -1 {
-		return ""
-	}
-
-	hashStart := xtStart + 12
-	hashEnd := strings.IndexAny(magnetLink[hashStart:], "&")
-	
-	if hashEnd == -1 {
-		return strings.ToLower(magnetLink[hashStart:])
-	}
-	
-	return strings.ToLower(magnetLink[hashStart : hashStart+hashEnd])
-}
-
-// CheckFileRemovedByHash checks if a file is marked as removed using torrent hash
-func (tm *TorrentManager) CheckFileRemovedByHash(magnetLink, filePath string) (bool, *db.RemovedFileRecord) {
-	torrentHash := ExtractTorrentHashFromMagnet(magnetLink)
-	if torrentHash == "" {
-		return false, nil
-	}
-	
-	debridDB := db.GetDebridDB()
-	isRemoved, record, err := debridDB.IsFileRemovedByHash(torrentHash, filePath)
-	if err != nil {
-		logger.Error("[Removed Files] Error checking if file is removed by hash: %v", err)
-		return false, nil
-	}
-	
-	return isRemoved, record
 }
 
 // startRefreshJob starts the background job

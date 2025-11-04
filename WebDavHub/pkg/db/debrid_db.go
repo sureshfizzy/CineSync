@@ -167,7 +167,7 @@ func (ddb *DebridDB) createTables() error {
 }
 
 // AddRemovedFile adds a file to the removed files database
-func (ddb *DebridDB) AddRemovedFile(torrentID, torrentHash, torrentName, filePath string, originalSize int64, verifiedViaAPI bool) error {
+func (ddb *DebridDB) AddRemovedFile(torrentID, torrentHash, torrentName, filePath string, verifiedViaAPI bool) error {
 	if ddb == nil || ddb.db == nil {
 		return fmt.Errorf("debrid database not initialized")
 	}
@@ -179,10 +179,10 @@ func (ddb *DebridDB) AddRemovedFile(torrentID, torrentHash, torrentName, filePat
 
 	query := `
 	INSERT OR REPLACE INTO removed_files 
-	(cache_key, torrent_id, torrent_hash, torrent_name, file_path, original_size, detected_at, verified_via_api, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+	(cache_key, torrent_id, torrent_hash, torrent_name, file_path, detected_at, verified_via_api, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
 
-	_, err := ddb.db.Exec(query, cacheKey, torrentID, torrentHash, torrentName, filePath, originalSize, time.Now(), verifiedViaAPI)
+	_, err := ddb.db.Exec(query, cacheKey, torrentID, torrentHash, torrentName, filePath, time.Now(), verifiedViaAPI)
 	if err != nil {
 		return fmt.Errorf("failed to insert removed file: %w", err)
 	}
