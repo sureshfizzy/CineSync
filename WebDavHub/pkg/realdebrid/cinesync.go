@@ -45,49 +45,19 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
         return
     }
 
-    allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-    visible := make(map[string]struct{}, allTorrents.Count())
-    if ok {
-        for item := range allTorrents.IterBuffered() {
-            if item.Val != nil {
-                visible[GetDirectoryName(item.Val.Filename)] = struct{}{}
-            }
-        }
-    }
-
-    if len(visible) > 0 {
-        filtered := make([]TorrentItem, 0, len(list))
+    if existingIDs, err := tm.store.GetAllIDs(); err == nil {
+        exist := make(map[string]struct{}, len(existingIDs))
+        for _, id := range existingIDs { exist[id] = struct{}{} }
+        missing := make([]TorrentItem, 0, len(list))
         for i := range list {
-            if _, ok := visible[GetDirectoryName(list[i].Filename)]; ok {
-                filtered = append(filtered, list[i])
+            if _, ok := exist[list[i].ID]; !ok {
+                missing = append(missing, list[i])
             }
         }
-        if len(filtered) > 0 {
-            list = filtered
+        if len(missing) == 0 {
+            list = nil
         } else {
-            logger.Info("[CineSync] WebDAV filter yielded 0 items; skipping placeholder write")
-            return
-        }
-    } else {
-        logger.Info("[CineSync] WebDAV cache empty; skipping placeholder write")
-        return
-    }
-
-    if tm.store != nil {
-        if existingIDs, err := tm.store.GetAllIDs(); err == nil {
-            exist := make(map[string]struct{}, len(existingIDs))
-            for _, id := range existingIDs { exist[id] = struct{}{} }
-            missing := make([]TorrentItem, 0, len(list))
-            for i := range list {
-                if _, ok := exist[list[i].ID]; !ok {
-                    missing = append(missing, list[i])
-                }
-            }
-            if len(missing) == 0 {
-                list = nil
-            } else {
-                list = missing
-            }
+            list = missing
         }
     }
 
