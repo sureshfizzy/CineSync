@@ -415,10 +415,85 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 	return nodes, nil
 }
 
+// PrefetchFileDownloadLinks prefetches unrestricted links for all files in the given torrents in parallel
+func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
+	if len(torrents) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	for _, torrent := range torrents {
+		wg.Add(1)
+		go func(torrentID string) {
+			defer wg.Done()
+
+			info, err := tm.GetTorrentInfo(torrentID)
+			if err != nil || len(info.Files) == 0 || len(info.Links) == 0 {
+				return
+			}
+
+			var fileWg sync.WaitGroup
+			for _, file := range info.Files {
+				if file.Selected != 1 {
+					continue
+				}
+
+				fileWg.Add(1)
+				go func(f TorrentFile, tid string, links []string) {
+					defer fileWg.Done()
+
+					fileName := path.Base(strings.Trim(f.Path, "/"))
+					cacheKey := fmt.Sprintf("%s:%s", tid, fileName)
+
+					tm.downloadCacheMutex.RLock()
+					if _, exists := tm.downloadLinkCache[cacheKey]; exists {
+						tm.downloadCacheMutex.RUnlock()
+						return
+					}
+					tm.downloadCacheMutex.RUnlock()
+
+					downloadLink := ""
+					if f.ID-1 < len(links) {
+						downloadLink = links[f.ID-1]
+					} else if len(links) > 0 {
+						downloadLink = links[0]
+					}
+
+					if downloadLink == "" {
+						return
+					}
+
+					unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
+					if err != nil || unrestrictedLink.Download == "" {
+						return
+					}
+
+					if f.Bytes > 0 {
+						unrestrictedLink.Filesize = f.Bytes
+					}
+
+					tm.downloadCacheMutex.Lock()
+					tm.downloadLinkCache[cacheKey] = unrestrictedLink
+					tm.downloadCacheMutex.Unlock()
+				}(file, torrentID, info.Links)
+			}
+			fileWg.Wait()
+		}(torrent.ID)
+	}
+	wg.Wait()
+}
+
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	// Create cache key
 	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+
+	tm.downloadCacheMutex.RLock()
+	if cached, exists := tm.downloadLinkCache[cacheKey]; exists {
+		tm.downloadCacheMutex.RUnlock()
+		return cached.Download, cached.Filesize, nil
+	}
+	tm.downloadCacheMutex.RUnlock()
 
 	tm.failedFileMutex.RLock()
 	if failedEntry, exists := tm.failedFileCache[cacheKey]; exists {
@@ -431,7 +506,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 	// Use singleflight to deduplicate concurrent requests
 	v, err, _ := tm.downloadSG.Do(cacheKey, func() (interface{}, error) {
-		// Check cache first
+		// Double-check cache inside singleflight (another goroutine might have filled it)
 		tm.downloadCacheMutex.RLock()
 		if cached, exists := tm.downloadLinkCache[cacheKey]; exists {
 			tm.downloadCacheMutex.RUnlock()
@@ -849,6 +924,9 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 				break
 			}
 		}
+
+		// Prefetch unrestricted links for all new torrents in parallel
+		go tm.PrefetchFileDownloadLinks(newTorrents)
 	}
 	
 	// Log removed torrents
