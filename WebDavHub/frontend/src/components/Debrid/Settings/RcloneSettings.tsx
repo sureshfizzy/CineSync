@@ -34,6 +34,8 @@ interface RcloneConfig {
   tpsLimitBurst: string;
   driveChunkSize: string;
   maxReadAhead: string;
+  logLevel: string;
+  logFile: string;
 }
 
 interface RateLimitUI {
@@ -87,6 +89,8 @@ const RcloneSettings: React.FC = () => {
     tpsLimitBurst: '20',
     driveChunkSize: '64M',
     maxReadAhead: '256M',
+    logLevel: '',
+    logFile: '',
   });
   const [status, setStatus] = useState<RcloneStatus | null>(null);
   const [rateLimit, setRateLimit] = useState<RateLimitUI>({
@@ -855,6 +859,41 @@ const RcloneSettings: React.FC = () => {
                                 onChange={(e) => handleConfigChange('maxReadAhead', e.target.value)}
                                 placeholder="256M"
                                 helperText="Maximum data to read ahead"
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
+
+                        {/* Logging */}
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                            Logging
+                          </Typography>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Log Level
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.logLevel}
+                                onChange={(e) => handleConfigChange('logLevel', e.target.value)}
+                                placeholder="INFO"
+                                helperText="rclone --log-level (e.g., DEBUG, INFO, NOTICE, ERROR)"
+                              />
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                Log File
+                              </Typography>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={config.logFile}
+                                onChange={(e) => handleConfigChange('logFile', e.target.value)}
+                                placeholder={navigator.platform.toLowerCase().includes('win') ? "C:\\path\\to\\rclone.log" : "/var/log/rclone.log"}
+                                helperText="Absolute path to write rclone logs"
                               />
                             </Box>
                           </Box>

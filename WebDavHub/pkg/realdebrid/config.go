@@ -52,6 +52,8 @@ type RcloneSettings struct {
 	TpsLimitBurst        string `json:"tpsLimitBurst" yaml:"tpsLimitBurst"`
 	DriveChunkSize       string `json:"driveChunkSize" yaml:"driveChunkSize"`
 	MaxReadAhead         string `json:"maxReadAhead" yaml:"maxReadAhead"`
+	LogLevel             string `json:"logLevel" yaml:"logLevel"`
+	LogFile              string `json:"logFile" yaml:"logFile"`
 }
 
 // HttpDavSettings represents HTTP DAV configuration
@@ -355,6 +357,12 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if maxReadAhead, ok := rcloneSettingsMap["maxReadAhead"].(string); ok && maxReadAhead != "" {
 					rcloneSettings.MaxReadAhead = maxReadAhead
+				}
+				if logLevel, ok := rcloneSettingsMap["logLevel"].(string); ok {
+					rcloneSettings.LogLevel = logLevel
+				}
+				if logFile, ok := rcloneSettingsMap["logFile"].(string); ok {
+					rcloneSettings.LogFile = logFile
 				}
 				
 				cm.config.RcloneSettings = rcloneSettings

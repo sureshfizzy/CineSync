@@ -423,6 +423,13 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--max-read-ahead", config.MaxReadAhead,
 	}
 
+    if config.LogLevel != "" {
+        args = append(args, "--log-level", config.LogLevel)
+    }
+    if config.LogFile != "" {
+        args = append(args, "--log-file", config.LogFile)
+    }
+
 	if config.CachePath != "" {
 		args = append(args, "--cache-dir", config.CachePath)
 	}

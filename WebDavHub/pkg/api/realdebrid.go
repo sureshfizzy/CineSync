@@ -436,7 +436,7 @@ func getHttpDavDirectoryWithPagination(httpDavClient *realdebrid.HttpDavClient, 
 func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 	// Set CORS and WebDAV headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, PROPFIND")
+    w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, PROPFIND, DELETE, MOVE, COPY")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Depth")
 	w.Header().Set("DAV", "1, 2")
 
@@ -459,11 +459,15 @@ func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 		reqPath = "/"
 	}
 
-	switch r.Method {
+    switch r.Method {
 	case "PROPFIND":
 		handleTorrentPropfind(w, r, config.APIKey, reqPath)
 	case "GET", "HEAD":
 		handleTorrentGet(w, r, config.APIKey, reqPath)
+    case "DELETE":
+        handleTorrentDelete(w, r, config.APIKey, reqPath)
+    case "MOVE", "COPY":
+        http.Error(w, "Not Implemented", http.StatusNotImplemented)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -733,6 +737,12 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	}
 	if streamBufferSize, ok := rcloneConfigMap["streamBufferSize"].(string); ok && streamBufferSize != "" {
 		rcloneConfig.StreamBufferSize = streamBufferSize
+	}
+	if logLevel, ok := rcloneConfigMap["logLevel"].(string); ok {
+		rcloneConfig.LogLevel = logLevel
+	}
+	if logFile, ok := rcloneConfigMap["logFile"].(string); ok {
+		rcloneConfig.LogFile = logFile
 	}
 
     rcloneConfig.RemoteName = "CineSync"
@@ -1543,6 +1553,35 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 			return
 		}
 	}
+}
+
+func handleTorrentDelete(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
+    tm := realdebrid.GetTorrentManager(apiKey)
+    // Normalize and parse path: /__all__/torrent_name[/optional/subpath]
+    reqPath = strings.Trim(reqPath, "/")
+    parts := strings.Split(reqPath, "/")
+    if len(parts) < 2 || parts[0] != realdebrid.ALL_TORRENTS {
+        http.Error(w, "Invalid path", http.StatusBadRequest)
+        return
+    }
+
+    torrentName := parts[1]
+    torrentID, err := tm.FindTorrentByName(torrentName)
+    if err != nil || torrentID == "" {
+        // If not found, treat as already gone
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
+
+    if len(parts) == 2 {
+        // DELETE the torrent folder: remove from local DB/cache
+        tm.DeleteFromDBByID(torrentID)
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
+
+    // File-level DELETE: acknowledge without changing RD state
+    w.WriteHeader(http.StatusNoContent)
 }
 
 // formatBytes formats byte count into human readable format
