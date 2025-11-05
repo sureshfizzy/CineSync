@@ -131,7 +131,7 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
                     CineSyncAPIInUse.Add(-1)
                     continue
                 }
-                if info, err := tm.client.GetTorrentInfo(it.ID); err == nil && info != nil {
+                if info, err := tm.GetTorrentInfo(it.ID); err == nil && info != nil {
                     if len(info.Links) == 0 {
                         _ = tm.store.UpsertRepair(it.ID, info.Filename, info.Status, int(info.Progress), "no_links")
                     } else {
