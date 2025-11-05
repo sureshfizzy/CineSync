@@ -313,7 +313,10 @@ func (s *TorrentStore) Count() (int, error) {
 // GetIDsNeedingUpdate returns candidate torrent IDs for enrichment.
 func (s *TorrentStore) GetIDsNeedingUpdate(limit int) ([]string, error) {
     if s == nil { return nil, errors.New("store not initialized") }
-    base := `SELECT id FROM torrents WHERE hash IS NULL OR hash='' ORDER BY updated_at ASC`
+    base := `SELECT t.id FROM torrents t
+             LEFT JOIN repair r ON r.torrent_id = t.id
+             WHERE (t.hash IS NULL OR t.hash='') AND r.torrent_id IS NULL
+             ORDER BY t.updated_at ASC`
     var rows *sql.Rows
     var err error
     if limit > 0 {
