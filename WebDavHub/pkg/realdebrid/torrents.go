@@ -11,6 +11,7 @@ import (
     "sync"
     "sync/atomic"
     "time"
+	"strconv"
 
     "cinesync/pkg/logger"
     "golang.org/x/sync/singleflight"
@@ -21,6 +22,7 @@ const (
 	// Refresh intervals
 	DEFAULT_REFRESH_INTERVAL = 15 * time.Second
 	CHECKSUM_TIMEOUT = 10 * time.Second
+    INFO_CACHE_TTL = 24 * time.Hour
 )
 
 // LibraryState represents the current state of the torrent library for change detection
@@ -105,7 +107,6 @@ type FailedFileEntry struct {
 // TorrentManager manages cached torrent listings
 type TorrentManager struct {
 	client        *Client
-	torrentCache  map[string]*TorrentInfo
 	torrentList   []TorrentItem
 	cacheMutex    sync.RWMutex
 	lastCacheTime time.Time
@@ -128,6 +129,14 @@ type TorrentManager struct {
 	httpDavCacheMutex    sync.RWMutex
 	httpDavLastCacheTime time.Time
     store *TorrentStore
+    infoStore *TorrentInfoStore
+    infoSG singleflight.Group
+    infoCache map[string]infoCacheEntry
+}
+
+type infoCacheEntry struct {
+    info *TorrentInfo
+    storedAt time.Time
 }
 
 var (
@@ -153,12 +162,12 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 
     torrentManager = &TorrentManager{
 		client:        NewClient(apiKey),
-		torrentCache:  make(map[string]*TorrentInfo),
 		torrentList:   []TorrentItem{},
 		downloadLinkCache: make(map[string]*DownloadLink),
 		failedFileCache: make(map[string]*FailedFileEntry),
 		refreshInterval: DEFAULT_REFRESH_INTERVAL,
 		initialized:     make(chan struct{}),
+        infoCache:       make(map[string]infoCacheEntry),
 	}
 
 	initialState := &LibraryState{
@@ -176,6 +185,13 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     } else {
         logger.Warn("[Torrents] Failed to open store: %v - falling back to file cache", err)
         torrentManager.loadCachedCineSync()
+    }
+
+    // Open detailed info store
+    if infoStore, err := OpenTorrentInfoStore(filepath.Join("..", "db", "torrents-info.db")); err == nil {
+        torrentManager.infoStore = infoStore
+    } else {
+        logger.Warn("[Torrents] Failed to open torrents-info.db: %v", err)
     }
 	
     // Start background refresh job
@@ -255,29 +271,42 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
     tm.cacheMutex.RLock()
-    if info, ok := tm.torrentCache[torrentID]; ok {
-        if len(info.Links) > 0 {
+    if ce, ok := tm.infoCache[torrentID]; ok {
+        if time.Since(ce.storedAt) < INFO_CACHE_TTL && ce.info != nil && len(ce.info.Links) > 0 {
             tm.cacheMutex.RUnlock()
-            return info, nil
+            return ce.info, nil
+        }
+    }
+    tm.cacheMutex.RUnlock()
+
+    v, err, shared := tm.infoSG.Do("info:"+torrentID, func() (interface{}, error) {
+        if tm.infoStore != nil {
+            if cached, ok, derr := tm.infoStore.Get(torrentID); derr == nil && ok && cached != nil {
+                tm.cacheMutex.Lock()
+                tm.infoCache[torrentID] = infoCacheEntry{info: cached, storedAt: time.Now()}
+                tm.cacheMutex.Unlock()
+                return cached, nil
+            }
         }
 
-        tm.cacheMutex.RUnlock()
-        logger.Debug("[Torrents] Cached info missing links for %s, refreshing", torrentID)
-    } else {
-        tm.cacheMutex.RUnlock()
+        fetched, ferr := tm.client.GetTorrentInfo(torrentID)
+        if ferr != nil {
+            return nil, ferr
+        }
+        tm.saveCineSync(fetched)
+        if tm.infoStore != nil {
+            _ = tm.infoStore.Upsert(fetched)
+        }
+        tm.cacheMutex.Lock()
+        tm.infoCache[torrentID] = infoCacheEntry{info: fetched, storedAt: time.Now()}
+        tm.cacheMutex.Unlock()
+        return fetched, nil
+    })
+    if err != nil {
+        return nil, err
     }
-
-    info, err := tm.client.GetTorrentInfo(torrentID)
-	if err != nil {
-		return nil, err
-	}
-
-	tm.cacheMutex.Lock()
-	tm.torrentCache[torrentID] = info
-	tm.cacheMutex.Unlock()
-    tm.saveCineSync(info)
-
-	return info, nil
+    _ = shared
+    return v.(*TorrentInfo), nil
 }
 
 
@@ -559,21 +588,12 @@ type FileNode struct {
 func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
 	logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
 	
-	// Clear cached info for this torrent
-	tm.cacheMutex.Lock()
-	delete(tm.torrentCache, torrentID)
-	tm.cacheMutex.Unlock()
-	
 	// Fetch fresh torrent info
     info, err := tm.client.GetTorrentInfo(torrentID)
 	if err != nil {
 		return fmt.Errorf("failed to refresh torrent %s: %w", torrentID, err)
 	}
 	
-	// Update cache with fresh data
-	tm.cacheMutex.Lock()
-	tm.torrentCache[torrentID] = info
-	tm.cacheMutex.Unlock()
     tm.saveCineSync(info)
 	
 	logger.Debug("[Torrents] Successfully refreshed torrent %s", torrentID)
@@ -811,12 +831,7 @@ func (tm *TorrentManager) getCurrentLibraryState(ctx context.Context) (*LibraryS
 
 // fetchFirstPageWithTotal fetches the first page using page parameter and returns total count
 func (tm *TorrentManager) fetchFirstPageWithTotal(ctx context.Context, pageSize int) ([]TorrentItem, int, error) {
-	_, totalCount, err := tm.client.GetTorrentsLightweight(10)
-	if err != nil {
-		return nil, 0, err
-	}
-	
-	url := fmt.Sprintf("%s/torrents?_t=%d&page=1&limit=%d", tm.client.baseURL, time.Now().Unix(), pageSize)
+    url := fmt.Sprintf("%s/torrents?_t=%d&page=1&limit=%d", tm.client.baseURL, time.Now().Unix(), pageSize)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, 0, err
@@ -829,8 +844,15 @@ func (tm *TorrentManager) fetchFirstPageWithTotal(ctx context.Context, pageSize 
 	}
 	defer resp.Body.Close()
 	
-	if resp.StatusCode == http.StatusNoContent {
-		return []TorrentItem{}, totalCount, nil
+    totalCount := 0
+    if totalHeader := resp.Header.Get("X-Total-Count"); totalHeader != "" {
+        if count, convErr := strconv.Atoi(totalHeader); convErr == nil {
+            totalCount = count
+        }
+    }
+
+    if resp.StatusCode == http.StatusNoContent {
+        return []TorrentItem{}, totalCount, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -840,6 +862,9 @@ func (tm *TorrentManager) fetchFirstPageWithTotal(ctx context.Context, pageSize 
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, 0, err
 	}
+    if totalCount == 0 {
+        totalCount = len(items)
+    }
 	return items, totalCount, nil
 }
 

@@ -875,7 +875,7 @@ func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	
-	resp, err := c.httpClient.Do(req)
+    resp, err := c.doWithLimit(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to make request: %w", err)
 	}

@@ -188,6 +188,10 @@ func (tm *TorrentManager) ReconcileDBWithRD(rdIDs []string) {
     for _, id := range dbIDs {
         if _, ok := present[id]; !ok {
             _ = tm.store.DeleteByID(id)
+            if tm.infoStore != nil { _ = tm.infoStore.Delete(id) }
+            tm.cacheMutex.Lock()
+            delete(tm.infoCache, id)
+            tm.cacheMutex.Unlock()
         }
     }
 }
@@ -196,4 +200,8 @@ func (tm *TorrentManager) ReconcileDBWithRD(rdIDs []string) {
 func (tm *TorrentManager) DeleteFromDBByID(id string) {
     if tm == nil || tm.store == nil { return }
     _ = tm.store.DeleteByID(id)
+    if tm.infoStore != nil { _ = tm.infoStore.Delete(id) }
+    tm.cacheMutex.Lock()
+    delete(tm.infoCache, id)
+    tm.cacheMutex.Unlock()
 }
