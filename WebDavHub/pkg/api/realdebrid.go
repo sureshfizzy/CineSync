@@ -15,6 +15,22 @@ import (
 	"cinesync/pkg/realdebrid"
 )
 
+// effectiveModTime returns a stable modified time for a torrent:
+func effectiveModTime(tm *realdebrid.TorrentManager, torrentID string, info *realdebrid.TorrentInfo) time.Time {
+    if tm != nil {
+        if m := tm.GetModifiedUnix(torrentID); m > 0 {
+            return time.Unix(m, 0)
+        }
+    }
+    if info != nil && info.Ended != "" {
+        if t, err := time.Parse(time.RFC3339, info.Ended); err == nil { return t }
+    }
+    if info != nil && info.Added != "" {
+        if t, err := time.Parse(time.RFC3339, info.Added); err == nil { return t }
+    }
+    return time.Now()
+}
+
 // Global semaphore to limit concurrent streaming requests
 var streamingSemaphore = make(chan struct{}, 32)
 
@@ -1064,27 +1080,36 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			return
 		}
 
-		fileNodes, err := tm.ListTorrentFiles(torrentID, subPath)
+        fileNodes, err := tm.ListTorrentFiles(torrentID, subPath)
 		if err != nil {
 			logger.Error("[WebDAV] Failed to list files for torrent %s: %v", torrentID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		basePath = "/api/realdebrid/webdav/" + reqPath
-		nodes = make([]torrentNode, 0, len(fileNodes))
-		
-		for _, fn := range fileNodes {
-			nodes = append(nodes, torrentNode{
-				Name:      fn.Name,
-				IsDir:     fn.IsDir,
-				Size:      fn.Size,
-				TorrentID: fn.TorrentID,
-				FileID:    fn.FileID,
-				ModTime:   fn.ModTime,
-				RdLink:    "",
-			})
-		}
+        basePath = "/api/realdebrid/webdav/" + reqPath
+        nodes = make([]torrentNode, 0, len(fileNodes))
+
+        baseMod := time.Time{}
+        if m := tm.GetModifiedUnix(torrentID); m > 0 {
+            baseMod = time.Unix(m, 0)
+        }
+
+        for _, fn := range fileNodes {
+            mt := fn.ModTime
+            if !baseMod.IsZero() {
+                mt = baseMod
+            }
+            nodes = append(nodes, torrentNode{
+                Name:      fn.Name,
+                IsDir:     fn.IsDir,
+                Size:      fn.Size,
+                TorrentID: fn.TorrentID,
+                FileID:    fn.FileID,
+                ModTime:   mt,
+                RdLink:    "",
+            })
+        }
 
         info, infoErr := tm.GetTorrentInfo(torrentID)
         if infoErr == nil && info != nil && len(info.Links) > 0 {
@@ -1123,11 +1148,21 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
         Responses: []response{},
     }
 
-	// Add current directory
-	lastModified := tm.GetLastRefreshTime()
-	if lastModified.IsZero() {
-		lastModified = time.Now()
-	}
+    lastModified := tm.GetLastRefreshTime()
+    if lastModified.IsZero() {
+        lastModified = time.Now()
+    }
+    if !currentIsFile && len(parts) >= 2 && parts[0] == realdebrid.ALL_TORRENTS {
+        var maxChild time.Time
+        for i := range nodes {
+            if nodes[i].ModTime.After(maxChild) {
+                maxChild = nodes[i].ModTime
+            }
+        }
+        if !maxChild.IsZero() {
+            lastModified = maxChild
+        }
+    }
 
     if currentIsFile {
         var fileNode *torrentNode
@@ -1301,6 +1336,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	torrentName := parts[1]
 	filePath := strings.Join(parts[2:], "/")
+	baseName := path.Base(filePath)
 
 	torrentID, err := tm.FindTorrentByName(torrentName)
 	if err != nil {
@@ -1308,7 +1344,41 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	downloadURL, fileSize, err := tm.GetFileDownloadURL(torrentID, filePath)
+    if r.Method == "HEAD" {
+        info, infoErr := tm.GetTorrentInfo(torrentID)
+		if infoErr != nil {
+			http.Error(w, "Failed to resolve file", http.StatusNotFound)
+			return
+		}
+		var target *realdebrid.TorrentFile
+		for i := range info.Files {
+			if info.Files[i].Selected == 1 {
+				clean := strings.Trim(info.Files[i].Path, "/")
+				if path.Base(clean) == baseName {
+					target = &info.Files[i]
+					break
+				}
+			}
+		}
+		if target == nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+        modTime := effectiveModTime(tm, torrentID, info)
+		etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
+		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", target.Bytes))
+		w.Header().Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	downloadURL, _, err := tm.GetFileDownloadURL(torrentID, filePath)
 	if err != nil {
 		// Try HTTP DAV fallback if configured
 		config := configManager.GetConfig()
@@ -1318,14 +1388,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 				return
 			}
 		}
-		return
-	}
-
-	// For HEAD requests
-	if r.Method == "HEAD" {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", fileSize))
-		w.Header().Set("Accept-Ranges", "bytes")
-		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -1383,6 +1445,24 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
+    if info, infoErr := tm.GetTorrentInfo(torrentID); infoErr == nil {
+		var target *realdebrid.TorrentFile
+		for i := range info.Files {
+			if info.Files[i].Selected == 1 {
+				clean := strings.Trim(info.Files[i].Path, "/")
+				if path.Base(clean) == baseName {
+					target = &info.Files[i]
+					break
+				}
+			}
+		}
+		if target != nil {
+            modTime := effectiveModTime(tm, torrentID, info)
+			etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
+			w.Header().Set("ETag", etag)
+		}
+	}
+
 	w.Header().Set("Accept-Ranges", "bytes")
 
 	// Set appropriate status code

@@ -173,7 +173,7 @@ func (s *TorrentStore) UpsertInfo(info *TorrentInfo) error {
            status=excluded.status,
            added=excluded.added,
            hash=excluded.hash,
-           modified=excluded.modified,
+           modified=COALESCE(torrents.modified, excluded.modified),
            links=excluded.links,
            updated_at=excluded.updated_at`,
         info.ID, normName, info.Bytes, len(info.Files), info.Status, info.Added, info.Hash, timeNowOr(info.Ended, info.Added), string(linksJSON), now,
@@ -282,6 +282,17 @@ func (s *TorrentStore) GetAllIDs() ([]string, error) {
         ids = append(ids, id)
     }
     return ids, rows.Err()
+}
+
+// GetModifiedUnix returns the stored modified unix time for a torrent id, or 0 if not found.
+func (s *TorrentStore) GetModifiedUnix(id string) (int64, bool, error) {
+    if s == nil { return 0, false, errors.New("store not initialized") }
+    var m sql.NullInt64
+    err := s.db.QueryRow(`SELECT modified FROM torrents WHERE id=?`, id).Scan(&m)
+    if err == sql.ErrNoRows { return 0, false, nil }
+    if err != nil { return 0, false, err }
+    if !m.Valid { return 0, false, nil }
+    return m.Int64, true, nil
 }
 
 // DeleteByID removes one torrent row and any repair row.

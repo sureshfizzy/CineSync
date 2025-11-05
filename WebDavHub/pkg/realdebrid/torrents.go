@@ -1030,6 +1030,14 @@ func (tm *TorrentManager) GetLastRefreshTime() time.Time {
 	defer tm.cacheMutex.RUnlock()
 	return tm.lastCacheTime
 }
+
+// GetModifiedUnix returns the stored modified unix timestamp.
+func (tm *TorrentManager) GetModifiedUnix(id string) int64 {
+    if tm == nil || tm.store == nil { return 0 }
+    if m, ok, err := tm.store.GetModifiedUnix(id); err == nil && ok { return m }
+    return 0
+}
+
 // StartCatalogSyncJob runs a lightweight periodic job.
 func (tm *TorrentManager) StartCatalogSyncJob(interval time.Duration) {
     if interval < 10*time.Second {
