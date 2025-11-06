@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Card, CardContent, Typography, CircularProgress, Chip, Avatar, Divider, Stack, useTheme, Alert, Paper, alpha } from '@mui/material';
-import { AccountCircle, CloudDownload, Storage, CheckCircle, Error as ErrorIcon, TrendingUp, DataUsage, Timer, CloudSync, Today as TodayIcon } from '@mui/icons-material';
+import { Box, Card, CardContent, Typography, CircularProgress, Chip, Avatar, Divider, Stack, useTheme, Alert, Paper, alpha, Tabs, Tab } from '@mui/material';
+import { AccountCircle, CloudDownload, Storage, CheckCircle, Error as ErrorIcon, TrendingUp, DataUsage, Timer, CloudSync, Today as TodayIcon, Memory } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { formatBytes, formatDate } from '../FileBrowser/fileUtils';
+import TorrentManagerTab from './TorrentManagerTab';
 
 interface DebridStats {
   account: {
@@ -135,7 +136,12 @@ export default function DebridDashboard() {
   const [stats, setStats] = useState<DebridStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentTab, setCurrentTab] = useState(0);
   const theme = useTheme();
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+  };
 
   const fetchStats = useCallback(async (isInitial = false) => {
     if (isInitial) {
@@ -288,6 +294,36 @@ export default function DebridDashboard() {
         )}
       </Box>
 
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs 
+          value={currentTab} 
+          onChange={handleTabChange}
+          sx={{
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+              minHeight: 48,
+            },
+          }}
+        >
+          <Tab 
+            icon={<CloudDownload sx={{ fontSize: 20 }} />} 
+            iconPosition="start" 
+            label="Overview" 
+          />
+          <Tab 
+            icon={<Memory sx={{ fontSize: 20 }} />} 
+            iconPosition="start" 
+            label="Torrent Manager" 
+          />
+        </Tabs>
+      </Box>
+
+      {/* Tab Content */}
+      {currentTab === 0 && (
+        <Box>
       {/* Account Info Card */}
       <motion.div
         variants={cardVariants}
@@ -718,6 +754,11 @@ export default function DebridDashboard() {
           </Card>
         </motion.div>
       </Box>
+        </Box>
+      )}
+
+      {/* Torrent Manager Tab */}
+      {currentTab === 1 && <TorrentManagerTab />}
     </Box>
   );
 }

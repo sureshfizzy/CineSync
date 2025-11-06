@@ -303,6 +303,74 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
     }
 }
 
+// doRequestWithRetry performs an HTTP request with retry logic, status code checking, and HTML detection
+func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operationName string) (*http.Response, error) {
+	if maxRetries <= 0 {
+		maxRetries = 3
+	}
+	
+	attempt := 0
+	
+	for attempt < maxRetries {
+		resp, err := c.doWithLimit(req)
+		if err != nil {
+			attempt++
+			if attempt >= maxRetries {
+				return nil, fmt.Errorf("failed to make request: %w", err)
+			}
+			logger.Warn("[RealDebrid] %s error (attempt %d/%d): %v", operationName, attempt, maxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusNoContent {
+			return resp, nil
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			attempt++
+			var errorResp ErrorResponse
+			if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+				if attempt >= maxRetries {
+					return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+				}
+				logger.Warn("[RealDebrid] %s API error (attempt %d/%d): %s (code: %d)", 
+					operationName, attempt, maxRetries, errorResp.Error, errorResp.ErrorCode)
+			} else {
+				bodyPreview := string(body)
+				if len(bodyPreview) > 200 {
+					bodyPreview = bodyPreview[:200] + "..."
+				}
+				
+				if strings.HasPrefix(strings.TrimSpace(bodyPreview), "<") {
+					if attempt >= maxRetries {
+						return nil, fmt.Errorf("Real-Debrid returned HTML instead of JSON (status %d), likely maintenance or error page", resp.StatusCode)
+					}
+					logger.Warn("[RealDebrid] %s received HTML response (attempt %d/%d, status %d), likely maintenance page", 
+						operationName, attempt, maxRetries, resp.StatusCode)
+				} else {
+					if attempt >= maxRetries {
+						return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+					}
+					logger.Warn("[RealDebrid] %s unexpected status code (attempt %d/%d): %d", 
+						operationName, attempt, maxRetries, resp.StatusCode)
+				}
+			}
+
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+			continue
+		}
+
+		if attempt > 0 {
+			logger.Info("[RealDebrid] %s succeeded after %d attempts", operationName, attempt+1)
+		}
+		return resp, nil
+	}
+	
+	return nil, fmt.Errorf("%s failed after %d attempts", operationName, maxRetries)
+}
+
 // SetAPIKey updates the API key
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
@@ -323,20 +391,11 @@ func (c *Client) GetUserInfo() (*UserInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequestWithRetry(req, 3, "GetUserInfo")
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		var errorResp ErrorResponse
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-		}
-		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-	}
 
 	var userInfo UserInfo
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
@@ -730,15 +789,14 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-    resp, err := c.doWithLimit(req)
+	resp, err := c.doRequestWithRetry(req, 3, "GetTorrentInfo")
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, fmt.Errorf("torrent not found")
 	}
 
 	var info TorrentInfo
@@ -824,20 +882,11 @@ func (c *Client) GetTrafficInfo() (*TrafficInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequestWithRetry(req, 3, "GetTrafficInfo")
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		var errorResp ErrorResponse
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-		}
-		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-	}
 
 	var detailsMap TrafficDetailsMap
 	if err := json.NewDecoder(resp.Body).Decode(&detailsMap); err != nil {
@@ -875,19 +924,14 @@ func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	
-    resp, err := c.doWithLimit(req)
+	resp, err := c.doRequestWithRetry(req, 3, "GetTorrentsLightweight")
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to make request: %w", err)
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		var errorResp ErrorResponse
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			return nil, 0, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-		}
-		return nil, 0, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+
+	if resp.StatusCode == http.StatusNoContent {
+		return []TorrentItem{}, 0, nil
 	}
 
 	totalCount := 0

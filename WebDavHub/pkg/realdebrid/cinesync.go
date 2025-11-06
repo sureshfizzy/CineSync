@@ -19,13 +19,17 @@ var (
     enrichRunning      atomic.Bool
 )
 
-// saveCineSync writes full TorrentInfo to the SQLite store
+// saveCineSync writes full TorrentInfo to the SQLite store and memory
 func (tm *TorrentManager) saveCineSync(info *TorrentInfo) {
     if info == nil || tm.store == nil {
         return
     }
     if err := tm.store.UpsertInfo(info); err != nil {
         logger.Warn("[CineSync] Store upsert info failed for %s: %v", info.ID, err)
+    }
+
+    if info.Progress == 100 {
+        tm.InfoMap.Set(info.ID, info)
     }
 }
 
@@ -93,7 +97,6 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
             return
         }
         if len(ids) == 0 {
-            logger.Info("[CineSync] Enrich: nothing to queue")
             return
         }
         logger.Info("[CineSync] Enrich: queued %d ids", len(ids))
@@ -157,12 +160,19 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
     }(list)
 }
 
-// SaveAllTorrents writes placeholders using the current torrent list and WebDAV cache.
+// SaveAllTorrents writes placeholders using the current torrent list from DirectoryMap.
 func (tm *TorrentManager) SaveAllTorrents() {
-    tm.cacheMutex.RLock()
-    list := make([]TorrentItem, len(tm.torrentList))
-    copy(list, tm.torrentList)
-    tm.cacheMutex.RUnlock()
+    allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+    if !ok {
+        logger.Warn("[CineSync] Directory map not initialized")
+        return
+    }
+    
+    list := make([]TorrentItem, 0, allTorrentsMap.Count())
+    for item := range allTorrentsMap.IterBuffered() {
+        list = append(list, *item.Val)
+    }
+    
     tm.saveAllTorrents(list)
 }
 
@@ -189,9 +199,7 @@ func (tm *TorrentManager) ReconcileDBWithRD(rdIDs []string) {
         if _, ok := present[id]; !ok {
             _ = tm.store.DeleteByID(id)
             if tm.infoStore != nil { _ = tm.infoStore.Delete(id) }
-            tm.cacheMutex.Lock()
-            delete(tm.infoCache, id)
-            tm.cacheMutex.Unlock()
+            tm.InfoMap.Remove(id)
         }
     }
 }
@@ -201,7 +209,5 @@ func (tm *TorrentManager) DeleteFromDBByID(id string) {
     if tm == nil || tm.store == nil { return }
     _ = tm.store.DeleteByID(id)
     if tm.infoStore != nil { _ = tm.infoStore.Delete(id) }
-    tm.cacheMutex.Lock()
-    delete(tm.infoCache, id)
-    tm.cacheMutex.Unlock()
+    tm.InfoMap.Remove(id)
 }

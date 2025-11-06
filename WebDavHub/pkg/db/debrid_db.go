@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	"cinesync/pkg/realdebrid"
 	_ "modernc.org/sqlite"
 )
 
@@ -172,7 +173,7 @@ func (ddb *DebridDB) AddRemovedFile(torrentID, torrentHash, torrentName, filePat
 		return fmt.Errorf("debrid database not initialized")
 	}
 
-	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+	cacheKey := realdebrid.MakeCacheKey(torrentID, filePath)
 
 	ddb.mu.Lock()
 	defer ddb.mu.Unlock()
@@ -197,7 +198,7 @@ func (ddb *DebridDB) IsFileRemoved(torrentID, filePath string) (bool, *RemovedFi
 		return false, nil, fmt.Errorf("debrid database not initialized")
 	}
 
-	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+	cacheKey := realdebrid.MakeCacheKey(torrentID, filePath)
 
 	ddb.mu.RLock()
 	defer ddb.mu.RUnlock()
@@ -326,7 +327,7 @@ func (ddb *DebridDB) RemoveFileRecord(torrentID, filePath string) error {
 		return fmt.Errorf("debrid database not initialized")
 	}
 
-	cacheKey := fmt.Sprintf("%s:%s", torrentID, filePath)
+	cacheKey := realdebrid.MakeCacheKey(torrentID, filePath)
 
 	ddb.mu.Lock()
 	defer ddb.mu.Unlock()

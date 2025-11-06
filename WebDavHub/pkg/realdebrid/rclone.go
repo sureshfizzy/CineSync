@@ -134,9 +134,11 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 
 	// Check if torrents are loaded before mounting
 	tm := GetTorrentManager(apiKey)
-	tm.cacheMutex.RLock()
-	torrentCount := len(tm.torrentList)
-	tm.cacheMutex.RUnlock()
+	allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+	torrentCount := 0
+	if ok {
+		torrentCount = allTorrentsMap.Count()
+	}
 	
 	if torrentCount == 0 {
 		pendingMount := &RcloneMount{
