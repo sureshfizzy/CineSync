@@ -1072,10 +1072,8 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				torrentNames := allTorrents.Keys()
 				for _, name := range torrentNames {
 					if item, found := allTorrents.Get(name); found {
-						modTime := item.Added
-						if modTime == "" {
-							modTime = time.Now().Format(time.RFC3339)
-						}
+						modTimeUnix := effectiveModTime(tm, item.ID, nil)
+						modTime := modTimeUnix.Format(time.RFC3339)
 						buf.WriteString(realdebrid.DirectoryResponse(basePath+name+"/", modTime))
 					}
 				}
@@ -1108,12 +1106,8 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			return
 		}
 
-		modTime := time.Now().Format(time.RFC3339)
-		if info.Ended != "" {
-			modTime = info.Ended
-		} else if info.Added != "" {
-			modTime = info.Added
-		}
+		modTimeUnix := effectiveModTime(tm, torrentID, info)
+		modTime := modTimeUnix.Format(time.RFC3339)
 
 		isFile := false
 		if subPath != "" {
