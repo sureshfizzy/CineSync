@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,18 +30,21 @@ func validateRealDebridConfig() (*realdebrid.Config, error) {
 
 // effectiveModTime returns a stable modified time for a torrent:
 func effectiveModTime(tm *realdebrid.TorrentManager, torrentID string, info *realdebrid.TorrentInfo) time.Time {
-    if tm != nil {
-        if m := tm.GetModifiedUnix(torrentID); m > 0 {
-            return time.Unix(m, 0)
-        }
-    }
-    if info != nil && info.Ended != "" {
-        if t, err := time.Parse(time.RFC3339, info.Ended); err == nil { return t }
-    }
-    if info != nil && info.Added != "" {
-        if t, err := time.Parse(time.RFC3339, info.Added); err == nil { return t }
-    }
-    return time.Now()
+	if info != nil {
+		if info.Ended != "" {
+			if t, err := time.Parse(time.RFC3339, info.Ended); err == nil { return t }
+		}
+		if info.Added != "" {
+			if t, err := time.Parse(time.RFC3339, info.Added); err == nil { return t }
+		}
+	}
+	if tm != nil {
+		if m := tm.GetModifiedUnix(torrentID); m > 0 {
+			return time.Unix(m, 0)
+		}
+	}
+
+	return time.Now()
 }
 
 // Global semaphore to limit concurrent streaming requests
@@ -49,12 +53,12 @@ var streamingSemaphore = make(chan struct{}, 32)
 // Shared streaming client
 var streamClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConns:          50,
-		MaxIdleConnsPerHost:   10,
-		MaxConnsPerHost:       15,
-		IdleConnTimeout:       30 * time.Second,
+		MaxIdleConns:          100,         // Total idle connections across all hosts
+		MaxIdleConnsPerHost:   100,         // High number for better connection reuse
+		MaxConnsPerHost:       0,           // Unlimited - optimized for large file streaming from RD download servers
+		IdleConnTimeout:       90 * time.Second,
 		DisableKeepAlives:     false,
-		ForceAttemptHTTP2:     false,
+		ForceAttemptHTTP2:     true,
 		ResponseHeaderTimeout: 30 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -961,6 +965,7 @@ func PrefetchRealDebridData() {
     go func() {
         logger.Info("[RD] Prefetch started")
         client := realdebrid.NewClient(cfg.APIKey)
+        tm := realdebrid.GetTorrentManager(cfg.APIKey)
 
         // Fetch all torrents in batches
         torrents, err := client.GetAllTorrents(1000, func(current, total int) {
@@ -973,7 +978,6 @@ func PrefetchRealDebridData() {
         } else {
             cachedTorrents = torrents
             logger.Info("[RD] Torrents fetched: %d", len(torrents))
-            tm := realdebrid.GetTorrentManager(cfg.APIKey)
             tm.SetPrefetchedTorrents(torrents)
             if err := tm.PrefetchHttpDavData(); err != nil {
                 logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
@@ -1045,117 +1049,151 @@ func parseTorrentTime(added string) time.Time {
 
 // handleTorrentPropfind handles PROPFIND requests to list torrents
 func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
-	depth := r.Header.Get("Depth")
-	if depth == "" {
-		depth = "1"
-	}
-
 	tm := realdebrid.GetTorrentManager(apiKey)
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
 	
-	var buf bytes.Buffer
-	buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
+	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
+	w.WriteHeader(http.StatusMultiStatus)
+	
+	flusher, canFlush := w.(http.Flusher)
 	
     if reqPath == "" {
+		buf := realdebrid.GetResponseBuffer()
+		defer realdebrid.PutResponseBuffer(buf)
+		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
 		basePath := "/api/realdebrid/webdav/"
-		buf.WriteString(realdebrid.DirectoryResponse(basePath, time.Now().Format(time.RFC3339)))
-		if depth != "0" {
-			buf.WriteString(realdebrid.DirectoryResponse(basePath+realdebrid.ALL_TORRENTS+"/", time.Now().Format(time.RFC3339)))
+		realdebrid.DirectoryResponse(buf, basePath, time.Now().Format(time.RFC3339))
+		realdebrid.DirectoryResponse(buf, basePath+realdebrid.ALL_TORRENTS+"/", time.Now().Format(time.RFC3339))
+		buf.WriteString("</d:multistatus>")
+		w.Write(buf.Bytes())
+		if canFlush {
+			flusher.Flush()
 		}
     } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) == 1 {
-        basePath := "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS + "/"
-		buf.WriteString(realdebrid.DirectoryResponse(basePath, time.Now().Format(time.RFC3339)))
+		basePath := "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS + "/"
+		var torrentCount int
+		if tm != nil {
+			if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
+				torrentCount = allTorrents.Count()
+			}
+		}
+		var buf *bytes.Buffer
+		if torrentCount > 500 {
+			buf = realdebrid.GetLargeResponseBuffer()
+			defer realdebrid.PutLargeResponseBuffer(buf)
+		} else {
+			buf = realdebrid.GetResponseBuffer()
+			defer realdebrid.PutResponseBuffer(buf)
+		}
 		
-		if depth != "0" && tm != nil {
+		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
+		realdebrid.DirectoryResponse(buf, basePath, time.Now().Format(time.RFC3339))
+		
+		if tm != nil {
 			if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
 				torrentNames := allTorrents.Keys()
+				sort.Strings(torrentNames)
+				
 				for _, name := range torrentNames {
 					if item, found := allTorrents.Get(name); found {
-						modTimeUnix := effectiveModTime(tm, item.ID, nil)
+						fakeInfo := &realdebrid.TorrentInfo{Added: item.Added}
+						modTimeUnix := effectiveModTime(tm, item.ID, fakeInfo)
 						modTime := modTimeUnix.Format(time.RFC3339)
-						buf.WriteString(realdebrid.DirectoryResponse(basePath+name+"/", modTime))
+						realdebrid.DirectoryResponse(buf, basePath+name+"/", modTime)
 					}
 				}
 			}
 		}
+		
+		buf.WriteString("</d:multistatus>")
+		w.Write(buf.Bytes())
+		if canFlush {
+			flusher.Flush()
+		}
     } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
         torrentName := parts[1]
-        subPath := ""
-        if len(parts) > 2 {
-            subPath = strings.Join(parts[2:], "/")
-        }
 
-		torrentID, err := tm.FindTorrentByName(torrentName)
-		if err != nil {
-			logger.Error("[WebDAV] Torrent not found: %s", torrentName)
+		allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS)
+		if !ok {
+			logger.Error("[WebDAV] DirectoryMap not initialized")
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		
+		item, found := allTorrents.Get(torrentName)
+		if !found {
+			logger.Error("[WebDAV] Torrent not found in DirectoryMap: %s", torrentName)
 			http.Error(w, "Torrent not found", http.StatusNotFound)
 			return
 		}
 
 		basePath := "/api/realdebrid/webdav/" + realdebrid.ALL_TORRENTS + "/" + torrentName + "/"
 		
-		info, infoErr := tm.GetTorrentInfo(torrentID)
-		if infoErr != nil {
-			errStr := strings.ToLower(infoErr.Error())
-			if strings.Contains(errStr, "404") || strings.Contains(errStr, "unknown_ressource") {
-				tm.DeleteFromDBByID(torrentID)
-			}
-			logger.Error("[WebDAV] Failed to get torrent info for %s: %v", torrentID, infoErr)
-			http.Error(w, "Torrent not found", http.StatusInternalServerError)
-			return
+		modTime := time.Now().Format(time.RFC3339)
+		if item.Ended != "" {
+			modTime = item.Ended
+		} else if item.Added != "" {
+			modTime = item.Added
 		}
 
-		modTimeUnix := effectiveModTime(tm, torrentID, info)
-		modTime := modTimeUnix.Format(time.RFC3339)
-
-		isFile := false
-		if subPath != "" {
-			for _, file := range info.Files {
-				if file.Selected == 1 {
-					cleanPath := strings.Trim(file.Path, "/")
-					fileName := path.Base(cleanPath)
-					if fileName == subPath {
-						isFile = true
-						break
-					}
-				}
+		fileCount := 0
+		for _, file := range item.FileList {
+			if file.Selected == 1 {
+				fileCount++
 			}
 		}
-
-		if isFile {
-			buf.WriteString(realdebrid.DirectoryResponse(basePath, modTime))
-			buf.WriteString(realdebrid.FileResponse(basePath+subPath, 0, modTime))
+		
+		var buf *bytes.Buffer
+		if fileCount > 500 {
+			buf = realdebrid.GetLargeResponseBuffer()
+			defer realdebrid.PutLargeResponseBuffer(buf)
 		} else {
-			buf.WriteString(realdebrid.DirectoryResponse(basePath, modTime))
+			buf = realdebrid.GetResponseBuffer()
+			defer realdebrid.PutResponseBuffer(buf)
+		}
+		
+		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
+		realdebrid.DirectoryResponse(buf, basePath, modTime)
+		
+		if len(item.FileList) > 0 {
+			type sortableFile struct {
+				baseName string
+				fullPath string
+				size     int64
+			}
+			var files []sortableFile
 			
-			if depth != "0" {
-				fileMap := make(map[string]realdebrid.TorrentFile)
-				for _, file := range info.Files {
-					if file.Selected == 1 {
-						cleanPath := strings.Trim(file.Path, "/")
-						fileName := path.Base(cleanPath)
-						fileMap[fileName] = file
-					}
-				}
-
-				for fileName, file := range fileMap {
-					buf.WriteString(realdebrid.FileResponse(basePath+fileName, file.Bytes, modTime))
+			for _, file := range item.FileList {
+				if file.Selected == 1 {
+					baseName := path.Base(file.Path)
+					fullPath := basePath + baseName
+					files = append(files, sortableFile{
+						baseName: baseName,
+						fullPath: fullPath,
+						size:     file.Bytes,
+					})
 				}
 			}
+			sort.Slice(files, func(i, j int) bool {
+				return files[i].baseName < files[j].baseName
+			})
+			for _, file := range files {
+				realdebrid.FileResponse(buf, file.fullPath, file.size, modTime)
+			}
+		}
+		
+		buf.WriteString("</d:multistatus>")
+		
+		w.Write(buf.Bytes())
+		if canFlush {
+			flusher.Flush()
 		}
 	} else {
 		logger.Error("[WebDAV] Invalid path requested: %s", reqPath)
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		w.Write([]byte("</d:multistatus>"))
 		return
 	}
-
-	buf.WriteString("</d:multistatus>")
-	
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
-	w.WriteHeader(http.StatusMultiStatus)
-	w.Write(buf.Bytes())
 }
 
 // tryHttpDavFallback attempts to serve file from HTTP DAV when API fails
@@ -1226,6 +1264,45 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	}
 
     if r.Method == "HEAD" {
+		if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
+			if item, found := allTorrents.Get(torrentName); found && len(item.FileList) > 0 {
+				var target *realdebrid.TorrentFile
+				for i := range item.FileList {
+					if item.FileList[i].Selected == 1 {
+						if path.Base(item.FileList[i].Path) == baseName {
+							target = &item.FileList[i]
+							break
+						}
+					}
+				}
+				
+				if target != nil {
+					modTime := time.Now()
+					if item.Ended != "" {
+						if t, err := time.Parse(time.RFC3339, item.Ended); err == nil {
+							modTime = t
+						}
+					} else if item.Added != "" {
+						if t, err := time.Parse(time.RFC3339, item.Added); err == nil {
+							modTime = t
+						}
+					}
+					
+					etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
+					if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+						w.WriteHeader(http.StatusNotModified)
+						return
+					}
+					w.Header().Set("ETag", etag)
+					w.Header().Set("Content-Length", fmt.Sprintf("%d", target.Bytes))
+					w.Header().Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
+					w.Header().Set("Accept-Ranges", "bytes")
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+			}
+		}
+		
         info, infoErr := tm.GetTorrentInfo(torrentID)
 		if infoErr != nil {
 			http.Error(w, "Failed to resolve file", http.StatusNotFound)
@@ -1261,24 +1338,12 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	downloadURL, _, err := tm.GetFileDownloadURL(torrentID, filePath)
 	if err != nil {
-		// Try HTTP DAV fallback if configured
 		config := configManager.GetConfig()
 		if config.HttpDavSettings.Enabled && config.HttpDavSettings.UserID != "" {
 			if tryHttpDavFallback(w, r, config, torrentName, filePath) {
-				logger.Debug("[HTTPDav Fallback] Fallback successful for: %s", path.Base(filePath))
 				return
 			}
 		}
-		return
-	}
-
-	// For GET requests, stream the content
-	select {
-	case streamingSemaphore <- struct{}{}:
-		defer func() { <-streamingSemaphore }()
-		
-	case <-time.After(5 * time.Second):
-		http.Error(w, "Server too busy, please try again later", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -1288,142 +1353,26 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	// Set range header if present
 	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
 		req.Header.Set("Range", rangeHeader)
 	}
 
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Accept-Encoding", "identity") // Disable compression for streaming
-	req.Header.Set("Cache-Control", "no-cache")
-	
-	// Add retry mechanism for connection issues
-	var resp *http.Response
-	maxRetries := 3
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		resp, err = streamClient.Do(req)
-		if err == nil {
-			break
-		}
-
-		if attempt < maxRetries {
-			logger.Warn("[Torrents] Connection attempt %d failed for %s: %v, retrying...", attempt, path.Base(filePath), err)
-			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // Progressive backoff
-		} else {
-			logger.Error("[Torrents] All connection attempts failed for %s: %v", path.Base(filePath), err)
-			http.Error(w, "Failed to fetch file after retries", http.StatusBadGateway)
-			return
-		}
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
+		return
 	}
 	defer resp.Body.Close()
 
-	if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
-		w.Header().Set("Content-Length", contentLength)
-	}
-	if contentRange := resp.Header.Get("Content-Range"); contentRange != "" {
-		w.Header().Set("Content-Range", contentRange)
-	}
-	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
-		w.Header().Set("Content-Type", contentType)
-	}
-    if info, infoErr := tm.GetTorrentInfo(torrentID); infoErr == nil {
-		var target *realdebrid.TorrentFile
-		for i := range info.Files {
-			if info.Files[i].Selected == 1 {
-				clean := strings.Trim(info.Files[i].Path, "/")
-				if path.Base(clean) == baseName {
-					target = &info.Files[i]
-					break
-				}
-			}
-		}
-		if target != nil {
-            modTime := effectiveModTime(tm, torrentID, info)
-			etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
-			w.Header().Set("ETag", etag)
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
 		}
 	}
-
-	w.Header().Set("Accept-Ranges", "bytes")
-
-	// Set appropriate status code
-	statusCode := resp.StatusCode
-	if statusCode == http.StatusOK && r.Header.Get("Range") != "" {
-		statusCode = http.StatusPartialContent
-	}
-	w.WriteHeader(statusCode)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		logger.Warn("[Torrents] Response writer doesn't support flushing, falling back to io.Copy")
-		io.Copy(w, resp.Body)
-		return
-	}
-
-	config := configManager.GetConfig()
-	initialChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSize)
-	maxChunkSizeBytes := parseChunkSize(config.RcloneSettings.VfsReadChunkSizeLimit)
-	if initialChunkSizeBytes == 0 {
-		initialChunkSizeBytes = 64 * 1024 * 1024
-	}
-	if maxChunkSizeBytes == 0 {
-		maxChunkSizeBytes = initialChunkSizeBytes
-	}
-
-	streamBufferSizeBytes := parseChunkSize(config.RcloneSettings.StreamBufferSize)
-	if streamBufferSizeBytes == 0 {
-		streamBufferSizeBytes = 1024 * 1024
-	}
-
-	smallBuf := make([]byte, 64*1024)
-	totalServed := int64(0)
-	currentChunkSize := initialChunkSizeBytes
-	lastLoggedAt := int64(0)
-	if n, err := resp.Body.Read(smallBuf); n > 0 {
-		if _, werr := w.Write(smallBuf[:n]); werr != nil {
-			return
-		}
-		flusher.Flush()
-		totalServed += int64(n)
-	} else if err != nil && err != io.EOF {
-		if totalServed == 0 {
-			return
-		}
-	}
-
-	buf := make([]byte, streamBufferSizeBytes)
 	
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return
-			}
-			flusher.Flush()
-			totalServed += int64(n)
-			
-			if totalServed >= lastLoggedAt + currentChunkSize {
-				logger.Info("[Stream] Served %s for %s", formatBytes(currentChunkSize), path.Base(filePath))
-				lastLoggedAt = totalServed
-
-				if currentChunkSize < maxChunkSizeBytes {
-					currentChunkSize *= 2
-					if currentChunkSize > maxChunkSizeBytes {
-						currentChunkSize = maxChunkSizeBytes
-					}
-				}
-			}
-		}
-		if readErr != nil {
-			if readErr == io.EOF {
-				return
-			}
-			if isClientDisconnection(readErr) {
-				return
-			}
-			return
-		}
-	}
+	w.WriteHeader(resp.StatusCode)
+	
+	io.Copy(w, resp.Body)
 }
 
 func handleTorrentDelete(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {

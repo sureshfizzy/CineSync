@@ -190,7 +190,6 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     dbPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents.db"))
     if store, err := OpenTorrentStore(dbPath); err == nil {
         torrentManager.store = store
-        logger.Info("[Torrents] Torrents store opened successfully at %s", dbPath)
     } else {
         logger.Warn("[Torrents] Failed to open store at %s: %v", dbPath, err)
     }
@@ -199,7 +198,6 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     infoDBPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents-info.db"))
     if infoStore, err := OpenTorrentInfoStore(infoDBPath); err == nil {
         torrentManager.infoStore = infoStore
-        logger.Info("[Torrents] Info store opened successfully at %s", infoDBPath)
     } else {
         logger.Warn("[Torrents] Failed to open torrents-info.db at %s: %v", infoDBPath, err)
     }
@@ -221,7 +219,6 @@ func (tm *TorrentManager) initializeDirectoryMaps() {
 	tm.DirectoryMap = cmap.New[cmap.ConcurrentMap[string, *TorrentItem]]()
 	tm.InfoMap = cmap.New[*TorrentInfo]()
 	tm.DirectoryMap.Set(ALL_TORRENTS, cmap.New[*TorrentItem]())
-	logger.Debug("[Torrents] Initialized directory maps")
 }
 
 // loadCachedTorrents loads from SQLite and populates concurrent maps
@@ -290,6 +287,10 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 		allTorrents.Set(accessKey, item)
 	}
 	
+	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", 
+		len(torrents))
+	tm.PopulateFileLists()
+	
 	tm.prefetchCompleted.Store(true)
 
 	// Update state after prefetch
@@ -306,12 +307,51 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	}
 	
 	tm.updateCurrentState(newState)
-
-	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", 
-		len(torrents))
 	
 	// Trigger pending mount
 	triggerPendingMount()
+}
+
+// PopulateFileLists loads file lists from DB/InfoMap into TorrentItem for instant WebDAV access
+func (tm *TorrentManager) PopulateFileLists() {
+	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+	if !ok {
+		return
+	}
+	
+	populated := 0
+	fromMemory := 0
+	fromDB := 0
+	
+	for entry := range allTorrents.IterBuffered() {
+		torrentName := entry.Key
+		item := entry.Val
+		
+		if info, ok := tm.InfoMap.Get(item.ID); ok {
+			item.FileList = info.Files
+			item.Links = info.Links
+			item.Ended = info.Ended
+			allTorrents.Set(torrentName, item)
+			fromMemory++
+			populated++
+			continue
+		}
+		
+		if tm.infoStore != nil {
+			if cached, ok, err := tm.infoStore.Get(item.ID); err == nil && ok && cached != nil {
+				item.FileList = cached.Files
+				item.Links = cached.Links
+				item.Ended = cached.Ended
+				allTorrents.Set(torrentName, item)
+				if cached.Progress == 100 {
+					tm.InfoMap.Set(item.ID, cached)
+				}
+				fromDB++
+				populated++
+				continue
+			}
+		}
+	}
 }
 
 
@@ -351,7 +391,6 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 				}
 			}
 		}
-
 		fetched, ferr := tm.client.GetTorrentInfo(torrentID)
 		if ferr != nil {
 			return nil, ferr
@@ -512,8 +551,50 @@ func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
 
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
-	// Create cache key
 	cacheKey := MakeCacheKey(torrentID, filePath)
+
+	var restrictedLink string
+	var targetFileBytes int64
+	if allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS); ok {
+		for entry := range allTorrents.IterBuffered() {
+			item := entry.Val
+			if item.ID == torrentID && len(item.Links) > 0 && len(item.FileList) > 0 {
+				var targetFile *TorrentFile
+				for i := range item.FileList {
+					if item.FileList[i].Selected == 1 {
+						baseName := path.Base(item.FileList[i].Path)
+						if baseName == filePath {
+							targetFile = &item.FileList[i]
+							break
+						}
+					}
+				}
+				
+				if targetFile != nil {
+					if targetFile.ID-1 < len(item.Links) {
+						restrictedLink = item.Links[targetFile.ID-1]
+					} else if len(item.Links) > 0 {
+						restrictedLink = item.Links[0]
+					}
+					targetFileBytes = targetFile.Bytes
+					
+					if restrictedLink != "" {
+						processedLink := restrictedLink
+						if strings.HasPrefix(restrictedLink, "https://real-debrid.com/d/") && len(restrictedLink) > 39 {
+							processedLink = restrictedLink[0:39]
+						}
+						
+						if cached, exists := tm.client.unrestrictCache.Get(processedLink); exists {
+							if time.Since(cached.Generated) < 24*time.Hour {
+								return cached.Download.Download, cached.Download.Filesize, nil
+							}
+						}
+					}
+				}
+				break
+			}
+		}
+	}
 
 	if cached, exists := tm.downloadLinkCache.Get(cacheKey); exists {
 		if time.Since(cached.GeneratedAt) < 24*time.Hour {
@@ -538,39 +619,45 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 			}
 		}
 
-		info, err := tm.GetTorrentInfo(torrentID)
-		if err != nil {
-			return nil, err
-		}
+		var downloadLink string
+		var filesize int64
+		if restrictedLink != "" {
+			downloadLink = restrictedLink
+			filesize = targetFileBytes
+		} else {
+			info, err := tm.GetTorrentInfo(torrentID)
+			if err != nil {
+				return nil, err
+			}
 
-		// Find the file
-		var targetFile *TorrentFile
-		for i, file := range info.Files {
-			if file.Selected == 1 {
-				cleanPath := strings.Trim(file.Path, "/")
-				fileName := path.Base(cleanPath)
-				if fileName == filePath {
-					targetFile = &info.Files[i]
-					break
+			var targetFile *TorrentFile
+			for i, file := range info.Files {
+				if file.Selected == 1 {
+					cleanPath := strings.Trim(file.Path, "/")
+					fileName := path.Base(cleanPath)
+					if fileName == filePath {
+						targetFile = &info.Files[i]
+						break
+					}
 				}
 			}
-		}
 
-		if targetFile == nil {
-			return nil, fmt.Errorf("file not found: %s", filePath)
-		}
+			if targetFile == nil {
+				return nil, fmt.Errorf("file not found: %s", filePath)
+			}
 
-		if len(info.Links) == 0 {
-			logger.Warn("[Torrents] No links available for torrent %s", torrentID)
-			return nil, fmt.Errorf("no links available")
-		}
+			if len(info.Links) == 0 {
+				logger.Warn("[Torrents] No links available for torrent %s", torrentID)
+				return nil, fmt.Errorf("no links available")
+			}
 
-		// Use the link corresponding to the file ID
-		var downloadLink string
-		if targetFile.ID-1 < len(info.Links) {
-			downloadLink = info.Links[targetFile.ID-1]
-		} else {
-			downloadLink = info.Links[0]
+			if targetFile.ID-1 < len(info.Links) {
+				downloadLink = info.Links[targetFile.ID-1]
+			} else {
+				downloadLink = info.Links[0]
+			}
+			
+			filesize = targetFile.Bytes
 		}
 
 		if downloadLink == "" {
@@ -614,7 +701,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 			GeneratedAt:  time.Now(),
 		})
 		
-		return []interface{}{unrestrictedLink.Download, targetFile.Bytes}, nil
+		return []interface{}{unrestrictedLink.Download, filesize}, nil
 	})
 
 	if err != nil {

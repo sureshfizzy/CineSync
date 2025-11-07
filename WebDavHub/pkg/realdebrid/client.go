@@ -85,12 +85,15 @@ type DownloadItem struct {
 
 // TorrentItem represents a torrent from RD
 type TorrentItem struct {
-    ID       string `json:"id"`
-    Filename string `json:"filename"`
-    Bytes    int64  `json:"bytes"`
-    Files    int    `json:"files"`
-    Added    string `json:"added"`
-    Status   string `json:"status"`
+    ID       string        `json:"id"`
+    Filename string        `json:"filename"`
+    Bytes    int64         `json:"bytes"`
+    Files    int           `json:"files"`
+    Added    string        `json:"added"`
+    Status   string        `json:"status"`
+    FileList []TorrentFile `json:"file_list,omitempty"`
+    Links    []string      `json:"links,omitempty"`
+    Ended    string        `json:"ended,omitempty"`
 }
 
 // TrafficInfo represents current traffic information
