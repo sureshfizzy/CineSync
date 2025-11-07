@@ -53,9 +53,9 @@ var streamingSemaphore = make(chan struct{}, 32)
 // Shared streaming client
 var streamClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConns:          100,         // Total idle connections across all hosts
-		MaxIdleConnsPerHost:   100,         // High number for better connection reuse
-		MaxConnsPerHost:       0,           // Unlimited - optimized for large file streaming from RD download servers
+		MaxIdleConns:          50,          // Total idle connections across all hosts
+		MaxIdleConnsPerHost:   10,          // Reasonable limit for connection reuse without excessive overhead
+		MaxConnsPerHost:       15,          // Limit concurrent connections to prevent connection storms and high CPU usage
 		IdleConnTimeout:       90 * time.Second,
 		DisableKeepAlives:     false,
 		ForceAttemptHTTP2:     true,
