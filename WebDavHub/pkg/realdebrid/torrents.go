@@ -211,6 +211,9 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     // Start background catalog sync
     torrentManager.StartCatalogSyncJob(60 * time.Second)
 
+    // Start repair worker to scan for broken torrents
+    torrentManager.StartRepairWorker()
+
 	return torrentManager
 }
 
@@ -1208,6 +1211,12 @@ func (tm *TorrentManager) GetModifiedUnix(id string) int64 {
     if tm == nil || tm.store == nil { return 0 }
     if m, ok, err := tm.store.GetModifiedUnix(id); err == nil && ok { return m }
     return 0
+}
+
+// GetStore returns the TorrentStore instance
+func (tm *TorrentManager) GetStore() *TorrentStore {
+    if tm == nil { return nil }
+    return tm.store
 }
 
 // GetDownloadLinkCacheCount returns the number of cached download links

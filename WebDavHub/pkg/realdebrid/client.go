@@ -424,6 +424,54 @@ func (c *Client) GetWebDAVCredentials() (username, password string) {
 	return c.apiKey, "eeeeee" // Real-Debrid uses API key as username and placeholder password
 }
 
+// CheckLink validates if a link is still available without unrestricting it
+// This is a lightweight operation that doesn't consume bandwidth or generate download links
+func (c *Client) CheckLink(link string) error {
+	if link == "" {
+		return fmt.Errorf("link parameter is empty")
+	}
+
+	processedLink := link
+	if strings.HasPrefix(link, "https://real-debrid.com/d/") && len(link) > 39 {
+		processedLink = link[0:39]
+	}
+
+	token, err := c.tokenManager.GetCurrentToken()
+	if err != nil {
+		return fmt.Errorf("no available tokens: %w", err)
+	}
+
+	payload := fmt.Sprintf("link=%s", processedLink)
+	req, err := http.NewRequest("POST", c.baseURL+"/unrestrict/check", strings.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.doWithLimit(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("link expired or file removed")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			return fmt.Errorf("link check failed: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return fmt.Errorf("link check failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // UnrestrictLink converts a restricted link to a direct download link
 func (c *Client) UnrestrictLink(link string, filename ...string) (*DownloadLink, error) {
 	if link == "" {

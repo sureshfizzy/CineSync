@@ -3,6 +3,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StorageIcon from '@mui/icons-material/Storage';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import BuildIcon from '@mui/icons-material/Build';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -25,6 +26,7 @@ export default function DebridSidebar() {
   const items = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard/debrid' },
     { text: 'Browser', icon: <FolderIcon />, path: '/dashboard/debrid/browser' },
+    { text: 'Repair', icon: <BuildIcon />, path: '/dashboard/debrid/repair' },
   ];
 
   return (

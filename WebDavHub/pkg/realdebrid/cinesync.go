@@ -1,6 +1,7 @@
 package realdebrid
 
 import (
+    "strings"
     "sync"
     "sync/atomic"
 
@@ -136,7 +137,7 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
                 }
                 if info, err := tm.GetTorrentInfo(it.ID); err == nil && info != nil {
                     if len(info.Links) == 0 {
-                        _ = tm.store.UpsertRepair(it.ID, info.Filename, info.Status, int(info.Progress), "no_links")
+                        _ = tm.store.UpsertRepair(it.ID, info.Filename, info.Hash, info.Status, int(info.Progress), "no_links")
                     } else {
                         tm.saveCineSync(info)
                         _ = tm.store.DeleteRepair(it.ID)
@@ -158,6 +159,25 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
         apiWg.Wait()
         logger.Info("[CineSync] Enrich complete: processed %d, saved %d", processed, saved)
     }(list)
+}
+
+// isVideoFile checks if a file is a video file based on its extension
+func isVideoFile(filename string) bool {
+    videoExtensions := map[string]bool{
+        ".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".wmv": true,
+        ".flv": true, ".webm": true, ".m4v": true, ".mpg": true, ".mpeg": true,
+        ".3gp": true, ".ogv": true, ".ts": true, ".m2ts": true, ".mts": true,
+    }
+
+    ext := ""
+    for i := len(filename) - 1; i >= 0; i-- {
+        if filename[i] == '.' {
+            ext = strings.ToLower(filename[i:])
+            break
+        }
+    }
+    
+    return videoExtensions[ext]
 }
 
 // SaveAllTorrents writes placeholders using the current torrent list from DirectoryMap.

@@ -94,6 +94,7 @@ func (s *TorrentStore) BulkUpsertItems(items []TorrentItem, onProgress func(int)
 }
 
 func initSchema(db *sql.DB) error {
+    // Create torrents table
     _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS torrents (
     id TEXT PRIMARY KEY,
@@ -108,16 +109,36 @@ CREATE TABLE IF NOT EXISTS torrents (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_torrents_status ON torrents(status);
+`)
+    if err != nil {
+        return err
+    }
 
+    // Create repair table to track broken/problematic torrents
+    _, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS repair (
     torrent_id TEXT PRIMARY KEY,
     filename   TEXT,
+    hash       TEXT,
     status     TEXT,
     progress   INTEGER,
     reason     TEXT,
     updated_at INTEGER NOT NULL
-);
-`)
+)`)
+    if err != nil {
+        return err
+    }
+    
+    // Create repair_state table to track last check time for each torrent
+    _, err = db.Exec(`
+CREATE TABLE IF NOT EXISTS repair_state (
+    torrent_id TEXT PRIMARY KEY,
+    last_checked INTEGER NOT NULL,
+    is_broken INTEGER NOT NULL DEFAULT 0,
+    broken_count INTEGER DEFAULT 0,
+    link_count INTEGER DEFAULT 0
+)`)
+    
     return err
 }
 
@@ -218,6 +239,17 @@ func (s *TorrentStore) GetAllItems() ([]TorrentItem, error) {
         items = append(items, it)
     }
     return items, rows.Err()
+}
+
+// GetItemByID returns a single torrent item by its ID
+func (s *TorrentStore) GetItemByID(id string) (TorrentItem, error) {
+    var it TorrentItem
+    err := s.db.QueryRow(`SELECT id, filename, bytes, files, status, added FROM torrents WHERE id=?`, id).
+        Scan(&it.ID, &it.Filename, &it.Bytes, &it.Files, &it.Status, &it.Added)
+    if err != nil {
+        return TorrentItem{}, err
+    }
+    return it, nil
 }
 
 // GetReadyDirs returns directory entries that are ready to serve.
@@ -337,19 +369,20 @@ func (s *TorrentStore) GetIDsNeedingUpdate(limit int) ([]string, error) {
 }
 
 // UpsertRepair records a torrent that needs repair or is not yet ready (e.g., links missing).
-func (s *TorrentStore) UpsertRepair(id, filename, status string, progress int, reason string) error {
+func (s *TorrentStore) UpsertRepair(id, filename, hash, status string, progress int, reason string) error {
     if s == nil { return errors.New("store not initialized") }
     now := time.Now().Unix()
     _, err := execWithRetry(s.db,
-        `INSERT INTO repair(torrent_id, filename, status, progress, reason, updated_at)
-         VALUES(?,?,?,?,?,?)
+        `INSERT INTO repair(torrent_id, filename, hash, status, progress, reason, updated_at)
+         VALUES(?,?,?,?,?,?,?)
          ON CONFLICT(torrent_id) DO UPDATE SET
            filename=excluded.filename,
+           hash=excluded.hash,
            status=excluded.status,
            progress=excluded.progress,
            reason=excluded.reason,
            updated_at=excluded.updated_at`,
-        id, filename, status, progress, reason, now,
+        id, filename, hash, status, progress, reason, now,
     )
     return err
 }
@@ -359,6 +392,101 @@ func (s *TorrentStore) DeleteRepair(id string) error {
     if s == nil { return errors.New("store not initialized") }
     _, err := execWithRetry(s.db, `DELETE FROM repair WHERE torrent_id=?`, id)
     return err
+}
+
+// RepairEntry represents a torrent that needs repair
+type RepairEntry struct {
+    TorrentID string `json:"torrent_id"`
+    Filename  string `json:"filename"`
+    Hash      string `json:"hash"`
+    Status    string `json:"status"`
+    Progress  int    `json:"progress"`
+    Reason    string `json:"reason"`
+    UpdatedAt int64  `json:"updated_at"`
+}
+
+// GetAllRepairs returns all repair entries from the database
+func (s *TorrentStore) GetAllRepairs() ([]RepairEntry, error) {
+    if s == nil { return []RepairEntry{}, errors.New("store not initialized") }
+    rows, err := s.db.Query(`SELECT torrent_id, filename, COALESCE(hash, ''), status, progress, reason, updated_at FROM repair ORDER BY updated_at DESC`)
+    if err != nil { 
+        return []RepairEntry{}, err 
+    }
+    defer rows.Close()
+    entries := make([]RepairEntry, 0)
+    for rows.Next() {
+        var e RepairEntry
+        if err := rows.Scan(&e.TorrentID, &e.Filename, &e.Hash, &e.Status, &e.Progress, &e.Reason, &e.UpdatedAt); err != nil {
+            return entries, err
+        }
+        entries = append(entries, e)
+    }
+    return entries, rows.Err()
+}
+
+// GetRepairCount returns the total number of repair entries
+func (s *TorrentStore) GetRepairCount() (int, error) {
+    if s == nil { return 0, errors.New("store not initialized") }
+    var count int
+    err := s.db.QueryRow(`SELECT COUNT(*) FROM repair`).Scan(&count)
+    return count, err
+}
+
+// UpdateRepairState records when a torrent was last checked
+func (s *TorrentStore) UpdateRepairState(torrentID string, isBroken bool, brokenCount, linkCount int) error {
+    if s == nil { return errors.New("store not initialized") }
+    now := time.Now().Unix()
+    broken := 0
+    if isBroken {
+        broken = 1
+    }
+    _, err := execWithRetry(s.db,
+        `INSERT INTO repair_state(torrent_id, last_checked, is_broken, broken_count, link_count)
+         VALUES(?,?,?,?,?)
+         ON CONFLICT(torrent_id) DO UPDATE SET
+           last_checked=excluded.last_checked,
+           is_broken=excluded.is_broken,
+           broken_count=excluded.broken_count,
+           link_count=excluded.link_count`,
+        torrentID, now, broken, brokenCount, linkCount)
+    return err
+}
+
+// GetLastCheckedTime returns the last time a torrent was checked
+func (s *TorrentStore) GetLastCheckedTime(torrentID string) (int64, error) {
+    if s == nil { return 0, errors.New("store not initialized") }
+    var lastChecked int64
+    err := s.db.QueryRow(`SELECT last_checked FROM repair_state WHERE torrent_id=?`, torrentID).Scan(&lastChecked)
+    if err == sql.ErrNoRows {
+        return 0, nil
+    }
+    return lastChecked, err
+}
+
+// GetUncheckedTorrents returns torrents that haven't been checked in the specified duration (seconds)
+func (s *TorrentStore) GetUncheckedTorrents(maxAge int64) ([]string, error) {
+    if s == nil { return nil, errors.New("store not initialized") }
+    cutoff := time.Now().Unix() - maxAge
+    rows, err := s.db.Query(`
+        SELECT t.id FROM torrents t
+        LEFT JOIN repair_state rs ON t.id = rs.torrent_id
+        WHERE rs.last_checked IS NULL OR rs.last_checked < ?
+        ORDER BY rs.last_checked ASC NULLS FIRST
+    `, cutoff)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+    
+    var ids []string
+    for rows.Next() {
+        var id string
+        if err := rows.Scan(&id); err != nil {
+            return ids, err
+        }
+        ids = append(ids, id)
+    }
+    return ids, rows.Err()
 }
 
 // timeNowOr converts RD time strings to unix seconds; falls back to now when empty.

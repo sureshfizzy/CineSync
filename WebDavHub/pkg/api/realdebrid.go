@@ -1760,3 +1760,192 @@ func HandleRealDebridRefreshControl(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
+// HandleRepairStatus handles requests for real-time repair progress and status
+func HandleRepairStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get repair status
+	status := realdebrid.GetRepairStatus()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"is_running":          status.IsRunning,
+		"current_torrent_id":  status.CurrentTorrentID,
+		"total_torrents":      status.TotalTorrents,
+		"processed_torrents":  status.ProcessedTorrents,
+		"broken_found":        status.BrokenFound,
+		"fixed":               status.Fixed,
+		"validated":           status.Validated,
+		"queue_size":          status.QueueSize,
+		"last_run_time":       status.LastRunTime.Unix(),
+		"next_run_time":       status.NextRunTime.Unix(),
+		"progress_percentage": calculateProgress(status.ProcessedTorrents, status.TotalTorrents),
+	})
+}
+
+func calculateProgress(processed, total int64) float64 {
+	if total == 0 {
+		return 0
+	}
+	return float64(processed) / float64(total) * 100
+}
+
+// HandleRepairStats handles requests for repair statistics and broken torrents list
+func HandleRepairStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		http.Error(w, "Torrent manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Get all repair entries
+	repairs, err := tm.GetStore().GetAllRepairs()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get repair entries: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure repairs is never nil, always return empty array
+	if repairs == nil {
+		repairs = []realdebrid.RepairEntry{}
+	}
+
+	// Get repair count
+	repairCount, err := tm.GetStore().GetRepairCount()
+	if err != nil {
+		repairCount = len(repairs)
+	}
+
+	// Group repairs by reason
+	reasonCounts := make(map[string]int)
+	for _, repair := range repairs {
+		reasonCounts[repair.Reason]++
+	}
+
+	response := map[string]interface{}{
+		"total":        repairCount,
+		"repairs":      repairs,
+		"reasonCounts": reasonCounts,
+		"lastUpdated":  time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRepairStart handles requests to start a repair scan
+func HandleRepairStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		http.Error(w, "Torrent manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Start repair scan
+	err = tm.RepairAllTorrents()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to start repair: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Repair scan started",
+	})
+}
+
+// HandleRepairStop handles requests to stop an ongoing repair scan
+func HandleRepairStop(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		http.Error(w, "Torrent manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Stop repair scan
+	err = tm.StopRepair()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to stop repair: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Repair stop signal sent",
+	})
+}
