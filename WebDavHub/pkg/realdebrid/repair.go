@@ -32,7 +32,6 @@ type RepairStatus struct {
     TotalTorrents     int64
     ProcessedTorrents int64
     BrokenFound       int64
-    Fixed             int64
     Validated         int64
     QueueSize         int
     LastRunTime       time.Time
@@ -48,7 +47,6 @@ func (rs *RepairStatus) GetStatus() RepairStatus {
         TotalTorrents:     rs.TotalTorrents,
         ProcessedTorrents: rs.ProcessedTorrents,
         BrokenFound:       rs.BrokenFound,
-        Fixed:             rs.Fixed,
         Validated:         rs.Validated,
         QueueSize:         rs.QueueSize,
         LastRunTime:       rs.LastRunTime,
@@ -56,12 +54,11 @@ func (rs *RepairStatus) GetStatus() RepairStatus {
     }
 }
 
-func (rs *RepairStatus) UpdateProgress(processed, broken, fixed, validated int64) {
+func (rs *RepairStatus) UpdateProgress(processed, broken, validated int64) {
     rs.mu.Lock()
     defer rs.mu.Unlock()
     rs.ProcessedTorrents = processed
     rs.BrokenFound = broken
-    rs.Fixed = fixed
     rs.Validated = validated
 }
 
@@ -97,6 +94,41 @@ func (rs *RepairStatus) SetNextRun(nextRun time.Time) {
 }
 
 func (tm *TorrentManager) StartRepairWorker() {
+    // Check if auto start repair is enabled
+    config := GetConfigManager().GetConfig()
+    if !config.RepairSettings.Enabled || !config.RepairSettings.AutoStartRepair {
+        logger.Debug("[RepairWorker] Auto start repair is disabled in settings")
+        return
+    }
+    
+    scanInterval := config.RepairSettings.ScanIntervalHours
+    if scanInterval <= 0 {
+        scanInterval = 48
+    }
+    
+    initialDelay := 5 * time.Minute
+    logger.Info("[RepairWorker] Auto repair monitor started - will scan every %d hours (first scan in %v)", scanInterval, initialDelay)
+    
+    // Start periodic repair scans
+    go func() {
+        ticker := time.NewTicker(time.Duration(scanInterval) * time.Hour)
+        defer ticker.Stop()
+
+        time.Sleep(initialDelay)
+        logger.Info("[RepairWorker] Running initial automatic repair scan")
+        _ = tm.RepairAllTorrents()
+
+        for range ticker.C {
+            currentConfig := GetConfigManager().GetConfig()
+            if !currentConfig.RepairSettings.Enabled || !currentConfig.RepairSettings.AutoStartRepair {
+                logger.Info("[RepairWorker] Auto start repair disabled, stopping periodic scans")
+                return
+            }
+
+            logger.Info("[RepairWorker] Running scheduled automatic repair scan")
+            _ = tm.RepairAllTorrents()
+        }
+    }()
 }
 
 func SetRepairStrategy(strategy RepairStrategy) {
@@ -121,6 +153,7 @@ func GetRepairStatus() RepairStatus {
     return status
 }
 
+// RepairTorrent triggers a manual repair for a specific torrent
 func (tm *TorrentManager) RepairTorrent(torrentID string) error {
     if tm == nil || tm.store == nil {
         return fmt.Errorf("manager or store not initialized")
@@ -130,17 +163,67 @@ func (tm *TorrentManager) RepairTorrent(torrentID string) error {
         return fmt.Errorf("torrent ID cannot be empty")
     }
     
-    logger.Info("[RepairWorker] On-demand repair requested for torrent %s", torrentID)
+    config := GetConfigManager().GetConfig()
+    if !config.RepairSettings.Enabled {
+        logger.Debug("[RepairWorker] Repair is disabled in settings")
+        return fmt.Errorf("repair is disabled in settings")
+    }
     
-    repairQueue.Store(torrentID, true)
-    go tm.scanForBrokenTorrents(torrentID)
-    
+    logger.Info("[RepairWorker] Starting manual repair for torrent %s", torrentID)
+    tm.triggerRepair(torrentID)
     return nil
+}
+
+// TriggerAutoRepair triggers an automatic on-demand repair
+func (tm *TorrentManager) TriggerAutoRepair(torrentID string) {
+    if tm == nil || tm.store == nil {
+        return
+    }
+
+    config := GetConfigManager().GetConfig()
+    if !config.RepairSettings.Enabled || !config.RepairSettings.OnDemand {
+        return
+    }
+    
+    logger.Debug("[RepairWorker] On-demand repair triggered for torrent %s", torrentID)
+    tm.triggerRepair(torrentID)
+}
+
+// triggerRepair
+func (tm *TorrentManager) triggerRepair(torrentID string) {
+    go func() {
+        fixed, err := tm.repairTorrentFiles(torrentID)
+        if err != nil {
+            logger.Debug("[RepairWorker] Initial repair attempt for %s: %v", torrentID, err)
+            _, getErr := tm.GetTorrentInfo(torrentID)
+            if getErr != nil && IsTorrentNotFound(getErr) {
+                logger.Info("[RepairWorker] Torrent %s was successfully replaced with new ID", torrentID)
+                _ = tm.store.DeleteRepair(torrentID)
+                _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
+                return
+            }
+            tm.scanForBrokenTorrents(torrentID)
+            return
+        }
+        
+        if fixed {
+            logger.Info("[RepairWorker] Torrent %s successfully repaired and removed from queue", torrentID)
+            _ = tm.store.DeleteRepair(torrentID)
+            _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
+        } else {
+            tm.scanForBrokenTorrents(torrentID)
+        }
+    }()
 }
 
 func (tm *TorrentManager) RepairAllTorrents() error {
     if tm == nil || tm.store == nil {
         return fmt.Errorf("manager or store not initialized")
+    }
+    
+    config := GetConfigManager().GetConfig()
+    if !config.RepairSettings.Enabled {
+        return fmt.Errorf("repair is disabled in settings")
     }
     
     logger.Info("[RepairWorker] On-demand repair requested for all torrents")
@@ -167,7 +250,6 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
 
     if !repairRunning.CompareAndSwap(false, true) {
         if torrentID != "" {
-            logger.Info("[RepairWorker] Repair already running, queueing torrent %s", torrentID)
             repairQueue.Store(torrentID, true)
             
             queueSize := 0
@@ -194,7 +276,6 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
     if torrentID != "" {
         item, err := tm.store.GetItemByID(torrentID)
         if err != nil {
-            logger.Warn("[RepairWorker] Failed to get torrent %s: %v", torrentID, err)
             return
         }
         items = []TorrentItem{item}
@@ -222,7 +303,7 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
 
     RepairProgress.SetTotals(int64(len(items)))
 
-    var brokenCount, fixedCount, validatedCount int64
+    var brokenCount, validatedCount int64
 
     for _, item := range items {
         if repairShouldStop.Load() {
@@ -234,25 +315,29 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
             continue
         }
 
-        var info *TorrentInfo
-        if tm.infoStore != nil {
-            cachedInfo, found, err := tm.infoStore.Get(item.ID)
-            if err == nil && found {
-                info = cachedInfo
+        refreshedInfo, err := tm.client.GetTorrentInfo(item.ID)
+        if err != nil {
+            if IsTorrentNotFound(err) {
+                tm.deleteTorrentFromCache(item.ID)
+            } else {
+                logger.Warn("[RepairWorker] Failed to refresh torrent %s: %v", item.ID, err)
             }
-        }
-
-        if info == nil {
-            apiInfo, err := tm.GetTorrentInfo(item.ID)
-            if err != nil {
-                continue
-            }
-            info = apiInfo
-        }
-
-        if info == nil {
             continue
         }
+        
+        if refreshedInfo == nil {
+            continue
+        }
+
+        if tm.infoStore != nil {
+            _ = tm.infoStore.Upsert(refreshedInfo)
+        }
+
+        if refreshedInfo.Progress == 100 {
+            tm.InfoMap.Set(item.ID, refreshedInfo)
+        }
+        
+        info := refreshedInfo
 
         selectedVideoFileCount := 0
         var videoFiles []TorrentFile
@@ -304,8 +389,7 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
                 for i := 0; i < totalLinks; i++ {
                     go func(index int, link string) {
                         defer wg.Done()
-                        
-                        // Early exit if per_torrent strategy and already failed
+
                         select {
                         case <-ctx.Done():
                             return
@@ -348,40 +432,34 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
         if isBroken {
             _ = tm.store.UpsertRepair(info.ID, info.Filename, info.Hash, info.Status, int(info.Progress), reason)
             brokenCount++
-            logger.Info("[RepairWorker] 🔧 Marked as broken: %s (%s) - Reason: %s", 
-                item.ID, info.Filename, reason)
             brokenLinks := len(info.Links)
             _ = tm.store.UpdateRepairState(info.ID, true, brokenLinks, len(info.Links))
-        } else {
-            wasInRepair := false
-            if tm.store != nil {
-                repairs, err := tm.store.GetAllRepairs()
-                if err == nil {
-                    for _, r := range repairs {
-                        if r.TorrentID == info.ID {
-                            wasInRepair = true
-                            break
-                        }
+            
+            // If AutoFix is enabled, automatically trigger repair for broken torrents
+            config := GetConfigManager().GetConfig()
+            if config.RepairSettings.AutoFix {
+                logger.Info("[RepairWorker] AutoFix enabled, triggering repair for broken torrent %s", info.ID)
+                go func(id string) {
+                    _, err := tm.repairTorrentFiles(id)
+                    if err != nil {
+                        logger.Warn("[RepairWorker] AutoFix repair failed for %s: %v", id, err)
+                    } else {
+                        logger.Info("[RepairWorker] AutoFix successfully repaired torrent %s", id)
+                        _ = tm.store.DeleteRepair(id)
+                        _ = tm.store.UpdateRepairState(id, false, 0, 0)
                     }
-                }
+                }(info.ID)
             }
+        } else {
             _ = tm.store.DeleteRepair(info.ID)
-            if wasInRepair {
-                fixedCount++
-            }
             _ = tm.store.UpdateRepairState(info.ID, false, 0, len(info.Links))
         }
         
-        processed := brokenCount + fixedCount
-        RepairProgress.UpdateProgress(processed, brokenCount, fixedCount, validatedCount)
+        RepairProgress.UpdateProgress(brokenCount, brokenCount, validatedCount)
     }
 
-    if torrentID != "" {
-        logger.Info("[RepairWorker] On-demand repair complete for %s: %d broken, %d fixed, %d validated", 
-            torrentID, brokenCount, fixedCount, validatedCount)
-    } else if brokenCount > 0 || fixedCount > 0 {
-        logger.Info("[RepairWorker] Scan complete: found %d broken, fixed %d, validated %d torrents", 
-            brokenCount, fixedCount, validatedCount)
+    if torrentID == "" && brokenCount > 0 {
+        logger.Info("[RepairWorker] Scan complete: found %d broken torrents", brokenCount)
     }
     
     tm.processRepairQueue()

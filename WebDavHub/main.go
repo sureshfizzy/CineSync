@@ -337,6 +337,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/repair-stats", api.HandleRepairStats)
 	apiMux.HandleFunc("/api/realdebrid/repair-start", api.HandleRepairStart)
 	apiMux.HandleFunc("/api/realdebrid/repair-stop", api.HandleRepairStop)
+	apiMux.HandleFunc("/api/realdebrid/repair-torrent", api.HandleRepairTorrent)
 
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)

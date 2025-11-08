@@ -29,7 +29,7 @@ type DirEntry struct {
 
 // OpenTorrentStore opens/creates the SQLite database at the given path and ensures schema.
 func OpenTorrentStore(dbPath string) (*TorrentStore, error) {
-    dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+    dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
     db, err := sql.Open("sqlite", dsn)
     if err != nil {
         return nil, err
@@ -37,6 +37,13 @@ func OpenTorrentStore(dbPath string) (*TorrentStore, error) {
 
     db.SetMaxOpenConns(1)
     db.SetMaxIdleConns(1)
+
+    // Checkpoint WAL immediately on open to prevent blocking
+    if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+        if _, err := db.Exec(`PRAGMA wal_checkpoint(RESTART)`); err != nil {
+            _, _ = db.Exec(`PRAGMA wal_checkpoint(PASSIVE)`)
+        }
+    }
 
     // Performance-oriented pragmas
     _, _ = db.Exec(`PRAGMA synchronous=NORMAL`)
@@ -105,7 +112,7 @@ CREATE TABLE IF NOT EXISTS torrents (
     added TEXT,
     hash TEXT,
     modified INTEGER,
-    links TEXT,             -- JSON array of links
+    links TEXT,
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_torrents_status ON torrents(status);
@@ -129,6 +136,12 @@ CREATE TABLE IF NOT EXISTS repair (
         return err
     }
     
+    // Migrate: Add hash column if it doesn't exist (for existing databases)
+    _, err = db.Exec(`ALTER TABLE repair ADD COLUMN hash TEXT`)
+    if err != nil && !strings.Contains(err.Error(), "duplicate column") && !strings.Contains(err.Error(), "already exists") {
+        _ = err
+    }
+    
     // Create repair_state table to track last check time for each torrent
     _, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS repair_state (
@@ -142,7 +155,15 @@ CREATE TABLE IF NOT EXISTS repair_state (
     return err
 }
 
-func (s *TorrentStore) Close() error { if s == nil || s.db == nil { return nil }; return s.db.Close() }
+func (s *TorrentStore) Close() error {
+    if s == nil || s.db == nil {
+        return nil
+    }
+    // Checkpoint WAL before closing
+    _, _ = s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+    _, _ = s.db.Exec(`PRAGMA optimize`)
+    return s.db.Close()
+}
 
 // UpsertItem inserts/updates a lightweight TorrentItem.
 func (s *TorrentStore) UpsertItem(it TorrentItem) error {
@@ -392,6 +413,24 @@ func (s *TorrentStore) DeleteRepair(id string) error {
     if s == nil { return errors.New("store not initialized") }
     _, err := execWithRetry(s.db, `DELETE FROM repair WHERE torrent_id=?`, id)
     return err
+}
+
+// GetRepair returns a repair entry for a specific torrent ID
+func (s *TorrentStore) GetRepair(torrentID string) (*RepairEntry, error) {
+    if s == nil { return nil, errors.New("store not initialized") }
+    var e RepairEntry
+    err := s.db.QueryRow(
+        `SELECT torrent_id, filename, COALESCE(hash, ''), status, progress, reason, updated_at 
+         FROM repair WHERE torrent_id=?`,
+        torrentID,
+    ).Scan(&e.TorrentID, &e.Filename, &e.Hash, &e.Status, &e.Progress, &e.Reason, &e.UpdatedAt)
+    if err == sql.ErrNoRows {
+        return nil, nil // Not found, but not an error
+    }
+    if err != nil {
+        return nil, err
+    }
+    return &e, nil
 }
 
 // RepairEntry represents a torrent that needs repair

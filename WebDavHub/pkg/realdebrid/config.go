@@ -17,6 +17,7 @@ type Config struct {
     RcloneSettings RcloneSettings `json:"rcloneSettings" yaml:"rcloneSettings"`
     HttpDavSettings HttpDavSettings `json:"httpDavSettings" yaml:"httpDavSettings"`
     RateLimit RateLimitSettings `json:"rateLimit" yaml:"rateLimit"`
+    RepairSettings RepairSettings `json:"repairSettings" yaml:"repairSettings"`
 }
 
 // RcloneSettings represents rclone mount configuration
@@ -71,6 +72,15 @@ type RateLimitSettings struct {
     MaxRetries        int   `json:"maxRetries" yaml:"maxRetries"`
     BaseBackoffMs     int   `json:"baseBackoffMs" yaml:"baseBackoffMs"`
     MaxBackoffMs      int   `json:"maxBackoffMs" yaml:"maxBackoffMs"`
+}
+
+// RepairSettings controls torrent repair behavior
+type RepairSettings struct {
+    Enabled         bool `json:"enabled" yaml:"enabled"`
+    AutoStartRepair bool `json:"autoStartRepair" yaml:"autoStartRepair"`
+    AutoFix         bool `json:"autoFix" yaml:"autoFix"`
+    OnDemand        bool `json:"onDemand" yaml:"onDemand"`
+    ScanIntervalHours int `json:"scanIntervalHours" yaml:"scanIntervalHours"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -138,6 +148,13 @@ func GetConfigManager() *ConfigManager {
                     MaxRetries:        5,
                     BaseBackoffMs:     500,
                     MaxBackoffMs:      8000,
+                },
+                RepairSettings: RepairSettings{
+                    Enabled:           false,
+                    AutoStartRepair:   false,
+                    AutoFix:           false,
+                    OnDemand:          false,
+                    ScanIntervalHours: 48, // 2 days
                 },
             },
             configPath: filepath.Join("..", "db", "debrid.yml"),
@@ -393,6 +410,26 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
                 if baseMs, ok := asInt(rateLimitMap["baseBackoffMs"]); ok && baseMs >= 0 { rl.BaseBackoffMs = baseMs }
                 if maxMs, ok := asInt(rateLimitMap["maxBackoffMs"]); ok && maxMs >= 0 { rl.MaxBackoffMs = maxMs }
                 cm.config.RateLimit = rl
+            }
+        case "repairSettings":
+            if repairSettingsMap, ok := value.(map[string]interface{}); ok {
+                rs := cm.config.RepairSettings
+                if enabled, ok := repairSettingsMap["enabled"].(bool); ok {
+                    rs.Enabled = enabled
+                }
+                if autoStartRepair, ok := repairSettingsMap["autoStartRepair"].(bool); ok {
+                    rs.AutoStartRepair = autoStartRepair
+                }
+                if autoFix, ok := repairSettingsMap["autoFix"].(bool); ok {
+                    rs.AutoFix = autoFix
+                }
+                if onDemand, ok := repairSettingsMap["onDemand"].(bool); ok {
+                    rs.OnDemand = onDemand
+                }
+                if scanInterval, ok := asInt(repairSettingsMap["scanIntervalHours"]); ok && scanInterval > 0 {
+                    rs.ScanIntervalHours = scanInterval
+                }
+                cm.config.RepairSettings = rs
             }
 		}
 	}

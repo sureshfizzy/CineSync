@@ -144,6 +144,10 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
                         _ = atomic.AddInt64(&saved, 1)
                         EnrichSaved.Add(1)
                     }
+                } else if err != nil && IsTorrentNotFound(err) {
+                    // Torrent no longer exists on Real-Debrid, delete from cache
+                    logger.Debug("[CineSync] Torrent %s not found, deleting from cache", it.ID)
+                    tm.deleteTorrentFromCache(it.ID)
                 }
                 if v := atomic.AddInt64(&processed, 1); v%1000 == 0 || int(v) == total2 {
                     logger.Info("[CineSync] Enrich progress: %d/%d (saved %d)", v, total2, saved)
@@ -233,4 +237,53 @@ func (tm *TorrentManager) DeleteFromDBByID(id string) {
     _ = tm.store.DeleteByID(id)
     if tm.infoStore != nil { _ = tm.infoStore.Delete(id) }
     tm.InfoMap.Remove(id)
+}
+
+// deleteTorrentFromCache removes a torrent from all caches and database
+func (tm *TorrentManager) deleteTorrentFromCache(torrentID string) {
+	if tm == nil {
+		return
+	}
+	
+	
+	// Delete from database
+	if tm.store != nil {
+		_ = tm.store.DeleteByID(torrentID)
+	}
+	
+	// Delete from info store
+	if tm.infoStore != nil {
+		_ = tm.infoStore.Delete(torrentID)
+	}
+	
+	// Remove from in-memory caches
+	tm.InfoMap.Remove(torrentID)
+	tm.idToItemMap.Remove(torrentID)
+	
+	// Remove from directory maps
+	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+	if ok {
+		// Find and remove from ALL_TORRENTS map
+		keys := allTorrents.Keys()
+		for _, key := range keys {
+			if item, found := allTorrents.Get(key); found && item != nil && item.ID == torrentID {
+				allTorrents.Remove(key)
+				break
+			}
+		}
+	}
+	
+	// Remove from download link cache (keys contain torrentID)
+	tm.downloadLinkCache.IterCb(func(key string, val *DownloadLinkEntry) {
+		if strings.Contains(key, torrentID) {
+			tm.downloadLinkCache.Remove(key)
+		}
+	})
+	
+	// Remove from failed file cache
+	tm.failedFileCache.IterCb(func(key string, val *FailedFileEntry) {
+		if strings.Contains(key, torrentID) {
+			tm.failedFileCache.Remove(key)
+		}
+	})
 }

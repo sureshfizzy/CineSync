@@ -19,6 +19,13 @@ interface RealDebridConfig {
     userId: string;
     password: string;
   };
+  repairSettings: {
+    enabled: boolean;
+    autoStartRepair: boolean;
+    autoFix: boolean;
+    onDemand: boolean;
+    scanIntervalHours: number;
+  };
 }
 
 interface RealDebridStatus {
@@ -57,6 +64,13 @@ const RealDebridSettings: React.FC = () => {
       userId: '',
       password: '',
     },
+    repairSettings: {
+      enabled: false,
+      autoStartRepair: false,
+      autoFix: false,
+      onDemand: false,
+      scanIntervalHours: 48,
+    },
   });
   const [status, setStatus] = useState<RealDebridStatus | null>(null);
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
@@ -82,7 +96,14 @@ const RealDebridSettings: React.FC = () => {
       const response = await axios.get('/api/realdebrid/config');
       setConfig({
         ...response.data.config,
-        additionalApiKeys: response.data.config.additionalApiKeys || []
+        additionalApiKeys: response.data.config.additionalApiKeys || [],
+        repairSettings: response.data.config.repairSettings || {
+          enabled: false,
+          autoStartRepair: false,
+          autoFix: false,
+          onDemand: false,
+          scanIntervalHours: 48,
+        },
       });
       setStatus(response.data.status);
       setTokenStatuses(response.data.tokenStatuses || []);
@@ -100,7 +121,14 @@ const RealDebridSettings: React.FC = () => {
       const response = await axios.put('/api/realdebrid/config', config);
       setConfig({
         ...response.data.config,
-        additionalApiKeys: response.data.config.additionalApiKeys || []
+        additionalApiKeys: response.data.config.additionalApiKeys || [],
+        repairSettings: response.data.config.repairSettings || {
+          enabled: false,
+          autoStartRepair: false,
+          autoFix: false,
+          onDemand: false,
+          scanIntervalHours: 48,
+        },
       });
       setStatus(response.data.status);
       setTokenStatuses(response.data.tokenStatuses || []);
@@ -584,6 +612,137 @@ const RealDebridSettings: React.FC = () => {
                       />
                     </Stack>
                   )}
+                </Box>
+
+                <Divider />
+
+                {/* Repair Settings */}
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                    Repair Settings
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                    Control automatic repair behavior for broken torrents
+                  </Typography>
+                  
+                  <Stack spacing={2}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.repairSettings.enabled}
+                          onChange={(e) => handleConfigChange('repairSettings', {
+                            ...config.repairSettings,
+                            enabled: e.target.checked
+                          })}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" fontWeight="500">
+                            Enable Repair
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Master switch to enable or disable all repair functionality
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.repairSettings.autoStartRepair}
+                          onChange={(e) => handleConfigChange('repairSettings', {
+                            ...config.repairSettings,
+                            autoStartRepair: e.target.checked
+                          })}
+                          color="primary"
+                          disabled={!config.repairSettings.enabled}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" fontWeight="500">
+                            Auto Start Repair
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Periodically scans for broken files at the specified interval
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.repairSettings.autoFix}
+                          onChange={(e) => handleConfigChange('repairSettings', {
+                            ...config.repairSettings,
+                            autoFix: e.target.checked
+                          })}
+                          color="primary"
+                          disabled={!config.repairSettings.enabled}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" fontWeight="500">
+                            Auto Fix
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Automatically fixes broken files found during scans
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.repairSettings.onDemand}
+                          onChange={(e) => handleConfigChange('repairSettings', {
+                            ...config.repairSettings,
+                            onDemand: e.target.checked
+                          })}
+                          color="primary"
+                          disabled={!config.repairSettings.enabled}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" fontWeight="500">
+                            On Demand
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Fixes files when requested during playback
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    {config.repairSettings.autoStartRepair && (
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="number"
+                        label="Scan Interval (hours)"
+                        value={config.repairSettings.scanIntervalHours}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 48;
+                          handleConfigChange('repairSettings', {
+                            ...config.repairSettings,
+                            scanIntervalHours: Math.max(1, value)
+                          });
+                        }}
+                        disabled={!config.repairSettings.enabled || !config.repairSettings.autoStartRepair}
+                        helperText="How often to scan for broken torrents (default: 48 hours = 2 days)"
+                        InputProps={{
+                          inputProps: { min: 1, max: 720 }
+                        }}
+                      />
+                    )}
+                  </Stack>
                 </Box>
 
                 {/* WebDAV Path removed per spec */}

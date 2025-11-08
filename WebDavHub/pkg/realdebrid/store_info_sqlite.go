@@ -14,12 +14,18 @@ type TorrentInfoStore struct {
 }
 
 func OpenTorrentInfoStore(dbPath string) (*TorrentInfoStore, error) {
-    dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+    dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
     db, err := sql.Open("sqlite", dsn)
     if err != nil { return nil, err }
 
     db.SetMaxOpenConns(1)
     db.SetMaxIdleConns(1)
+
+    if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+        if _, err := db.Exec(`PRAGMA wal_checkpoint(RESTART)`); err != nil {
+            _, _ = db.Exec(`PRAGMA wal_checkpoint(PASSIVE)`)
+        }
+    }
 
     _, _ = db.Exec(`PRAGMA synchronous=NORMAL`)
     _, _ = db.Exec(`PRAGMA cache_size=-20000`)
@@ -47,7 +53,12 @@ CREATE INDEX IF NOT EXISTS idx_torrent_info_updated_at ON torrent_info(updated_a
 }
 
 func (s *TorrentInfoStore) Close() error {
-    if s == nil || s.db == nil { return nil }
+    if s == nil || s.db == nil {
+        return nil
+    }
+    // Checkpoint WAL before closing
+    _, _ = s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+    _, _ = s.db.Exec(`PRAGMA optimize`)
     return s.db.Close()
 }
 

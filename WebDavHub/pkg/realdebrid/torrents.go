@@ -2,16 +2,13 @@ package realdebrid
 
 import (
     "context"
-    "encoding/json"
     "fmt"
-    "net/http"
     "path"
     "path/filepath"
     "strings"
     "sync"
     "sync/atomic"
     "time"
-	"strconv"
 
     "cinesync/pkg/logger"
     cmap "github.com/orcaman/concurrent-map/v2"
@@ -235,7 +232,6 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	
 	items, err := tm.store.GetAllItems()
 	if err != nil || len(items) == 0 {
-		logger.Debug("[Torrents] No cached items to load")
 		return
 	}
 	
@@ -255,12 +251,10 @@ func (tm *TorrentManager) loadCachedTorrents() {
 // loadCachedTorrentInfo loads all TorrentInfo from torrents-info.db into memory
 func (tm *TorrentManager) loadCachedTorrentInfo() {
 	if tm.infoStore == nil {
-		logger.Debug("[Torrents] Info store not available")
 		return
 	}
 	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
 	if !ok {
-		logger.Warn("[Torrents] ALL_TORRENTS map not found")
 		return
 	}
 	
@@ -378,6 +372,11 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 		}
 		fetched, ferr := tm.client.GetTorrentInfo(torrentID)
 		if ferr != nil {
+			// If torrent not found, delete it from our database/cache
+			if IsTorrentNotFound(ferr) {
+				tm.deleteTorrentFromCache(torrentID)
+				return nil, ferr
+			}
 			return nil, ferr
 		}
 		tm.saveCineSync(fetched)
@@ -534,6 +533,33 @@ func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
 	wg.Wait()
 }
 
+// isBrokenLinkError checks if an error indicates a broken link that needs repair
+func isBrokenLinkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+
+	if strings.Contains(errStr, "code: 21") || 
+		strings.Contains(errStr, "code: 19") || 
+		strings.Contains(errStr, "code: 28") {
+		return true
+	}
+
+	if strings.Contains(errStr, "no links available") ||
+		strings.Contains(errStr, "empty download link") ||
+		strings.Contains(errStr, "unavailable_file") ||
+		strings.Contains(errStr, "hoster_unavailable") ||
+		strings.Contains(errStr, "hoster_not_supported") ||
+		strings.Contains(errStr, "link expired") ||
+		strings.Contains(errStr, "file removed") {
+		return true
+	}
+	
+	return false
+}
+
+
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	cacheKey := MakeCacheKey(torrentID, filePath)
@@ -629,6 +655,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 			if len(info.Links) == 0 {
 				logger.Warn("[Torrents] No links available for torrent %s", torrentID)
+				tm.TriggerAutoRepair(torrentID)
 				return nil, fmt.Errorf("no links available")
 			}
 
@@ -643,6 +670,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 		if downloadLink == "" {
 			logger.Warn("[Torrents] Empty download link for torrent %s, file %s", torrentID, filePath)
+			tm.TriggerAutoRepair(torrentID)
 			return nil, fmt.Errorf("empty download link")
 		}
 
@@ -652,6 +680,11 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
 		if err != nil {
 			wrappedErr := fmt.Errorf("failed to unrestrict link: %w", err)
+			
+			if isBrokenLinkError(err) {
+				tm.TriggerAutoRepair(torrentID)
+			}
+			
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
 				Error:     wrappedErr,
 				Timestamp: time.Now(),
@@ -662,6 +695,8 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		if unrestrictedLink.Download == "" {
 			logger.Warn("[Torrents] Unrestrict returned empty download URL")
 			emptyErr := fmt.Errorf("unrestrict returned empty download URL")
+			
+			tm.TriggerAutoRepair(torrentID)
 
 			// Cache this error too
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
@@ -903,235 +938,6 @@ func (tm *TorrentManager) startRefreshJob() {
 			}
 		}
 	}()
-}
-
-// performSmartRefresh
-func (tm *TorrentManager) performSmartRefresh(ctx context.Context) {
-	newState, err := tm.getCurrentLibraryState(ctx)
-	if err != nil {
-		logger.Warn("[Refresh] Failed to get library state for change detection: %v", err)
-		return
-	}
-	
-	currentState := tm.currentState.Load()
-
-	if currentState.Eq(newState) {
-		return
-	}
-	
-	logger.Info("[Refresh] Changes detected (count: %d -> %d)", 
-		currentState.TotalCount, newState.TotalCount)
-	tm.performFullRefresh(ctx)
-	
-	tm.updateCurrentState(newState)
-}
-
-// getCurrentLibraryState gets a lightweight state fingerprint for change detection
-func (tm *TorrentManager) getCurrentLibraryState(ctx context.Context) (*LibraryState, error) {
-	ctx, cancel := context.WithTimeout(ctx, CHECKSUM_TIMEOUT)
-	defer cancel()
-	
-	state := &LibraryState{
-		LastUpdated: time.Now(),
-	}
-
-	torrents, totalCount, err := tm.client.GetTorrentsLightweight(10)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get lightweight torrents for state: %w", err)
-	}
-	
-	state.TotalCount = totalCount
-	if len(torrents) > 0 {
-		state.FirstTorrentID = torrents[0].ID
-		state.FirstTorrentName = torrents[0].Filename
-	}
-	
-	return state, nil
-}
-
-// fetchFirstPageWithTotal fetches the first page using page parameter and returns total count
-func (tm *TorrentManager) fetchFirstPageWithTotal(ctx context.Context, pageSize int) ([]TorrentItem, int, error) {
-    url := fmt.Sprintf("%s/torrents?_t=%d&page=1&limit=%d", tm.client.baseURL, time.Now().Unix(), pageSize)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+tm.client.apiKey)
-	
-	resp, err := tm.client.doWithLimit(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	
-    totalCount := 0
-    if totalHeader := resp.Header.Get("X-Total-Count"); totalHeader != "" {
-        if count, convErr := strconv.Atoi(totalHeader); convErr == nil {
-            totalCount = count
-        }
-    }
-
-    if resp.StatusCode == http.StatusNoContent {
-        return []TorrentItem{}, totalCount, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	
-	var items []TorrentItem
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, 0, err
-	}
-    if totalCount == 0 {
-        totalCount = len(items)
-    }
-	return items, totalCount, nil
-}
-
-// performFullRefresh performs a refresh using cached data + first page changes
-// Fetches only first page to detect changes, then merges with cached/prefetched torrents
-func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
-	allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-	if !ok {
-		logger.Debug("[Refresh] Directory map not initialized")
-		return
-	}
-	
-	keys := allTorrentsMap.Keys()
-	if len(keys) == 0 {
-		logger.Debug("[Refresh] No cached/prefetched torrents available, skipping refresh")
-		return
-	}
-
-	// Build oldTorrents map directly from keys (no intermediate slice)
-	oldTorrents := make(map[string]TorrentItem, len(keys))
-	cachedTorrents := make([]TorrentItem, 0, len(keys))
-	for _, key := range keys {
-		if item, ok := allTorrentsMap.Get(key); ok && item != nil {
-			oldTorrents[item.ID] = *item
-			cachedTorrents = append(cachedTorrents, *item)
-		}
-	}
-	
-	firstPage, totalCount, err := tm.fetchFirstPageWithTotal(ctx, 1000)
-	if err != nil || len(firstPage) == 0 {
-		if err != nil {
-			logger.Error("[Refresh] Failed to fetch first page: %v", err)
-		}
-		return
-	}
-
-	var allTorrents []TorrentItem
-	cachedLen := len(cachedTorrents)
-	
-	freshMap := make(map[string]int, len(firstPage))
-	for fIdx, fresh := range firstPage {
-		freshMap[fresh.ID] = fIdx
-	}
-
-	matchFound := false
-	for cIdx, cached := range cachedTorrents {
-		if fIdx, exists := freshMap[cached.ID]; exists {
-			cIdxFromEnd := cachedLen - 1 - cIdx
-			positionDiff := (totalCount - 1 - fIdx) - cIdxFromEnd
-			if positionDiff >= -1 && positionDiff <= 1 {
-				allTorrents = make([]TorrentItem, 0, totalCount)
-				allTorrents = append(allTorrents, firstPage[:fIdx]...)
-				allTorrents = append(allTorrents, cachedTorrents[cIdx:]...)
-				if len(allTorrents) >= totalCount-10 && len(allTorrents) <= totalCount+10 {
-					matchFound = true
-					break
-				}
-			}
-		}
-	}
-
-	if !matchFound {
-		allTorrents = firstPage
-		if totalCount > len(firstPage) && cachedLen > len(firstPage) {
-			allTorrents = append(allTorrents, cachedTorrents[len(firstPage):]...)
-		}
-	}
-	
-	// Analyze new/removed torrents
-	newTorrents := make([]TorrentItem, 0, 10)
-	removedTorrents := make([]TorrentItem, 0, 10)
-	newTorrentsMap := make(map[string]bool, len(allTorrents))
-	
-	for i := range allTorrents {
-		id := allTorrents[i].ID
-		newTorrentsMap[id] = true
-		if _, exists := oldTorrents[id]; !exists {
-			newTorrents = append(newTorrents, allTorrents[i])
-		}
-	}
-	
-	for id, torrent := range oldTorrents {
-		if !newTorrentsMap[id] {
-			removedTorrents = append(removedTorrents, torrent)
-		}
-	}
-	
-	allTorrentsMap.Clear()
-	tm.idToItemMap.Clear()
-	
-	for i := range allTorrents {
-		item := &allTorrents[i]
-		accessKey := GetDirectoryName(item.Filename)
-		allTorrentsMap.Set(accessKey, item)
-		tm.idToItemMap.Set(item.ID, item)
-	}
-	
-	go tm.SaveAllTorrents()
-	
-	// Log new torrents (but not during initial load)
-	if len(newTorrents) > 0 && len(cachedTorrents) > 0 {
-		for i, torrent := range newTorrents {
-			if i < 3 {
-				logger.Info("New file added: %s", truncateFilename(torrent.Filename))
-			} else if i == 3 {
-				logger.Info("... and %d more new files", len(newTorrents)-3)
-				break
-			}
-		}
-
-		// Prefetch unrestricted links for all new torrents in parallel
-		go tm.PrefetchFileDownloadLinks(newTorrents)
-	}
-	
-	// Log removed torrents
-	if len(removedTorrents) > 0 {
-		for i, torrent := range removedTorrents {
-			if i < 3 {
-				logger.Info("File removed: %s", truncateFilename(torrent.Filename))
-			} else if i == 3 {
-				logger.Info("... and %d more files removed", len(removedTorrents)-3)
-				break
-			}
-		}
-	}
-
-	triggerPendingMount()
-}
-
-// updateCurrentState atomically updates the current library state
-func (tm *TorrentManager) updateCurrentState(newState *LibraryState) {
-	tm.currentState.Store(newState)
-}
-
-// GetCurrentState returns the current library state
-func (tm *TorrentManager) GetCurrentState() *LibraryState {
-	state := tm.currentState.Load()
-	if state == nil {
-		return &LibraryState{}
-	}
-
-	return &LibraryState{
-		TotalCount:       state.TotalCount,
-		FirstTorrentID:   state.FirstTorrentID,
-		FirstTorrentName: state.FirstTorrentName,
-		LastUpdated:      state.LastUpdated,
-	}
 }
 
 // SetRefreshInterval updates the refresh interval

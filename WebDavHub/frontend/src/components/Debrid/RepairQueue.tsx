@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Tooltip, alpha, useTheme, Stack, Button } from '@mui/material';
+import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Tooltip, alpha, useTheme, Stack, Button, Checkbox } from '@mui/material';
 import { Build as BuildIcon, Error as ErrorIcon, Warning as WarningIcon, Info as InfoIcon, PlayArrow as PlayIcon, Stop as StopIcon } from '@mui/icons-material';
 import { motion } from 'framer-motion'; import axios from 'axios'; import { formatDate } from '../FileBrowser/fileUtils';
 
@@ -26,7 +26,6 @@ interface RepairStatus {
   total_torrents: number;
   processed_torrents: number;
   broken_found: number;
-  fixed: number;
   validated: number;
   queue_size: number;
   last_run_time: number;
@@ -84,6 +83,8 @@ export default function RepairQueue() {
   const [status, setStatus] = useState<RepairStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedTorrents, setSelectedTorrents] = useState<Set<string>>(new Set());
+  const [repairing, setRepairing] = useState(false);
   const theme = useTheme();
 
   const fetchRepairStatus = useCallback(async () => {
@@ -108,8 +109,17 @@ export default function RepairQueue() {
       const response = await axios.get('/api/realdebrid/repair-stats');
       setStats(response.data);
     } catch (err: any) {
+      // Only show error on initial load, silently retry on subsequent fetches
       if (isInitial) {
-        setError(err.response?.data?.error || 'Failed to fetch repair statistics');
+        const errorMsg = err.response?.data?.error || 
+                        err.response?.data || 
+                        err.message || 
+                        'Failed to fetch repair statistics';
+        setError(errorMsg);
+        console.error('Failed to fetch repair stats:', err);
+      } else {
+        // Log but don't show error for background refreshes
+        console.warn('Background repair stats fetch failed:', err.response?.data || err.message);
       }
     } finally {
       if (isInitial) {
@@ -121,10 +131,15 @@ export default function RepairQueue() {
   useEffect(() => {
     fetchRepairStats(true);
     fetchRepairStatus();
-    
+  }, [fetchRepairStats, fetchRepairStatus]);
+
+  // Separate effect for intervals that adjusts based on repair status
+  useEffect(() => {
+    // Refresh stats more frequently when repair is running (every 2 seconds)
+    // Otherwise refresh every 10 seconds
     const statsInterval = setInterval(() => {
       fetchRepairStats(false);
-    }, 10000); // Update stats every 10 seconds
+    }, status?.is_running ? 2000 : 10000);
 
     const statusInterval = setInterval(() => {
       fetchRepairStatus();
@@ -134,7 +149,7 @@ export default function RepairQueue() {
       clearInterval(statsInterval);
       clearInterval(statusInterval);
     };
-  }, [fetchRepairStats, fetchRepairStatus]);
+  }, [fetchRepairStats, fetchRepairStatus, status?.is_running]);
 
 
   const handleStartRepair = async () => {
@@ -159,6 +174,58 @@ export default function RepairQueue() {
     } catch (err) {
       console.error('Failed to stop repair:', err);
       setError('Failed to stop repair scan');
+    }
+  };
+
+  const handleSelectTorrent = (torrentId: string) => {
+    setSelectedTorrents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(torrentId)) {
+        newSet.delete(torrentId);
+      } else {
+        newSet.add(torrentId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!stats || !stats.repairs) return;
+    
+    if (selectedTorrents.size === stats.repairs.length) {
+      setSelectedTorrents(new Set());
+    } else {
+      setSelectedTorrents(new Set(stats.repairs.map(r => r.torrent_id)));
+    }
+  };
+
+  const handleRepairSelected = async () => {
+    if (selectedTorrents.size === 0) {
+      setError('Please select at least one torrent to repair');
+      return;
+    }
+
+    setRepairing(true);
+    setError('');
+
+    try {
+      const response = await axios.post('/api/realdebrid/repair-torrent', {
+        torrent_ids: Array.from(selectedTorrents)
+      });
+
+      if (response.data.success) {
+        setSelectedTorrents(new Set());
+        fetchRepairStats(false);
+        fetchRepairStatus();
+        setError('');
+      } else {
+        setError(response.data.message || 'Failed to repair torrents');
+      }
+    } catch (err: any) {
+      console.error('Failed to repair torrents:', err);
+      setError(err.response?.data?.error || 'Failed to repair selected torrents');
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -190,9 +257,8 @@ export default function RepairQueue() {
     );
   }
 
-  if (!stats) {
-    return null;
-  }
+  const repairs = stats?.repairs || [];
+  const total = stats?.total || 0;
 
   console.log('Current status:', status);
 
@@ -231,7 +297,20 @@ export default function RepairQueue() {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {status && status.is_running ? (
+          {selectedTorrents.size > 0 && (
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<BuildIcon />}
+              onClick={handleRepairSelected}
+              disabled={repairing}
+              sx={{ fontWeight: 600 }}
+            >
+              {repairing ? 'Repairing...' : `Repair (${selectedTorrents.size})`}
+            </Button>
+          )}
+          {/* Always show Start/Stop button, even if status is null */}
+          {status?.is_running ? (
             <Button
               variant="contained"
               color="error"
@@ -331,14 +410,6 @@ export default function RepairQueue() {
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    Fixed
-                  </Typography>
-                  <Typography variant="body1" fontWeight="600" color="success.main">
-                    {status.fixed}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
                     Validated
                   </Typography>
                   <Typography variant="body1" fontWeight="600" color="info.main">
@@ -399,7 +470,7 @@ export default function RepairQueue() {
                 <Stack direction="row" alignItems="center" spacing={1}>
                   <BuildIcon sx={{ fontSize: 20, color: 'warning.main' }} />
                   <Box>
-                    <Typography variant="h4" fontWeight="700" color="warning.main" sx={{ fontSize: '1.1rem' }}>{stats.total}</Typography>
+                    <Typography variant="h4" fontWeight="700" color="warning.main" sx={{ fontSize: '1.1rem' }}>{total}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Needs Repair</Typography>
                   </Box>
                 </Stack>
@@ -445,7 +516,7 @@ export default function RepairQueue() {
       </Box>
 
       {/* Repairs Table */}
-      {!stats.repairs || stats.repairs.length === 0 ? (
+      {repairs.length === 0 ? (
         <Card sx={{ borderRadius: 2, boxShadow: 'none', mb: 2 }}>
           <CardContent sx={{ p: 2 }}>
             <Box sx={{ textAlign: 'center', py: 2 }}>
@@ -475,6 +546,13 @@ export default function RepairQueue() {
               <TableRow
                 sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}
               >
+                  <TableCell padding="checkbox" sx={{ fontWeight: 700 }}>
+                  <Checkbox
+                    indeterminate={selectedTorrents.size > 0 && selectedTorrents.size < repairs.length}
+                    checked={repairs.length > 0 && selectedTorrents.size === repairs.length}
+                    onChange={handleSelectAll}
+                  />
+                </TableCell>
                 <TableCell sx={{ fontWeight: 700, display: { xs: 'none', sm: 'table-cell' } }}>Torrent ID</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Filename</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Hash</TableCell>
@@ -485,7 +563,7 @@ export default function RepairQueue() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {stats.repairs.map((repair, index) => (
+              {repairs.map((repair, index) => (
                 <React.Fragment key={repair.torrent_id}>
                   <Box sx={{
                     mb: 1.5,
@@ -496,7 +574,14 @@ export default function RepairQueue() {
                     p: 1.2,
                     display: { xs: 'block', sm: 'none' },
                   }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>{repair.filename}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Checkbox
+                        checked={selectedTorrents.has(repair.torrent_id)}
+                        onChange={() => handleSelectTorrent(repair.torrent_id)}
+                        size="small"
+                      />
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{repair.filename}</Typography>
+                    </Box>
                     <Stack direction="row" spacing={1} sx={{ mb: 0.5 }}>
                       <Chip label={repair.status} size="small" variant="outlined" />
                       <Chip icon={getReasonIcon(repair.reason)} label={getReasonLabel(repair.reason)} size="small" color={getReasonColor(repair.reason)} sx={{ fontWeight: 600 }} />
@@ -519,8 +604,15 @@ export default function RepairQueue() {
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.05),
                     },
+                    bgcolor: selectedTorrents.has(repair.torrent_id) ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                   }}
                 >
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedTorrents.has(repair.torrent_id)}
+                      onChange={() => handleSelectTorrent(repair.torrent_id)}
+                    />
+                  </TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     <Typography
                       variant="body2"
@@ -578,11 +670,13 @@ export default function RepairQueue() {
       )}
 
       {/* Footer Info */}
-      <Box sx={{ mt: 2, textAlign: 'right' }}>
-        <Typography variant="caption" color="text.secondary">
-          Last updated: {formatDate(stats.lastUpdated)}
-        </Typography>
-      </Box>
+      {stats && (
+        <Box sx={{ mt: 2, textAlign: 'right' }}>
+          <Typography variant="caption" color="text.secondary">
+            Last updated: {formatDate(stats.lastUpdated)}
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }

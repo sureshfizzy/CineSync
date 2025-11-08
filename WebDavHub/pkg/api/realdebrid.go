@@ -1795,7 +1795,6 @@ func HandleRepairStatus(w http.ResponseWriter, r *http.Request) {
 		"total_torrents":      status.TotalTorrents,
 		"processed_torrents":  status.ProcessedTorrents,
 		"broken_found":        status.BrokenFound,
-		"fixed":               status.Fixed,
 		"validated":           status.Validated,
 		"queue_size":          status.QueueSize,
 		"last_run_time":       status.LastRunTime.Unix(),
@@ -1839,8 +1838,21 @@ func HandleRepairStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	store := tm.GetStore()
+	if store == nil {
+		// Return empty stats if store is not initialized
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"total":        0,
+			"repairs":      []realdebrid.RepairEntry{},
+			"reasonCounts": map[string]int{},
+			"lastUpdated":  time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
 	// Get all repair entries
-	repairs, err := tm.GetStore().GetAllRepairs()
+	repairs, err := store.GetAllRepairs()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get repair entries: %v", err), http.StatusInternalServerError)
 		return
@@ -1852,7 +1864,7 @@ func HandleRepairStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get repair count
-	repairCount, err := tm.GetStore().GetRepairCount()
+	repairCount, err := store.GetRepairCount()
 	if err != nil {
 		repairCount = len(repairs)
 	}
@@ -1902,6 +1914,12 @@ func HandleRepairStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	store := tm.GetStore()
+	if store == nil {
+		http.Error(w, "Store not initialized", http.StatusInternalServerError)
+		return
+	}
+
 	// Start repair scan
 	err = tm.RepairAllTorrents()
 	if err != nil {
@@ -1909,10 +1927,14 @@ func HandleRepairStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get current stats
+	stats := realdebrid.GetRepairStatus()
+	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": "Repair scan started",
+		"message": "Repair scan started successfully",
+		"totalTorrents": stats.TotalTorrents,
 	})
 }
 
@@ -1956,4 +1978,76 @@ func HandleRepairStop(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "Repair stop signal sent",
 	})
+}
+
+// HandleRepairTorrent handles requests to repair specific torrent(s)
+func HandleRepairTorrent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		http.Error(w, "Torrent manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse request body
+	var request struct {
+		TorrentIDs []string `json:"torrent_ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(request.TorrentIDs) == 0 {
+		http.Error(w, "No torrent IDs provided", http.StatusBadRequest)
+		return
+	}
+
+	// Repair each torrent
+	repaired := 0
+	failed := 0
+	errors := []string{}
+
+	for _, torrentID := range request.TorrentIDs {
+		if err := tm.RepairTorrent(torrentID); err != nil {
+			failed++
+			errors = append(errors, fmt.Sprintf("%s: %v", torrentID, err))
+		} else {
+			repaired++
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Repair initiated for %d torrent(s)", repaired),
+		"repaired": repaired,
+		"failed":   failed,
+	}
+
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

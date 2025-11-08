@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -113,6 +114,22 @@ type TrafficDetailsMap map[string]TrafficDetailResponse
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	ErrorCode int  `json:"error_code"`
+}
+
+// ErrTorrentNotFound is returned when a torrent doesn't exist (unknown_ressource, code 7)
+type ErrTorrentNotFound struct {
+	TorrentID string
+	Message   string
+}
+
+func (e *ErrTorrentNotFound) Error() string {
+	return e.Message
+}
+
+// IsTorrentNotFound checks if an error is ErrTorrentNotFound
+func IsTorrentNotFound(err error) bool {
+	_, ok := err.(*ErrTorrentNotFound)
+	return ok
 }
 
 var (
@@ -329,12 +346,17 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operation
 		if resp.StatusCode == http.StatusNoContent {
 			return resp, nil
 		}
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			attempt++
 			var errorResp ErrorResponse
 			if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+				if errorResp.ErrorCode == 7 {
+					return nil, &ErrTorrentNotFound{
+						Message: fmt.Sprintf("torrent not found: %s (code: %d)", errorResp.Error, errorResp.ErrorCode),
+					}
+				}
 				if attempt >= maxRetries {
 					return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
 				}
@@ -421,11 +443,10 @@ func (c *Client) GetWebDAVURL() string {
 
 // GetWebDAVCredentials returns the WebDAV credentials
 func (c *Client) GetWebDAVCredentials() (username, password string) {
-	return c.apiKey, "eeeeee" // Real-Debrid uses API key as username and placeholder password
+	return c.apiKey, "eeeeee"
 }
 
 // CheckLink validates if a link is still available without unrestricting it
-// This is a lightweight operation that doesn't consume bandwidth or generate download links
 func (c *Client) CheckLink(link string) error {
 	if link == "" {
 		return fmt.Errorf("link parameter is empty")
@@ -825,6 +846,7 @@ type TorrentInfo struct {
 	Ended        string         `json:"ended,omitempty"`
 	Speed        int64          `json:"speed,omitempty"`
 	Seeders      int            `json:"seeders,omitempty"`
+	OriginalID   string         `json:"-"`
 }
 
 // GetTorrentInfo retrieves detailed information about a specific torrent
@@ -842,12 +864,22 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 
 	resp, err := c.doRequestWithRetry(req, 3, "GetTorrentInfo")
 	if err != nil {
+		// Check if it's a torrent not found error
+		if IsTorrentNotFound(err) {
+			return nil, &ErrTorrentNotFound{
+				TorrentID: torrentID,
+				Message:   fmt.Sprintf("torrent %s not found: %v", torrentID, err),
+			}
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent {
-		return nil, fmt.Errorf("torrent not found")
+		return nil, &ErrTorrentNotFound{
+			TorrentID: torrentID,
+			Message:   fmt.Sprintf("torrent %s not found (204 No Content)", torrentID),
+		}
 	}
 
 	var info TorrentInfo
@@ -856,6 +888,189 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	}
 
 	return &info, nil
+}
+
+// AddMagnetResponse represents the response from adding a magnet
+type AddMagnetResponse struct {
+	ID  string `json:"id"`
+	URI string `json:"uri"`
+}
+
+// AddMagnet adds a magnet link to Real-Debrid and returns the new torrent ID
+func (c *Client) AddMagnet(magnet string) (*AddMagnetResponse, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+
+	formData := url.Values{}
+	formData.Set("magnet", magnet)
+
+	req, err := http.NewRequest("POST", c.baseURL+"/torrents/addMagnet", strings.NewReader(formData.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.doRequestWithRetry(req, 3, "AddMagnet")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		bodyPreview := string(body)
+		if len(bodyPreview) > 200 {
+			bodyPreview = bodyPreview[:200] + "..."
+		}
+		return nil, fmt.Errorf("failed to add magnet: status %d, body: %s", resp.StatusCode, bodyPreview)
+	}
+
+	var result AddMagnetResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// InstantAvailabilityResponse represents the response from instant availability check
+type InstantAvailabilityResponse map[string]struct {
+	Rd []interface{} `json:"rd"`
+}
+
+// CheckInstantAvailability checks if torrents are instantly available (cached) by their hashes
+func (c *Client) CheckInstantAvailability(hashes []string) (map[string]bool, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+
+	result := make(map[string]bool)
+	for i := 0; i < len(hashes); i += 200 {
+		end := i + 200
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+
+		// Filter out empty strings
+		validHashes := make([]string, 0, end-i)
+		for _, hash := range hashes[i:end] {
+			if hash != "" {
+				validHashes = append(validHashes, hash)
+			}
+		}
+
+		if len(validHashes) == 0 {
+			continue
+		}
+
+		hashStr := strings.Join(validHashes, "/")
+		url := fmt.Sprintf("%s/torrents/instantAvailability/%s", c.baseURL, hashStr)
+		
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.doRequestWithRetry(req, 3, "CheckInstantAvailability")
+		if err != nil {
+			logger.Warn("[RealDebrid] Failed to check instant availability: %v", err)
+			// Continue with other batches even if one fails
+			continue
+		}
+		defer resp.Body.Close()
+
+		var data InstantAvailabilityResponse
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			logger.Warn("[RealDebrid] Failed to decode availability response: %v", err)
+			continue
+		}
+
+		for _, h := range validHashes {
+			hosters, exists := data[strings.ToLower(h)]
+			if exists && len(hosters.Rd) > 0 {
+				result[h] = true
+			} else {
+				result[h] = false
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// DeleteTorrent deletes a torrent from Real-Debrid
+func (c *Client) DeleteTorrent(torrentID string) error {
+	if c.apiKey == "" {
+		return fmt.Errorf("API key not set")
+	}
+
+	req, err := http.NewRequest("DELETE", c.baseURL+"/torrents/delete/"+torrentID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequestWithRetry(req, 3, "DeleteTorrent")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+			return fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return fmt.Errorf("failed to delete torrent: status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *Client) SelectFiles(torrentID string, fileIDs []string) error {
+	if c.apiKey == "" {
+		return fmt.Errorf("API key not set")
+	}
+
+	formData := url.Values{}
+	formData.Set("files", strings.Join(fileIDs, ","))
+
+	req, err := http.NewRequest("POST", c.baseURL+"/torrents/selectFiles/"+torrentID, strings.NewReader(formData.Encode()))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.doRequestWithRetry(req, 3, "SelectFiles")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+			if errorResp.ErrorCode == 509 {
+				return fmt.Errorf("too many active downloads")
+			}
+			return fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return fmt.Errorf("failed to select files: status %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // IsValidAPIKey checks if the provided API key is valid
