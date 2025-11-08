@@ -328,8 +328,12 @@ func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, [
 			return cached.Files, cached.Links, cached.Ended
 		}
 	}
+	info, err := tm.GetTorrentInfo(torrentID)
+	if err != nil {
+		return nil, nil, ""
+	}
 	
-	return nil, nil, ""
+	return info.Files, info.Links, info.Ended
 }
 
 // GetTorrentStatistics returns status counts and total size from cached torrents
