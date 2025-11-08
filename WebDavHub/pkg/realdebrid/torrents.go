@@ -115,6 +115,7 @@ type TorrentManager struct {
 	client        *Client
 	DirectoryMap cmap.ConcurrentMap[string, cmap.ConcurrentMap[string, *TorrentItem]]
 	InfoMap      cmap.ConcurrentMap[string, *TorrentInfo]
+	idToItemMap  cmap.ConcurrentMap[string, *TorrentItem]
 	downloadLinkCache cmap.ConcurrentMap[string, *DownloadLinkEntry]
 	failedFileCache   cmap.ConcurrentMap[string, *FailedFileEntry]
 	downloadSG singleflight.Group
@@ -172,6 +173,7 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		client:            NewClient(apiKey),
 		downloadLinkCache: cmap.New[*DownloadLinkEntry](),
 		failedFileCache:   cmap.New[*FailedFileEntry](),
+		idToItemMap:       cmap.New[*TorrentItem](),
 		refreshInterval:   DEFAULT_REFRESH_INTERVAL,
 		initialized:       make(chan struct{}),
 	}
@@ -243,6 +245,7 @@ func (tm *TorrentManager) loadCachedTorrents() {
 		item := &items[i]
 		accessKey := GetDirectoryName(item.Filename)
 		allTorrents.Set(accessKey, item)
+		tm.idToItemMap.Set(item.ID, item)
 	}
 	
 	logger.Info("[Torrents] Loaded %d torrents into concurrent maps", len(items))
@@ -262,13 +265,15 @@ func (tm *TorrentManager) loadCachedTorrentInfo() {
 	}
 	
 	loaded := 0
-	for item := range allTorrents.IterBuffered() {
-		torrentItem := item.Val
-		torrentID := torrentItem.ID
-		if info, found, err := tm.infoStore.Get(torrentID); err == nil && found && info != nil {
-			if info.Progress == 100 {
-				tm.InfoMap.Set(torrentID, info)
-				loaded++
+	keys := allTorrents.Keys()
+	for _, key := range keys {
+		if item, ok := allTorrents.Get(key); ok && item != nil {
+			torrentID := item.ID
+			if info, found, err := tm.infoStore.Get(torrentID); err == nil && found && info != nil {
+				if info.Progress == 100 {
+					tm.InfoMap.Set(torrentID, info)
+					loaded++
+				}
 			}
 		}
 	}
@@ -288,11 +293,11 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 		item := &torrents[i]
 		accessKey := GetDirectoryName(item.Filename)
 		allTorrents.Set(accessKey, item)
+		tm.idToItemMap.Set(item.ID, item)
 	}
 	
 	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", 
 		len(torrents))
-	tm.PopulateFileLists()
 	
 	tm.prefetchCompleted.Store(true)
 
@@ -315,48 +320,23 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	triggerPendingMount()
 }
 
-// PopulateFileLists loads file lists from DB/InfoMap into TorrentItem for instant WebDAV access
-func (tm *TorrentManager) PopulateFileLists() {
-	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-	if !ok {
-		return
+// GetTorrentFileList loads file list on demand from InfoMap/DB
+func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, []string, string) {
+	if info, ok := tm.InfoMap.Get(torrentID); ok && info != nil {
+		return info.Files, info.Links, info.Ended
 	}
 	
-	populated := 0
-	fromMemory := 0
-	fromDB := 0
-	
-	for entry := range allTorrents.IterBuffered() {
-		torrentName := entry.Key
-		item := entry.Val
-		
-		if info, ok := tm.InfoMap.Get(item.ID); ok {
-			item.FileList = info.Files
-			item.Links = info.Links
-			item.Ended = info.Ended
-			allTorrents.Set(torrentName, item)
-			fromMemory++
-			populated++
-			continue
-		}
-		
-		if tm.infoStore != nil {
-			if cached, ok, err := tm.infoStore.Get(item.ID); err == nil && ok && cached != nil {
-				item.FileList = cached.Files
-				item.Links = cached.Links
-				item.Ended = cached.Ended
-				allTorrents.Set(torrentName, item)
-				if cached.Progress == 100 {
-					tm.InfoMap.Set(item.ID, cached)
-				}
-				fromDB++
-				populated++
-				continue
+	if tm.infoStore != nil {
+		if cached, ok, err := tm.infoStore.Get(torrentID); err == nil && ok && cached != nil {
+			if cached.Progress == 100 {
+				tm.InfoMap.Set(torrentID, cached)
 			}
+			return cached.Files, cached.Links, cached.Ended
 		}
 	}
+	
+	return nil, nil, ""
 }
-
 
 // GetTorrentStatistics returns status counts and total size from cached torrents
 func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
@@ -367,10 +347,12 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 		return statusCounts, 0
 	}
 	
-	for item := range allTorrents.IterBuffered() {
-		torrent := item.Val
-		statusCounts[torrent.Status]++
-		totalSize += torrent.Bytes
+	keys := allTorrents.Keys()
+	for _, key := range keys {
+		if torrent, ok := allTorrents.Get(key); ok && torrent != nil {
+			statusCounts[torrent.Status]++
+			totalSize += torrent.Bytes
+		}
 	}
 	
 	return statusCounts, totalSize
@@ -558,43 +540,39 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 	var restrictedLink string
 	var targetFileBytes int64
-	if allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS); ok {
-		for entry := range allTorrents.IterBuffered() {
-			item := entry.Val
-			if item.ID == torrentID && len(item.Links) > 0 && len(item.FileList) > 0 {
-				var targetFile *TorrentFile
-				for i := range item.FileList {
-					if item.FileList[i].Selected == 1 {
-						baseName := path.Base(item.FileList[i].Path)
-						if baseName == filePath {
-							targetFile = &item.FileList[i]
-							break
-						}
-					}
+	
+	files, links, _ := tm.GetTorrentFileList(torrentID)
+	if len(links) > 0 && len(files) > 0 {
+		var targetFile *TorrentFile
+		for i := range files {
+			if files[i].Selected == 1 {
+				baseName := path.Base(files[i].Path)
+				if baseName == filePath {
+					targetFile = &files[i]
+					break
+				}
+			}
+		}
+		
+		if targetFile != nil {
+			if targetFile.ID-1 < len(links) {
+				restrictedLink = links[targetFile.ID-1]
+			} else if len(links) > 0 {
+				restrictedLink = links[0]
+			}
+			targetFileBytes = targetFile.Bytes
+			
+			if restrictedLink != "" {
+				processedLink := restrictedLink
+				if strings.HasPrefix(restrictedLink, "https://real-debrid.com/d/") && len(restrictedLink) > 39 {
+					processedLink = restrictedLink[0:39]
 				}
 				
-				if targetFile != nil {
-					if targetFile.ID-1 < len(item.Links) {
-						restrictedLink = item.Links[targetFile.ID-1]
-					} else if len(item.Links) > 0 {
-						restrictedLink = item.Links[0]
-					}
-					targetFileBytes = targetFile.Bytes
-					
-					if restrictedLink != "" {
-						processedLink := restrictedLink
-						if strings.HasPrefix(restrictedLink, "https://real-debrid.com/d/") && len(restrictedLink) > 39 {
-							processedLink = restrictedLink[0:39]
-						}
-						
-						if cached, exists := tm.client.unrestrictCache.Get(processedLink); exists {
-							if time.Since(cached.Generated) < 24*time.Hour {
-								return cached.Download.Download, cached.Download.Filesize, nil
-							}
-						}
+				if cached, exists := tm.client.unrestrictCache.Get(processedLink); exists {
+					if time.Since(cached.Generated) < 24*time.Hour {
+						return cached.Download.Download, cached.Download.Filesize, nil
 					}
 				}
-				break
 			}
 		}
 	}
@@ -764,9 +742,11 @@ func (tm *TorrentManager) PrefetchHttpDavData() error {
 	
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	torrentSizeMap := make(map[string]int64)
-	for item := range allTorrents.IterBuffered() {
-		dirName := item.Key
-		torrentSizeMap[dirName] = item.Val.Bytes
+	keys := allTorrents.Keys()
+	for _, dirName := range keys {
+		if item, ok := allTorrents.Get(dirName); ok && item != nil {
+			torrentSizeMap[dirName] = item.Bytes
+		}
 	}
 
 	for i := range torrentsFiles {
@@ -1016,19 +996,21 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		logger.Debug("[Refresh] Directory map not initialized")
 		return
 	}
-	cachedTorrents := make([]TorrentItem, 0, allTorrentsMap.Count())
-	for item := range allTorrentsMap.IterBuffered() {
-		cachedTorrents = append(cachedTorrents, *item.Val)
-	}
 	
-	if len(cachedTorrents) == 0 {
+	keys := allTorrentsMap.Keys()
+	if len(keys) == 0 {
 		logger.Debug("[Refresh] No cached/prefetched torrents available, skipping refresh")
 		return
 	}
 
-	oldTorrents := make(map[string]TorrentItem, len(cachedTorrents))
-	for i := range cachedTorrents {
-		oldTorrents[cachedTorrents[i].ID] = cachedTorrents[i]
+	// Build oldTorrents map directly from keys (no intermediate slice)
+	oldTorrents := make(map[string]TorrentItem, len(keys))
+	cachedTorrents := make([]TorrentItem, 0, len(keys))
+	for _, key := range keys {
+		if item, ok := allTorrentsMap.Get(key); ok && item != nil {
+			oldTorrents[item.ID] = *item
+			cachedTorrents = append(cachedTorrents, *item)
+		}
 	}
 	
 	firstPage, totalCount, err := tm.fetchFirstPageWithTotal(ctx, 1000)
@@ -1042,25 +1024,29 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 	var allTorrents []TorrentItem
 	cachedLen := len(cachedTorrents)
 	
-	matchLoop:
+	freshMap := make(map[string]int, len(firstPage))
+	for fIdx, fresh := range firstPage {
+		freshMap[fresh.ID] = fIdx
+	}
+
+	matchFound := false
 	for cIdx, cached := range cachedTorrents {
-		cIdxFromEnd := cachedLen - 1 - cIdx
-		for fIdx, fresh := range firstPage {
-			if fresh.ID == cached.ID {
-				positionDiff := (totalCount - 1 - fIdx) - cIdxFromEnd
-				if positionDiff >= -1 && positionDiff <= 1 {
-					allTorrents = make([]TorrentItem, 0, totalCount)
-					allTorrents = append(allTorrents, firstPage[:fIdx]...)
-					allTorrents = append(allTorrents, cachedTorrents[cIdx:]...)
-					if len(allTorrents) >= totalCount-10 && len(allTorrents) <= totalCount+10 {
-						break matchLoop
-					}
+		if fIdx, exists := freshMap[cached.ID]; exists {
+			cIdxFromEnd := cachedLen - 1 - cIdx
+			positionDiff := (totalCount - 1 - fIdx) - cIdxFromEnd
+			if positionDiff >= -1 && positionDiff <= 1 {
+				allTorrents = make([]TorrentItem, 0, totalCount)
+				allTorrents = append(allTorrents, firstPage[:fIdx]...)
+				allTorrents = append(allTorrents, cachedTorrents[cIdx:]...)
+				if len(allTorrents) >= totalCount-10 && len(allTorrents) <= totalCount+10 {
+					matchFound = true
+					break
 				}
 			}
 		}
 	}
 
-	if allTorrents == nil {
+	if !matchFound {
 		allTorrents = firstPage
 		if totalCount > len(firstPage) && cachedLen > len(firstPage) {
 			allTorrents = append(allTorrents, cachedTorrents[len(firstPage):]...)
@@ -1086,13 +1072,14 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		}
 	}
 	
-	// Update DirectoryMap
 	allTorrentsMap.Clear()
+	tm.idToItemMap.Clear()
 	
 	for i := range allTorrents {
 		item := &allTorrents[i]
 		accessKey := GetDirectoryName(item.Filename)
 		allTorrentsMap.Set(accessKey, item)
+		tm.idToItemMap.Set(item.ID, item)
 	}
 	
 	go tm.SaveAllTorrents()
@@ -1248,13 +1235,13 @@ func (tm *TorrentManager) StartCatalogSyncJob(interval time.Duration) {
                 continue
             }
 
-            listCopy := make([]TorrentItem, 0, allTorrentsMap.Count())
-            for item := range allTorrentsMap.IterBuffered() {
-                listCopy = append(listCopy, *item.Val)
+            keys := allTorrentsMap.Keys()
+            rdIDs := make([]string, 0, len(keys))
+            for _, key := range keys {
+                if item, ok := allTorrentsMap.Get(key); ok && item != nil {
+                    rdIDs = append(rdIDs, item.ID)
+                }
             }
-
-            rdIDs := make([]string, 0, len(listCopy))
-            for i := range listCopy { rdIDs = append(rdIDs, listCopy[i].ID) }
             tm.ReconcileDBWithRD(rdIDs)
             tm.SaveAllTorrents()
         }

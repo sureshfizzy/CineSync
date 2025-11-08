@@ -175,9 +175,10 @@ func (c *Client) StartTokenRecoveryJob() {
 			for _, token := range expiredTokens {
 				verified := false
 
-				for item := range c.unrestrictCache.IterBuffered() {
-					cachedEntry := item.Val
-					if cachedEntry == nil || cachedEntry.Download == nil {
+				keys := c.unrestrictCache.Keys()
+				for _, key := range keys {
+					cachedEntry, ok := c.unrestrictCache.Get(key)
+					if !ok || cachedEntry == nil || cachedEntry.Download == nil {
 						continue
 					}
 					

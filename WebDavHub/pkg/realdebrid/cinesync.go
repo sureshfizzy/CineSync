@@ -188,9 +188,12 @@ func (tm *TorrentManager) SaveAllTorrents() {
         return
     }
     
-    list := make([]TorrentItem, 0, allTorrentsMap.Count())
-    for item := range allTorrentsMap.IterBuffered() {
-        list = append(list, *item.Val)
+    keys := allTorrentsMap.Keys()
+    list := make([]TorrentItem, 0, len(keys))
+    for _, key := range keys {
+        if item, ok := allTorrentsMap.Get(key); ok && item != nil {
+            list = append(list, *item)
+        }
     }
     
     tm.saveAllTorrents(list)

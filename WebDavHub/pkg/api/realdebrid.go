@@ -1137,8 +1137,13 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			modTime = item.Added
 		}
 
+		fileList, _, ended := tm.GetTorrentFileList(item.ID)
+		if ended != "" {
+			modTime = ended
+		}
+		
 		fileCount := 0
-		for _, file := range item.FileList {
+		for _, file := range fileList {
 			if file.Selected == 1 {
 				fileCount++
 			}
@@ -1156,7 +1161,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
 		realdebrid.DirectoryResponse(buf, basePath, modTime)
 		
-		if len(item.FileList) > 0 {
+		if len(fileList) > 0 {
 			type sortableFile struct {
 				baseName string
 				fullPath string
@@ -1164,7 +1169,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			}
 			var files []sortableFile
 			
-			for _, file := range item.FileList {
+			for _, file := range fileList {
 				if file.Selected == 1 {
 					baseName := path.Base(file.Path)
 					fullPath := basePath + baseName
@@ -1265,40 +1270,43 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
     if r.Method == "HEAD" {
 		if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
-			if item, found := allTorrents.Get(torrentName); found && len(item.FileList) > 0 {
-				var target *realdebrid.TorrentFile
-				for i := range item.FileList {
-					if item.FileList[i].Selected == 1 {
-						if path.Base(item.FileList[i].Path) == baseName {
-							target = &item.FileList[i]
-							break
-						}
-					}
-				}
-				
-				if target != nil {
-					modTime := time.Now()
-					if item.Ended != "" {
-						if t, err := time.Parse(time.RFC3339, item.Ended); err == nil {
-							modTime = t
-						}
-					} else if item.Added != "" {
-						if t, err := time.Parse(time.RFC3339, item.Added); err == nil {
-							modTime = t
+			if item, found := allTorrents.Get(torrentName); found {
+				fileList, _, _ := tm.GetTorrentFileList(item.ID)
+				if len(fileList) > 0 {
+					var target *realdebrid.TorrentFile
+					for i := range fileList {
+						if fileList[i].Selected == 1 {
+							if path.Base(fileList[i].Path) == baseName {
+								target = &fileList[i]
+								break
+							}
 						}
 					}
 					
-					etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
-					if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
-						w.WriteHeader(http.StatusNotModified)
+					if target != nil {
+						modTime := time.Now()
+						if item.Ended != "" {
+							if t, err := time.Parse(time.RFC3339, item.Ended); err == nil {
+								modTime = t
+							}
+						} else if item.Added != "" {
+							if t, err := time.Parse(time.RFC3339, item.Added); err == nil {
+								modTime = t
+							}
+						}
+						
+						etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
+						if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+						w.Header().Set("ETag", etag)
+						w.Header().Set("Content-Length", fmt.Sprintf("%d", target.Bytes))
+						w.Header().Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
+						w.Header().Set("Accept-Ranges", "bytes")
+						w.WriteHeader(http.StatusOK)
 						return
 					}
-					w.Header().Set("ETag", etag)
-					w.Header().Set("Content-Length", fmt.Sprintf("%d", target.Bytes))
-					w.Header().Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
-					w.Header().Set("Accept-Ranges", "bytes")
-					w.WriteHeader(http.StatusOK)
-					return
 				}
 			}
 		}

@@ -912,9 +912,12 @@ func (c *Client) GetUnrestrictCacheSize() int {
 // CleanupExpiredCacheEntries removes expired cache entries
 func (c *Client) CleanupExpiredCacheEntries() {
 	now := time.Now()
-	for item := range c.unrestrictCache.IterBuffered() {
-		if now.Sub(item.Val.Generated) >= 24*time.Hour {
-			c.unrestrictCache.Remove(item.Key)
+	keys := c.unrestrictCache.Keys()
+	for _, key := range keys {
+		if entry, ok := c.unrestrictCache.Get(key); ok && entry != nil {
+			if now.Sub(entry.Generated) >= 24*time.Hour {
+				c.unrestrictCache.Remove(key)
+			}
 		}
 	}
 }
