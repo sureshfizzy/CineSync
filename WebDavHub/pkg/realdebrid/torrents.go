@@ -288,6 +288,8 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 
 // GetTorrentFileList loads file list on demand from DB
 func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, []string, string) {
+	torrentID = resolveTorrentID(torrentID)
+	
 	if tm.infoStore != nil {
 		if cached, ok, err := tm.infoStore.Get(torrentID); err == nil && ok && cached != nil {
 			return cached.Files, cached.Links, cached.Ended
@@ -324,6 +326,8 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
+	torrentID = resolveTorrentID(torrentID)
+	
 	v, err, shared := tm.infoSG.Do("info:"+torrentID, func() (interface{}, error) {
 		if tm.infoStore != nil {
 			if cached, ok, derr := tm.infoStore.Get(torrentID); derr == nil && ok && cached != nil {
@@ -374,6 +378,8 @@ func (tm *TorrentManager) FindTorrentByName(name string) (string, error) {
 
 // ListTorrentFiles lists files in a torrent
 func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]FileNode, error) {
+	torrentID = resolveTorrentID(torrentID)
+	
 	info, err := tm.GetTorrentInfo(torrentID)
 	if err != nil {
 		return nil, err
@@ -524,6 +530,8 @@ func isBrokenLinkError(err error) bool {
 
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
+	torrentID = resolveTorrentID(torrentID)
+	
 	cacheKey := MakeCacheKey(torrentID, filePath)
 
 	var restrictedLink string
@@ -702,6 +710,8 @@ type FileNode struct {
 
 // RefreshTorrent refreshes torrent information from Real-Debrid API
 func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
+	torrentID = resolveTorrentID(torrentID)
+	
 	logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
 	
 	// Fetch fresh torrent info

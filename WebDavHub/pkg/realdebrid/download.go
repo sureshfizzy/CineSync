@@ -49,6 +49,41 @@ func constructMagnet(infoHash, name string) string {
 	return fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", infoHash, name)
 }
 
+// updateCachesAfterRepair updates in-memory caches after a successful repair
+func (tm *TorrentManager) updateCachesAfterRepair(oldID string, newInfo *TorrentInfo) {
+	oldItem, oldExists := tm.idToItemMap.Get(oldID)
+	if !oldExists {
+		return
+	}
+
+	newItem := &TorrentItem{
+		ID:       newInfo.ID,
+		Filename: oldItem.Filename,
+		Bytes:    oldItem.Bytes,
+		Files:    oldItem.Files,
+		Status:   newInfo.Status,
+		Added:    oldItem.Added,
+		Ended:    newInfo.Ended,
+	}
+	
+	// Update DirectoryMap with the new torrent
+	if allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS); ok {
+		dirName := GetDirectoryName(oldItem.Filename)
+		allTorrents.Set(dirName, newItem)
+	}
+
+	tm.idToItemMap.Set(newInfo.ID, newItem)
+	tm.idToItemMap.Set(oldID, newItem)
+}
+
+// resolveTorrentID resolves a torrent ID, checking the mapping for repaired torrents
+func resolveTorrentID(torrentID string) string {
+	if newID, ok := torrentIDMapping.Get(torrentID); ok {
+		return newID
+	}
+	return torrentID
+}
+
 func (tm *TorrentManager) fetchDownloadLink(torrentID, filePath string) (string, int64, error) {
 	info, err := tm.GetTorrentInfo(torrentID)
 	if err != nil {
@@ -280,6 +315,7 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 					deletedOldTorrents.Remove(originalTorrentID)
 				} else {
 					tm.deleteTorrentFromCache(originalTorrentID)
+					tm.idToItemMap.Remove(originalTorrentID)
 					torrentIDMapping.Remove(originalTorrentID)
 				}
 			}
@@ -408,6 +444,10 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 		_ = tm.infoStore.Upsert(newInfo)
 	}
 	
+	if tm.store != nil {
+		_ = tm.store.UpsertInfo(newInfo)
+	}
+	
 	if newInfo.Progress == 100 {
 		tm.InfoMap.Set(newInfo.ID, newInfo)
 	}
@@ -418,6 +458,7 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 	if oldID != "" && oldID != newInfo.ID {
 		torrentIDMapping.Set(oldID, newInfo.ID)
 	}
+	tm.updateCachesAfterRepair(oldID, newInfo)
 	
 	req.Complete(newInfo, nil)
 	
