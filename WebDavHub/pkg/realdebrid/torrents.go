@@ -245,34 +245,6 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 	
 	logger.Info("[Torrents] Loaded %d torrents into concurrent maps", len(items))
-	tm.loadCachedTorrentInfo()
-}
-
-// loadCachedTorrentInfo loads all TorrentInfo from torrents-info.db into memory
-func (tm *TorrentManager) loadCachedTorrentInfo() {
-	if tm.infoStore == nil {
-		return
-	}
-	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-	if !ok {
-		return
-	}
-	
-	loaded := 0
-	keys := allTorrents.Keys()
-	for _, key := range keys {
-		if item, ok := allTorrents.Get(key); ok && item != nil {
-			torrentID := item.ID
-			if info, found, err := tm.infoStore.Get(torrentID); err == nil && found && info != nil {
-				if info.Progress == 100 {
-					tm.InfoMap.Set(torrentID, info)
-					loaded++
-				}
-			}
-		}
-	}
-	
-	logger.Info("[Torrents] Loaded %d complete torrent infos into memory", loaded)
 }
 
 // loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
@@ -314,20 +286,14 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	triggerPendingMount()
 }
 
-// GetTorrentFileList loads file list on demand from InfoMap/DB
+// GetTorrentFileList loads file list on demand from DB
 func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, []string, string) {
-	if info, ok := tm.InfoMap.Get(torrentID); ok && info != nil {
-		return info.Files, info.Links, info.Ended
-	}
-	
 	if tm.infoStore != nil {
 		if cached, ok, err := tm.infoStore.Get(torrentID); err == nil && ok && cached != nil {
-			if cached.Progress == 100 {
-				tm.InfoMap.Set(torrentID, cached)
-			}
 			return cached.Files, cached.Links, cached.Ended
 		}
 	}
+
 	info, err := tm.GetTorrentInfo(torrentID)
 	if err != nil {
 		return nil, nil, ""
@@ -358,20 +324,10 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
-	if info, ok := tm.InfoMap.Get(torrentID); ok {
-		return info, nil
-	}
-
 	v, err, shared := tm.infoSG.Do("info:"+torrentID, func() (interface{}, error) {
-		if info, ok := tm.InfoMap.Get(torrentID); ok {
-			return info, nil
-		}
 		if tm.infoStore != nil {
 			if cached, ok, derr := tm.infoStore.Get(torrentID); derr == nil && ok && cached != nil {
-				if cached.Progress == 100 {
-					tm.InfoMap.Set(torrentID, cached)
-					return cached, nil
-				}
+				return cached, nil
 			}
 		}
 		fetched, ferr := tm.client.GetTorrentInfo(torrentID)
@@ -383,13 +339,15 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 			}
 			return nil, ferr
 		}
-		tm.saveCineSync(fetched)
+		
+		// Save to both databases for future fast access
 		if tm.infoStore != nil {
 			_ = tm.infoStore.Upsert(fetched)
 		}
-		if fetched.Progress == 100 {
-			tm.InfoMap.Set(torrentID, fetched)
+		if tm.store != nil {
+			_ = tm.store.UpsertInfo(fetched)
 		}
+
 		return fetched, nil
 	})
 

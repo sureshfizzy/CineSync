@@ -20,7 +20,7 @@ var (
     enrichRunning      atomic.Bool
 )
 
-// saveCineSync writes full TorrentInfo to the SQLite store and memory
+// saveCineSync writes full TorrentInfo to the SQLite store
 func (tm *TorrentManager) saveCineSync(info *TorrentInfo) {
     if info == nil || tm.store == nil {
         return
@@ -29,9 +29,6 @@ func (tm *TorrentManager) saveCineSync(info *TorrentInfo) {
         logger.Warn("[CineSync] Store upsert info failed for %s: %v", info.ID, err)
     }
 
-    if info.Progress == 100 {
-        tm.InfoMap.Set(info.ID, info)
-    }
 }
 
 // saveCineSyncItem writes a lightweight TorrentItem to the SQLite store
