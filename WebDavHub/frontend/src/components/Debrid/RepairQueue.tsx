@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Tooltip, alpha, useTheme, Stack, Button, Checkbox } from '@mui/material';
-import { Build as BuildIcon, Error as ErrorIcon, Warning as WarningIcon, Info as InfoIcon, PlayArrow as PlayIcon, Stop as StopIcon } from '@mui/icons-material';
+import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Tooltip, alpha, useTheme, Stack, Button, Checkbox, IconButton, TablePagination, Snackbar, Backdrop, Slide, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import { Build as BuildIcon, Error as ErrorIcon, Warning as WarningIcon, Info as InfoIcon, PlayArrow as PlayIcon, Stop as StopIcon, Delete as DeleteIcon, ListAlt as ListAltIcon } from '@mui/icons-material';
 import { motion } from 'framer-motion'; import axios from 'axios'; import { formatDate } from '../FileBrowser/fileUtils';
 
 interface RepairEntry {
@@ -33,11 +33,32 @@ interface RepairStatus {
   progress_percentage: number;
 }
 
+interface RepairQueueEntry extends RepairEntry {
+  position: number;
+}
+
+interface ConfirmConfig {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm?: () => Promise<void> | void;
+}
+
+interface ConfirmState {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm?: () => Promise<void> | void;
+}
+
 const getReasonColor = (reason: string): 'error' | 'warning' | 'info' => {
   if (reason.includes('error') || reason.includes('dead') || reason.includes('virus')) {
     return 'error';
   }
-  if (reason.includes('missing') || reason.includes('no_links') || reason.includes('mismatch') || reason.includes('complete_but')) {
+  if (reason.includes('missing') || reason.includes('no_links') || reason.includes('mismatch') || reason.includes('complete_but') || reason.startsWith('reinsert_failed')) {
     return 'warning';
   }
   return 'info';
@@ -74,6 +95,14 @@ const getReasonLabel = (reason: string): string => {
     }
     return 'Link Mismatch';
   }
+
+  if (reason.startsWith('reinsert_failed_')) {
+    const countMatch = reason.match(/reinsert_failed_(\d+)_files/);
+    if (countMatch) {
+      return `Reinsert Failed (${countMatch[1]} File${countMatch[1] === '1' ? '' : 's'})`;
+    }
+    return 'Reinsert Failed';
+  }
   
   return labels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
@@ -85,12 +114,31 @@ export default function RepairQueue() {
   const [error, setError] = useState('');
   const [selectedTorrents, setSelectedTorrents] = useState<Set<string>>(new Set());
   const [repairing, setRepairing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(0); // 0-based for MUI
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [selectedReasons, setSelectedReasons] = useState<Set<string>>(new Set());
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastSeverity, setToastSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('success');
+  const [queueEntries, setQueueEntries] = useState<RepairQueueEntry[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [isQueueView, setIsQueueView] = useState(false);
+  const [queuePage, setQueuePage] = useState(0);
+  const [queueRowsPerPage, setQueueRowsPerPage] = useState(50);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const [confirmState, setConfirmState] = useState<ConfirmState>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+  });
   const theme = useTheme();
 
   const fetchRepairStatus = useCallback(async () => {
     try {
       const response = await axios.get('/api/realdebrid/repair-status');
-      console.log('Repair status response:', response.data);
       setStatus(response.data);
     } catch (err: any) {
       // Silently fail for status updates
@@ -106,7 +154,14 @@ export default function RepairQueue() {
     setError('');
 
     try {
-      const response = await axios.get('/api/realdebrid/repair-stats');
+      const params: any = {
+        page: page + 1,         // API expects 1-based
+        page_size: rowsPerPage, // bounded on server
+      };
+      if (selectedReasons.size > 0) {
+        params.reason = Array.from(selectedReasons).join(',');
+      }
+      const response = await axios.get('/api/realdebrid/repair-stats', { params });
       setStats(response.data);
     } catch (err: any) {
       // Only show error on initial load, silently retry on subsequent fetches
@@ -126,30 +181,89 @@ export default function RepairQueue() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [page, rowsPerPage, selectedReasons]);
+
+  const fetchRepairQueue = useCallback(async (showSpinner = false) => {
+    if (showSpinner) {
+      setQueueLoading(true);
+    }
+
+    try {
+      const response = await axios.get('/api/realdebrid/repair-queue', {
+        params: {
+          page: queuePage + 1,
+          page_size: queueRowsPerPage,
+        },
+      });
+      const nextEntries: RepairQueueEntry[] = response.data.queue || [];
+      const totalCount: number = response.data.count || 0;
+
+      if (queuePage > 0 && nextEntries.length === 0 && totalCount > 0) {
+        setQueuePage(prev => Math.max(prev - 1, 0));
+        return;
+      }
+
+      setQueueEntries(nextEntries);
+      setQueueTotal(totalCount);
+    } catch (err: any) {
+      console.error('Failed to fetch repair queue:', err);
+      if (showSpinner) {
+        setToastSeverity('error');
+        setToastMsg(err.response?.data?.error || 'Failed to fetch repair queue');
+        setToastOpen(true);
+      }
+    } finally {
+      if (showSpinner) {
+        setQueueLoading(false);
+      }
+    }
+  }, [queuePage, queueRowsPerPage]);
 
   useEffect(() => {
     fetchRepairStats(true);
     fetchRepairStatus();
   }, [fetchRepairStats, fetchRepairStatus]);
 
-  // Separate effect for intervals that adjusts based on repair status
+  // Separate effect for intervals: only poll status frequently to keep UI light
   useEffect(() => {
-    // Refresh stats more frequently when repair is running (every 2 seconds)
-    // Otherwise refresh every 10 seconds
-    const statsInterval = setInterval(() => {
-      fetchRepairStats(false);
-    }, status?.is_running ? 2000 : 10000);
-
     const statusInterval = setInterval(() => {
       fetchRepairStatus();
-    }, 2000); // Update status every 2 seconds for real-time progress
+    }, 10000); // Update status every 10 seconds
 
     return () => {
-      clearInterval(statsInterval);
       clearInterval(statusInterval);
     };
   }, [fetchRepairStats, fetchRepairStatus, status?.is_running]);
+
+  const statusSnapshot = `${status?.processed_torrents ?? 0}|${status?.queue_size ?? 0}|${status?.is_running ? 1 : 0}|${status?.current_torrent_id ?? ''}`;
+  useEffect(() => {
+    if (!status) {
+      return;
+    }
+    fetchRepairStats(false);
+  }, [statusSnapshot, fetchRepairStats]);
+
+  useEffect(() => {
+    if (!isQueueView) {
+      setQueueLoading(false);
+      return;
+    }
+
+    fetchRepairQueue(true);
+    const interval = setInterval(() => {
+      fetchRepairQueue();
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isQueueView, fetchRepairQueue]);
+
+  useEffect(() => {
+    if (isQueueView) {
+      fetchRepairQueue();
+    }
+  }, [isQueueView, fetchRepairQueue, status?.queue_size]);
 
 
   const handleStartRepair = async () => {
@@ -163,6 +277,141 @@ export default function RepairQueue() {
       console.error('Failed to start repair:', err);
       setError('Failed to start repair scan');
     }
+  };
+
+  const deleteRepairs = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) {
+        return;
+      }
+
+      setDeleting(true);
+      setError('');
+
+      try {
+        const response = await axios.post('/api/realdebrid/repair-delete', {
+          torrent_ids: ids,
+        });
+
+        if (response.data.success) {
+          setSelectedTorrents(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => next.delete(id));
+            return next;
+          });
+          fetchRepairStats(false);
+          fetchRepairStatus();
+          setError('');
+          setToastSeverity('success');
+          setToastMsg(response.data.message || 'Deleted');
+          setToastOpen(true);
+        } else {
+          const message = response.data.message || 'Failed to delete torrents';
+          setError(message);
+          setToastSeverity('error');
+          setToastMsg(message);
+          setToastOpen(true);
+        }
+      } catch (err: any) {
+        console.error('Failed to delete torrents:', err);
+        const message = err.response?.data?.error || 'Failed to delete selected torrents';
+        setError(message);
+        setToastSeverity('error');
+        setToastMsg(message);
+        setToastOpen(true);
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [fetchRepairStats, fetchRepairStatus]
+  );
+
+  const openConfirm = useCallback(
+    (config: ConfirmConfig) => {
+      setConfirmState({
+        open: true,
+        title: config.title,
+        message: config.message,
+        confirmLabel: config.confirmLabel ?? 'Confirm',
+        cancelLabel: config.cancelLabel ?? 'Cancel',
+        onConfirm: config.onConfirm,
+      });
+    },
+    []
+  );
+
+  const closeConfirm = useCallback(() => {
+    setConfirmState({
+      open: false,
+      title: '',
+      message: '',
+      confirmLabel: 'Confirm',
+      cancelLabel: 'Cancel',
+      onConfirm: undefined,
+    });
+  }, []);
+
+  const handleConfirmAction = useCallback(async () => {
+    try {
+      if (confirmState.onConfirm) {
+        await confirmState.onConfirm();
+      }
+    } finally {
+      closeConfirm();
+    }
+  }, [confirmState, closeConfirm]);
+
+  const handleDialogClose = useCallback(
+    (_event?: object, reason?: string) => {
+      if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+        if (repairing || deleting) {
+          return;
+        }
+      }
+      closeConfirm();
+    },
+    [closeConfirm, repairing, deleting]
+  );
+
+  const runRepairAll = useCallback(async () => {
+    setRepairing(true);
+    setError('');
+
+    try {
+      const response = await axios.post('/api/realdebrid/repair-all');
+      if (response.data.success) {
+        fetchRepairStats(false);
+        fetchRepairStatus();
+        fetchRepairQueue();
+        setToastSeverity('success');
+        setToastMsg(response.data.message || 'Queued repair for all');
+        setToastOpen(true);
+      } else {
+        setToastSeverity('error');
+        setToastMsg(response.data.message || 'Failed to queue repair for all');
+        setToastOpen(true);
+      }
+    } catch (err: any) {
+      console.error('Failed to repair all:', err);
+      setToastSeverity('error');
+      setToastMsg(err.response?.data?.error || 'Failed to queue repair for all');
+      setToastOpen(true);
+    } finally {
+      setRepairing(false);
+    }
+  }, [fetchRepairQueue, fetchRepairStats, fetchRepairStatus]);
+
+  const handleRepairAll = async () => {
+    if (isQueueView) {
+      return;
+    }
+
+    openConfirm({
+      title: 'Queue Repairs',
+      message: 'Queue repair for all torrents except Not Cached items?',
+      confirmLabel: 'Queue',
+      onConfirm: runRepairAll,
+    });
   };
 
   const handleStopRepair = async () => {
@@ -190,18 +439,107 @@ export default function RepairQueue() {
   };
 
   const handleSelectAll = () => {
-    if (!stats || !stats.repairs) return;
+    const rows = isQueueView ? queueEntries : (stats?.repairs || []);
+    if (rows.length === 0) {
+      return;
+    }
     
-    if (selectedTorrents.size === stats.repairs.length) {
+    if (selectedTorrents.size === rows.length) {
       setSelectedTorrents(new Set());
     } else {
-      setSelectedTorrents(new Set(stats.repairs.map(r => r.torrent_id)));
+      setSelectedTorrents(new Set(rows.map(r => r.torrent_id)));
+    }
+  };
+
+  const handleChangePage = (_: unknown, newPage: number) => {
+    setSelectedTorrents(new Set()); // reset selection per page
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = parseInt(e.target.value, 10);
+    setRowsPerPage(next);
+    setPage(0);
+    setSelectedTorrents(new Set());
+  };
+
+  const handleQueuePageChange = (_: unknown, newPage: number) => {
+    setSelectedTorrents(new Set());
+    setQueuePage(newPage);
+  };
+
+  const handleQueueRowsPerPageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = parseInt(e.target.value, 10);
+    setQueueRowsPerPage(next);
+    setQueuePage(0);
+    setSelectedTorrents(new Set());
+  };
+
+  const clearReasons = () => {
+    setSelectedReasons(new Set());
+    setPage(0);
+    setSelectedTorrents(new Set());
+  };
+
+  const handleToggleQueueView = () => {
+    if (isQueueView) {
+      setIsQueueView(false);
+    } else {
+      setIsQueueView(true);
+      setSelectedTorrents(new Set());
+      setQueuePage(0);
+    }
+  };
+
+  const removeQueueItems = async (ids: string[]) => {
+    if (ids.length === 0) {
+      setToastSeverity('warning');
+      setToastMsg('Select at least one item');
+      setToastOpen(true);
+      return;
+    }
+
+    setDeleting(true);
+    setError('');
+
+    try {
+      const response = await axios.post('/api/realdebrid/repair-queue/delete', {
+        torrent_ids: ids,
+      });
+
+      if (response.data.success) {
+        setSelectedTorrents(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.delete(id));
+          return next;
+        });
+        fetchRepairQueue(false);
+        fetchRepairStatus();
+        setToastSeverity('success');
+        setToastMsg(response.data.message || 'Removed from queue');
+        setToastOpen(true);
+      } else {
+        setToastSeverity('warning');
+        setToastMsg(response.data.message || 'No items were removed from queue');
+        setToastOpen(true);
+      }
+    } catch (err: any) {
+      console.error('Failed to remove from queue:', err);
+      setToastSeverity('error');
+      setToastMsg(err.response?.data?.error || 'Failed to remove from queue');
+      setToastOpen(true);
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleRepairSelected = async () => {
+    if (isQueueView) {
+      return;
+    }
     if (selectedTorrents.size === 0) {
       setError('Please select at least one torrent to repair');
+      setToastSeverity('warning'); setToastMsg('Select at least one item'); setToastOpen(true);
       return;
     }
 
@@ -218,15 +556,66 @@ export default function RepairQueue() {
         fetchRepairStats(false);
         fetchRepairStatus();
         setError('');
+        setToastSeverity('success'); setToastMsg(response.data.message || 'Repair queued'); setToastOpen(true);
       } else {
         setError(response.data.message || 'Failed to repair torrents');
+        setToastSeverity('error'); setToastMsg(response.data.message || 'Failed to repair'); setToastOpen(true);
       }
     } catch (err: any) {
       console.error('Failed to repair torrents:', err);
       setError(err.response?.data?.error || 'Failed to repair selected torrents');
+      setToastSeverity('error'); setToastMsg('Failed to repair selected'); setToastOpen(true);
     } finally {
       setRepairing(false);
     }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedTorrents.size === 0) {
+      if (!isQueueView) {
+        setError('Please select at least one torrent to delete');
+      }
+      setToastSeverity('warning'); setToastMsg('Select at least one item'); setToastOpen(true);
+      return;
+    }
+
+    const ids = Array.from(selectedTorrents);
+
+    if (isQueueView) {
+      openConfirm({
+        title: 'Remove from Repair Queue',
+        message: `Remove ${ids.length} torrent(s) from the repair queue?`,
+        confirmLabel: 'Remove',
+        onConfirm: () => removeQueueItems(ids),
+      });
+      return;
+    }
+
+    openConfirm({
+      title: 'Delete from Repair Table',
+      message: `Delete ${ids.length} torrent(s) from the repair table?`,
+      confirmLabel: 'Delete',
+      onConfirm: () => deleteRepairs(ids),
+    });
+  };
+
+  const handleDeleteSingle = async (torrentId: string, filename: string) => {
+    if (isQueueView) {
+      openConfirm({
+        title: 'Remove from Repair Queue',
+        message: `Remove "${filename}" from the repair queue?`,
+        confirmLabel: 'Remove',
+        onConfirm: () => removeQueueItems([torrentId]),
+      });
+      return;
+    }
+
+    openConfirm({
+      title: 'Delete from Repair Table',
+      message: `Delete "${filename}" from the repair table?`,
+      confirmLabel: 'Delete',
+      onConfirm: () => deleteRepairs([torrentId]),
+    });
   };
 
   if (loading && !stats) {
@@ -259,8 +648,18 @@ export default function RepairQueue() {
 
   const repairs = stats?.repairs || [];
   const total = stats?.total || 0;
+  const reasonCounts = stats?.reasonCounts || {};
+  const tableRows = isQueueView ? queueEntries : repairs;
+  const allowSelection = true;
 
-  console.log('Current status:', status);
+  // Aggregated categories
+  const unrestrictFailedCount = Object.entries(reasonCounts).reduce((acc, [k, v]) => {
+    return acc + (k.startsWith('unrestrict_failed') ? v : 0);
+  }, 0);
+  const notCachedPrefixes = ['no_links', 'complete_but_no_links', 'unavailable_file', 'infringing_file', 'not_cached', 'reinsert_failed'];
+  const notCachedCount = Object.entries(reasonCounts).reduce((acc, [k, v]) => {
+    return acc + (notCachedPrefixes.some(prefix => k === prefix || k.startsWith(prefix)) ? v : 0);
+  }, 0);
 
   return (
     <Box 
@@ -297,16 +696,60 @@ export default function RepairQueue() {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {selectedTorrents.size > 0 && (
+          {!isQueueView && selectedTorrents.size > 0 && (
+            <>
             <Button
               variant="contained"
               color="secondary"
               startIcon={<BuildIcon />}
               onClick={handleRepairSelected}
-              disabled={repairing}
+                disabled={repairing || deleting}
               sx={{ fontWeight: 600 }}
             >
               {repairing ? 'Repairing...' : `Repair (${selectedTorrents.size})`}
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={handleDeleteSelected}
+                disabled={repairing || deleting}
+                sx={{ fontWeight: 600 }}
+              >
+                {deleting ? 'Deleting...' : `Delete (${selectedTorrents.size})`}
+              </Button>
+            </>
+          )}
+          {isQueueView && selectedTorrents.size > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => {
+                const ids = Array.from(selectedTorrents);
+                openConfirm({
+                  title: 'Remove from Repair Queue',
+                  message: `Remove ${ids.length} torrent(s) from the repair queue?`,
+                  confirmLabel: 'Remove',
+                  onConfirm: () => removeQueueItems(ids),
+                });
+              }}
+              disabled={deleting}
+              sx={{ fontWeight: 600 }}
+            >
+              {deleting ? 'Removing...' : `Remove (${selectedTorrents.size})`}
+            </Button>
+          )}
+          {!isQueueView && selectedTorrents.size === 0 && (
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<BuildIcon />}
+              onClick={handleRepairAll}
+              disabled={repairing || deleting}
+              sx={{ fontWeight: 600 }}
+            >
+              {repairing ? 'Queuing...' : 'Repair All'}
             </Button>
           )}
           {/* Always show Start/Stop button, even if status is null */}
@@ -334,13 +777,9 @@ export default function RepairQueue() {
         </Box>
       </Box>
 
-      {/* Repair Status/Progress Indicator */}
+      {/* Repair Status/Progress Indicator and Quick Filter Cards */}
       {status && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <Card
             sx={{
               mb: { xs: 2, md: 3 },
@@ -366,6 +805,52 @@ export default function RepairQueue() {
                   size="small"
                 />
               </Box>
+              
+              {/* Quick filter cards */}
+              <Stack direction="row" spacing={1.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Chip
+                    icon={<PlayIcon sx={{ fontSize: 16 }} />}
+                    label={`Runners: ${status.total_torrents}`}
+                    variant="outlined"
+                    onClick={() => { clearReasons(); }}
+                    sx={{ fontWeight: 600 }}
+                  />
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Chip
+                    icon={<ErrorIcon sx={{ fontSize: 16 }} />}
+                    label={`Unrestrict Failed: ${unrestrictFailedCount}`}
+                    color={selectedReasons.has('unrestrict_failed') ? 'error' : 'default'}
+                    variant={selectedReasons.has('unrestrict_failed') ? 'filled' : 'outlined'}
+                    onClick={() => {
+                      setSelectedReasons(new Set(['unrestrict_failed']));
+                      setPage(0);
+                      setSelectedTorrents(new Set());
+                    }}
+                    sx={{ fontWeight: 600 }}
+                  />
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Chip
+                    icon={<WarningIcon sx={{ fontSize: 16 }} />}
+                    label={`Not Cached: ${notCachedCount}`}
+                    color={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'warning' : 'default'}
+                    variant={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'filled' : 'outlined'}
+                    onClick={() => {
+                      setSelectedReasons(new Set(notCachedPrefixes));
+                      setPage(0);
+                      setSelectedTorrents(new Set());
+                    }}
+                    sx={{ fontWeight: 600 }}
+                  />
+                </motion.div>
+                {selectedReasons.size > 0 && (
+                  <Button size="small" onClick={clearReasons}>
+                    Clear Filters
+                  </Button>
+                )}
+              </Stack>
               
               {status.is_running && (
                 <Box sx={{ width: '100%', mb: 2 }}>
@@ -513,19 +998,66 @@ export default function RepairQueue() {
             </Card>
           </motion.div>
         </Box>
+        <Box sx={{ minWidth: { xs: 140, sm: 160 }, flex: '0 0 auto' }}>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ duration: 0.3 }}
+          >
+            <Card
+              onClick={handleToggleQueueView}
+              sx={{ 
+                minWidth: { xs: 140, sm: 160 },
+                height: 60,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                background: isQueueView
+                  ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`
+                  : `linear-gradient(135deg, ${alpha(theme.palette.primary.light, 0.06)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`,
+                border: isQueueView
+                  ? `1px solid ${alpha(theme.palette.primary.main, 0.3)}`
+                  : `1px solid ${alpha(theme.palette.divider, 0.18)}`,
+                borderRadius: 2,
+                boxShadow: 'none',
+                m: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5, '&:last-child': { pb: 1 } }}>
+                <Stack direction="row" alignItems="center" spacing={0.75}>
+                  {queueLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <ListAltIcon sx={{ fontSize: 18, color: isQueueView ? 'primary.main' : 'text.secondary' }} />
+                  )}
+                  <Typography variant="h4" fontWeight="700" color={isQueueView ? 'primary.main' : 'text.primary'} sx={{ fontSize: '1.05rem' }}>
+                    {isQueueView ? queueTotal : status?.queue_size ?? 0}
+                  </Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                  Repair Queue
+                </Typography>
+                <Typography variant="caption" color={isQueueView ? 'primary.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
+                  {isQueueView ? 'Viewing queue' : 'Tap to view'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </Box>
       </Box>
 
       {/* Repairs Table */}
-      {repairs.length === 0 ? (
+      {tableRows.length === 0 ? (
         <Card sx={{ borderRadius: 2, boxShadow: 'none', mb: 2 }}>
           <CardContent sx={{ p: 2 }}>
             <Box sx={{ textAlign: 'center', py: 2 }}>
-              <BuildIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-              <Typography variant="h6" fontWeight="600" color="success.main" sx={{ fontSize: '1rem' }}>
-                All Clear!
+              <BuildIcon sx={{ fontSize: 40, color: isQueueView ? 'info.main' : 'success.main', mb: 1 }} />
+              <Typography variant="h6" fontWeight="600" color={isQueueView ? 'info.main' : 'success.main'} sx={{ fontSize: '1rem' }}>
+                {isQueueView ? 'Queue Empty' : 'All Clear!'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
-                No torrents require repair at this time
+                {isQueueView ? 'No torrents are waiting in the repair queue' : 'No torrents require repair at this time'}
               </Typography>
             </Box>
           </CardContent>
@@ -546,13 +1078,18 @@ export default function RepairQueue() {
               <TableRow
                 sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}
               >
+                {allowSelection && (
                   <TableCell padding="checkbox" sx={{ fontWeight: 700 }}>
                   <Checkbox
-                    indeterminate={selectedTorrents.size > 0 && selectedTorrents.size < repairs.length}
-                    checked={repairs.length > 0 && selectedTorrents.size === repairs.length}
+                      indeterminate={selectedTorrents.size > 0 && selectedTorrents.size < tableRows.length}
+                      checked={tableRows.length > 0 && selectedTorrents.size === tableRows.length}
                     onChange={handleSelectAll}
                   />
                 </TableCell>
+                )}
+                {isQueueView && (
+                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', sm: 'table-cell' } }}>Position</TableCell>
+                )}
                 <TableCell sx={{ fontWeight: 700, display: { xs: 'none', sm: 'table-cell' } }}>Torrent ID</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Filename</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Hash</TableCell>
@@ -560,11 +1097,17 @@ export default function RepairQueue() {
                 <TableCell sx={{ fontWeight: 700 }}>Progress</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Reason</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Last Updated</TableCell>
+                {allowSelection && <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
-              {repairs.map((repair, index) => (
-                <React.Fragment key={repair.torrent_id}>
+              {tableRows.map((repair) => (
+                <React.Fragment key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'row'}`}>
+                  {/* Mobile row as a single cell to avoid div inside tbody */}
+                  <TableRow
+                    sx={{ display: { xs: 'table-row', sm: 'none' } }}
+                  >
+                    <TableCell colSpan={isQueueView ? 10 : 9} sx={{ p: 0, border: 0 }}>
                   <Box sx={{
                     mb: 1.5,
                     borderRadius: 2,
@@ -572,16 +1115,22 @@ export default function RepairQueue() {
                     bgcolor: alpha(theme.palette.background.paper, 0.95),
                     border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
                     p: 1.2,
-                    display: { xs: 'block', sm: 'none' },
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          {allowSelection && (
                       <Checkbox
                         checked={selectedTorrents.has(repair.torrent_id)}
                         onChange={() => handleSelectTorrent(repair.torrent_id)}
                         size="small"
                       />
+                          )}
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>{repair.filename}</Typography>
                     </Box>
+                        {isQueueView && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                            Position: {(repair as RepairQueueEntry).position}
+                          </Typography>
+                        )}
                     <Stack direction="row" spacing={1} sx={{ mb: 0.5 }}>
                       <Chip label={repair.status} size="small" variant="outlined" />
                       <Chip icon={getReasonIcon(repair.reason)} label={getReasonLabel(repair.reason)} size="small" color={getReasonColor(repair.reason)} sx={{ fontWeight: 600 }} />
@@ -590,29 +1139,50 @@ export default function RepairQueue() {
                       <Typography variant="caption" color="text.secondary">ID: {repair.torrent_id}</Typography>
                       <Typography variant="caption" color="text.secondary">Hash: {repair.hash ? repair.hash.substring(0, 12) + '...' : 'N/A'}</Typography>
                       <Typography variant="caption" color="text.secondary">Progress: {repair.progress}%</Typography>
-                      <Typography variant="caption" color="text.secondary">Updated: {formatDate(new Date(repair.updated_at * 1000).toISOString())}</Typography>
+                          <Typography variant="caption" color="text.secondary">Updated: {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}</Typography>
                     </Stack>
+                        {allowSelection && (
+                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                          <Tooltip title={isQueueView ? 'Remove from repair queue' : 'Delete from repair table'}>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteSingle(repair.torrent_id, repair.filename)}
+                                disabled={deleting}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                   </Box>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
                   <TableRow
-                  key={repair.torrent_id}
-                  component={motion.tr}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.02 }}
+                  key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'desktop'}`}
                   sx={{
                     display: { xs: 'none', sm: 'table-row' },
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.05),
                     },
-                    bgcolor: selectedTorrents.has(repair.torrent_id) ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                    bgcolor: allowSelection && selectedTorrents.has(repair.torrent_id) ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                   }}
                 >
+                  {allowSelection && (
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={selectedTorrents.has(repair.torrent_id)}
                       onChange={() => handleSelectTorrent(repair.torrent_id)}
                     />
                   </TableCell>
+                  )}
+                  {isQueueView && (
+                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, width: 90 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {(repair as RepairQueueEntry).position}
+                      </Typography>
+                    </TableCell>
+                  )}
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     <Typography
                       variant="body2"
@@ -658,9 +1228,23 @@ export default function RepairQueue() {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" color="text.secondary">
-                      {formatDate(new Date(repair.updated_at * 1000).toISOString())}
+                      {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}
                     </Typography>
                   </TableCell>
+                  {allowSelection && (
+                    <TableCell>
+                      <Tooltip title={isQueueView ? 'Remove from repair queue' : 'Delete from repair table'}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteSingle(repair.torrent_id, repair.filename)}
+                          disabled={deleting}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  )}
                 </TableRow>
                 </React.Fragment>
               ))}
@@ -668,6 +1252,77 @@ export default function RepairQueue() {
           </Table>
         </TableContainer>
       )}
+
+      {/* Pagination */}
+      {!isQueueView && total > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+          <TablePagination
+            component="div"
+            count={total}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[25, 50, 100, 200]}
+            labelRowsPerPage="Rows per page"
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} of ${count}`}
+          />
+        </Box>
+      )}
+      {isQueueView && queueTotal > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+          <TablePagination
+            component="div"
+            count={queueTotal}
+            page={queuePage}
+            onPageChange={handleQueuePageChange}
+            rowsPerPage={queueRowsPerPage}
+            onRowsPerPageChange={handleQueueRowsPerPageChange}
+            rowsPerPageOptions={[25, 50, 100, 200]}
+            labelRowsPerPage="Rows per page"
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} of ${count}`}
+          />
+        </Box>
+      )}
+
+      {/* Action feedback */}
+      <Backdrop
+        open={repairing || deleting}
+        sx={{ color: '#fff', zIndex: (th) => th.zIndex.drawer + 1, backdropFilter: 'blur(2px)' }}
+      >
+        <Stack alignItems="center" spacing={2}>
+          <CircularProgress color="inherit" />
+          <Typography variant="body2">
+            {repairing ? 'Queuing repair...' : isQueueView ? 'Removing from queue...' : 'Deleting...'}
+          </Typography>
+        </Stack>
+      </Backdrop>
+      <Dialog open={confirmState.open} onClose={handleDialogClose}>
+        <DialogTitle>{confirmState.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{confirmState.message}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeConfirm} disabled={repairing || deleting}>
+            {confirmState.cancelLabel}
+          </Button>
+          <Button onClick={handleConfirmAction} disabled={repairing || deleting} autoFocus>
+            {confirmState.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={2500}
+        onClose={() => setToastOpen(false)}
+        TransitionComponent={(props) => <Slide {...props} direction="up" />}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message=""
+      >
+        <Alert onClose={() => setToastOpen(false)} severity={toastSeverity} sx={{ width: '100%' }}>
+          {toastMsg}
+        </Alert>
+      </Snackbar>
 
       {/* Footer Info */}
       {stats && (

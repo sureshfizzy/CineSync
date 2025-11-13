@@ -42,11 +42,15 @@ type Client struct {
 	baseURL    string
 	webdavURL  string
 	httpClient *http.Client
+	repairHTTPClient *http.Client
 	unrestrictCache cmap.ConcurrentMap[string, *DownloadCacheEntry]
 	failedUnrestrictCache cmap.ConcurrentMap[string, *FailedUnrestrictEntry]
 	cacheMutex      sync.RWMutex
     limiter         *rateLimiter
+	repairLimiter   *rateLimiter
 }
+
+const repairModeContextKey contextKey = "repairMode"
 
 // UserInfo represents Real-Debrid user information
 type UserInfo struct {
@@ -95,6 +99,8 @@ type TorrentItem struct {
     FileList []TorrentFile `json:"file_list,omitempty"`
     Links    []string      `json:"links,omitempty"`
     Ended    string        `json:"ended,omitempty"`
+    CachedFiles []TorrentFile `json:"-"`
+    CachedLinks []string      `json:"-"`
 }
 
 // TrafficInfo represents current traffic information
@@ -181,12 +187,25 @@ func NewClient(apiKey string) *Client {
 		tokenManager: NewTokenManager(tokens),
 		baseURL:   "https://api.real-debrid.com/rest/1.0",
 		webdavURL: "https://webdav.debrid.it",
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 		unrestrictCache: cmap.New[*DownloadCacheEntry](),
 		failedUnrestrictCache: cmap.New[*FailedUnrestrictEntry](),
 	}
+	client.httpClient = &http.Client{
+		Timeout: 120 * time.Second,
+	}
+	client.repairHTTPClient = &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			ForceAttemptHTTP2: false,
+			DisableKeepAlives: true,
+			MaxConnsPerHost:   1,
+			MaxIdleConns:      1,
+			MaxIdleConnsPerHost: 1,
+			IdleConnTimeout:   30 * time.Second,
+		},
+	}
+	client.limiter = newRateLimiterFromConfig()
+	client.repairLimiter = newRepairRateLimiterFromConfig()
 
 	// Start background jobs for token management
 	client.StartResetBandwidthJob()
@@ -208,27 +227,115 @@ type rateLimiter struct {
     maxBackoff time.Duration
 }
 
+type RateLimitConfig struct {
+    RequestsPerMinute int
+    Burst             int
+    MaxRetries        int
+    BaseBackoffMs     int
+    MaxBackoffMs      int
+}
+
+func normalizeRateLimitConfig(cfg RateLimitConfig, fallback RateLimitConfig) RateLimitConfig {
+    if cfg.RequestsPerMinute <= 0 {
+        cfg.RequestsPerMinute = fallback.RequestsPerMinute
+    }
+    if cfg.RequestsPerMinute <= 0 {
+        cfg.RequestsPerMinute = 220
+    }
+    if cfg.Burst < 0 {
+        cfg.Burst = fallback.Burst
+    }
+    if cfg.Burst < 0 {
+        cfg.Burst = 0
+    }
+    if cfg.MaxRetries < 0 {
+        cfg.MaxRetries = fallback.MaxRetries
+    }
+    if cfg.MaxRetries < 0 {
+        cfg.MaxRetries = 0
+    }
+    if cfg.BaseBackoffMs <= 0 {
+        cfg.BaseBackoffMs = fallback.BaseBackoffMs
+    }
+    if cfg.BaseBackoffMs <= 0 {
+        cfg.BaseBackoffMs = 500
+    }
+    if cfg.MaxBackoffMs <= 0 {
+        cfg.MaxBackoffMs = fallback.MaxBackoffMs
+    }
+    if cfg.MaxBackoffMs <= 0 {
+        cfg.MaxBackoffMs = 8000
+    }
+    return cfg
+}
+
 func newRateLimiterFromConfig() *rateLimiter {
     cfg := GetConfigManager().GetConfig()
-    rl := cfg.RateLimit
-    if rl.RequestsPerMinute <= 0 {
-        rl.RequestsPerMinute = 220
+    general := RateLimitConfig{
+        RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+        Burst:             cfg.RateLimit.Burst,
+        MaxRetries:        cfg.RateLimit.MaxRetries,
+        BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
+        MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
     }
-    if rl.Burst < 0 { rl.Burst = 0 }
-    if rl.MaxRetries < 0 { rl.MaxRetries = 0 }
-    if rl.BaseBackoffMs <= 0 { rl.BaseBackoffMs = 500 }
-    if rl.MaxBackoffMs <= 0 { rl.MaxBackoffMs = 8000 }
-    r := &rateLimiter{
-        capacity: rl.Burst + 1,
-        tokens: float64(rl.Burst + 1),
-        refillRatePerSec: float64(rl.RequestsPerMinute) / 60.0,
-        last: time.Now(),
-        burst: rl.Burst,
-        maxRetries: rl.MaxRetries,
-        baseBackoff: time.Duration(rl.BaseBackoffMs) * time.Millisecond,
-        maxBackoff: time.Duration(rl.MaxBackoffMs) * time.Millisecond,
+    general = normalizeRateLimitConfig(general, RateLimitConfig{
+        RequestsPerMinute: 220,
+        Burst:             50,
+        MaxRetries:        5,
+        BaseBackoffMs:     500,
+        MaxBackoffMs:      8000,
+    })
+    return newRateLimiter(general)
+}
+
+func newRepairRateLimiterFromConfig() *rateLimiter {
+    cfg := GetConfigManager().GetConfig()
+    general := RateLimitConfig{
+        RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+        Burst:             cfg.RateLimit.Burst,
+        MaxRetries:        cfg.RateLimit.MaxRetries,
+        BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
+        MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
     }
-    return r
+    general = normalizeRateLimitConfig(general, RateLimitConfig{
+        RequestsPerMinute: 220,
+        Burst:             50,
+        MaxRetries:        5,
+        BaseBackoffMs:     500,
+        MaxBackoffMs:      8000,
+    })
+
+    repair := RateLimitConfig{
+        RequestsPerMinute: cfg.RateLimit.Repair.RequestsPerMinute,
+        Burst:             cfg.RateLimit.Repair.Burst,
+        MaxRetries:        cfg.RateLimit.Repair.MaxRetries,
+        BaseBackoffMs:     cfg.RateLimit.Repair.BaseBackoffMs,
+        MaxBackoffMs:      cfg.RateLimit.Repair.MaxBackoffMs,
+    }
+    repair = normalizeRateLimitConfig(repair, RateLimitConfig{
+        RequestsPerMinute: general.RequestsPerMinute / 4,
+        Burst:             general.Burst / 2,
+        MaxRetries:        general.MaxRetries,
+        BaseBackoffMs:     general.BaseBackoffMs,
+        MaxBackoffMs:      general.MaxBackoffMs,
+    })
+    return newRateLimiter(repair)
+}
+
+func newRateLimiter(cfg RateLimitConfig) *rateLimiter {
+    if cfg.Burst < 0 {
+        cfg.Burst = 0
+    }
+    return &rateLimiter{
+        capacity:        cfg.Burst + 1,
+        tokens:          float64(cfg.Burst + 1),
+        refillRatePerSec: float64(cfg.RequestsPerMinute) / 60.0,
+        last:            time.Now(),
+        burst:           cfg.Burst,
+        maxRetries:      cfg.MaxRetries,
+        baseBackoff:     time.Duration(cfg.BaseBackoffMs) * time.Millisecond,
+        maxBackoff:      time.Duration(cfg.MaxBackoffMs) * time.Millisecond,
+    }
 }
 
 func (r *rateLimiter) waitToken(ctxDone <-chan struct{}) bool {
@@ -251,21 +358,54 @@ func (r *rateLimiter) waitToken(ctxDone <-chan struct{}) bool {
         }
         r.mu.Unlock()
         select {
-        case <-time.After(50 * time.Millisecond):
+        case <-time.After(10 * time.Millisecond):
         case <-ctxDone:
             return false
         }
     }
 }
 
-func (c *Client) ensureLimiter() {
-    if c.limiter == nil {
-        c.limiter = newRateLimiterFromConfig()
-    }
-}
-
 func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
-    c.ensureLimiter()
+	useRepair := false
+	if v, ok := req.Context().Value(repairModeContextKey).(bool); ok && v {
+		useRepair = true
+	}
+
+	var limiter *rateLimiter
+	var httpClient *http.Client
+
+	if useRepair {
+		if c.repairLimiter == nil {
+			c.repairLimiter = newRepairRateLimiterFromConfig()
+		}
+		limiter = c.repairLimiter
+		if c.repairHTTPClient == nil {
+			c.repairHTTPClient = &http.Client{
+				Timeout: 120 * time.Second,
+				Transport: &http.Transport{
+					ForceAttemptHTTP2: false,
+					DisableKeepAlives: true,
+					MaxConnsPerHost:   1,
+					MaxIdleConns:      1,
+					MaxIdleConnsPerHost: 1,
+					IdleConnTimeout:   30 * time.Second,
+				},
+			}
+		}
+		httpClient = c.repairHTTPClient
+	} else {
+		if c.limiter == nil {
+			c.limiter = newRateLimiterFromConfig()
+		}
+		limiter = c.limiter
+		if c.httpClient == nil {
+			c.httpClient = &http.Client{
+				Timeout: 120 * time.Second,
+			}
+		}
+		httpClient = c.httpClient
+	}
+
     attempt := 0
 
     filename := req.URL.Path
@@ -274,11 +414,11 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
     }
 
     for {
-        if ok := c.limiter.waitToken(req.Context().Done()); !ok {
+        if ok := limiter.waitToken(req.Context().Done()); !ok {
             return nil, fmt.Errorf("request canceled")
         }
 
-        resp, err := c.httpClient.Do(req)
+        resp, err := httpClient.Do(req)
         if err != nil {
             return nil, err
         }
@@ -309,14 +449,14 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
             return resp, nil
         }
 
-        if attempt >= c.limiter.maxRetries {
+        if attempt >= limiter.maxRetries {
             return nil, fmt.Errorf("rate limited (429) for %s after %d retries", filename, attempt)
         }
 
         resp.Body.Close()
-        backoff := c.limiter.baseBackoff * time.Duration(1<<uint(attempt))
-        if backoff > c.limiter.maxBackoff {
-            backoff = c.limiter.maxBackoff
+        backoff := limiter.baseBackoff * time.Duration(1<<uint(attempt))
+        if backoff > limiter.maxBackoff {
+            backoff = limiter.maxBackoff
         }
         time.Sleep(backoff)
         attempt++
@@ -400,6 +540,7 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operation
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
     c.limiter = nil
+    c.repairLimiter = nil
 }
 
 // GetUserInfo retrieves user information from Real-Debrid
@@ -849,8 +990,7 @@ type TorrentInfo struct {
 	OriginalID   string         `json:"-"`
 }
 
-// GetTorrentInfo retrieves detailed information about a specific torrent
-func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
+func (c *Client) getTorrentInfoInternal(torrentID string, repair bool) (*TorrentInfo, error) {
 	if c.apiKey == "" {
 		return nil, fmt.Errorf("API key not set")
 	}
@@ -861,6 +1001,10 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+
+	if repair {
+		req = req.WithContext(context.WithValue(req.Context(), repairModeContextKey, true))
+	}
 
 	resp, err := c.doRequestWithRetry(req, 3, "GetTorrentInfo")
 	if err != nil {
@@ -890,6 +1034,16 @@ func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	return &info, nil
 }
 
+// GetTorrentInfo retrieves detailed information about a specific torrent
+func (c *Client) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
+	return c.getTorrentInfoInternal(torrentID, false)
+}
+
+// GetTorrentInfoForRepair retrieves torrent information using the repair-limited client.
+func (c *Client) GetTorrentInfoForRepair(torrentID string) (*TorrentInfo, error) {
+	return c.getTorrentInfoInternal(torrentID, true)
+}
+
 // AddMagnetResponse represents the response from adding a magnet
 type AddMagnetResponse struct {
 	ID  string `json:"id"`
@@ -912,6 +1066,7 @@ func (c *Client) AddMagnet(magnet string) (*AddMagnetResponse, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	req = req.WithContext(context.WithValue(req.Context(), repairModeContextKey, true))
 	resp, err := c.doRequestWithRetry(req, 3, "AddMagnet")
 	if err != nil {
 		return nil, err
@@ -1037,7 +1192,7 @@ func (c *Client) DeleteTorrent(torrentID string) error {
 	return nil
 }
 
-func (c *Client) SelectFiles(torrentID string, fileIDs []string) error {
+func (c *Client) selectFilesInternal(torrentID string, fileIDs []string, repair bool) error {
 	if c.apiKey == "" {
 		return fmt.Errorf("API key not set")
 	}
@@ -1051,6 +1206,10 @@ func (c *Client) SelectFiles(torrentID string, fileIDs []string) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	if repair {
+		req = req.WithContext(context.WithValue(req.Context(), repairModeContextKey, true))
+	}
 
 	resp, err := c.doRequestWithRetry(req, 3, "SelectFiles")
 	if err != nil {
@@ -1071,6 +1230,14 @@ func (c *Client) SelectFiles(torrentID string, fileIDs []string) error {
 	}
 
 	return nil
+}
+
+func (c *Client) SelectFiles(torrentID string, fileIDs []string) error {
+	return c.selectFilesInternal(torrentID, fileIDs, false)
+}
+
+func (c *Client) SelectFilesForRepair(torrentID string, fileIDs []string) error {
+	return c.selectFilesInternal(torrentID, fileIDs, true)
 }
 
 // IsValidAPIKey checks if the provided API key is valid

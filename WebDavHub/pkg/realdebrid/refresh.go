@@ -24,9 +24,18 @@ func (tm *TorrentManager) performSmartRefresh(ctx context.Context) {
 		return
 	}
 	
-	logger.Info("[Refresh] Changes detected (count: %d -> %d)", 
-		currentState.TotalCount, newState.TotalCount)
+	needsFullRefresh := false
+	if currentState.LastUpdated.IsZero() || time.Since(currentState.LastUpdated) > time.Hour {
+		needsFullRefresh = true
+		logger.Info("[Refresh] Performing full refresh (periodic, last: %v ago)", time.Since(currentState.LastUpdated))
+	} else if currentState.TotalCount != newState.TotalCount {
+		needsFullRefresh = true
+		logger.Info("[Refresh] Changes detected (count: %d -> %d)", currentState.TotalCount, newState.TotalCount)
+	}
+	
+	if needsFullRefresh {
 	tm.performFullRefresh(ctx)
+	}
 	
 	tm.updateCurrentState(newState)
 }
@@ -156,10 +165,13 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		for i := range firstPage {
 			freshIDs[firstPage[i].ID] = true
 		}
+		existingIDs := make(map[string]bool, len(oldTorrents))
+		for id := range oldTorrents {
+			existingIDs[id] = true
+		}
 		
 		allTorrents = make([]TorrentItem, 0, totalCount)
 		allTorrents = append(allTorrents, firstPage...)
-		
 		for i := range cachedTorrents {
 			if !freshIDs[cachedTorrents[i].ID] {
 				allTorrents = append(allTorrents, cachedTorrents[i])
@@ -174,38 +186,189 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			}
 		}
 	}
-	
-	allTorrentsMap.Clear()
-	tm.idToItemMap.Clear()
-	
+	logger.Debug("[Refresh] Building new maps with %d torrents", len(allTorrents))
+	updatingIDs := make(map[string]bool, len(allTorrents))
+	for i := range allTorrents {
+		updatingIDs[allTorrents[i].ID] = true
+	}
 	for i := range allTorrents {
 		item := &allTorrents[i]
 		accessKey := GetDirectoryName(item.Filename)
+		oldItem, existsInIDMap := tm.idToItemMap.Get(item.ID)
+		existingItem, existsInDirMap := allTorrentsMap.Get(accessKey)
+		if existsInDirMap && existingItem != nil && existingItem.ID != item.ID {
+			continue
+		}
+		if existsInIDMap && oldItem != nil && oldItem.ID == item.ID {
+			oldItem.Filename = item.Filename
+			oldItem.Bytes = item.Bytes
+			oldItem.Files = item.Files
+			oldItem.Status = item.Status
+			oldItem.Added = item.Added
+			if item.Ended != "" {
+				oldItem.Ended = item.Ended
+			}
+
+			if len(item.CachedFiles) == 0 && len(oldItem.CachedFiles) > 0 {
+			} else if len(item.CachedFiles) > 0 {
+				oldItem.CachedFiles = item.CachedFiles
+				oldItem.CachedLinks = item.CachedLinks
+			}
+			allTorrentsMap.Set(accessKey, oldItem)
+		} else {
+			if existsInIDMap && oldItem != nil {
+				if len(item.CachedFiles) == 0 && len(oldItem.CachedFiles) > 0 {
+					item.CachedFiles = oldItem.CachedFiles
+					item.CachedLinks = oldItem.CachedLinks
+				}
+			}
 		allTorrentsMap.Set(accessKey, item)
 		tm.idToItemMap.Set(item.ID, item)
+		}
+	}
+
+	if totalCount >= oldTotalCount {
+		allKeys := allTorrentsMap.Keys()
+		preservedCount := 0
+		for _, key := range allKeys {
+			if existingItem, exists := allTorrentsMap.Get(key); exists && existingItem != nil {
+				if !updatingIDs[existingItem.ID] {
+					preservedCount++
+				}
+			}
+		}
+		if preservedCount > 0 {
+			logger.Debug("[Refresh] Preserved %d existing entries not in first page", preservedCount)
+		}
+	}
+
+	if totalCount < oldTotalCount && len(removedTorrents) > 0 {
+		logger.Debug("[Refresh] Cleaning up %d removed torrents from maps", len(removedTorrents))
+		for i := range removedTorrents {
+			torrent := &removedTorrents[i]
+			accessKey := GetDirectoryName(torrent.Filename)
+
+			if existingItem, exists := allTorrentsMap.Get(accessKey); exists && existingItem != nil {
+				if existingItem.ID == torrent.ID {
+					allTorrentsMap.Remove(accessKey)
+					logger.Debug("[Refresh] Removed torrent %s from directory map", torrent.ID[:8])
+				} else {
+					logger.Debug("[Refresh] Skipping directory removal for %s (key reused by %s)", torrent.ID[:8], existingItem.ID[:8])
+				}
+			}
+
+			tm.idToItemMap.Remove(torrent.ID)
+			logger.Debug("[Refresh] Removed torrent %s from ID map", torrent.ID[:8])
+		}
+	} else if totalCount < oldTotalCount {
+		logger.Warn("[Refresh] Count decreased but no removed torrents detected")
 	}
 	
 	go tm.SaveAllTorrents()
 	
-	if len(newTorrents) > 0 && len(cachedTorrents) > 0 {
+	if len(newTorrents) > 0 {
+		logger.Info("[Refresh] Processing %d new torrents", len(newTorrents))
+		
 		for i, torrent := range newTorrents {
 			if i < 3 {
-				logger.Info("New file added: %s", truncateFilename(torrent.Filename))
+				logger.Info("[Refresh] New file added: %s", truncateFilename(torrent.Filename))
 			} else if i == 3 {
-				logger.Info("... and %d more new files", len(newTorrents)-3)
+				logger.Info("[Refresh] ... and %d more new files", len(newTorrents)-3)
 				break
 			}
 		}
 
-		go tm.PrefetchFileDownloadLinks(newTorrents)
+		logger.Debug("[Refresh] Loading file lists for %d new torrents", len(newTorrents))
+		type loadResult struct {
+			index int
+			item  *TorrentItem
+		}
+		resultChan := make(chan loadResult, len(newTorrents))
+		
+		// Semaphore to limit concurrent API calls
+		const maxConcurrent = 50
+		sem := make(chan struct{}, maxConcurrent)
+		
+		for i := range newTorrents {
+			sem <- struct{}{}
+			
+			go func(idx int, torrent *TorrentItem) {
+				defer func() { <-sem }()
+				if len(torrent.CachedFiles) > 0 {
+					resultChan <- loadResult{index: idx, item: torrent}
+					return
+				}
+				if tm.infoStore != nil {
+					if cached, ok, err := tm.infoStore.Get(torrent.ID); err == nil && ok && cached != nil {
+						torrent.CachedFiles = cached.Files
+						torrent.CachedLinks = cached.Links
+						torrent.Ended = cached.Ended
+						resultChan <- loadResult{index: idx, item: torrent}
+						return
+					}
+				}
+				info, err := tm.client.GetTorrentInfo(torrent.ID)
+				if err == nil && info != nil {
+					torrent.CachedFiles = info.Files
+					torrent.CachedLinks = info.Links
+					torrent.Ended = info.Ended
+					if tm.infoStore != nil {
+						_ = tm.infoStore.Upsert(info)
+					}
+					
+					logger.Debug("[Refresh] Loaded %d files for new torrent %s", len(info.Files), torrent.ID[:8])
+				} else {
+					logger.Warn("[Refresh] Failed to load files for new torrent %s: %v", torrent.ID[:8], err)
+				}
+				
+				resultChan <- loadResult{index: idx, item: torrent}
+			}(i, &newTorrents[i])
+		}
+		timeout := time.After(30 * time.Second)
+		completed := 0
+		for completed < len(newTorrents) {
+			select {
+			case result := <-resultChan:
+				accessKey := GetDirectoryName(result.item.Filename)
+				if existingItem, exists := allTorrentsMap.Get(accessKey); exists && existingItem != nil {
+					existingItem.CachedFiles = result.item.CachedFiles
+					existingItem.CachedLinks = result.item.CachedLinks
+					if result.item.Ended != "" {
+						existingItem.Ended = result.item.Ended
+					}
+				} else {
+					allTorrentsMap.Set(accessKey, result.item)
+				}
+				if existingItem, exists := tm.idToItemMap.Get(result.item.ID); exists && existingItem != nil {
+					existingItem.CachedFiles = result.item.CachedFiles
+					existingItem.CachedLinks = result.item.CachedLinks
+					if result.item.Ended != "" {
+						existingItem.Ended = result.item.Ended
+					}
+				} else {
+					tm.idToItemMap.Set(result.item.ID, result.item)
+				}
+				completed++
+				if completed%50 == 0 || completed == len(newTorrents) {
+					logger.Info("[Refresh] Progress: %d/%d new torrents loaded", completed, len(newTorrents))
+				}
+			case <-timeout:
+				logger.Warn("[Refresh] Timeout waiting for file lists (%d/%d completed)", completed, len(newTorrents))
+				goto done
+			}
+		}
+		done:
+		logger.Debug("[Refresh] File lists loaded for %d new torrents (unrestrict on-demand)", len(newTorrents))
 	}
 	
 	if len(removedTorrents) > 0 {
+		logger.Info("[Refresh] Processing %d removed torrents", len(removedTorrents))
+		
 		for i, torrent := range removedTorrents {
 			if i < 3 {
-				logger.Info("File removed: %s", truncateFilename(torrent.Filename))
+				logger.Info("[Refresh] File removed: %s", truncateFilename(torrent.Filename))
 			} else if i == 3 {
-				logger.Info("... and %d more files removed", len(removedTorrents)-3)
+				logger.Info("[Refresh] ... and %d more files removed", len(removedTorrents)-3)
 				break
 			}
 		}
@@ -213,9 +376,14 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		for i := range removedTorrents {
 			tm.DeleteFromDBByID(removedTorrents[i].ID)
 		}
+		
+		logger.Debug("[Refresh] Cleanup complete for removed torrents")
 	}
 
 	triggerPendingMount()
+	
+	logger.Info("[Refresh] Full refresh complete - New: %d, Removed: %d, Total: %d", 
+		len(newTorrents), len(removedTorrents), len(allTorrents))
 }
 
 func (tm *TorrentManager) updateCurrentState(newState *LibraryState) {
@@ -235,4 +403,3 @@ func (tm *TorrentManager) GetCurrentState() *LibraryState {
 		LastUpdated:      state.LastUpdated,
 	}
 }
-

@@ -64,6 +64,8 @@ func (tm *TorrentManager) updateCachesAfterRepair(oldID string, newInfo *Torrent
 		Status:   newInfo.Status,
 		Added:    oldItem.Added,
 		Ended:    newInfo.Ended,
+		CachedFiles: newInfo.Files,
+		CachedLinks: newInfo.Links,
 	}
 	
 	// Update DirectoryMap with the new torrent
@@ -286,32 +288,68 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 	}
 
 	brokenCount := 0
+	brokenFiles := []string{}
+	
+	if len(info.Links) == 0 {
+		logger.Warn("[Repair] Torrent %s has no links, all %d files are broken", torrentID, len(videoFiles))
+		brokenCount = len(videoFiles)
+	} else {
 	for _, file := range videoFiles {
 		cleanPath := strings.Trim(file.Path, "/")
 		fileName := path.Base(cleanPath)
-		
-		// Check if torrent ID changed due to reinsertion
-		if newID, ok := torrentIDMapping.Get(torrentID); ok {
-			torrentID = newID
+			cacheKey := MakeCacheKey(torrentID, fileName)
+			if _, exists := tm.failedFileCache.Get(cacheKey); exists {
+				brokenCount++
+				brokenFiles = append(brokenFiles, fileName)
+			}
+		}
+		if brokenCount == 0 {
+			for _, file := range videoFiles {
+				if file.ID-1 >= len(info.Links) || file.ID <= 0 {
+			brokenCount++
+					cleanPath := strings.Trim(file.Path, "/")
+					brokenFiles = append(brokenFiles, path.Base(cleanPath))
+				}
+			}
+		}
+	}
+	
+	if brokenCount > 0 {
+		newInfo, reinsertErr := tm.reInsertTorrent(info)
+		if reinsertErr != nil {
+			logger.Warn("[Repair] Failed to reinsert torrent %s: %v", torrentID, reinsertErr)
+			if tm.store != nil && !strings.Contains(reinsertErr.Error(), "not cached") && 
+			   !strings.Contains(reinsertErr.Error(), "error status") {
+				reason := fmt.Sprintf("reinsert_failed_%d_files", brokenCount)
+				if strings.Contains(strings.ToLower(reinsertErr.Error()), "infringing_file") || strings.Contains(reinsertErr.Error(), "code: 35") {
+					reason = "infringing_file"
+				}
+			_ = tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason)
+			}
+			
+			return false, fmt.Errorf("torrent has %d broken files, reinsert failed: %w", brokenCount, reinsertErr)
+		}
+		newBrokenCount := 0
+		for _, file := range videoFiles {
+			if file.ID-1 >= len(newInfo.Links) || file.ID <= 0 {
+				newBrokenCount++
+			}
 		}
 		
-		_, _, err := tm.fetchDownloadLink(torrentID, fileName)
-		if err != nil {
-			brokenCount++
+        if newBrokenCount == 0 {
+			brokenCount = 0
+		} else {
+			return false, fmt.Errorf("torrent has %d broken files after reinsert", newBrokenCount)
 		}
 	}
 
-	// If reinsertion happened and all files work, delete the old torrent
 	if newID, ok := torrentIDMapping.Get(originalTorrentID); ok {
 		if brokenCount == 0 {
-			// Use concurrent-safe check-and-set to ensure only one goroutine deletes
 			if alreadyDeleted, _ := deletedOldTorrents.Get(originalTorrentID); !alreadyDeleted {
-				// Mark as being deleted to prevent concurrent deletion
 				deletedOldTorrents.Set(originalTorrentID, true)
 				
 				if err := tm.client.DeleteTorrent(originalTorrentID); err != nil {
 					logger.Warn("[Repair] Failed to delete old torrent %s: %v", originalTorrentID, err)
-					// If deletion failed, allow retry
 					deletedOldTorrents.Remove(originalTorrentID)
 				} else {
 					tm.deleteTorrentFromCache(originalTorrentID)
@@ -325,6 +363,12 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 	}
 
 	if brokenCount == 0 {
+		for _, file := range videoFiles {
+			cleanPath := strings.Trim(file.Path, "/")
+			fileName := path.Base(cleanPath)
+			cacheKey := MakeCacheKey(originalTorrentID, fileName)
+			tm.failedFileCache.Remove(cacheKey)
+		}
 		return true, nil
 	}
 
@@ -370,9 +414,7 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 	
 	newTorrentID := addResult.ID
 	
-	var newInfo *TorrentInfo
-	for {
-		checkInfo, err := tm.client.GetTorrentInfo(newTorrentID)
+		checkInfo, err := tm.client.GetTorrentInfoForRepair(newTorrentID)
 		if err != nil {
 			if IsTorrentNotFound(err) {
 				_ = tm.client.DeleteTorrent(newTorrentID)
@@ -397,34 +439,66 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 			}
 			
 			if len(selectedFileIDs) > 0 {
-				if err := tm.client.SelectFiles(newTorrentID, selectedFileIDs); err != nil {
+				if err := tm.client.SelectFilesForRepair(newTorrentID, selectedFileIDs); err != nil {
 					_ = tm.client.DeleteTorrent(newTorrentID)
 					failedToReinsert.Set(oldID, true)
 					req.Complete(nil, fmt.Errorf("failed to select files: %w", err))
 					return nil, fmt.Errorf("failed to select files: %w", err)
 				}
-			} else {
+			checkInfo, err = tm.client.GetTorrentInfoForRepair(newTorrentID)
+			if err != nil {
 				_ = tm.client.DeleteTorrent(newTorrentID)
 				failedToReinsert.Set(oldID, true)
-				req.Complete(nil, fmt.Errorf("no valid files found"))
-				return nil, fmt.Errorf("no valid files found")
+				req.Complete(nil, fmt.Errorf("failed to check torrent after selection: %w", err))
+				return nil, fmt.Errorf("failed to check torrent after selection: %w", err)
 			}
-		} else if status == "downloaded" {
-			newInfo = checkInfo
-			break
-		} else if status == "downloading" || status == "queued" || status == "magnet_error" {
-			time.Sleep(2 * time.Second)
-			continue
-		} else if status == "error" || status == "dead" || status == "virus" {
+		} else {
 			_ = tm.client.DeleteTorrent(newTorrentID)
 			failedToReinsert.Set(oldID, true)
-			req.Complete(nil, fmt.Errorf("torrent has error status: %s", status))
-			return nil, fmt.Errorf("torrent has error status: %s", status)
-		} else {
-			time.Sleep(2 * time.Second)
-			continue
+			req.Complete(nil, fmt.Errorf("no valid files found"))
+			return nil, fmt.Errorf("no valid files found")
 		}
 	}
+
+	if checkInfo.Status == "downloading" || checkInfo.Status == "queued" {
+		logger.Warn("[Repair] Torrent %s is not cached (status: %s), marking as unrepairable", oldID, checkInfo.Status)
+		_ = tm.client.DeleteTorrent(newTorrentID)
+		failedToReinsert.Set(oldID, true)
+		tm.brokenTorrentCache.Set(oldID, &FailedFileEntry{
+			Error:     fmt.Errorf("torrent not cached, status: %s", checkInfo.Status),
+			Timestamp: time.Now(),
+		})
+
+		if tm.store != nil {
+			_ = tm.store.UpsertRepair(oldID, info.Filename, info.Hash, checkInfo.Status, int(checkInfo.Progress), "not_cached")
+		} else {
+			logger.Warn("[Repair] Store is nil, cannot save unrepairable torrent %s to DB", oldID)
+		}
+		
+		req.Complete(nil, fmt.Errorf("torrent not cached, status: %s", checkInfo.Status))
+		return nil, fmt.Errorf("torrent not cached, status: %s", checkInfo.Status)
+	}
+	if checkInfo.Status == "error" || checkInfo.Status == "dead" || checkInfo.Status == "virus" || checkInfo.Status == "magnet_error" {
+		logger.Warn("[Repair] Torrent %s has error status: %s, marking as unrepairable", oldID, checkInfo.Status)
+		_ = tm.client.DeleteTorrent(newTorrentID)
+		failedToReinsert.Set(oldID, true)
+		tm.brokenTorrentCache.Set(oldID, &FailedFileEntry{
+			Error:     fmt.Errorf("torrent has error status: %s", checkInfo.Status),
+			Timestamp: time.Now(),
+		})
+
+		if tm.store != nil {
+			reason := fmt.Sprintf("reinsert_error_%s", checkInfo.Status)
+			_ = tm.store.UpsertRepair(oldID, info.Filename, info.Hash, checkInfo.Status, int(checkInfo.Progress), reason)
+		} else {
+			logger.Warn("[Repair] Store is nil, cannot save unrepairable torrent %s to DB", oldID)
+		}
+		
+		req.Complete(nil, fmt.Errorf("torrent has error status: %s", checkInfo.Status))
+		return nil, fmt.Errorf("torrent has error status: %s", checkInfo.Status)
+	}
+	
+	newInfo := checkInfo
 	
 	if newInfo == nil {
 		_ = tm.client.DeleteTorrent(newTorrentID)
@@ -432,20 +506,56 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 		req.Complete(nil, fmt.Errorf("torrent did not complete in time"))
 		return nil, fmt.Errorf("torrent did not complete in time")
 	}
+
+	if enriched, err := tm.GetTorrentInfo(newInfo.ID); err == nil && enriched != nil && len(enriched.Links) > 0 {
+		newInfo = enriched
+	}
+	if newInfo.Hash == "" && info.Hash != "" {
+		newInfo.Hash = info.Hash
+	}
+	if newInfo.Bytes == 0 && info.Bytes > 0 {
+		newInfo.Bytes = info.Bytes
+	}
+	if newInfo.Added == "" && info.Added != "" {
+		newInfo.Added = info.Added
+	}
+	if newInfo.Filename == "" && info.Filename != "" {
+		newInfo.Filename = info.Filename
+	}
+	if len(newInfo.Files) == 0 && len(info.Files) > 0 {
+		newInfo.Files = info.Files
+	}
 	
 	if len(newInfo.Links) == 0 {
+		logger.Warn("[Repair] Torrent %s reinserted but has no links, marking as unrepairable", oldID)
 		_ = tm.client.DeleteTorrent(newTorrentID)
 		failedToReinsert.Set(oldID, true)
+		tm.brokenTorrentCache.Set(oldID, &FailedFileEntry{
+			Error:     fmt.Errorf("no links after reinsert"),
+			Timestamp: time.Now(),
+		})
+		if tm.store != nil {
+			_ = tm.store.UpsertRepair(oldID, info.Filename, info.Hash, newInfo.Status, int(newInfo.Progress), "no_links_after_reinsert")
+		} else {
+			logger.Warn("[Repair] Store is nil, cannot save unrepairable torrent %s to DB", oldID)
+		}
+		
 		req.Complete(nil, fmt.Errorf("failed to reinsert torrent: empty links"))
 		return nil, fmt.Errorf("failed to reinsert torrent: empty links")
 	}
 	
 	if tm.infoStore != nil {
 		_ = tm.infoStore.Upsert(newInfo)
+		if oldID != "" && oldID != newInfo.ID {
+			_ = tm.infoStore.Delete(oldID)
+		}
 	}
 	
 	if tm.store != nil {
 		_ = tm.store.UpsertInfo(newInfo)
+		if oldID != "" && oldID != newInfo.ID {
+			_ = tm.store.DeleteByID(oldID)
+		}
 	}
 	
 	if newInfo.Progress == 100 {

@@ -334,10 +334,14 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/dashboard-stats", api.HandleDebridDashboardStats)
 	apiMux.HandleFunc("/api/realdebrid/torrent-manager-stats", api.HandleTorrentManagerStats)
 	apiMux.HandleFunc("/api/realdebrid/repair-status", api.HandleRepairStatus)
+	apiMux.HandleFunc("/api/realdebrid/repair-queue", api.HandleRepairQueue)
+	apiMux.HandleFunc("/api/realdebrid/repair-queue/delete", api.HandleRepairQueueDelete)
+	apiMux.HandleFunc("/api/realdebrid/repair-all", api.HandleRepairAllFiltered)
 	apiMux.HandleFunc("/api/realdebrid/repair-stats", api.HandleRepairStats)
 	apiMux.HandleFunc("/api/realdebrid/repair-start", api.HandleRepairStart)
 	apiMux.HandleFunc("/api/realdebrid/repair-stop", api.HandleRepairStop)
 	apiMux.HandleFunc("/api/realdebrid/repair-torrent", api.HandleRepairTorrent)
+	apiMux.HandleFunc("/api/realdebrid/repair-delete", api.HandleRepairDelete)
 
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)
@@ -552,12 +556,14 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	}()
 
 	// Wrap the root mux with global panic recovery
+	// HTTP server with no timeouts
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      globalPanicRecoveryMiddleware(rootMux),
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  300 * time.Second,
+		Addr:           addr,
+		Handler:        globalPanicRecoveryMiddleware(rootMux),
+		ReadTimeout:    0,
+		WriteTimeout:   0,
+		IdleTimeout:    300 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	log.Fatal(server.ListenAndServe())

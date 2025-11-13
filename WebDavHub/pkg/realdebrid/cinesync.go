@@ -84,6 +84,12 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
     }
 
     go func(items []TorrentItem) {
+        defer func() {
+            if r := recover(); r != nil {
+                logger.Error("[CineSync] PANIC in enrich goroutine: %v", r)
+                enrichRunning.Store(false)
+            }
+        }()
         if !enrichRunning.CompareAndSwap(false, true) {
             return
         }

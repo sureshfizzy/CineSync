@@ -18,8 +18,8 @@ func OpenTorrentInfoStore(dbPath string) (*TorrentInfoStore, error) {
     db, err := sql.Open("sqlite", dsn)
     if err != nil { return nil, err }
 
-    db.SetMaxOpenConns(32)
-    db.SetMaxIdleConns(16)
+    db.SetMaxOpenConns(64)
+    db.SetMaxIdleConns(32)
 
     if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
         if _, err := db.Exec(`PRAGMA wal_checkpoint(RESTART)`); err != nil {

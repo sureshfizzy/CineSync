@@ -35,8 +35,8 @@ func OpenTorrentStore(dbPath string) (*TorrentStore, error) {
         return nil, err
     }
 
-    db.SetMaxOpenConns(32)
-    db.SetMaxIdleConns(16)
+    db.SetMaxOpenConns(64)
+    db.SetMaxIdleConns(32)
 
     // Checkpoint WAL immediately on open to prevent blocking
     if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {

@@ -22,9 +22,9 @@ func NewWebDAVHandler(dir string) *WebDAVHandler {
 			LockSystem: webdav.NewMemLS(),
 			Logger: func(r *http.Request, err error) {
 				if err != nil {
-					logger.Error("[WebDAV] Method: %s, Path: %s, ERROR: %v", r.Method, r.URL.Path, err)
+				logger.Error("WebDAV request error: method=%s path=%s err=%v", r.Method, r.URL.Path, err)
 				} else {
-					logger.Info("[WebDAV] Method: %s, Path: %s", r.Method, r.URL.Path)
+				logger.Info("WebDAV request: method=%s path=%s", r.Method, r.URL.Path)
 				}
 			},
 		},

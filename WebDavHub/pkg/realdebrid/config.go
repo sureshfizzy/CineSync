@@ -72,6 +72,15 @@ type RateLimitSettings struct {
     MaxRetries        int   `json:"maxRetries" yaml:"maxRetries"`
     BaseBackoffMs     int   `json:"baseBackoffMs" yaml:"baseBackoffMs"`
     MaxBackoffMs      int   `json:"maxBackoffMs" yaml:"maxBackoffMs"`
+    Repair            RepairRateLimitSettings `json:"repair" yaml:"repair"`
+}
+
+type RepairRateLimitSettings struct {
+    RequestsPerMinute int `json:"requestsPerMinute" yaml:"requestsPerMinute"`
+    Burst             int `json:"burst" yaml:"burst"`
+    MaxRetries        int `json:"maxRetries" yaml:"maxRetries"`
+    BaseBackoffMs     int `json:"baseBackoffMs" yaml:"baseBackoffMs"`
+    MaxBackoffMs      int `json:"maxBackoffMs" yaml:"maxBackoffMs"`
 }
 
 // RepairSettings controls torrent repair behavior
@@ -148,6 +157,13 @@ func GetConfigManager() *ConfigManager {
                     MaxRetries:        5,
                     BaseBackoffMs:     500,
                     MaxBackoffMs:      8000,
+                    Repair: RepairRateLimitSettings{
+                        RequestsPerMinute: 60,
+                        Burst:             10,
+                        MaxRetries:        5,
+                        BaseBackoffMs:     500,
+                        MaxBackoffMs:      8000,
+                    },
                 },
                 RepairSettings: RepairSettings{
                     Enabled:           false,

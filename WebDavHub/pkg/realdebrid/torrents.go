@@ -115,6 +115,7 @@ type TorrentManager struct {
 	idToItemMap  cmap.ConcurrentMap[string, *TorrentItem]
 	downloadLinkCache cmap.ConcurrentMap[string, *DownloadLinkEntry]
 	failedFileCache   cmap.ConcurrentMap[string, *FailedFileEntry]
+	brokenTorrentCache cmap.ConcurrentMap[string, *FailedFileEntry]
 	downloadSG singleflight.Group
 	infoSG     singleflight.Group
 	currentState      atomic.Pointer[LibraryState]
@@ -146,36 +147,31 @@ type infoCacheEntry struct {
 }
 
 var (
-	torrentManager *TorrentManager
-	torrentMutex   sync.RWMutex
+	torrentManager atomic.Pointer[TorrentManager]
+	torrentOnce    sync.Once
+	torrentApiKey  atomic.Value
 )
 
 // GetTorrentManager returns the singleton torrent manager
 func GetTorrentManager(apiKey string) *TorrentManager {
-	torrentMutex.RLock()
-	if torrentManager != nil && torrentManager.client.apiKey == apiKey {
-		torrentMutex.RUnlock()
-		return torrentManager
-	}
-	torrentMutex.RUnlock()
-
-	torrentMutex.Lock()
-	defer torrentMutex.Unlock()
-
-	if torrentManager != nil && torrentManager.client.apiKey == apiKey {
-		return torrentManager
+	if tm := torrentManager.Load(); tm != nil {
+		if storedKey, ok := torrentApiKey.Load().(string); ok && storedKey == apiKey {
+			return tm
+		}
 	}
 
-	torrentManager = &TorrentManager{
-		client:            NewClient(apiKey),
-		downloadLinkCache: cmap.New[*DownloadLinkEntry](),
-		failedFileCache:   cmap.New[*FailedFileEntry](),
-		idToItemMap:       cmap.New[*TorrentItem](),
-		refreshInterval:   DEFAULT_REFRESH_INTERVAL,
-		initialized:       make(chan struct{}),
-	}
+	torrentOnce.Do(func() {
+		tm := &TorrentManager{
+			client:             NewClient(apiKey),
+			downloadLinkCache:  cmap.New[*DownloadLinkEntry](),
+			failedFileCache:    cmap.New[*FailedFileEntry](),
+			brokenTorrentCache: cmap.New[*FailedFileEntry](),
+			idToItemMap:        cmap.New[*TorrentItem](),
+			refreshInterval:    DEFAULT_REFRESH_INTERVAL,
+			initialized:        make(chan struct{}),
+		}
 
-	torrentManager.initializeDirectoryMaps()
+		tm.initializeDirectoryMaps()
 
 	initialState := &LibraryState{
 		TotalCount:       0,
@@ -183,12 +179,12 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 		FirstTorrentName: "",
 		LastUpdated:      time.Now(),
 	}
-	torrentManager.currentState.Store(initialState)
+		tm.currentState.Store(initialState)
 	
     // Open SQLite stores
     dbPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents.db"))
     if store, err := OpenTorrentStore(dbPath); err == nil {
-        torrentManager.store = store
+			tm.store = store
     } else {
         logger.Warn("[Torrents] Failed to open store at %s: %v", dbPath, err)
     }
@@ -196,24 +192,29 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     // Open detailed info store
     infoDBPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents-info.db"))
     if infoStore, err := OpenTorrentInfoStore(infoDBPath); err == nil {
-        torrentManager.infoStore = infoStore
+			tm.infoStore = infoStore
     } else {
         logger.Warn("[Torrents] Failed to open torrents-info.db at %s: %v", infoDBPath, err)
     }
     
     // load cached data
-    torrentManager.loadCachedCineSync()
+		tm.loadCachedCineSync()
 	
     // Start background refresh job
-	torrentManager.startRefreshJob()
+		tm.startRefreshJob()
 
     // Start background catalog sync
-    torrentManager.StartCatalogSyncJob(60 * time.Second)
+		tm.StartCatalogSyncJob(60 * time.Second)
 
     // Start repair worker to scan for broken torrents
-    torrentManager.StartRepairWorker()
+		tm.StartRepairWorker()
 
-	return torrentManager
+		// Store atomically
+		torrentManager.Store(tm)
+		torrentApiKey.Store(apiKey)
+	})
+
+	return torrentManager.Load()
 }
 
 // initializeDirectoryMaps creates the concurrent directory maps
@@ -223,28 +224,70 @@ func (tm *TorrentManager) initializeDirectoryMaps() {
 	tm.DirectoryMap.Set(ALL_TORRENTS, cmap.New[*TorrentItem]())
 }
 
-// loadCachedTorrents loads from SQLite and populates concurrent maps
+// loadCachedTorrents loads from SQLite and AGGRESSIVELY populates ALL file lists in memory
 func (tm *TorrentManager) loadCachedTorrents() {
+	logger.Info("[LoadCache] Starting to load cached torrents from SQLite")
+	
 	if tm.store == nil {
-		logger.Warn("[Torrents] Store not available for loading cached torrents")
+		logger.Warn("[LoadCache] Store not available for loading cached torrents")
 		return
 	}
 	
+	logger.Debug("[LoadCache] Fetching all items from SQLite...")
 	items, err := tm.store.GetAllItems()
-	if err != nil || len(items) == 0 {
+	if err != nil {
+		logger.Error("[LoadCache] Failed to get items from store: %v", err)
 		return
 	}
+	
+	if len(items) == 0 {
+		logger.Info("[LoadCache] No items found in store")
+		return
+	}
+	
+	logger.Info("[LoadCache] Found %d torrents in SQLite, loading file lists into memory", len(items))
 	
 	// Get directory map
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
+	
+	// Load torrents with file lists FULLY cached in memory
+	loadedCount := 0
+	missingCount := 0
+	startTime := time.Now()
+	
 	for i := range items {
 		item := &items[i]
 		accessKey := GetDirectoryName(item.Filename)
+		if tm.infoStore != nil {
+			if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
+				item.CachedFiles = cached.Files
+				item.CachedLinks = cached.Links
+				item.Ended = cached.Ended
+				loadedCount++
+			} else {
+				info, apiErr := tm.client.GetTorrentInfo(item.ID)
+				if apiErr == nil && info != nil {
+					item.CachedFiles = info.Files
+					item.CachedLinks = info.Links
+					item.Ended = info.Ended
+					if tm.infoStore != nil {
+						_ = tm.infoStore.Upsert(info)
+					}
+					loadedCount++
+				} else {
+					missingCount++
+					logger.Warn("[LoadCache] Torrent %d: Failed to load files for %s: %v", i+1, item.ID, apiErr)
+				}
+			}
+		}
+		
 		allTorrents.Set(accessKey, item)
 		tm.idToItemMap.Set(item.ID, item)
 	}
 	
-	logger.Info("[Torrents] Loaded %d torrents into concurrent maps", len(items))
+	elapsed := time.Since(startTime)
+	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents: %d with files in RAM, %d missing", 
+		elapsed.Seconds(), len(items), loadedCount, missingCount)
 }
 
 // loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
@@ -252,18 +295,53 @@ func (tm *TorrentManager) loadCachedCineSync() {
 	tm.loadCachedTorrents()
 }
 
-// SetPrefetchedTorrents seeds the torrent manager with prefetched data
+// SetPrefetchedTorrents seeds the torrent manager with prefetched data and caches files in memory
 func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
+	logger.Info("[SetPrefetch] Starting to prefetch %d torrents with ALL file lists into memory", len(torrents))
+	
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
+	
+	loadedCount := 0
+	missingCount := 0
+	alreadyCachedCount := 0
+	startTime := time.Now()
+	
 	for i := range torrents {
 		item := &torrents[i]
 		accessKey := GetDirectoryName(item.Filename)
+		// AGGRESSIVELY load file lists into memory for instant access
+		if len(item.CachedFiles) == 0 {
+			if tm.infoStore != nil {
+				if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
+					item.CachedFiles = cached.Files
+					item.CachedLinks = cached.Links
+					item.Ended = cached.Ended
+					loadedCount++
+				} else {
+					info, apiErr := tm.client.GetTorrentInfo(item.ID)
+					if apiErr == nil && info != nil {
+						item.CachedFiles = info.Files
+						item.CachedLinks = info.Links
+						item.Ended = info.Ended
+						_ = tm.infoStore.Upsert(info)
+						loadedCount++
+					} else {
+						missingCount++
+						logger.Warn("[SetPrefetch] Torrent %d: Failed to prefetch files for %s: %v", i+1, item.ID, apiErr)
+					}
+				}
+			}
+		} else {
+			alreadyCachedCount++
+		}
+		
 		allTorrents.Set(accessKey, item)
 		tm.idToItemMap.Set(item.ID, item)
 	}
 	
-	logger.Info("[Torrents] Initialized with prefetched data: %d torrents loaded", 
-		len(torrents))
+	elapsed := time.Since(startTime)
+	logger.Info("[SetPrefetch] COMPLETED in %.1fs - %d torrents: %d loaded, %d already cached, %d missing", 
+		elapsed.Seconds(), len(torrents), loadedCount, alreadyCachedCount, missingCount)
 	
 	tm.prefetchCompleted.Store(true)
 
@@ -286,16 +364,48 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	triggerPendingMount()
 }
 
-// GetTorrentFileList loads file list on demand from DB
+// GetTorrentFileList loads file list - first from in-memory cache, then DB, then API
 func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, []string, string) {
 	torrentID = resolveTorrentID(torrentID)
 	
-	if tm.infoStore != nil {
-		if cached, ok, err := tm.infoStore.Get(torrentID); err == nil && ok && cached != nil {
-			return cached.Files, cached.Links, cached.Ended
+	if item, ok := tm.idToItemMap.Get(torrentID); ok && item != nil {
+		if len(item.CachedFiles) > 0 {
+			return item.CachedFiles, item.CachedLinks, item.Ended
 		}
-	}
 
+		var files []TorrentFile
+		var links []string
+		var ended string
+		
+		// Try DB first
+	if tm.infoStore != nil {
+			if cached, cacheOk, err := tm.infoStore.Get(torrentID); err == nil && cacheOk && cached != nil {
+				files = cached.Files
+				links = cached.Links
+				ended = cached.Ended
+			}
+		}
+		
+		// If DB miss, try API
+		if len(files) == 0 {
+			info, err := tm.GetTorrentInfo(torrentID)
+			if err != nil {
+				return nil, nil, ""
+			}
+			files = info.Files
+			links = info.Links
+			ended = info.Ended
+		}
+
+		item.CachedFiles = files
+		item.CachedLinks = links
+		if ended != "" {
+			item.Ended = ended
+		}
+		
+		return files, links, ended
+	}
+	
 	info, err := tm.GetTorrentInfo(torrentID)
 	if err != nil {
 		return nil, nil, ""
@@ -324,6 +434,11 @@ func (tm *TorrentManager) GetTorrentStatistics() (map[string]int, int64) {
 	return statusCounts, totalSize
 }
 
+// GetBrokenTorrentCache returns the broken torrent cache for filtering
+func (tm *TorrentManager) GetBrokenTorrentCache() cmap.ConcurrentMap[string, *FailedFileEntry] {
+	return tm.brokenTorrentCache
+}
+
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	torrentID = resolveTorrentID(torrentID)
@@ -336,7 +451,6 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 		}
 		fetched, ferr := tm.client.GetTorrentInfo(torrentID)
 		if ferr != nil {
-			// If torrent not found, delete it from our database/cache
 			if IsTorrentNotFound(ferr) {
 				tm.deleteTorrentFromCache(torrentID)
 				return nil, ferr
@@ -438,37 +552,86 @@ func (tm *TorrentManager) ListTorrentFiles(torrentID string, subPath string) ([]
 // PrefetchFileDownloadLinks prefetches unrestricted links for all files in the given torrents in parallel
 func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
 	if len(torrents) == 0 {
+		logger.Info("[Prefetch] No torrents to prefetch")
 		return
 	}
 
-	var wg sync.WaitGroup
-	for _, torrent := range torrents {
-		wg.Add(1)
-		go func(torrentID string) {
-			defer wg.Done()
+	startTime := time.Now()
+	logger.Info("[Prefetch] Starting prefetch for %d torrents", len(torrents))
+	const maxConcurrentTorrents = 50
+	const maxConcurrentFiles = 100
+	sem := make(chan struct{}, maxConcurrentTorrents)
+	var processed, cached, fetched, failed atomic.Int32
 
+	var wg sync.WaitGroup
+	for idx, torrent := range torrents {
+		wg.Add(1)
+		sem <- struct{}{}
+		
+		go func(torrentID string, torrentIdx int, totalTorrents int) {
+			defer func() {
+				wg.Done()
+				<-sem
+				currentProcessed := processed.Add(1)
+				if currentProcessed%10 == 0 || currentProcessed == int32(totalTorrents) {
+					logger.Info("[Prefetch] Progress: %d/%d torrents processed (cached: %d, fetched: %d, failed: %d)",
+						currentProcessed, totalTorrents, cached.Load(), fetched.Load(), failed.Load())
+				}
+				
+				if r := recover(); r != nil {
+					logger.Error("[Prefetch] PANIC in torrent %d: %v", torrentIdx, r)
+				}
+			}()
+			
+			logger.Debug("[Prefetch] Processing torrent %d/%d (ID: %s)", torrentIdx+1, totalTorrents, torrentID[:8])
 			info, err := tm.GetTorrentInfo(torrentID)
-			if err != nil || len(info.Files) == 0 || len(info.Links) == 0 {
+			if err != nil {
+				logger.Warn("[Prefetch] Failed to get info for torrent %d: %v", torrentIdx, err)
+				failed.Add(int32(1))
 				return
 			}
 
+			if len(info.Files) == 0 {
+				logger.Debug("[Prefetch] Torrent %d has no files", torrentIdx)
+				return
+			}
+			
+			if len(info.Links) == 0 {
+				logger.Warn("[Prefetch] Torrent %d has no links", torrentIdx)
+				failed.Add(int32(1))
+				return
+			}
+			
+			logger.Debug("[Prefetch] Torrent %d: %d files, %d links", torrentIdx, len(info.Files), len(info.Links))
+			fileSem := make(chan struct{}, maxConcurrentFiles)
 			var fileWg sync.WaitGroup
+			
+			fileCount := 0
 			for _, file := range info.Files {
 				if file.Selected != 1 {
 					continue
 				}
+				fileCount++
 
 				fileWg.Add(1)
+				fileSem <- struct{}{}
+				
 				go func(f TorrentFile, tid string, links []string) {
-					defer fileWg.Done()
+					defer func() {
+						fileWg.Done()
+						<-fileSem
+						
+						if r := recover(); r != nil {
+							logger.Error("[Prefetch] PANIC in file processing: %v", r)
+						}
+					}()
 
 					fileName := path.Base(strings.Trim(f.Path, "/"))
 					cacheKey := MakeCacheKey(tid, fileName)
-
 					if _, exists := tm.downloadLinkCache.Get(cacheKey); exists {
+						cached.Add(1)
 						return
 					}
-
 					downloadLink := ""
 					if f.ID-1 < len(links) {
 						downloadLink = links[f.ID-1]
@@ -477,11 +640,20 @@ func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
 					}
 
 					if downloadLink == "" {
+						logger.Debug("[Prefetch] No download link for file: %s", fileName)
+						failed.Add(1)
 						return
 					}
-
 					unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
-					if err != nil || unrestrictedLink.Download == "" {
+					if err != nil {
+						logger.Debug("[Prefetch] Failed to unrestrict %s: %v", fileName, err)
+						failed.Add(1)
+						return
+					}
+					
+					if unrestrictedLink.Download == "" {
+						logger.Debug("[Prefetch] Empty unrestrict URL for %s", fileName)
+						failed.Add(1)
 						return
 					}
 
@@ -493,12 +665,24 @@ func (tm *TorrentManager) PrefetchFileDownloadLinks(torrents []TorrentItem) {
 						DownloadLink: unrestrictedLink,
 						GeneratedAt:  time.Now(),
 					})
+					
+					fetched.Add(1)
 				}(file, torrentID, info.Links)
 			}
+			
+			logger.Debug("[Prefetch] Torrent %d: waiting for %d files to complete", torrentIdx, fileCount)
 			fileWg.Wait()
-		}(torrent.ID)
+			logger.Debug("[Prefetch] Torrent %d: all files completed", torrentIdx)
+			
+		}(torrent.ID, idx, len(torrents))
 	}
+	
+	logger.Info("[Prefetch] Waiting for all torrents to complete...")
 	wg.Wait()
+	
+	elapsed := time.Since(startTime)
+	logger.Info("[Prefetch] COMPLETED in %.1fs - Processed: %d, Cached: %d, Fetched: %d, Failed: %d",
+		elapsed.Seconds(), processed.Load(), cached.Load(), fetched.Load(), failed.Load())
 }
 
 // isBrokenLinkError checks if an error indicates a broken link that needs repair
@@ -531,6 +715,9 @@ func isBrokenLinkError(err error) bool {
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	torrentID = resolveTorrentID(torrentID)
+	if _, broken := tm.brokenTorrentCache.Get(torrentID); broken {
+		return "", 0, fmt.Errorf("torrent is in repair queue")
+	}
 	
 	cacheKey := MakeCacheKey(torrentID, filePath)
 
@@ -587,9 +774,11 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		tm.failedFileCache.Remove(cacheKey)
 	}
 
-	// Use singleflight to deduplicate concurrent requests
+	if brokenEntry, exists := tm.brokenTorrentCache.Get(torrentID); exists {
+		return "", 0, brokenEntry.Error
+	}
+
 	v, err, _ := tm.downloadSG.Do(cacheKey, func() (interface{}, error) {
-		// Double-check cache inside singleflight (another goroutine might have filled it)
 		if cached, exists := tm.downloadLinkCache.Get(cacheKey); exists {
 			if time.Since(cached.GeneratedAt) < 24*time.Hour {
 				return []interface{}{cached.Download, cached.Filesize}, nil
@@ -598,12 +787,16 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 		var downloadLink string
 		var filesize int64
+		var info *TorrentInfo
+		
 		if restrictedLink != "" {
 			downloadLink = restrictedLink
 			filesize = targetFileBytes
 		} else {
-			info, err := tm.GetTorrentInfo(torrentID)
+			var err error
+			info, err = tm.GetTorrentInfo(torrentID)
 			if err != nil {
+				tm.downloadSG.Forget(cacheKey)
 				return nil, err
 			}
 
@@ -620,13 +813,29 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 			}
 
 			if targetFile == nil {
+				tm.downloadSG.Forget(cacheKey)
 				return nil, fmt.Errorf("file not found: %s", filePath)
 			}
 
 			if len(info.Links) == 0 {
-				logger.Warn("[Torrents] No links available for torrent %s", torrentID)
+				noLinksErr := fmt.Errorf("no links available")
+				tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+					Error:     noLinksErr,
+					Timestamp: time.Now(),
+				})
+
+				if tm.store != nil {
+					reason := "no_links_available"
+					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+						logger.Warn("[Torrents] Failed to save no links error to repair table for %s: %v", torrentID, saveErr)
+					} else {
+						logger.Info("[Torrents] Saved no links error to repair table for %s: %s", torrentID, reason)
+					}
+				}
+				
+				logger.Warn("[Torrents] No links available for torrent %s (will retry only if repair succeeds)", torrentID)
 				tm.TriggerAutoRepair(torrentID)
-				return nil, fmt.Errorf("no links available")
+				return nil, noLinksErr
 			}
 
 			if targetFile.ID-1 < len(info.Links) {
@@ -639,44 +848,100 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		}
 
 		if downloadLink == "" {
+			emptyLinkErr := fmt.Errorf("empty download link")
 			logger.Warn("[Torrents] Empty download link for torrent %s, file %s", torrentID, filePath)
+			if tm.store != nil {
+				if info == nil {
+					info, _ = tm.GetTorrentInfo(torrentID)
+				}
+				if info != nil {
+					reason := "empty_download_link"
+					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+						logger.Warn("[Torrents] Failed to save empty link error to repair table for %s: %v", torrentID, saveErr)
+					} else {
+						logger.Info("[Torrents] Saved empty link error to repair table for %s: %s", torrentID, reason)
+					}
+				}
+			}
+			
 			tm.TriggerAutoRepair(torrentID)
-			return nil, fmt.Errorf("empty download link")
+			
+			tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+				Error:     emptyLinkErr,
+				Timestamp: time.Now(),
+			})
+			tm.downloadSG.Forget(cacheKey)
+			return nil, emptyLinkErr
 		}
-
-		logger.Debug("[Torrents] Attempting to unrestrict link for: %s", filePath)
 		
 		// Unrestrict the link
 		unrestrictedLink, err := tm.client.UnrestrictLink(downloadLink)
+		
 		if err != nil {
 			wrappedErr := fmt.Errorf("failed to unrestrict link: %w", err)
-			
 			if isBrokenLinkError(err) {
+				logger.Info("[Torrents] File %s marked as broken (unrestrict failed: %v)", filePath, err)
+				if tm.store != nil {
+					if info == nil {
+						info, _ = tm.GetTorrentInfo(torrentID)
+					}
+					if info != nil {
+						reason := fmt.Sprintf("unrestrict_failed: %v", err)
+						if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+							logger.Warn("[Torrents] Failed to save unrestrict error to repair table for %s: %v", torrentID, saveErr)
+						} else {
+						}
+					}
+				}
+				
 				tm.TriggerAutoRepair(torrentID)
+				
+				tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+					Error:     fmt.Errorf("unrestrict failed: %v", err),
+					Timestamp: time.Now(),
+				})
 			}
 			
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
 				Error:     wrappedErr,
 				Timestamp: time.Now(),
 			})
+			tm.downloadSG.Forget(cacheKey)
 			return nil, wrappedErr
 		}
 
 		if unrestrictedLink.Download == "" {
-			logger.Warn("[Torrents] Unrestrict returned empty download URL")
 			emptyErr := fmt.Errorf("unrestrict returned empty download URL")
+			logger.Info("[Torrents] File %s marked as broken (empty download URL)", filePath)
+			
+			if tm.store != nil {
+				if info == nil {
+					info, _ = tm.GetTorrentInfo(torrentID)
+				}
+				if info != nil {
+					reason := "empty_download_url"
+					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+						logger.Warn("[Torrents] Failed to save empty URL error to repair table for %s: %v", torrentID, saveErr)
+					} else {
+						logger.Info("[Torrents] Saved empty URL error to repair table for %s: %s", torrentID, reason)
+					}
+				}
+			}
 			
 			tm.TriggerAutoRepair(torrentID)
 
-			// Cache this error too
+			tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+				Error:     emptyErr,
+				Timestamp: time.Now(),
+			})
+
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
 				Error:     emptyErr,
 				Timestamp: time.Now(),
 			})
+			tm.downloadSG.Forget(cacheKey)
 			return nil, emptyErr
 		}
-
-		logger.Debug("[Torrents] Successfully unrestricted link for: %s", filePath)
 		
 		// Clear any cached failures for this file since it succeeded
 		tm.failedFileCache.Remove(cacheKey)
@@ -802,7 +1067,7 @@ func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient)
 		err   error
 	}
 
-	const maxWorkers = 3
+	const maxWorkers = 16
 	results := make(chan pageResult, len(paginationDirs))
 	semaphore := make(chan struct{}, maxWorkers)
 	
@@ -848,9 +1113,7 @@ func (tm *TorrentManager) aggregateHttpDavTorrents(httpDavClient *HttpDavClient)
 func (tm *TorrentManager) GetHttpDavTorrents() []HttpDavFileInfo {
 	tm.httpDavCacheMutex.RLock()
 	defer tm.httpDavCacheMutex.RUnlock()
-	result := make([]HttpDavFileInfo, len(tm.httpDavTorrentsCache))
-	copy(result, tm.httpDavTorrentsCache)
-	return result
+	return tm.httpDavTorrentsCache
 }
 
 // GetHttpDavLinks returns cached HTTP DAV links
@@ -860,9 +1123,7 @@ func (tm *TorrentManager) GetHttpDavLinks() []HttpDavFileInfo {
 	if tm.httpDavLinksCache == nil {
 		return []HttpDavFileInfo{}
 	}
-	result := make([]HttpDavFileInfo, len(tm.httpDavLinksCache))
-	copy(result, tm.httpDavLinksCache)
-	return result
+	return tm.httpDavLinksCache
 }
 
 // startRefreshJob starts the background job
@@ -879,6 +1140,9 @@ func (tm *TorrentManager) startRefreshJob() {
 		tm.refreshCancel = cancel
 		
 		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("[Refresh] PANIC in refresh goroutine: %v", r)
+			}
 			if tm.refreshTicker != nil {
 				tm.refreshTicker.Stop()
 			}
@@ -895,7 +1159,6 @@ func (tm *TorrentManager) startRefreshJob() {
 			case <-ctx.Done():
 				return
 			case <-waitTicker.C:
-				// Continue waiting until prefetch completes
 			}
 		}
 
@@ -1005,6 +1268,12 @@ func (tm *TorrentManager) StartCatalogSyncJob(interval time.Duration) {
         interval = 10 * time.Second
     }
     go func() {
+        defer func() {
+            if r := recover(); r != nil {
+                logger.Error("[Torrents] PANIC in reconcile goroutine: %v", r)
+            }
+        }()
+        
         ticker := time.NewTicker(interval)
         defer ticker.Stop()
         for range ticker.C {
