@@ -251,14 +251,12 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			if existingItem, exists := allTorrentsMap.Get(accessKey); exists && existingItem != nil {
 				if existingItem.ID == torrent.ID {
 					allTorrentsMap.Remove(accessKey)
-					logger.Debug("[Refresh] Removed torrent %s from directory map", torrent.ID[:8])
 				} else {
 					logger.Debug("[Refresh] Skipping directory removal for %s (key reused by %s)", torrent.ID[:8], existingItem.ID[:8])
 				}
 			}
 
 			tm.idToItemMap.Remove(torrent.ID)
-			logger.Debug("[Refresh] Removed torrent %s from ID map", torrent.ID[:8])
 		}
 	} else if totalCount < oldTotalCount {
 		logger.Warn("[Refresh] Count decreased but no removed torrents detected")

@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	repairRunning         atomic.Bool
+    repairRunning         atomic.Bool
 	repairRunningMu       sync.Mutex
     repairShouldStop      atomic.Bool
 	repairQueue           = newRepairQueueList()
@@ -382,6 +382,9 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
                 logger.Debug("[RepairWorker] Repair attempt for %s completed with: %v", torrentID, err)
             if newID, ok := torrentIDMapping.Get(torrentID); ok && newID != "" {
                     logger.Info("[RepairWorker] Torrent %s was replaced with new ID %s", torrentID, newID)
+                    if delErr := tm.client.DeleteTorrent(torrentID); delErr != nil {
+                        logger.Debug("[RepairWorker] Delete torrent %s from Real-Debrid returned: %v", torrentID, delErr)
+                    }
                     if err := tm.store.DeleteRepair(torrentID); err != nil {
                         logger.Error("[RepairWorker] Failed to delete repair entry for %s: %v", torrentID, err)
                     } else {
@@ -394,10 +397,11 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
             _, getErr := tm.GetTorrentInfo(torrentID)
             if getErr != nil && IsTorrentNotFound(getErr) {
                         logger.Info("[RepairWorker] Torrent %s was successfully replaced with a new ID", torrentID)
+                        if delErr := tm.client.DeleteTorrent(torrentID); delErr != nil {
+                            logger.Debug("[RepairWorker] Delete torrent %s from Real-Debrid returned: %v", torrentID, delErr)
+                        }
                         if err := tm.store.DeleteRepair(torrentID); err != nil {
                             logger.Error("[RepairWorker] Failed to delete repair entry for %s: %v", torrentID, err)
-                        } else {
-                            logger.Info("[RepairWorker] Removed torrent %s from repair table", torrentID)
                         }
                         _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
                         tm.brokenTorrentCache.Remove(torrentID)
