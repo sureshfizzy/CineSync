@@ -711,6 +711,19 @@ func isBrokenLinkError(err error) bool {
 	return false
 }
 
+// Returns true if the link is confirmed broken, false if it's still valid
+func (tm *TorrentManager) verifyLinkIsActuallyBroken(link string) bool {
+	if link == "" {
+		return true
+	}
+
+	err := tm.client.CheckLink(link)
+	if err != nil {
+		return true
+	}
+	return false
+}
+
 
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
@@ -880,28 +893,30 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 		if err != nil {
 			wrappedErr := fmt.Errorf("failed to unrestrict link: %w", err)
 			if isBrokenLinkError(err) {
-				logger.Info("[Torrents] File %s marked as broken (unrestrict failed: %v)", filePath, err)
-				if tm.store != nil {
-					if info == nil {
-						info, _ = tm.GetTorrentInfo(torrentID)
-					}
-					if info != nil {
-						reason := fmt.Sprintf("unrestrict_failed: %v", err)
-						if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
-							logger.Warn("[Torrents] Failed to save unrestrict error to repair table for %s: %v", torrentID, saveErr)
-						} else {
+				logger.Info("[Torrents] Unrestrict failed for %s, verifying with CheckLink: %v", filePath, err)
+				if tm.verifyLinkIsActuallyBroken(downloadLink) {
+					logger.Info("[Torrents] CheckLink confirmed link is broken, marking torrent as broken")
+					if tm.store != nil {
+						if info == nil {
+							info, _ = tm.GetTorrentInfo(torrentID)
+						}
+						if info != nil {
+							reason := fmt.Sprintf("link_check_failed: %v", err)
+							if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+								logger.Warn("[Torrents] Failed to save link check error to repair table for %s: %v", torrentID, saveErr)
+							}
 						}
 					}
+					
+					tm.TriggerAutoRepair(torrentID)
+					
+					tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+						Error:     fmt.Errorf("link check failed: %v", err),
+						Timestamp: time.Now(),
+					})
 				}
-				
-				tm.TriggerAutoRepair(torrentID)
-				
-				tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
-					Error:     fmt.Errorf("unrestrict failed: %v", err),
-					Timestamp: time.Now(),
-				})
 			}
-			
+
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
 				Error:     wrappedErr,
 				Timestamp: time.Now(),
@@ -912,28 +927,31 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 
 		if unrestrictedLink.Download == "" {
 			emptyErr := fmt.Errorf("unrestrict returned empty download URL")
-			logger.Info("[Torrents] File %s marked as broken (empty download URL)", filePath)
+			logger.Info("[Torrents] Empty download URL for %s, verifying with CheckLink", filePath)
 			
-			if tm.store != nil {
-				if info == nil {
-					info, _ = tm.GetTorrentInfo(torrentID)
-				}
-				if info != nil {
-					reason := "empty_download_url"
-					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
-						logger.Warn("[Torrents] Failed to save empty URL error to repair table for %s: %v", torrentID, saveErr)
-					} else {
-						logger.Info("[Torrents] Saved empty URL error to repair table for %s: %s", torrentID, reason)
+			if tm.verifyLinkIsActuallyBroken(downloadLink) {
+				logger.Info("[Torrents] CheckLink confirmed link is broken")
+				if tm.store != nil {
+					if info == nil {
+						info, _ = tm.GetTorrentInfo(torrentID)
+					}
+					if info != nil {
+						reason := "empty_download_url_verified"
+						if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
+							logger.Warn("[Torrents] Failed to save empty URL error to repair table for %s: %v", torrentID, saveErr)
+						} else {
+							logger.Info("[Torrents] Saved empty URL error to repair table for %s: %s", torrentID, reason)
+						}
 					}
 				}
-			}
-			
-			tm.TriggerAutoRepair(torrentID)
+				
+				tm.TriggerAutoRepair(torrentID)
 
-			tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
-				Error:     emptyErr,
-				Timestamp: time.Now(),
-			})
+				tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+					Error:     emptyErr,
+					Timestamp: time.Now(),
+				})
+			}
 
 			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
 				Error:     emptyErr,

@@ -198,40 +198,44 @@ func (tm *TorrentManager) fetchDownloadLink(torrentID, filePath string) (string,
 	unrestrictedLink, err := tm.client.UnrestrictLink(restrictedLink)
 	if err != nil {
 		if isBrokenLinkError(err) {
-			newInfo, err := tm.reInsertTorrent(info)
-			if err != nil {
-				return "", 0, fmt.Errorf("failed to reinsert torrent: %w", err)
-			}
-			info = newInfo
-			
-			targetFile = nil
-			for i, file := range info.Files {
-				if file.Selected == 1 {
-					cleanPath := strings.Trim(file.Path, "/")
-					fileName := path.Base(cleanPath)
-					if fileName == filePath {
-						targetFile = &info.Files[i]
-						break
+			logger.Info("[Download] Unrestrict failed, verifying with CheckLink: %v", err)
+			if tm.verifyLinkIsActuallyBroken(restrictedLink) {
+				logger.Info("[Download] CheckLink confirmed link is broken, attempting reinsert")
+				newInfo, err := tm.reInsertTorrent(info)
+				if err != nil {
+					return "", 0, fmt.Errorf("failed to reinsert torrent: %w", err)
+				}
+				info = newInfo
+				
+				targetFile = nil
+				for i, file := range info.Files {
+					if file.Selected == 1 {
+						cleanPath := strings.Trim(file.Path, "/")
+						fileName := path.Base(cleanPath)
+						if fileName == filePath {
+							targetFile = &info.Files[i]
+							break
+						}
 					}
 				}
-			}
-			
-			if targetFile == nil {
-				return "", 0, fmt.Errorf("file %s not found in reinserted torrent %s", filePath, torrentID)
-			}
-			
-			if targetFile.ID-1 < len(info.Links) {
-				restrictedLink = info.Links[targetFile.ID-1]
-			} else if len(info.Links) > 0 {
-				restrictedLink = info.Links[0]
-			}
-			
-			unrestrictedLink, err = tm.client.UnrestrictLink(restrictedLink)
-			if err != nil {
-				return "", 0, fmt.Errorf("retry failed to get download link: %w", err)
-			}
-			if unrestrictedLink.Download == "" {
-				return "", 0, fmt.Errorf("download link is empty after retry")
+				
+				if targetFile == nil {
+					return "", 0, fmt.Errorf("file %s not found in reinserted torrent %s", filePath, torrentID)
+				}
+				
+				if targetFile.ID-1 < len(info.Links) {
+					restrictedLink = info.Links[targetFile.ID-1]
+				} else if len(info.Links) > 0 {
+					restrictedLink = info.Links[0]
+				}
+				
+				unrestrictedLink, err = tm.client.UnrestrictLink(restrictedLink)
+				if err != nil {
+					return "", 0, fmt.Errorf("retry failed to get download link: %w", err)
+				}
+				if unrestrictedLink.Download == "" {
+					return "", 0, fmt.Errorf("download link is empty after retry")
+				}
 			}
 		} else {
 			return "", 0, fmt.Errorf("failed to unrestrict link: %w", err)
