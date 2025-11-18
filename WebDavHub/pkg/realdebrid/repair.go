@@ -315,21 +315,17 @@ func (tm *TorrentManager) RepairTorrent(torrentID string) error {
     return nil
 }
 
-// TriggerAutoRepair triggers an automatic on-demand repair (queues if repair already running)
+// TriggerAutoRepair triggers automatic repair for broken torrents
 func (tm *TorrentManager) TriggerAutoRepair(torrentID string) {
     if tm == nil || tm.store == nil {
         return
     }
 
     config := GetConfigManager().GetConfig()
-    if !config.RepairSettings.Enabled || !config.RepairSettings.OnDemand {
+    if !config.RepairSettings.Enabled {
         return
     }
     
-    if _, broken := tm.brokenTorrentCache.Get(torrentID); broken {
-        return
-    }
-
     if _, inQueue := repairInProgress.Load(torrentID); inQueue {
         return
     }
@@ -349,7 +345,7 @@ func (tm *TorrentManager) TriggerAutoRepair(torrentID string) {
     repairInProgress.Store(torrentID, true)
     repairRunningMu.Unlock()
     
-    logger.Info("[RepairWorker] AutoFix enabled, triggering repair for broken torrent %s", torrentID)
+    logger.Info("[RepairWorker] Triggering repair for torrent %s", torrentID)
     tm.triggerRepair(torrentID)
 }
 
@@ -360,23 +356,56 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
             if r := recover(); r != nil {
                 logger.Error("[RepairWorker] PANIC in repair goroutine: %v", r)
             }
+            repairInProgress.Delete(torrentID)
 			repairRunningMu.Lock()
 			repairRunning.Store(false)
 			repairRunningMu.Unlock()
         }()
         for {
-            repairInProgress.Delete(torrentID)
             var fixed bool
             var err error
-            func() {
+            
+            repairTimeout := 30 * time.Second
+            repairDone := make(chan struct{})
+            
+            go func() {
                 defer func() {
                     if r := recover(); r != nil {
                         logger.Error("[RepairWorker] PANIC during repairTorrentFiles for %s: %v", torrentID, r)
                         err = fmt.Errorf("panic during repair: %v", r)
                     }
+                    close(repairDone)
                 }()
                 fixed, err = tm.repairTorrentFiles(torrentID)
             }()
+            
+            timedOut := false
+            select {
+            case <-repairDone:
+            case <-time.After(repairTimeout):
+                err = fmt.Errorf("repair timeout after %v", repairTimeout)
+                fixed = false
+                timedOut = true
+            }
+            
+            if timedOut {
+                if tm.store != nil {
+                    if info, infoErr := tm.GetTorrentInfo(torrentID); infoErr == nil && info != nil {
+                        _ = tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), "repair_timeout")
+                    }
+                }
+                repairInProgress.Delete(torrentID)
+                repairRunningMu.Lock()
+                queuedTorrentID := repairQueue.Dequeue()
+                RepairProgress.UpdateQueueSize(repairQueue.Len())
+                if queuedTorrentID == "" {
+                    repairRunningMu.Unlock()
+                    break
+                }
+                repairRunningMu.Unlock()
+                torrentID = queuedTorrentID
+                continue
+            }
             
         if err != nil {
                 logger.Debug("[RepairWorker] Repair attempt for %s completed with: %v", torrentID, err)
@@ -393,7 +422,6 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
                     _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
                     tm.brokenTorrentCache.Remove(torrentID)
             } else {
-                // Case 2: old ID truly gone on RD
             _, getErr := tm.GetTorrentInfo(torrentID)
             if getErr != nil && IsTorrentNotFound(getErr) {
                         logger.Info("[RepairWorker] Torrent %s was successfully replaced with a new ID", torrentID)
@@ -406,7 +434,6 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
                         _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
                         tm.brokenTorrentCache.Remove(torrentID)
                     } else {
-                        // Don't scan - we already tried to repair, just log it
                         logger.Debug("[RepairWorker] Torrent %s not found after repair attempt", torrentID)
                     }
             }
@@ -420,10 +447,11 @@ func (tm *TorrentManager) triggerRepair(torrentID string) {
                 _ = tm.store.UpdateRepairState(torrentID, false, 0, 0)
                 tm.brokenTorrentCache.Remove(torrentID)
             } else {
-                // Repair failed - don't call scanForBrokenTorrents (it wastes 20+ API calls)
-                // We already know it's broken, just log it
                 logger.Debug("[RepairWorker] Torrent %s repair failed, marked as broken", torrentID)
             }
+            
+            // Mark current torrent as done processing
+            repairInProgress.Delete(torrentID)
             
 			// Check if there are more torrents in queue
 			repairRunningMu.Lock()
@@ -475,8 +503,6 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
         return
     }
 
-    // CRITICAL: Don't scan/validate if repair is disabled!
-    // This prevents CheckLink API spam during Plex/JF scans
     config := GetConfigManager().GetConfig()
     if !config.RepairSettings.Enabled {
         logger.Debug("[RepairWorker] Repair is disabled, skipping scan for broken torrents")
@@ -491,8 +517,6 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
         }
         return
     }
-    
-    // CRITICAL: Always reset repairRunning even if panic occurs
     defer func() {
         if r := recover(); r != nil {
             logger.Error("[RepairWorker] PANIC in scanForBrokenTorrents: %v", r)
@@ -548,8 +572,6 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
             logger.Info("[RepairWorker] Stop requested, halting repair scan")
             break
         }
-        
-        // SKIP downloading/queued/magnet_error - only check completed or error states
         if item.Status == "downloading" || item.Status == "queued" || item.Status == "magnet_error" {
             logger.Debug("[RepairWorker] Skipping torrent %s in transient state: %s", item.ID, item.Status)
             continue
@@ -679,20 +701,10 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
             brokenLinks := len(info.Links)
             _ = tm.store.UpdateRepairState(info.ID, true, brokenLinks, len(info.Links))
             
-            // If AutoFix is enabled, automatically trigger repair for broken torrents
+            // If AutoFix is enabled, queue repair for broken torrents
             config := GetConfigManager().GetConfig()
             if config.RepairSettings.AutoFix {
-                logger.Info("[RepairWorker] AutoFix enabled, triggering repair for broken torrent %s", info.ID)
-                go func(id string) {
-                    _, err := tm.repairTorrentFiles(id)
-                    if err != nil {
-                        logger.Warn("[RepairWorker] AutoFix repair failed for %s: %v", id, err)
-                    } else {
-                        logger.Info("[RepairWorker] AutoFix successfully repaired torrent %s", id)
-                        _ = tm.store.DeleteRepair(id)
-                        _ = tm.store.UpdateRepairState(id, false, 0, 0)
-                    }
-                }(info.ID)
+                tm.TriggerAutoRepair(info.ID)
             }
         } else {
             _ = tm.store.DeleteRepair(info.ID)
@@ -705,7 +717,4 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
     if torrentID == "" && brokenCount > 0 {
         logger.Info("[RepairWorker] Scan complete: found %d broken torrents", brokenCount)
     }
-    
-    // Queue processing is now handled by triggerRepair's queue system
-    // Old processRepairQueue() removed to prevent CheckLink API spam
 }
