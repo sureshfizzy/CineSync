@@ -420,6 +420,11 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
 
         resp, err := httpClient.Do(req)
         if err != nil {
+            if isTimeoutError(err) {
+                if transport, ok := httpClient.Transport.(*http.Transport); ok {
+                    transport.CloseIdleConnections()
+                }
+            }
             return nil, err
         }
 
@@ -749,6 +754,17 @@ func getErrorCacheDuration(errorCode int) time.Duration {
 	}
 }
 
+// isTimeoutError checks
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "deadline exceeded") ||
+		strings.Contains(errStr, "i/o timeout")
+}
 
 // GetDownloads retrieves the user's downloads list
 func (c *Client) GetDownloads() ([]DownloadItem, error) {

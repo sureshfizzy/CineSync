@@ -54,7 +54,7 @@ var streamClient = &http.Client{
 		MaxIdleConns:          200,         // Maximum idle connections for better reuse
 		MaxIdleConnsPerHost:   50,          // More connections per host for parallel streams
 		MaxConnsPerHost:       0,           // Unlimited - let OS handle connection limits
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout:       45 * time.Second, // Reduced from 90s to prevent stale connections
 		DisableKeepAlives:     false,
 		ForceAttemptHTTP2:     true,
 		ResponseHeaderTimeout: 30 * time.Second,
@@ -1392,6 +1392,13 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 			Error:     err,
 			Timestamp: time.Now(),
 		})
+
+		if isTimeoutError(err) {
+			if transport, ok := streamClient.Transport.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+		}
+		
 		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
 		return
 	}
@@ -1496,6 +1503,18 @@ func isClientDisconnection(err error) bool {
 		strings.Contains(errStr, "client disconnected") ||
 		strings.Contains(errStr, "wsasend") || // Windows-specific
 		strings.Contains(errStr, "eof")
+}
+
+// isTimeoutError checks
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "deadline exceeded") ||
+		strings.Contains(errStr, "i/o timeout")
 }
 
 // parseChunkSize parses chunk size string

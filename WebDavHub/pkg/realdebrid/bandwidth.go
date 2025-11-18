@@ -75,6 +75,11 @@ func (c *Client) DownloadFile(ctx context.Context, downloadURL string, token str
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if isTimeoutError(err) {
+			if transport, ok := c.httpClient.Transport.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+		}
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 
