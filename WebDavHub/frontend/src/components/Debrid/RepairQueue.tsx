@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Tooltip, alpha, useTheme, Stack, Button, Checkbox, IconButton, TablePagination, Snackbar, Backdrop, Slide, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import { Build as BuildIcon, Error as ErrorIcon, Warning as WarningIcon, Info as InfoIcon, PlayArrow as PlayIcon, Stop as StopIcon, Delete as DeleteIcon, ListAlt as ListAltIcon } from '@mui/icons-material';
 import { motion } from 'framer-motion'; import axios from 'axios'; import { formatDate } from '../FileBrowser/fileUtils';
@@ -87,7 +87,6 @@ const getReasonLabel = (reason: string): string => {
     'no_selected_files_but_has_links': 'Invalid File Selection',
   };
   
-  // Handle dynamic reasons like "link_mismatch_expected_5_got_3"
   if (reason.startsWith('link_mismatch_')) {
     const parts = reason.match(/link_mismatch_expected_(\d+)_got_(\d+)/);
     if (parts) {
@@ -106,6 +105,131 @@ const getReasonLabel = (reason: string): string => {
   
   return labels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
+
+const RepairTableRow = React.memo(({ 
+  repair, 
+  isQueueView, 
+  isSelected, 
+  allowSelection, 
+  deleting,
+  onSelect, 
+  onDelete,
+  theme
+}: { 
+  repair: RepairEntry & { position?: number };
+  isQueueView: boolean;
+  isSelected: boolean;
+  allowSelection: boolean;
+  deleting: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (id: string, filename: string) => void;
+  theme: any;
+}) => {
+  const repairQueueEntry = repair as RepairQueueEntry;
+  
+  return (
+    <TableRow
+      sx={{
+        '&:hover': {
+          bgcolor: alpha(theme.palette.primary.main, 0.05),
+        },
+        bgcolor: allowSelection && isSelected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+      }}
+    >
+      {allowSelection && (
+        <TableCell padding="checkbox">
+          <Checkbox
+            checked={isSelected}
+            onChange={() => onSelect(repair.torrent_id)}
+          />
+        </TableCell>
+      )}
+      {isQueueView && (
+        <TableCell sx={{ width: { sm: 90 } }}>
+          <Typography variant="body2" fontWeight={600}>
+            {repairQueueEntry.position}
+          </Typography>
+        </TableCell>
+      )}
+      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
+        <Typography
+          variant="body2"
+          sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {repair.torrent_id}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Tooltip title={repair.filename}>
+          <Typography
+            variant="body2"
+            sx={{ 
+              maxWidth: { xs: 150, sm: 200, md: 300 }, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              whiteSpace: 'nowrap',
+              fontWeight: { xs: 600, sm: 400 }
+            }}
+          >
+            {repair.filename}
+          </Typography>
+        </Tooltip>
+        <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+          <Chip label={repair.status} size="small" variant="outlined" sx={{ height: 20 }} />
+          <Chip 
+            icon={getReasonIcon(repair.reason)} 
+            label={getReasonLabel(repair.reason)} 
+            size="small" 
+            color={getReasonColor(repair.reason)} 
+            sx={{ fontWeight: 600, height: 20, fontSize: '0.7rem' }} 
+          />
+        </Box>
+      </TableCell>
+      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
+        <Typography
+          variant="body2"
+          sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}
+        >
+          {repair.hash ? repair.hash.substring(0, 12) + '...' : 'N/A'}
+        </Typography>
+      </TableCell>
+      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+        <Chip label={repair.status} size="small" variant="outlined" />
+      </TableCell>
+      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
+        <Typography variant="body2" fontWeight="600">
+          {repair.progress}%
+        </Typography>
+      </TableCell>
+      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+        <Chip
+          icon={getReasonIcon(repair.reason)}
+          label={getReasonLabel(repair.reason)}
+          size="small"
+          color={getReasonColor(repair.reason)}
+          sx={{ fontWeight: 600 }}
+        />
+      </TableCell>
+      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
+        <Typography variant="body2" color="text.secondary">
+          {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}
+        </Typography>
+      </TableCell>
+      {allowSelection && (
+        <TableCell padding="checkbox">
+          <IconButton
+            size="small"
+            color="error"
+            onClick={() => onDelete(repair.torrent_id, repair.filename)}
+            disabled={deleting}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </TableCell>
+      )}
+    </TableRow>
+  );
+});
 
 export default function RepairQueue() {
   const [stats, setStats] = useState<RepairStats | null>(null);
@@ -135,6 +259,9 @@ export default function RepairQueue() {
     cancelLabel: 'Cancel',
   });
   const theme = useTheme();
+  
+  const isFetchingStats = useRef(false);
+  const isFetchingQueue = useRef(false);
 
   const fetchRepairStatus = useCallback(async () => {
     try {
@@ -148,6 +275,12 @@ export default function RepairQueue() {
   }, []);
 
   const fetchRepairStats = useCallback(async (isInitial = false) => {
+    if (isFetchingStats.current && !isInitial) {
+      return;
+    }
+    
+    isFetchingStats.current = true;
+    
     if (isInitial) {
       setLoading(true);
     }
@@ -155,8 +288,8 @@ export default function RepairQueue() {
 
     try {
       const params: any = {
-        page: page + 1,         // API expects 1-based
-        page_size: rowsPerPage, // bounded on server
+        page: page + 1,
+        page_size: rowsPerPage,
       };
       if (selectedReasons.size > 0) {
         params.reason = Array.from(selectedReasons).join(',');
@@ -164,7 +297,6 @@ export default function RepairQueue() {
       const response = await axios.get('/api/realdebrid/repair-stats', { params });
       setStats(response.data);
     } catch (err: any) {
-      // Only show error on initial load, silently retry on subsequent fetches
       if (isInitial) {
         const errorMsg = err.response?.data?.error || 
                         err.response?.data || 
@@ -173,17 +305,23 @@ export default function RepairQueue() {
         setError(errorMsg);
         console.error('Failed to fetch repair stats:', err);
       } else {
-        // Log but don't show error for background refreshes
         console.warn('Background repair stats fetch failed:', err.response?.data || err.message);
       }
     } finally {
       if (isInitial) {
         setLoading(false);
       }
+      isFetchingStats.current = false;
     }
   }, [page, rowsPerPage, selectedReasons]);
 
   const fetchRepairQueue = useCallback(async (showSpinner = false) => {
+    if (isFetchingQueue.current && !showSpinner) {
+      return;
+    }
+    
+    isFetchingQueue.current = true;
+    
     if (showSpinner) {
       setQueueLoading(true);
     }
@@ -200,6 +338,7 @@ export default function RepairQueue() {
 
       if (queuePage > 0 && nextEntries.length === 0 && totalCount > 0) {
         setQueuePage(prev => Math.max(prev - 1, 0));
+        isFetchingQueue.current = false;
         return;
       }
 
@@ -216,6 +355,7 @@ export default function RepairQueue() {
       if (showSpinner) {
         setQueueLoading(false);
       }
+      isFetchingQueue.current = false;
     }
   }, [queuePage, queueRowsPerPage]);
 
@@ -224,24 +364,47 @@ export default function RepairQueue() {
     fetchRepairStatus();
   }, [fetchRepairStats, fetchRepairStatus]);
 
-  // Separate effect for intervals: only poll status frequently to keep UI light
   useEffect(() => {
     const statusInterval = setInterval(() => {
       fetchRepairStatus();
-    }, 10000); // Update status every 10 seconds
+    }, 10000);
 
     return () => {
       clearInterval(statusInterval);
     };
-  }, [fetchRepairStats, fetchRepairStatus, status?.is_running]);
+  }, [fetchRepairStatus]);
 
-  const statusSnapshot = `${status?.processed_torrents ?? 0}|${status?.queue_size ?? 0}|${status?.is_running ? 1 : 0}|${status?.current_torrent_id ?? ''}`;
+  const prevStatusRef = useRef<{
+    processed: number;
+    queueSize: number;
+    isRunning: boolean;
+  } | null>(null);
+  
   useEffect(() => {
     if (!status) {
       return;
     }
-    fetchRepairStats(false);
-  }, [statusSnapshot, fetchRepairStats]);
+    
+    const currentStatus = {
+      processed: status.processed_torrents ?? 0,
+      queueSize: status.queue_size ?? 0,
+      isRunning: status.is_running ?? false,
+    };
+
+    if (prevStatusRef.current) {
+      const hasChanged = 
+        prevStatusRef.current.processed !== currentStatus.processed ||
+        prevStatusRef.current.queueSize !== currentStatus.queueSize ||
+        prevStatusRef.current.isRunning !== currentStatus.isRunning;
+      
+      if (hasChanged) {
+        fetchRepairStats(false);
+      }
+    }
+    
+    prevStatusRef.current = currentStatus;
+  }, [status?.processed_torrents, status?.queue_size, status?.is_running, fetchRepairStats]);
+
 
   useEffect(() => {
     if (!isQueueView) {
@@ -251,26 +414,32 @@ export default function RepairQueue() {
 
     fetchRepairQueue(true);
     const interval = setInterval(() => {
-      fetchRepairQueue();
+      fetchRepairQueue(false);
     }, 10000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isQueueView, fetchRepairQueue]);
-
+  }, [isQueueView, queuePage, queueRowsPerPage]);
+  const prevQueueSizeRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (isQueueView) {
-      fetchRepairQueue();
+    if (!isQueueView) {
+      return;
     }
-  }, [isQueueView, fetchRepairQueue, status?.queue_size]);
+    
+    if (prevQueueSizeRef.current !== undefined && prevQueueSizeRef.current !== status?.queue_size) {
+      fetchRepairQueue(false);
+    }
+    
+    prevQueueSizeRef.current = status?.queue_size;
+  }, [status?.queue_size, isQueueView, fetchRepairQueue]);
 
 
   const handleStartRepair = async () => {
     try {
       const response = await axios.post('/api/realdebrid/repair-start');
       if (response.data.success) {
-        fetchRepairStatus(); // Immediately fetch status to show it started
+        fetchRepairStatus();
         fetchRepairStats(false);
       }
     } catch (err) {
@@ -418,7 +587,7 @@ export default function RepairQueue() {
     try {
       const response = await axios.post('/api/realdebrid/repair-stop');
       if (response.data.success) {
-        fetchRepairStatus(); // Immediately fetch status to show it stopped
+        fetchRepairStatus();
       }
     } catch (err) {
       console.error('Failed to stop repair:', err);
@@ -490,6 +659,25 @@ export default function RepairQueue() {
       setQueuePage(0);
     }
   };
+
+  const repairs = useMemo(() => stats?.repairs || [], [stats?.repairs]);
+  const total = useMemo(() => stats?.total || 0, [stats?.total]);
+  const reasonCounts = useMemo(() => stats?.reasonCounts || {}, [stats?.reasonCounts]);
+  const tableRows = useMemo(() => isQueueView ? queueEntries : repairs, [isQueueView, queueEntries, repairs]);
+
+  const notCachedPrefixes = useMemo(() => ['no_links', 'complete_but_no_links', 'unavailable_file', 'infringing_file', 'not_cached', 'reinsert_failed'], []);
+  
+  const unrestrictFailedCount = useMemo(() => {
+    return Object.entries(reasonCounts).reduce((acc, [k, v]) => {
+      return acc + (k.startsWith('unrestrict_failed') ? v : 0);
+    }, 0);
+  }, [reasonCounts]);
+  
+  const notCachedCount = useMemo(() => {
+    return Object.entries(reasonCounts).reduce((acc, [k, v]) => {
+      return acc + (notCachedPrefixes.some(prefix => k === prefix || k.startsWith(prefix)) ? v : 0);
+    }, 0);
+  }, [reasonCounts, notCachedPrefixes]);
 
   const removeQueueItems = async (ids: string[]) => {
     if (ids.length === 0) {
@@ -646,20 +834,7 @@ export default function RepairQueue() {
     );
   }
 
-  const repairs = stats?.repairs || [];
-  const total = stats?.total || 0;
-  const reasonCounts = stats?.reasonCounts || {};
-  const tableRows = isQueueView ? queueEntries : repairs;
   const allowSelection = true;
-
-  // Aggregated categories
-  const unrestrictFailedCount = Object.entries(reasonCounts).reduce((acc, [k, v]) => {
-    return acc + (k.startsWith('unrestrict_failed') ? v : 0);
-  }, 0);
-  const notCachedPrefixes = ['no_links', 'complete_but_no_links', 'unavailable_file', 'infringing_file', 'not_cached', 'reinsert_failed'];
-  const notCachedCount = Object.entries(reasonCounts).reduce((acc, [k, v]) => {
-    return acc + (notCachedPrefixes.some(prefix => k === prefix || k.startsWith(prefix)) ? v : 0);
-  }, 0);
 
   return (
     <Box 
@@ -808,43 +983,37 @@ export default function RepairQueue() {
               
               {/* Quick filter cards */}
               <Stack direction="row" spacing={1.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Chip
-                    icon={<PlayIcon sx={{ fontSize: 16 }} />}
-                    label={`Runners: ${status.total_torrents}`}
-                    variant="outlined"
-                    onClick={() => { clearReasons(); }}
-                    sx={{ fontWeight: 600 }}
-                  />
-                </motion.div>
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Chip
-                    icon={<ErrorIcon sx={{ fontSize: 16 }} />}
-                    label={`Unrestrict Failed: ${unrestrictFailedCount}`}
-                    color={selectedReasons.has('unrestrict_failed') ? 'error' : 'default'}
-                    variant={selectedReasons.has('unrestrict_failed') ? 'filled' : 'outlined'}
-                    onClick={() => {
-                      setSelectedReasons(new Set(['unrestrict_failed']));
-                      setPage(0);
-                      setSelectedTorrents(new Set());
-                    }}
-                    sx={{ fontWeight: 600 }}
-                  />
-                </motion.div>
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Chip
-                    icon={<WarningIcon sx={{ fontSize: 16 }} />}
-                    label={`Not Cached: ${notCachedCount}`}
-                    color={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'warning' : 'default'}
-                    variant={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'filled' : 'outlined'}
-                    onClick={() => {
-                      setSelectedReasons(new Set(notCachedPrefixes));
-                      setPage(0);
-                      setSelectedTorrents(new Set());
-                    }}
-                    sx={{ fontWeight: 600 }}
-                  />
-                </motion.div>
+                <Chip
+                  icon={<PlayIcon sx={{ fontSize: 16 }} />}
+                  label={`Runners: ${status.total_torrents}`}
+                  variant="outlined"
+                  onClick={() => { clearReasons(); }}
+                  sx={{ fontWeight: 600, cursor: 'pointer', '&:hover': { transform: 'scale(1.02)' }, transition: 'transform 0.1s' }}
+                />
+                <Chip
+                  icon={<ErrorIcon sx={{ fontSize: 16 }} />}
+                  label={`Unrestrict Failed: ${unrestrictFailedCount}`}
+                  color={selectedReasons.has('unrestrict_failed') ? 'error' : 'default'}
+                  variant={selectedReasons.has('unrestrict_failed') ? 'filled' : 'outlined'}
+                  onClick={() => {
+                    setSelectedReasons(new Set(['unrestrict_failed']));
+                    setPage(0);
+                    setSelectedTorrents(new Set());
+                  }}
+                  sx={{ fontWeight: 600, cursor: 'pointer', '&:hover': { transform: 'scale(1.02)' }, transition: 'transform 0.1s' }}
+                />
+                <Chip
+                  icon={<WarningIcon sx={{ fontSize: 16 }} />}
+                  label={`Not Cached: ${notCachedCount}`}
+                  color={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'warning' : 'default'}
+                  variant={[...selectedReasons].some(r => notCachedPrefixes.some(prefix => r === prefix || r.startsWith(prefix))) ? 'filled' : 'outlined'}
+                  onClick={() => {
+                    setSelectedReasons(new Set(notCachedPrefixes));
+                    setPage(0);
+                    setSelectedTorrents(new Set());
+                  }}
+                  sx={{ fontWeight: 600, cursor: 'pointer', '&:hover': { transform: 'scale(1.02)' }, transition: 'transform 0.1s' }}
+                />
                 {selectedReasons.size > 0 && (
                   <Button size="small" onClick={clearReasons}>
                     Clear Filters
@@ -934,120 +1103,103 @@ export default function RepairQueue() {
         overflowX: { xs: 'auto', sm: 'visible' },
       }}>
         <Box sx={{ minWidth: { xs: 140, sm: 160 }, flex: '0 0 auto' }}>
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ duration: 0.3 }}
-          >
-            <Card sx={{ 
-              minWidth: { xs: 140, sm: 160 }, 
-              height: 60, 
-              display: 'flex', 
-              flexDirection: 'column', 
-              justifyContent: 'center', 
-              background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 100%)`, 
-              border: `1px solid ${alpha(theme.palette.warning.main, 0.18)}`, 
-              borderRadius: 2, 
-              boxShadow: 'none', 
-              m: 0 
-            }}>
-              <CardContent sx={{ p: 0.5, '&:last-child': { pb: 0.5 } }}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <BuildIcon sx={{ fontSize: 20, color: 'warning.main' }} />
-                  <Box>
-                    <Typography variant="h4" fontWeight="700" color="warning.main" sx={{ fontSize: '1.1rem' }}>{total}</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Needs Repair</Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </Box>
-        <Box sx={{ minWidth: { xs: 140, sm: 160 }, flex: '0 0 auto' }}>
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ duration: 0.3 }}
-          >
-            <Card sx={{ 
-              minWidth: { xs: 140, sm: 160 }, 
-              height: 60,
-              display: 'flex', 
-              flexDirection: 'column', 
-              justifyContent: 'center', 
-              background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.10)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`, 
-              border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`, 
-              borderRadius: 2, 
-              boxShadow: 'none', 
-              m: 0 
-            }}>
-              <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.5, '&:last-child': { pb: 1 } }}>
-                <Typography variant="h4" fontWeight="700" color="info.main" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
-                  {2}
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <PlayIcon sx={{ fontSize: 12, color: 'info.main' }} />
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, fontSize: '0.7rem', lineHeight: 1.2 }}>
-                    Available Workers
-                  </Typography>
+          <Card sx={{ 
+            minWidth: { xs: 140, sm: 160 }, 
+            height: 60, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            justifyContent: 'center', 
+            background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 100%)`, 
+            border: `1px solid ${alpha(theme.palette.warning.main, 0.18)}`, 
+            borderRadius: 2, 
+            boxShadow: 'none', 
+            m: 0 
+          }}>
+            <CardContent sx={{ p: 0.5, '&:last-child': { pb: 0.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <BuildIcon sx={{ fontSize: 20, color: 'warning.main' }} />
+                <Box>
+                  <Typography variant="h4" fontWeight="700" color="warning.main" sx={{ fontSize: '1.1rem' }}>{total}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Needs Repair</Typography>
                 </Box>
-                <Typography variant="caption" color={status && status.is_running ? 'info.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem', lineHeight: 1.2 }}>
-                  Running: {status && status.is_running ? 1 : 0}
-                </Typography>
-              </CardContent>
-            </Card>
-          </motion.div>
+              </Stack>
+            </CardContent>
+          </Card>
         </Box>
         <Box sx={{ minWidth: { xs: 140, sm: 160 }, flex: '0 0 auto' }}>
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ duration: 0.3 }}
+          <Card sx={{ 
+            minWidth: { xs: 140, sm: 160 }, 
+            height: 60,
+            display: 'flex', 
+            flexDirection: 'column', 
+            justifyContent: 'center', 
+            background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.10)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`, 
+            border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`, 
+            borderRadius: 2, 
+            boxShadow: 'none', 
+            m: 0 
+          }}>
+            <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.5, '&:last-child': { pb: 1 } }}>
+              <Typography variant="h4" fontWeight="700" color="info.main" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                {2}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PlayIcon sx={{ fontSize: 12, color: 'info.main' }} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, fontSize: '0.7rem', lineHeight: 1.2 }}>
+                  Available Workers
+                </Typography>
+              </Box>
+              <Typography variant="caption" color={status && status.is_running ? 'info.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem', lineHeight: 1.2 }}>
+                Running: {status && status.is_running ? 1 : 0}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Box>
+        <Box sx={{ minWidth: { xs: 140, sm: 160 }, flex: '0 0 auto' }}>
+          <Card
+            onClick={handleToggleQueueView}
+            sx={{ 
+              minWidth: { xs: 140, sm: 160 },
+              height: 60,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              background: isQueueView
+                ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`
+                : `linear-gradient(135deg, ${alpha(theme.palette.primary.light, 0.06)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`,
+              border: isQueueView
+                ? `1px solid ${alpha(theme.palette.primary.main, 0.3)}`
+                : `1px solid ${alpha(theme.palette.divider, 0.18)}`,
+              borderRadius: 2,
+              boxShadow: 'none',
+              m: 0,
+              cursor: 'pointer',
+              transition: 'transform 0.1s',
+              '&:hover': { transform: 'scale(1.02)' }
+            }}
           >
-            <Card
-              onClick={handleToggleQueueView}
-              sx={{ 
-                minWidth: { xs: 140, sm: 160 },
-                height: 60,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                background: isQueueView
-                  ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`
-                  : `linear-gradient(135deg, ${alpha(theme.palette.primary.light, 0.06)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`,
-                border: isQueueView
-                  ? `1px solid ${alpha(theme.palette.primary.main, 0.3)}`
-                  : `1px solid ${alpha(theme.palette.divider, 0.18)}`,
-                borderRadius: 2,
-                boxShadow: 'none',
-                m: 0,
-                cursor: 'pointer',
-              }}
-            >
-              <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5, '&:last-child': { pb: 1 } }}>
-                <Stack direction="row" alignItems="center" spacing={0.75}>
-                  {queueLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <ListAltIcon sx={{ fontSize: 18, color: isQueueView ? 'primary.main' : 'text.secondary' }} />
-                  )}
-                  <Typography variant="h4" fontWeight="700" color={isQueueView ? 'primary.main' : 'text.primary'} sx={{ fontSize: '1.05rem' }}>
-                    {isQueueView ? queueTotal : status?.queue_size ?? 0}
-                  </Typography>
-                </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                  Repair Queue
+            <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5, '&:last-child': { pb: 1 } }}>
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                {queueLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <ListAltIcon sx={{ fontSize: 18, color: isQueueView ? 'primary.main' : 'text.secondary' }} />
+                )}
+                <Typography variant="h4" fontWeight="700" color={isQueueView ? 'primary.main' : 'text.primary'} sx={{ fontSize: '1.05rem' }}>
+                  {isQueueView ? queueTotal : status?.queue_size ?? 0}
                 </Typography>
-                <Typography variant="caption" color={isQueueView ? 'primary.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
-                  {isQueueView ? 'Viewing queue' : 'Tap to view'}
-                </Typography>
-              </CardContent>
-            </Card>
-          </motion.div>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                Repair Queue
+              </Typography>
+              <Typography variant="caption" color={isQueueView ? 'primary.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
+                {isQueueView ? 'Viewing queue' : 'Tap to view'}
+              </Typography>
+            </CardContent>
+          </Card>
         </Box>
       </Box>
 
-      {/* Repairs Table */}
       {tableRows.length === 0 ? (
         <Card sx={{ borderRadius: 2, boxShadow: 'none', mb: 2 }}>
           <CardContent sx={{ p: 2 }}>
@@ -1063,194 +1215,141 @@ export default function RepairQueue() {
           </CardContent>
         </Card>
       ) : (
-        <TableContainer
-          component={Paper}
-          sx={{
-            boxShadow: 'none',
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            borderRadius: 2,
-            overflowX: 'auto',
-            fontSize: { xs: '0.85rem', sm: '1rem' },
-          }}
-        >
-          <Table>
-            <TableHead>
-              <TableRow
-                sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}
+        <>
+          <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+            {tableRows.map((repair) => (
+              <Card 
+                key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'mobile'}`}
+                sx={{ 
+                  mb: 1.5, 
+                  boxShadow: 'none',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                  bgcolor: selectedTorrents.has(repair.torrent_id) ? alpha(theme.palette.primary.main, 0.05) : 'background.paper'
+                }}
               >
-                {allowSelection && (
-                  <TableCell padding="checkbox" sx={{ fontWeight: 700 }}>
-                  <Checkbox
-                      indeterminate={selectedTorrents.size > 0 && selectedTorrents.size < tableRows.length}
-                      checked={tableRows.length > 0 && selectedTorrents.size === tableRows.length}
-                    onChange={handleSelectAll}
-                  />
-                </TableCell>
-                )}
-                {isQueueView && (
-                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', sm: 'table-cell' } }}>Position</TableCell>
-                )}
-                <TableCell sx={{ fontWeight: 700, display: { xs: 'none', sm: 'table-cell' } }}>Torrent ID</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Filename</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Hash</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Progress</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Reason</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Last Updated</TableCell>
-                {allowSelection && <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {tableRows.map((repair) => (
-                <React.Fragment key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'row'}`}>
-                  {/* Mobile row as a single cell to avoid div inside tbody */}
-                  <TableRow
-                    sx={{ display: { xs: 'table-row', sm: 'none' } }}
-                  >
-                    <TableCell colSpan={isQueueView ? 10 : 9} sx={{ p: 0, border: 0 }}>
-                  <Box sx={{
-                    mb: 1.5,
-                    borderRadius: 2,
-                    boxShadow: 'none',
-                    bgcolor: alpha(theme.palette.background.paper, 0.95),
-                    border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-                    p: 1.2,
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                          {allowSelection && (
+                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+                    {allowSelection && (
                       <Checkbox
                         checked={selectedTorrents.has(repair.torrent_id)}
                         onChange={() => handleSelectTorrent(repair.torrent_id)}
                         size="small"
+                        sx={{ p: 0, mt: 0.25 }}
                       />
-                          )}
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{repair.filename}</Typography>
-                    </Box>
-                        {isQueueView && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                            Position: {(repair as RepairQueueEntry).position}
-                          </Typography>
-                        )}
-                    <Stack direction="row" spacing={1} sx={{ mb: 0.5 }}>
-                      <Chip label={repair.status} size="small" variant="outlined" />
-                      <Chip icon={getReasonIcon(repair.reason)} label={getReasonLabel(repair.reason)} size="small" color={getReasonColor(repair.reason)} sx={{ fontWeight: 600 }} />
-                    </Stack>
-                    <Stack direction="row" spacing={2} sx={{ fontSize: '0.85rem' }}>
-                      <Typography variant="caption" color="text.secondary">ID: {repair.torrent_id}</Typography>
-                      <Typography variant="caption" color="text.secondary">Hash: {repair.hash ? repair.hash.substring(0, 12) + '...' : 'N/A'}</Typography>
-                      <Typography variant="caption" color="text.secondary">Progress: {repair.progress}%</Typography>
-                          <Typography variant="caption" color="text.secondary">Updated: {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}</Typography>
-                    </Stack>
-                        {allowSelection && (
-                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                          <Tooltip title={isQueueView ? 'Remove from repair queue' : 'Delete from repair table'}>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleDeleteSingle(repair.torrent_id, repair.filename)}
-                                disabled={deleting}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                  </Box>
-                        )}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow
-                  key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'desktop'}`}
-                  sx={{
-                    display: { xs: 'none', sm: 'table-row' },
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.05),
-                    },
-                    bgcolor: allowSelection && selectedTorrents.has(repair.torrent_id) ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                  }}
-                >
-                  {allowSelection && (
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={selectedTorrents.has(repair.torrent_id)}
-                      onChange={() => handleSelectTorrent(repair.torrent_id)}
-                    />
-                  </TableCell>
-                  )}
-                  {isQueueView && (
-                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, width: 90 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {(repair as RepairQueueEntry).position}
-                      </Typography>
-                    </TableCell>
-                  )}
-                  <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                      {repair.torrent_id}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title={repair.filename}>
-                      <Typography
-                        variant="body2"
-                        sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    )}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          fontWeight: 600, 
+                          mb: 0.5,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          lineHeight: 1.3
+                        }}
                       >
                         {repair.filename}
                       </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}
-                    >
-                      {repair.hash ? repair.hash.substring(0, 12) + '...' : 'N/A'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={repair.status} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="600">
-                      {repair.progress}%
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      icon={getReasonIcon(repair.reason)}
-                      label={getReasonLabel(repair.reason)}
-                      size="small"
-                      color={getReasonColor(repair.reason)}
-                      sx={{ fontWeight: 600 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}
-                    </Typography>
-                  </TableCell>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.5 }}>
+                        {isQueueView && (
+                          <Chip 
+                            label={`#${(repair as RepairQueueEntry).position}`} 
+                            size="small" 
+                            sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} 
+                          />
+                        )}
+                        <Chip 
+                          label={repair.status} 
+                          size="small" 
+                          variant="outlined" 
+                          sx={{ height: 18, fontSize: '0.65rem' }} 
+                        />
+                        <Chip 
+                          icon={getReasonIcon(repair.reason)} 
+                          label={getReasonLabel(repair.reason)} 
+                          size="small" 
+                          color={getReasonColor(repair.reason)} 
+                          sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600, '& .MuiChip-icon': { fontSize: 12 } }} 
+                        />
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                        Progress: {repair.progress}% • ID: {repair.torrent_id.substring(0, 8)}...
+                      </Typography>
+                    </Box>
+                    {allowSelection && (
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteSingle(repair.torrent_id, repair.filename)}
+                        disabled={deleting}
+                        sx={{ p: 0.5 }}
+                      >
+                        <DeleteIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+          <TableContainer
+            component={Paper}
+            sx={{
+              display: { xs: 'none', sm: 'block' },
+              boxShadow: 'none',
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              borderRadius: 2,
+              overflowX: 'auto',
+            }}
+          >
+            <Table>
+              <TableHead>
+                <TableRow
+                  sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}
+                >
                   {allowSelection && (
-                    <TableCell>
-                      <Tooltip title={isQueueView ? 'Remove from repair queue' : 'Delete from repair table'}>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteSingle(repair.torrent_id, repair.filename)}
-                          disabled={deleting}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                    <TableCell padding="checkbox" sx={{ fontWeight: 700 }}>
+                      <Checkbox
+                        indeterminate={selectedTorrents.size > 0 && selectedTorrents.size < tableRows.length}
+                        checked={tableRows.length > 0 && selectedTorrents.size === tableRows.length}
+                        onChange={handleSelectAll}
+                      />
                     </TableCell>
                   )}
+                  {isQueueView && (
+                    <TableCell sx={{ fontWeight: 700 }}>Pos</TableCell>
+                  )}
+                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', md: 'table-cell' } }}>Torrent ID</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Filename</TableCell>
+                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', lg: 'table-cell' } }}>Hash</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', md: 'table-cell' } }}>Progress</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Reason</TableCell>
+                  <TableCell sx={{ fontWeight: 700, display: { xs: 'none', lg: 'table-cell' } }}>Updated</TableCell>
+                  {allowSelection && <TableCell padding="checkbox" sx={{ fontWeight: 700 }}></TableCell>}
                 </TableRow>
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {tableRows.map((repair) => (
+                  <RepairTableRow
+                    key={`${repair.torrent_id}-${(repair as RepairQueueEntry).position ?? 'row'}`}
+                    repair={repair}
+                    isQueueView={isQueueView}
+                    isSelected={selectedTorrents.has(repair.torrent_id)}
+                    allowSelection={allowSelection}
+                    deleting={deleting}
+                    onSelect={handleSelectTorrent}
+                    onDelete={handleDeleteSingle}
+                    theme={theme}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
 
       {/* Pagination */}
@@ -1335,4 +1434,3 @@ export default function RepairQueue() {
     </Box>
   );
 }
-
