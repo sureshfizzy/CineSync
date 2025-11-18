@@ -154,9 +154,15 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		for i := range allTorrents {
 			currentTorrentsMap[allTorrents[i].ID] = true
 		}
-		
+
+		skippedRemappedCount := 0
 		for id, torrent := range oldTorrents {
 			if !currentTorrentsMap[id] {
+				newID, wasRemapped := torrentIDMapping.Get(id)
+				if wasRemapped && currentTorrentsMap[newID] {
+					skippedRemappedCount++
+					continue
+				}
 				removedTorrents = append(removedTorrents, torrent)
 			}
 		}
@@ -239,6 +245,17 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		}
 		if preservedCount > 0 {
 			logger.Debug("[Refresh] Preserved %d existing entries not in first page", preservedCount)
+		}
+	}
+
+	cleanedRemappedCount := 0
+	mappingKeys := torrentIDMapping.Keys()
+	for _, oldID := range mappingKeys {
+		if newID, ok := torrentIDMapping.Get(oldID); ok {
+			if updatingIDs[newID] {
+				tm.idToItemMap.Remove(oldID)
+				cleanedRemappedCount++
+			}
 		}
 	}
 
