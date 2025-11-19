@@ -1167,7 +1167,9 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
 		realdebrid.DirectoryResponse(buf, basePath, dirModTime)
 		
-		if len(fileList) > 0 {
+		_, isTorrentBroken := tm.GetBrokenTorrentCache().Get(item.ID)
+
+		if !isTorrentBroken && len(fileList) > 0 {
 			type sortableFile struct {
 				baseName string
 				fullPath string
@@ -1178,6 +1180,11 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			for _, file := range fileList {
 				if file.Selected == 1 {
 					baseName := path.Base(file.Path)
+					cacheKey := realdebrid.MakeCacheKey(item.ID, baseName)
+					if _, isFileBroken := tm.GetFailedFileCache().Get(cacheKey); isFileBroken {
+						continue
+					}
+
 					fullPath := basePath + baseName
 					files = append(files, sortableFile{
 						baseName: baseName,

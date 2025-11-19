@@ -200,6 +200,9 @@ func GetTorrentManager(apiKey string) *TorrentManager {
     // load cached data
 		tm.loadCachedCineSync()
 	
+    // Load broken torrents from database into cache
+		tm.loadBrokenTorrentsFromDB()
+
     // Start background refresh job
 		tm.startRefreshJob()
 
@@ -293,6 +296,31 @@ func (tm *TorrentManager) loadCachedTorrents() {
 // loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
 func (tm *TorrentManager) loadCachedCineSync() {
 	tm.loadCachedTorrents()
+}
+
+// loadBrokenTorrentsFromDB loads broken torrent entries
+func (tm *TorrentManager) loadBrokenTorrentsFromDB() {
+	if tm.store == nil {
+		return
+	}
+
+	repairEntries, err := tm.store.GetAllRepairs()
+	if err != nil {
+		return
+	}
+
+	if len(repairEntries) == 0 {
+		return
+	}
+
+	loadedCount := 0
+	for _, entry := range repairEntries {
+		tm.brokenTorrentCache.Set(entry.TorrentID, &FailedFileEntry{
+			Error:     fmt.Errorf("broken: %s", entry.Reason),
+			Timestamp: time.Unix(entry.UpdatedAt, 0),
+		})
+		loadedCount++
+	}
 }
 
 // SetPrefetchedTorrents seeds the torrent manager with prefetched data and caches files in memory
@@ -1273,6 +1301,11 @@ func (tm *TorrentManager) GetDownloadLinkCacheCount() int {
 // GetFailedFileCacheCount returns the number of cached failed file entries
 func (tm *TorrentManager) GetFailedFileCacheCount() int {
 	return tm.failedFileCache.Count()
+}
+
+// GetFailedFileCache returns the failed file cache for filtering
+func (tm *TorrentManager) GetFailedFileCache() cmap.ConcurrentMap[string, *FailedFileEntry] {
+	return tm.failedFileCache
 }
 
 // GetRefreshInterval returns the current refresh interval
