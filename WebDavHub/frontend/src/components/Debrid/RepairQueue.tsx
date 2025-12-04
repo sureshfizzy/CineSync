@@ -42,7 +42,9 @@ interface ConfirmConfig {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  secondaryConfirmLabel?: string;
   onConfirm?: () => Promise<void> | void;
+  onSecondaryConfirm?: () => Promise<void> | void;
 }
 
 interface ConfirmState {
@@ -51,7 +53,9 @@ interface ConfirmState {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  secondaryConfirmLabel?: string;
   onConfirm?: () => Promise<void> | void;
+  onSecondaryConfirm?: () => Promise<void> | void;
 }
 
 const getReasonColor = (reason: string): 'error' | 'warning' | 'info' => {
@@ -449,7 +453,7 @@ export default function RepairQueue() {
   };
 
   const deleteRepairs = useCallback(
-    async (ids: string[]) => {
+    async (ids: string[], deleteFromDebrid = false) => {
       if (ids.length === 0) {
         return;
       }
@@ -460,6 +464,7 @@ export default function RepairQueue() {
       try {
         const response = await axios.post('/api/realdebrid/repair-delete', {
           torrent_ids: ids,
+          delete_from_debrid: deleteFromDebrid,
         });
 
         if (response.data.success) {
@@ -472,7 +477,7 @@ export default function RepairQueue() {
           fetchRepairStatus();
           setError('');
           setToastSeverity('success');
-          setToastMsg(response.data.message || 'Deleted');
+          setToastMsg(response.data.message || (deleteFromDebrid ? 'Deleted (Real-Debrid)' : 'Deleted'));
           setToastOpen(true);
         } else {
           const message = response.data.message || 'Failed to delete torrents';
@@ -503,7 +508,9 @@ export default function RepairQueue() {
         message: config.message,
         confirmLabel: config.confirmLabel ?? 'Confirm',
         cancelLabel: config.cancelLabel ?? 'Cancel',
+        secondaryConfirmLabel: config.secondaryConfirmLabel,
         onConfirm: config.onConfirm,
+        onSecondaryConfirm: config.onSecondaryConfirm,
       });
     },
     []
@@ -516,7 +523,9 @@ export default function RepairQueue() {
       message: '',
       confirmLabel: 'Confirm',
       cancelLabel: 'Cancel',
+      secondaryConfirmLabel: undefined,
       onConfirm: undefined,
+      onSecondaryConfirm: undefined,
     });
   }, []);
 
@@ -524,6 +533,16 @@ export default function RepairQueue() {
     try {
       if (confirmState.onConfirm) {
         await confirmState.onConfirm();
+      }
+    } finally {
+      closeConfirm();
+    }
+  }, [confirmState, closeConfirm]);
+
+  const handleSecondaryConfirmAction = useCallback(async () => {
+    try {
+      if (confirmState.onSecondaryConfirm) {
+        await confirmState.onSecondaryConfirm();
       }
     } finally {
       closeConfirm();
@@ -783,7 +802,9 @@ export default function RepairQueue() {
       title: 'Delete from Repair Table',
       message: `Delete ${ids.length} torrent(s) from the repair table?`,
       confirmLabel: 'Delete',
-      onConfirm: () => deleteRepairs(ids),
+      secondaryConfirmLabel: 'Delete + RD',
+      onConfirm: () => deleteRepairs(ids, false),
+      onSecondaryConfirm: () => deleteRepairs(ids, true),
     });
   };
 
@@ -802,7 +823,9 @@ export default function RepairQueue() {
       title: 'Delete from Repair Table',
       message: `Delete "${filename}" from the repair table?`,
       confirmLabel: 'Delete',
-      onConfirm: () => deleteRepairs([torrentId]),
+      secondaryConfirmLabel: 'Delete + RD',
+      onConfirm: () => deleteRepairs([torrentId], false),
+      onSecondaryConfirm: () => deleteRepairs([torrentId], true),
     });
   };
 
@@ -872,28 +895,28 @@ export default function RepairQueue() {
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           {!isQueueView && selectedTorrents.size > 0 && (
-            <>
-            <Button
-              variant="contained"
-              color="secondary"
-              startIcon={<BuildIcon />}
-              onClick={handleRepairSelected}
-                disabled={repairing || deleting}
-              sx={{ fontWeight: 600 }}
-            >
-              {repairing ? 'Repairing...' : `Repair (${selectedTorrents.size})`}
-              </Button>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={handleDeleteSelected}
-                disabled={repairing || deleting}
-                sx={{ fontWeight: 600 }}
-              >
-                {deleting ? 'Deleting...' : `Delete (${selectedTorrents.size})`}
-              </Button>
-            </>
+              <>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<BuildIcon />}
+                  onClick={handleRepairSelected}
+                  disabled={repairing || deleting}
+                  sx={{ fontWeight: 600 }}
+                >
+                  {repairing ? 'Repairing...' : `Repair (${selectedTorrents.size})`}
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={handleDeleteSelected}
+                  disabled={repairing || deleting}
+                  sx={{ fontWeight: 600 }}
+                >
+                  {deleting ? 'Deleting...' : `Delete (${selectedTorrents.size})`}
+                </Button>
+              </>
           )}
           {isQueueView && selectedTorrents.size > 0 && (
             <Button
@@ -1405,6 +1428,15 @@ export default function RepairQueue() {
           <Button onClick={closeConfirm} disabled={repairing || deleting}>
             {confirmState.cancelLabel}
           </Button>
+          {confirmState.secondaryConfirmLabel && (
+            <Button
+              onClick={handleSecondaryConfirmAction}
+              disabled={repairing || deleting}
+              color="error"
+            >
+              {confirmState.secondaryConfirmLabel}
+            </Button>
+          )}
           <Button onClick={handleConfirmAction} disabled={repairing || deleting} autoFocus>
             {confirmState.confirmLabel}
           </Button>
@@ -1422,7 +1454,6 @@ export default function RepairQueue() {
           {toastMsg}
         </Alert>
       </Snackbar>
-
       {/* Footer Info */}
       {stats && (
         <Box sx={{ mt: 2, textAlign: 'right' }}>

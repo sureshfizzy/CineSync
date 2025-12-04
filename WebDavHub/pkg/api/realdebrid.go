@@ -1287,6 +1287,12 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 			return
 		}
 		
+		cacheKey := realdebrid.MakeCacheKey(torrentID, baseName)
+		if _, fileBroken := tm.GetFailedFileCache().Get(cacheKey); fileBroken {
+			http.Error(w, "File is not available", http.StatusNotFound)
+			return
+		}
+		
 		if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
 			if item, found := allTorrents.Get(torrentName); found {
 				fileList, _, _ := tm.GetTorrentFileList(item.ID)
@@ -2006,7 +2012,8 @@ func HandleRepairQueueDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		TorrentIDs []string `json:"torrent_ids"`
+		TorrentIDs       []string `json:"torrent_ids"`
+		DeleteFromDebrid bool     `json:"delete_from_debrid"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -2407,7 +2414,8 @@ func HandleRepairTorrent(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var request struct {
-		TorrentIDs []string `json:"torrent_ids"`
+		TorrentIDs       []string `json:"torrent_ids"`
+		DeleteFromDebrid bool     `json:"delete_from_debrid"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -2478,7 +2486,8 @@ func HandleRepairDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		TorrentIDs []string `json:"torrent_ids"`
+		TorrentIDs       []string `json:"torrent_ids"`
+		DeleteFromDebrid bool     `json:"delete_from_debrid"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -2499,24 +2508,44 @@ func HandleRepairDelete(w http.ResponseWriter, r *http.Request) {
 
 	deleted := 0
 	failed := 0
+	rdRemoved := 0
+	rdFailed := 0
 	errors := []string{}
 
 	for _, torrentID := range request.TorrentIDs {
 		if err := store.DeleteRepair(torrentID); err != nil {
 			failed++
 			errors = append(errors, fmt.Sprintf("%s: %v", torrentID, err))
-		} else {
-			deleted++
-			tm.GetBrokenTorrentCache().Remove(torrentID)
+			continue
+		}
+
+		deleted++
+		tm.GetBrokenTorrentCache().Remove(torrentID)
+
+		if request.DeleteFromDebrid {
+			if err := tm.DeleteFromRealDebrid(torrentID); err != nil {
+				rdFailed++
+				errors = append(errors, fmt.Sprintf("%s (Real-Debrid): %v", torrentID, err))
+			} else {
+				rdRemoved++
+			}
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	message := fmt.Sprintf("Deleted %d torrent(s) from repair table", deleted)
+	if request.DeleteFromDebrid {
+		message = fmt.Sprintf("%s, removed %d from Real-Debrid", message, rdRemoved)
+	}
 	response := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Deleted %d torrent(s) from repair table", deleted),
+		"message": message,
 		"deleted": deleted,
 		"failed":  failed,
+	}
+	if request.DeleteFromDebrid {
+		response["removed_from_debrid"] = rdRemoved
+		response["rd_failed"] = rdFailed
 	}
 
 	if len(errors) > 0 {

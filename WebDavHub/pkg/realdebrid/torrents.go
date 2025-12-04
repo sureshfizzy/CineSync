@@ -337,7 +337,6 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	for i := range torrents {
 		item := &torrents[i]
 		accessKey := GetDirectoryName(item.Filename)
-		// AGGRESSIVELY load file lists into memory for instant access
 		if len(item.CachedFiles) == 0 {
 			if tm.infoStore != nil {
 				if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
@@ -756,6 +755,16 @@ func (tm *TorrentManager) verifyLinkIsActuallyBroken(link string) bool {
 // GetFileDownloadURL gets the download URL for a file with caching
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	torrentID = resolveTorrentID(torrentID)
+	if tm.store != nil {
+		if repair, err := tm.store.GetRepair(torrentID); err == nil && repair != nil {
+			tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
+				Error:     fmt.Errorf("torrent marked broken: %s", repair.Reason),
+				Timestamp: time.Unix(repair.UpdatedAt, 0),
+			})
+			return "", 0, fmt.Errorf("torrent is broken (reason: %s)", repair.Reason)
+		}
+	}
+
 	if _, broken := tm.brokenTorrentCache.Get(torrentID); broken {
 		return "", 0, fmt.Errorf("torrent is in repair queue")
 	}
@@ -1291,6 +1300,20 @@ func (tm *TorrentManager) GetModifiedUnix(id string) int64 {
 func (tm *TorrentManager) GetStore() *TorrentStore {
     if tm == nil { return nil }
     return tm.store
+}
+
+// DeleteFromRealDebrid removes a torrent from Real-Debrid directly
+func (tm *TorrentManager) DeleteFromRealDebrid(torrentID string) error {
+	if tm == nil {
+		return fmt.Errorf("torrent manager not initialized")
+	}
+	if tm.client == nil {
+		return fmt.Errorf("real-debrid client not available")
+	}
+	if strings.TrimSpace(torrentID) == "" {
+		return fmt.Errorf("torrent id required")
+	}
+	return tm.client.DeleteTorrent(torrentID)
 }
 
 // GetDownloadLinkCacheCount returns the number of cached download links
