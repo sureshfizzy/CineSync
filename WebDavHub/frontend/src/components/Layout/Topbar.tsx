@@ -40,18 +40,15 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   };
 
   const onDashboard = true;
-  const isArrDashboardRoute = location.pathname.startsWith('/dashboard/') && location.pathname !== '/dashboard';
-  
   // Determine initial view based on current route
-  const getInitialView = (): 'current' | 'arrdash' | 'debrid' => {
+  const getInitialView = (): 'current' | 'debrid' => {
     if (location.pathname.startsWith('/dashboard/debrid')) return 'debrid';
-    if (isArrDashboardRoute) return 'arrdash';
     const saved = localStorage.getItem('dashboardView');
-    if (saved === 'arrdash' || saved === 'debrid') return saved as any;
+    if (saved === 'debrid') return saved as any;
     return 'current';
   };
   
-  const [dashView, setDashView] = useState<'current' | 'arrdash' | 'debrid'>(getInitialView());
+  const [dashView, setDashView] = useState<'current' | 'debrid'>(getInitialView());
   const [dashMenuAnchor, setDashMenuAnchor] = useState<null | HTMLElement>(null);
 
   // Update dashboard view when route changes
@@ -63,7 +60,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     }
   }, [location.pathname]);
 
-  const handleHeaderToggle = (_: any, v: 'current' | 'arrdash' | 'debrid' | null) => {
+  const handleHeaderToggle = (_: any, v: 'current' | 'debrid' | null) => {
     if (!v || v === dashView) return;
     setDashView(v);
     localStorage.setItem('dashboardView', v);
@@ -71,8 +68,6 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     // Navigate to appropriate route when switching views
     if (v === 'current') {
       navigate('/dashboard');
-    } else if (v === 'arrdash') {
-      navigate('/dashboard/movies');
     } else if (v === 'debrid') {
       navigate('/dashboard/debrid');
     }
@@ -83,7 +78,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
 
   const openDashMenu = (e: React.MouseEvent<HTMLButtonElement>) => setDashMenuAnchor(e.currentTarget);
   const closeDashMenu = () => setDashMenuAnchor(null);
-  const chooseDashView = (v: 'current' | 'arrdash' | 'debrid') => {
+  const chooseDashView = (v: 'current' | 'debrid') => {
     closeDashMenu();
     if (v !== dashView) handleHeaderToggle(null, v);
   };
@@ -280,10 +275,6 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                   <LinkRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
                   Symlinks
                 </ToggleButton>
-                <ToggleButton value="arrdash" aria-label="Arr dashboard view">
-                  <DashboardRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
-                  ArrDash
-                </ToggleButton>
                 <ToggleButton value="debrid" aria-label="Debrid view">
                   <CloudDownloadRoundedIcon sx={{ fontSize: 18, mr: 0.75 }} />
                   Debrid
@@ -319,9 +310,6 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
               >
                 <MenuItem selected={dashView === 'current'} onClick={() => chooseDashView('current')}>
                   <LinkRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> Symlinks
-                </MenuItem>
-                <MenuItem selected={dashView === 'arrdash'} onClick={() => chooseDashView('arrdash')}>
-                  <DashboardRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> ArrDash
                 </MenuItem>
                 <MenuItem selected={dashView === 'debrid'} onClick={() => chooseDashView('debrid')}>
                   <CloudDownloadRoundedIcon sx={{ fontSize: 18, mr: 1 }} /> Debrid

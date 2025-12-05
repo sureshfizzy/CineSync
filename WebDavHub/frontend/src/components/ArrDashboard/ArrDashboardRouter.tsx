@@ -1,29 +1,22 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import ArrDashboard from './ArrDashboard';
-import ArrSearchPage from './ArrSearchPage';
-import RootFoldersManagement from './RootFoldersManagement';
-import IndexerManagement from './IndexerManagement';
+import { Routes, Route } from 'react-router-dom';
 import DebridDashboard from '../Debrid/DebridDashboard';
 import DebridBrowser from '../Debrid/DebridBrowser';
 import RepairQueue from '../Debrid/RepairQueue';
 import RealDebridSettings from '../Debrid/Settings/RealDebridSettings';
 import RcloneSettings from '../Debrid/Settings/RcloneSettings';
+import ArrComingSoon from './ArrComingSoon';
 
 export default function ArrDashboardRouter() {
   return (
     <Routes>
-      {/* Default route - shows all content */}
-      <Route index element={<ArrDashboard filter="all" />} />
-      
-      {/* Filter routes */}
-      <Route path="movies" element={<ArrDashboard filter="movies" />} />
-      <Route path="series" element={<ArrDashboard filter="series" />} />
-      <Route path="wanted" element={<ArrDashboard filter="wanted" />} />
-      
-      {/* Settings routes */}
-      <Route path="settings" element={<Navigate to="/dashboard/settings/media-management" replace />} />
-      <Route path="settings/media-management" element={<RootFoldersManagement />} />
-      <Route path="settings/indexers" element={<IndexerManagement />} />
+      {/* ArrDash temporarily disabled */}
+      <Route index element={<ArrComingSoon />} />
+      <Route path="movies" element={<ArrComingSoon />} />
+      <Route path="series" element={<ArrComingSoon />} />
+      <Route path="wanted" element={<ArrComingSoon />} />
+      <Route path="search/movie" element={<ArrComingSoon />} />
+      <Route path="search/tv" element={<ArrComingSoon />} />
+      <Route path="settings/*" element={<ArrComingSoon />} />
 
       {/* Debrid */}
       <Route path="debrid" element={<DebridDashboard />} />
@@ -31,13 +24,9 @@ export default function ArrDashboardRouter() {
       <Route path="debrid/repair" element={<RepairQueue />} />
       <Route path="debrid/settings" element={<RealDebridSettings />} />
       <Route path="debrid/settings/rclone" element={<RcloneSettings />} />
-      
-      {/* Search routes */}
-      <Route path="search/movie" element={<ArrSearchPage mediaType="movie" />} />
-      <Route path="search/tv" element={<ArrSearchPage mediaType="tv" />} />
-      
-      {/* Fallback - redirect to main dashboard */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Fallback - keep users inside ArrDash splash */}
+      <Route path="*" element={<ArrComingSoon />} />
     </Routes>
   );
 }

@@ -68,7 +68,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
 
   const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>(() => {
     const saved = localStorage.getItem('dashboardView');
-    return saved === 'arrdash' ? 'arrdash' : 'current';
+    return saved === 'current' ? 'current' : 'current';
   });
 
   useEffect(() => {
