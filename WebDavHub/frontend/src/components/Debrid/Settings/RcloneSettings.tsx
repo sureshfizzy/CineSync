@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Stack, Divider, IconButton, Tooltip, useTheme, useMediaQuery, alpha } from '@mui/material';
-import { Storage, Settings, CheckCircle, Error, Refresh, Science, FolderOpen } from '@mui/icons-material';
+import { Storage, Settings, CheckCircle, Error, Refresh, Science, FolderOpen, MenuBook, ExpandMore, ExpandLess } from '@mui/icons-material';
 import axios from 'axios';
+import CineSyncMountGuide from './CineSyncMountGuide';
 
 interface RcloneConfig {
   enabled: boolean;
@@ -108,6 +109,7 @@ const RcloneSettings: React.FC = () => {
   const [unmounting, setUnmounting] = useState(false);
   const [serverOS, setServerOS] = useState<string>('');
   const [isPolling, setIsPolling] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const showMessage = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -353,9 +355,9 @@ const RcloneSettings: React.FC = () => {
   }
 
   return (
-    <Box sx={{ pb: { xs: 2, md: 4 } }}>
+    <Box sx={{ pb: { xs: 2, md: 4 }, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
       {/* Header */}
-      <Box sx={{ mb: { xs: 2, md: 3 } }}>
+      <Box sx={{ mb: { xs: 1.5, md: 3 } }}>
         <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
           <Box
             sx={{
@@ -391,7 +393,7 @@ const RcloneSettings: React.FC = () => {
               bgcolor: status.waiting || (isPolling && !status?.mounted) ? alpha(theme.palette.warning.main, 0.05) : status.mounted ? alpha(theme.palette.success.main, 0.05) : alpha(theme.palette.error.main, 0.05),
             }}
           >
-            <CardContent sx={{ py: { xs: 1.5, md: 2 }, '&:last-child': { pb: { xs: 1.5, md: 2 } } }}>
+            <CardContent sx={{ py: { xs: 1, md: 2 }, '&:last-child': { pb: { xs: 1, md: 2 } } }}>
               <Stack direction="row" alignItems="flex-start" spacing={2}>
                 {status.waiting || (isPolling && !status?.mounted) ? (
                   <CircularProgress size={24} sx={{ mt: 0.5 }} />
@@ -431,19 +433,19 @@ const RcloneSettings: React.FC = () => {
         )}
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 2, md: 3 } }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 1.5, md: 3 } }}>
         {/* Main Configuration */}
-        <Box>
-          <Card>
-            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 2, md: 3 } }}>
+        <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+          <Card sx={{ width: '100%', maxWidth: '100%' }}>
+            <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 3 } }}>
                 <Settings sx={{ color: 'primary.main', fontSize: { xs: 20, md: 24 } }} />
                 <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
                   Configuration
                 </Typography>
               </Stack>
 
-              <Stack spacing={{ xs: 2.5, md: 3 }}>
+              <Stack spacing={{ xs: 1.5, md: 3 }}>
                 {/* Enable Rclone */}
                 <FormControlLabel
                   control={
@@ -489,78 +491,6 @@ const RcloneSettings: React.FC = () => {
                         </Box>
                       }
                     />
-
-                    {/* Serve From Rclone Toggle */}
-                    <Box>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={config.serveFromRclone}
-                            onChange={(e) => handleConfigChange('serveFromRclone', e.target.checked)}
-                            color="primary"
-                          />
-                        }
-                        label={
-                          <Box>
-                            <Typography variant="body1" fontWeight="500">
-                              Serve From Rclone Mount
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
-                              Files served through rclone mount filesystem (uses VFS cache)
-                            </Typography>
-                          </Box>
-                        }
-                      />
-                      {/* Current Mode Indicator */}
-                      <Alert
-                        severity={config.serveFromRclone ? "info" : "success"}
-                        sx={{ mt: 1, py: 0.5 }}
-                        icon={config.serveFromRclone ? <Storage fontSize="small" /> : <CheckCircle fontSize="small" />}
-                      >
-                        <Typography variant="body2" fontWeight="500">
-                          {config.serveFromRclone
-                            ? '🔄 Active Mode: Serving from Rclone Mount (VFS cache)'
-                            : '⚡ Active Mode: Direct streaming from cached RD links (Recommended)'}
-                        </Typography>
-                      </Alert>
-                    </Box>
-
-                    <Divider />
-
-                    {/* Retain Folder Extension Toggle */}
-                    <Box>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={config.retainFolderExtension}
-                            onChange={(e) => handleConfigChange('retainFolderExtension', e.target.checked)}
-                            color="primary"
-                          />
-                        }
-                        label={
-                          <Box>
-                            <Typography variant="body1" fontWeight="500">
-                              Retain Folder Extensions
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
-                              Keep file extensions in mounted directory names (e.g., "Movie.mkv/" instead of "Movie/")
-                            </Typography>
-                          </Box>
-                        }
-                      />
-                      <Alert
-                        severity="info"
-                        sx={{ mt: 1, py: 0.5 }}
-                      >
-                        <Typography variant="body2" fontWeight="500">
-                          {config.retainFolderExtension
-                            ? '📁 Directories will be named: "Movie.mkv/", "Archive.zip/"'
-                            : '📂 Directories will be named: "Movie/", "Archive/" (Recommended)'}
-                        </Typography>
-                      </Alert>
-                    </Box>
-
-                    <Divider />
 
                     {/* Rclone Path (Windows only - hidden on Linux/Unix) */}
                     {serverOS === 'windows' && (
@@ -627,11 +557,11 @@ const RcloneSettings: React.FC = () => {
 
                     {/* Advanced Settings */}
                     <Box>
-                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: { xs: 1.5, md: 2 } }}>
                         Advanced Settings
                       </Typography>
-                      <Stack spacing={2}>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                      <Stack spacing={{ xs: 1.5, md: 2 }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
                             <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                               VFS Cache Mode
@@ -657,7 +587,7 @@ const RcloneSettings: React.FC = () => {
                             />
                           </Box>
                         </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
                             <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                               Cache Max Age
@@ -697,7 +627,7 @@ const RcloneSettings: React.FC = () => {
                             helperText="Custom directory for VFS cache files. Leave empty to use default location."
                           />
                         </Box>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
                             <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                               Directory Cache Time
@@ -723,8 +653,8 @@ const RcloneSettings: React.FC = () => {
                             />
                           </Box>
                         </Box>
-                        <Box sx={{ mt: 2 }}>
-                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
                               <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 Attribute Timeout
@@ -781,8 +711,8 @@ const RcloneSettings: React.FC = () => {
                         </Box>
 
                         {/* VFS & Compatibility Settings */}
-                        <Box sx={{ mt: 2 }}>
-                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
                               <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 VFS Read Wait
@@ -865,11 +795,11 @@ const RcloneSettings: React.FC = () => {
                         </Box>
 
                         {/* Logging */}
-                        <Box sx={{ mt: 2 }}>
+                        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
                           <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
                             Logging
                           </Typography>
-                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
                               <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 Log Level
@@ -900,11 +830,11 @@ const RcloneSettings: React.FC = () => {
                         </Box>
 
                         {/* Network & Retry Settings */}
-                        <Box sx={{ mt: 2 }}>
+                        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
                           <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
                             Network & Retry Settings
                           </Typography>
-                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
                               <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 Timeout
@@ -961,11 +891,11 @@ const RcloneSettings: React.FC = () => {
                         </Box>
 
                         {/* Streaming Settings */}
-                        <Box sx={{ mt: 2 }}>
+                        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
                           <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
                             Streaming Settings
                           </Typography>
-                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
                               <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 VFS Read Chunk Size
@@ -1010,58 +940,6 @@ const RcloneSettings: React.FC = () => {
                       </Stack>
                     </Box>
 
-                    <Divider sx={{ my: 2 }} />
-
-                    {/* API Rate Limiting */}
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
-                        API Rate Limiting
-                      </Typography>
-                      <Stack spacing={2}>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                          <TextField
-                            type="number"
-                            label="Requests per Minute"
-                            size={isMobile ? 'small' : 'medium'}
-                            value={rateLimit.requestsPerMinute}
-                            onChange={(e) => setRateLimit(prev => ({ ...prev, requestsPerMinute: Number(e.target.value) || 0 }))}
-                            helperText="Max sustained request rate (<= 250)"
-                          />
-                          <TextField
-                            type="number"
-                            label="Burst"
-                            size={isMobile ? 'small' : 'medium'}
-                            value={rateLimit.burst}
-                            onChange={(e) => setRateLimit(prev => ({ ...prev, burst: Number(e.target.value) || 0 }))}
-                            helperText="Short spikes allowed"
-                          />
-                        </Stack>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                          <TextField
-                            type="number"
-                            label="Max Retries (429)"
-                            size={isMobile ? 'small' : 'medium'}
-                            value={rateLimit.maxRetries}
-                            onChange={(e) => setRateLimit(prev => ({ ...prev, maxRetries: Number(e.target.value) || 0 }))}
-                          />
-                          <TextField
-                            type="number"
-                            label="Base Backoff (ms)"
-                            size={isMobile ? 'small' : 'medium'}
-                            value={rateLimit.baseBackoffMs}
-                            onChange={(e) => setRateLimit(prev => ({ ...prev, baseBackoffMs: Number(e.target.value) || 0 }))}
-                          />
-                          <TextField
-                            type="number"
-                            label="Max Backoff (ms)"
-                            size={isMobile ? 'small' : 'medium'}
-                            value={rateLimit.maxBackoffMs}
-                            onChange={(e) => setRateLimit(prev => ({ ...prev, maxBackoffMs: Number(e.target.value) || 0 }))}
-                          />
-                        </Stack>
-                      </Stack>
-                    </Box>
-
                     {/* Mount Controls */}
                     <Box>
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -1088,13 +966,137 @@ const RcloneSettings: React.FC = () => {
                     </Box>
                   </>
                 )}
+
+                <Divider />
+
+                {/* Serve From Rclone Toggle */}
+                <Box>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={config.serveFromRclone}
+                        onChange={(e) => handleConfigChange('serveFromRclone', e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body1" fontWeight="500">
+                          Serve From Rclone Mount
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                          Files served through rclone mount filesystem (uses VFS cache)
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  {/* Current Mode Indicator */}
+                  <Alert
+                    severity={config.serveFromRclone ? "info" : "success"}
+                    sx={{ mt: 1, py: 0.5 }}
+                    icon={config.serveFromRclone ? <Storage fontSize="small" /> : <CheckCircle fontSize="small" />}
+                  >
+                    <Typography variant="body2" fontWeight="500">
+                      {config.serveFromRclone
+                        ? '🔄 Active Mode: Serving from Rclone Mount (VFS cache)'
+                        : '⚡ Active Mode: Direct streaming from cached RD links (Recommended)'}
+                    </Typography>
+                  </Alert>
+                </Box>
+
+                <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
+
+                {/* API Rate Limiting */}
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                    API Rate Limiting
+                  </Typography>
+                  <Stack spacing={2}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <TextField
+                        type="number"
+                        label="Requests per Minute"
+                        size={isMobile ? 'small' : 'medium'}
+                        value={rateLimit.requestsPerMinute}
+                        onChange={(e) => setRateLimit(prev => ({ ...prev, requestsPerMinute: Number(e.target.value) || 0 }))}
+                        helperText="Max sustained request rate (<= 250)"
+                      />
+                      <TextField
+                        type="number"
+                        label="Burst"
+                        size={isMobile ? 'small' : 'medium'}
+                        value={rateLimit.burst}
+                        onChange={(e) => setRateLimit(prev => ({ ...prev, burst: Number(e.target.value) || 0 }))}
+                        helperText="Short spikes allowed"
+                      />
+                    </Stack>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <TextField
+                        type="number"
+                        label="Max Retries (429)"
+                        size={isMobile ? 'small' : 'medium'}
+                        value={rateLimit.maxRetries}
+                        onChange={(e) => setRateLimit(prev => ({ ...prev, maxRetries: Number(e.target.value) || 0 }))}
+                      />
+                      <TextField
+                        type="number"
+                        label="Base Backoff (ms)"
+                        size={isMobile ? 'small' : 'medium'}
+                        value={rateLimit.baseBackoffMs}
+                        onChange={(e) => setRateLimit(prev => ({ ...prev, baseBackoffMs: Number(e.target.value) || 0 }))}
+                      />
+                      <TextField
+                        type="number"
+                        label="Max Backoff (ms)"
+                        size={isMobile ? 'small' : 'medium'}
+                        value={rateLimit.maxBackoffMs}
+                        onChange={(e) => setRateLimit(prev => ({ ...prev, maxBackoffMs: Number(e.target.value) || 0 }))}
+                      />
+                    </Stack>
+                  </Stack>
+                </Box>
+
+                <Divider />
+
+                {/* Retain Folder Extension Toggle */}
+                <Box>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={config.retainFolderExtension}
+                        onChange={(e) => handleConfigChange('retainFolderExtension', e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body1" fontWeight="500">
+                          Retain Folder Extensions
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                          Keep file extensions in mounted directory names (e.g., "Movie.mkv/" instead of "Movie/")
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <Alert
+                    severity="info"
+                    sx={{ mt: 1, py: 0.5 }}
+                  >
+                    <Typography variant="body2" fontWeight="500">
+                      {config.retainFolderExtension
+                        ? '📁 Directories will be named: "Movie.mkv/", "Archive.zip/"'
+                        : '📂 Directories will be named: "Movie/", "Archive/" (Recommended)'}
+                    </Typography>
+                  </Alert>
+                </Box>
               </Stack>
 
               {/* Action Buttons */}
               <Stack 
                 direction={{ xs: 'column', sm: 'row' }} 
                 spacing={{ xs: 1.5, sm: 2 }} 
-                sx={{ mt: { xs: 3, md: 4 } }}
+                sx={{ mt: { xs: 2, md: 4 } }}
               >
                 <Button
                   variant="contained"
@@ -1127,15 +1129,53 @@ const RcloneSettings: React.FC = () => {
               </Stack>
             </CardContent>
           </Card>
+
+          {/* Optional CineSync Mount Guide - Show below when mount is disabled */}
+          {!config.enabled && (
+            <Card sx={{ mt: { xs: 1.5, md: 3 }, width: '100%', maxWidth: '100%' }}>
+              <CardContent sx={{ p: { xs: 1.5, md: 3 }, width: '100%', maxWidth: '100%' }}>
+                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                  <MenuBook sx={{ color: 'secondary.main', fontSize: { xs: 20, md: 24 } }} />
+                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                    Manual Mount Guide (Optional)
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={showGuide ? <ExpandLess /> : <ExpandMore />}
+                    onClick={() => setShowGuide(prev => !prev)}
+                    sx={{ ml: 'auto' }}
+                  >
+                    {showGuide ? 'Hide' : 'View'}
+                  </Button>
+                </Stack>
+
+                <CineSyncMountGuide
+                  config={{
+                    mountPath: config.mountPath,
+                    vfsCacheMode: config.vfsCacheMode,
+                    vfsCacheMaxSize: config.vfsCacheMaxSize,
+                    vfsReadAhead: config.vfsReadAhead,
+                    bufferSize: config.bufferSize,
+                    CachePath: config.CachePath,
+                    logLevel: config.logLevel,
+                    logFile: config.logFile,
+                  }}
+                  serverOS={serverOS}
+                  showGuide={showGuide}
+                />
+              </CardContent>
+            </Card>
+          )}
         </Box>
 
         {/* Information Panel */}
         <Box>
-          <Stack spacing={{ xs: 2, md: 3 }}>
+          <Stack spacing={{ xs: 1.5, md: 3 }}>
             {/* Windows Info */}
             {navigator.platform.toLowerCase().includes('win') && (
               <Card>
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
                   <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
                     <Science sx={{ color: 'info.main', fontSize: { xs: 20, md: 24 } }} />
                     <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Windows Requirements</Typography>
@@ -1161,53 +1201,8 @@ const RcloneSettings: React.FC = () => {
               </Card>
             )}
 
-            {/* Mount Status */}
-            {status && (
-              <Card>
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
-                    <Storage sx={{ color: status.mounted ? 'success.main' : 'error.main', fontSize: { xs: 20, md: 24 } }} />
-                    <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Mount Status</Typography>
-                  </Stack>
-                  <Stack spacing={1.5}>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Status
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color={status.mounted ? 'success.main' : 'error.main'}>
-                        {status.mounted ? 'Mounted' : 'Not Mounted'}
-                      </Typography>
-                    </Box>
-                    {status.mountPath && (
-                      <Box>
-                        <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          Mount Path
-                        </Typography>
-                        <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.mountPath}</Typography>
-                      </Box>
-                    )}
-                    {status.processId && (
-                      <Box>
-                        <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          Process ID
-                        </Typography>
-                        <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.processId}</Typography>
-                      </Box>
-                    )}
-                    {status.error && (
-                      <Box>
-                        <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          Error
-                        </Typography>
-                        <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color="error.main">{status.error}</Typography>
-                      </Box>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
-          </Stack>
-        </Box>
+        </Stack>
+      </Box>
       </Box>
 
       {/* Snackbar */}
