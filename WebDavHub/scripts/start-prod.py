@@ -22,6 +22,10 @@ import time
 import argparse
 import socket
 import psutil
+import urllib.request
+import urllib.error
+import urllib.parse
+import json
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
@@ -34,6 +38,7 @@ class WebDavHubProductionServer:
         self.backend_process: Optional[subprocess.Popen] = None
         self.frontend_process: Optional[subprocess.Popen] = None
         self.env_vars: Dict[str, str] = {}
+        self.api_host = "localhost"
         self.api_port = 8082
         self.ui_port = 5173
         self.network_ip = self.get_network_ip()
@@ -75,8 +80,12 @@ class WebDavHubProductionServer:
         else:
             print("Warning: No .env file found. Using default values.")
 
-        # Get ports from environment variables with defaults
+        # Get host and ports from environment variables with defaults
         # Priority: Docker environment variables > .env file > defaults
+        self.api_host = os.environ.get('CINESYNC_IP', self.env_vars.get('CINESYNC_IP', 'localhost'))
+        if self.api_host == '0.0.0.0':
+            self.api_host = 'localhost'
+        
         try:
             api_port_str = os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
             self.api_port = int(api_port_str) if api_port_str and api_port_str.strip() else 8082
@@ -242,6 +251,99 @@ class WebDavHubProductionServer:
 
         print("✅ Docker environment validation passed")
 
+    def wait_for_backend_api(self, max_wait: int = 30) -> bool:
+        """Wait for backend API to be ready"""
+        print("Waiting for backend API to be ready...")
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            try:
+                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/status"
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    if response.status == 200:
+                        print("✅ Backend API is ready")
+                        return True
+            except (urllib.error.URLError, socket.timeout, ConnectionRefusedError):
+                time.sleep(1)
+        
+        print("⚠️  Backend API did not become ready in time")
+        return False
+
+    def is_auto_start_enabled(self) -> bool:
+        """Check if MediaHub or RTM auto-start is enabled"""
+        mediahub_auto = self.env_vars.get('MEDIAHUB_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+        rtm_auto = self.env_vars.get('RTM_AUTO_START', 'false').lower() in ('true', '1', 'yes')
+        return mediahub_auto or rtm_auto
+
+    def get_mount_path_from_config(self) -> Optional[str]:
+        """Get mount path from Real-Debrid config API"""
+        try:
+            url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/config"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode('utf-8'))
+                    config = data.get('config', {})
+                    rclone_settings = config.get('rcloneSettings', {})
+                    mount_path = rclone_settings.get('mountPath')
+                    enabled = rclone_settings.get('enabled', False)
+                    auto_mount = rclone_settings.get('autoMountOnStart', False)
+                    
+                    if enabled and auto_mount and mount_path:
+                        return mount_path
+        except Exception as e:
+            pass
+        return None
+
+    def wait_for_mount(self, mount_path: str, max_wait: int = 60) -> bool:
+        """Wait for rclone mount to be ready by checking both API status and filesystem access"""
+        if not mount_path:
+            return False
+        
+        print(f"⏳ Waiting for mount at {mount_path} to be ready...")
+        start_time = time.time()
+        last_log = 0
+        
+        while time.time() - start_time < max_wait:
+            # Check API status first
+            api_mounted = False
+            try:
+                encoded_path = urllib.parse.quote(mount_path, safe='')
+                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/rclone/status?path={encoded_path}"
+                with urllib.request.urlopen(url, timeout=3) as response:
+                    if response.status == 200:
+                        data = json.loads(response.read().decode('utf-8'))
+                        status = data.get('status', {})
+                        if status.get('waiting'):
+                            waiting_reason = status.get('waitingReason', '')
+                            if time.time() - last_log > 5:
+                                print(f"   Mount waiting: {waiting_reason}")
+                                last_log = time.time()
+                            time.sleep(2)
+                            continue
+                        if status.get('error'):
+                            print(f"❌ Mount error: {status.get('error')}")
+                            return False
+                        api_mounted = status.get('mounted', False)
+            except:
+                pass
+            
+            # Verify mount is actually accessible on filesystem
+            if api_mounted:
+                try:
+                    mount_dir = Path(mount_path)
+                    if mount_dir.exists() and mount_dir.is_dir():
+                        # Try to access it
+                        list(mount_dir.iterdir())
+                        print(f"✅ Mount is ready at {mount_path}")
+                        return True
+                except:
+                    pass
+            
+            time.sleep(2)
+        
+        print(f"⚠️  Mount not ready after {max_wait}s, continuing anyway...")
+        return False
+
     def start_backend_server(self):
         """Start the Go backend server"""
         print(f"Starting Go backend server on port {self.api_port}...")
@@ -268,6 +370,20 @@ class WebDavHubProductionServer:
                 sys.exit(1)
 
             print("✅ Backend server started successfully")
+
+            # Wait for backend API to be ready
+            if not self.wait_for_backend_api():
+                print("⚠️  Continuing despite API not being ready...")
+
+            if self.is_auto_start_enabled():
+                # Give backend a moment to load config
+                time.sleep(2)
+                mount_path = self.get_mount_path_from_config()
+                if mount_path:
+                    print(f"\n🔗 Auto-start enabled - waiting for mount before MediaHub/RTM starts...")
+                    self.wait_for_mount(mount_path)
+                else:
+                    print("ℹ️  Auto-start enabled but no auto-mount configured")
 
         except Exception as e:
             print(f"Error starting backend server: {e}")
