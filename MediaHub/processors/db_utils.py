@@ -308,6 +308,24 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_time ON processed_files(sport_time)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_date ON processed_files(sport_date)")
 
+        # Check if deleted_files table has all required columns and add missing ones
+        cursor.execute("PRAGMA table_info(deleted_files)")
+        deleted_columns = [column[1] for column in cursor.fetchall()]
+
+        required_deleted_columns = {
+            "file_path": "TEXT",
+            "destination_path": "TEXT",
+            "base_path": "TEXT",
+            "root_folder": "TEXT",
+            "tmdb_id": "TEXT",
+            "deleted_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            "trash_file_name": "TEXT"
+        }
+
+        for col_name, col_type in required_deleted_columns.items():
+            if col_name not in deleted_columns:
+                cursor.execute(f"ALTER TABLE deleted_files ADD COLUMN {col_name} {col_type}")
+
         # Create indexes for deleted_files table
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_file_path ON deleted_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_destination_path ON deleted_files(destination_path)")
