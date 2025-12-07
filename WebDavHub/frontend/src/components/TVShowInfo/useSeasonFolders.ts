@@ -73,7 +73,8 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
         if (!seasonMap[seasonNum]) seasonMap[seasonNum] = [];
         seasonMap[seasonNum].push({
           name: file.name,
-          size: file.size || '--',
+          size: file.size || file.fileSize || file.filesize || '--',
+          quality: file.quality || file.Quality || file.qualityProfile || '',
           modified: file.modified || '--',
           path: (file.path as string) || '',
           episodeNumber: episodeNum || file.episodeNumber
@@ -137,7 +138,8 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
         webdavPath,
         sourcePath: res.data.realPath || res.data.absPath || file.path,
         fullPath: res.data.absPath || file.path,
-        size: fileSize
+        size: fileSize,
+        quality: file.quality || file.Quality || file.qualityProfile || ''
       });
     } catch (err) {
       setDetailsData({ ...details, error: 'Failed to resolve file path' });

@@ -20,11 +20,42 @@ interface MovieHeaderProps {
 
 
 // Helper function to format file size
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return 'Unknown size';
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+const formatFileSize = (value: number | string | undefined) => {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+  if (value === undefined || value === null) return 'Unknown size';
+
+  if (typeof value === 'number') {
+    if (value <= 0 || !Number.isFinite(value)) return 'Unknown size';
+    let size = value;
+    let idx = 0;
+    while (size >= 1024 && idx < units.length - 1) {
+      size /= 1024;
+      idx++;
+    }
+    return `${size.toFixed(1)} ${units[idx]}`;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return 'Unknown size';
+
+  const match = trimmed.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/i);
+  if (!match) return trimmed;
+
+  const amount = parseFloat(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Unknown size';
+
+  const unit = (match[2] || 'B').toUpperCase();
+  const unitIndex = Math.max(units.indexOf(unit as any), 0);
+  let bytes = amount * Math.pow(1024, unitIndex);
+
+  let displayIdx = 0;
+  while (bytes >= 1024 && displayIdx < units.length - 1) {
+    bytes /= 1024;
+    displayIdx++;
+  }
+
+  return `${bytes.toFixed(1)} ${units[displayIdx]}`;
 };
 
 
@@ -349,7 +380,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                         color: 'text.primary',
                         fontSize: '0.875rem'
                       }}>
-                        HD-1080p
+                        {selectedFile?.quality || 'Unknown'}
                       </Typography>
                     </Box>
                   )}

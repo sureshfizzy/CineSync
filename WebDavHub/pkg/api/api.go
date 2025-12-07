@@ -869,6 +869,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				fileInfo.Size = formatFileSize(dbInfo.FileSize)
 				fileInfo.SourcePath = dbInfo.SourcePath
 				fileInfo.DestinationPath = dbInfo.DestinationPath
+				if dbInfo.Quality != "" {
+					fileInfo.Quality = dbInfo.Quality
+				}
 				if dbInfo.TmdbID != "" {
 					fileInfo.TmdbId = dbInfo.TmdbID
 				}

@@ -57,7 +57,8 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
             fullPath: file.fullPath || `${folderPath}/${file.name}`,
             sourcePath: file.sourcePath || file.path || `${folderPath}/${file.name}`,
             webdavPath: file.webdavPath || `${folderPath}/${file.name}`,
-            size: file.size || '0 B',
+            size: file.size ?? file.fileSize ?? file.filesize ?? '0 B',
+            quality: file.quality ?? file.Quality ?? file.qualityProfile ?? '',
             modified: file.modified || new Date().toISOString()
           }));
           setFileInfo(processedFiles);
