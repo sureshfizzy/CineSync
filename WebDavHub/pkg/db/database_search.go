@@ -317,8 +317,6 @@ func InvalidateFolderCache() {
 	cache.pathFolders = make(map[string][]FolderInfo)
 	cache.totalCounts = make(map[string]int)
 	cache.initialized = false
-
-	logger.Info("Folder cache invalidated")
 }
 
 // InvalidateFolderCacheForCategory clears the cache for a specific category

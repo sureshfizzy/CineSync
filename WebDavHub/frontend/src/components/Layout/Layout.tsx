@@ -66,10 +66,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
     handleRefresh,
   };
 
-  const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>(() => {
-    const saved = localStorage.getItem('dashboardView');
-    return saved === 'current' ? 'current' : 'current';
-  });
+  const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>('current');
 
   useEffect(() => {
     const handler = (e: Event) => {

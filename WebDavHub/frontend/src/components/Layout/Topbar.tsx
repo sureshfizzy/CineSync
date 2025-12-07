@@ -40,12 +40,8 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   };
 
   const onDashboard = true;
-  // Determine initial view based on current route
   const getInitialView = (): 'current' | 'debrid' => {
-    if (location.pathname.startsWith('/dashboard/debrid')) return 'debrid';
-    const saved = localStorage.getItem('dashboardView');
-    if (saved === 'debrid') return saved as any;
-    return 'current';
+    return location.pathname.startsWith('/dashboard/debrid') ? 'debrid' : 'current';
   };
   
   const [dashView, setDashView] = useState<'current' | 'debrid'>(getInitialView());
