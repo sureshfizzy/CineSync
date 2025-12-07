@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,6 +46,39 @@ var (
 	basePathColumnExists sync.Once
 	hasBasePathColumn    bool
 )
+
+var invalidPathChars = regexp.MustCompile(`[\\/:*?"<>|]`)
+
+func sanitizeFolderName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "sanitized_filename"
+	}
+
+	replacements := map[string]string{
+		":": " -",
+		"/": "-",
+		"\\": "-",
+		"*": "x",
+		"?": "",
+		"\"": "'",
+		"<": "(",
+		">": ")",
+		"|": "-",
+	}
+
+	for old, repl := range replacements {
+		name = strings.ReplaceAll(name, old, repl)
+	}
+
+	name = invalidPathChars.ReplaceAllString(name, "")
+	name = strings.Trim(name, " .")
+
+	if name == "" {
+		return "sanitized_filename"
+	}
+	return name
+}
 
 // checkFileSizeColumnExists checks if the file_size column exists in processed_files table
 func checkFileSizeColumnExists() bool {
@@ -355,6 +389,7 @@ func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, medi
 	} else {
 		folderName = properName
 	}
+	folderName = sanitizeFolderName(folderName)
 
 	// Check if this folder already exists in cache
 	if cachedFolders, exists := cache.pathFolders[category]; exists {
@@ -952,6 +987,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		apiPath := "/" + strings.ReplaceAll(basePath, string(filepath.Separator), "/") + "/" + folder.FolderName
 		folder.FolderPath = apiPath
 		folder.Modified = latestProcessedAt
@@ -1132,6 +1168,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		if basePath != "" {
 			apiBasePath := strings.ReplaceAll(basePath, "\\", "/")
 			folder.FolderPath = "/" + apiBasePath + "/" + folder.FolderName
@@ -1206,6 +1243,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		folder.FolderPath = "/" + category + "/" + folder.FolderName
 		folder.Modified = latestProcessedAt
 
@@ -1299,6 +1337,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		folder.FolderPath = "/" + basePath + "/" + folder.FolderName
 		folder.Modified = latestProcessedAt
 
@@ -1381,6 +1420,7 @@ func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter s
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		apiPath := "/" + strings.ReplaceAll(normalizedCategory, string(filepath.Separator), "/") + "/" + folder.FolderName
 		folder.FolderPath = apiPath
 		folder.Modified = latestProcessedAt
