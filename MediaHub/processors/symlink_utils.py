@@ -10,6 +10,7 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.processors.process_db import *
+from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 from MediaHub.utils.plex_utils import update_plex_after_deletion
@@ -30,7 +31,7 @@ def generate_unique_filename(dest_file, src_file=None):
 	# If the existing file is a symlink pointing to the same source, return original path
 	if src_file and os.path.islink(dest_file):
 		try:
-			existing_target = normalize_file_path(os.readlink(dest_file))
+			existing_target = normalize_file_path(get_symlink_target_path(dest_file))
 			normalized_src = normalize_file_path(src_file)
 			if existing_target == normalized_src:
 				return dest_file
@@ -76,7 +77,9 @@ def _move_symlink_to_trash(symlink_path):
 		while os.path.lexists(candidate):
 			candidate = os.path.join(trash_dir, f"{name} ({counter}){ext}")
 			counter += 1
-		link_target = os.readlink(symlink_path)
+		link_target = get_symlink_target_path(symlink_path)
+		if not link_target:
+			raise OSError(f"Could not resolve symlink target for {symlink_path}")
 		os.symlink(link_target, candidate)
 		os.remove(symlink_path)
 		log_message(f"Moved symlink to trash: {symlink_path} -> {candidate}", level="INFO")
@@ -303,7 +306,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                             if os.path.lexists(safe_path):
                                 if os.path.islink(safe_path):
                                     try:
-                                        target = os.readlink(safe_path)
+                                        target = get_symlink_target_path(safe_path)
                                         # Normalize the target path to remove Windows \\?\ prefix
                                         normalized_target = normalize_file_path(target)
                                         log_message(f"Found symlink {safe_path} pointing to: {normalized_target}", level="DEBUG")
@@ -480,7 +483,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                 if os.path.lexists(possible_dest_path):
                                     if os.path.islink(possible_dest_path):
                                         # It's a symlink - check if it's broken
-                                        target = os.readlink(possible_dest_path)
+                                        target = get_symlink_target_path(possible_dest_path)
                                         normalized_target = normalize_file_path(target)
                                         if not os.path.exists(target) or normalized_target == removed_path:
                                             _safe_delete_symlink(possible_dest_path)
@@ -531,7 +534,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                         if os.path.islink(file_path):
                                             try:
-                                                target = os.readlink(file_path)
+                                                target = get_symlink_target_path(file_path)
                                                 normalized_target = normalize_file_path(target)
                                                 if normalized_target == removed_path or (not os.path.exists(target) and removed_path in normalized_target):
                                                     log_message(f"Found broken symlink pointing to removed file: {file_path}", level="INFO")
@@ -574,7 +577,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                         if os.path.lexists(dest_path):
                                             if os.path.islink(dest_path):
-                                                target = os.readlink(dest_path)
+                                                target = get_symlink_target_path(dest_path)
                                                 normalized_target = normalize_file_path(target)
                                                 if not os.path.exists(target):
                                                     log_message(f"Found broken symlink: {dest_path}", level="INFO")
@@ -610,7 +613,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                             if os.path.lexists(safe_path):
                                 if os.path.islink(safe_path):
                                     try:
-                                        target = os.readlink(safe_path)
+                                        target = get_symlink_target_path(safe_path)
                                         # Normalize the target path to remove Windows \\?\ prefix
                                         normalized_target = normalize_file_path(target)
                                         log_message(f"Deleting symlink: {safe_path} -> {normalized_target}, tmdb_id={tmdb_id}, season_number={season_number}", level="INFO")
@@ -757,7 +760,7 @@ def _check_all_symlinks(dest_dir):
     for file in files:
         file_path = os.path.join(dest_dir, file)
         if os.path.islink(file_path):
-            target = os.readlink(file_path)
+            target = get_symlink_target_path(file_path)
             normalized_target = normalize_file_path(target)
             log_message(f"Checking symlink: {file_path} -> {normalized_target}", level="DEBUG")
 
@@ -817,11 +820,11 @@ def get_existing_symlink_info(src_file):
         for filename in os.listdir(dir_path):
             full_path = os.path.join(dir_path, filename)
             if os.path.islink(full_path):
-                target_path = os.readlink(full_path)
+                target = get_symlink_target_path(full_path)
 
                 # Normalize paths for consistent comparison
                 normalized_src_file = normalize_file_path(src_file)
-                normalized_target_path = normalize_file_path(target_path)
+                normalized_target_path = normalize_file_path(target)
 
                 if normalized_target_path == normalized_src_file:
                     return full_path

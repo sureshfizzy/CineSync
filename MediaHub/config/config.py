@@ -138,6 +138,9 @@ def is_movie_collection_enabled():
 def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
 
+def use_relative_symlinks():
+    return os.getenv('RELATIVE_SYMLINK', 'false').lower() in ['true', '1', 'yes']
+
 def get_show_extras_size_limit():
      return get_env_int('SHOW_EXTRAS_SIZE_LIMIT', 5)
 

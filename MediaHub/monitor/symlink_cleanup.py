@@ -17,7 +17,7 @@ from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns
+from MediaHub.utils.file_utils import build_dest_index, get_anime_patterns, get_symlink_target_path
 from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
@@ -40,7 +40,7 @@ def run_symlink_cleanup(dest_dir):
             file_path = os.path.join(root, file)
             if os.path.islink(file_path):
                 try:
-                    target = os.readlink(file_path)
+                    target = get_symlink_target_path(file_path)
 
                     # Check if the symlink target exists
                     if not os.path.exists(target):

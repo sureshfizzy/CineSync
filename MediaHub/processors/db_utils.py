@@ -22,6 +22,7 @@ from MediaHub.config.config import (
     get_db_connection_timeout, get_db_cache_size,
     get_cinesync_ip, get_cinesync_api_port
 )
+from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.api.tmdb_api_helpers import get_movie_data, get_show_data, get_episode_name
 
 def format_file_size(size):
@@ -762,7 +763,7 @@ def display_missing_files(conn, destination_folder, cleanup_missing=False):
                             if os.path.islink(potential_new_path):
                                 try:
                                     # Check if the symlink points to our source file
-                                    link_target = os.readlink(potential_new_path)
+                                    link_target = get_symlink_target_path(potential_new_path)
                                     # Use improved normalization for both paths
                                     normalized_link_target = normalize_file_path(link_target)
                                     normalized_source_path = normalize_file_path(source_path)
@@ -939,7 +940,7 @@ def _check_path_exists_batch(paths_batch):
             existing_paths.append(path)
             if os.path.islink(path):
                 try:
-                    link_target = normalize_file_path(os.readlink(path))
+                    link_target = normalize_file_path(get_symlink_target_path(path))
                     reverse_index[link_target] = path
                 except (OSError, IOError):
                     pass
@@ -1179,7 +1180,7 @@ def populate_missing_file_sizes(cursor, conn):
                 try:
                     # For symlinks, get the size of the target file
                     if os.path.islink(dest_path):
-                        target = os.readlink(dest_path)
+                        target = get_symlink_target_path(dest_path)
                         if os.path.exists(target):
                             file_size = os.path.getsize(target)
                     else:
@@ -1243,7 +1244,7 @@ def populate_all_file_sizes(conn):
                     try:
                         # For symlinks, get the size of the target file
                         if os.path.islink(dest_path):
-                            target = os.readlink(dest_path)
+                            target = get_symlink_target_path(dest_path)
                             if os.path.exists(target):
                                 file_size = os.path.getsize(target)
                         else:

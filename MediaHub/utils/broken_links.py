@@ -3,6 +3,7 @@ import sys
 import logging
 from dotenv import load_dotenv
 from MediaHub.utils.env_creator import get_env_file_path
+from MediaHub.utils.file_utils import get_symlink_target_path
 
 def setup_logging(log_folder):
     if not os.path.exists(log_folder):
@@ -38,7 +39,8 @@ def find_broken_symlinks(directory):
         for name in files + dirs:
             path = os.path.join(root, name)
             if os.path.islink(path):
-                if not os.path.exists(os.readlink(path)):
+                target = get_symlink_target_path(path)
+                if not target or not os.path.exists(target):
                     broken_symlinks.append(path)
     return broken_symlinks
 

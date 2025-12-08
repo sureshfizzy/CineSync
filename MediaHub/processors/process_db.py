@@ -12,6 +12,7 @@ from functools import wraps
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.env_creator import get_env_file_path
+from MediaHub.utils.file_utils import get_symlink_target_path
 
 # Load environment variables
 db_env_path = get_env_file_path()
@@ -46,7 +47,7 @@ def update_file_index(dest_dir):
             for file in files:
                 full_path = os.path.join(root, file)
                 is_symlink = os.path.islink(full_path)
-                target_path = os.readlink(full_path) if is_symlink else None
+                target_path = get_symlink_target_path(full_path) if is_symlink else None
                 last_modified = os.path.getmtime(full_path)
 
                 cursor.execute('''

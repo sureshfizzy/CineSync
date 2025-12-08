@@ -3,6 +3,7 @@ import os
 import json
 import builtins
 import unicodedata
+import platform
 from typing import Tuple, Optional, Dict, List, Set, Union, Any
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
@@ -497,6 +498,32 @@ def resolve_symlink_to_source(file_path: str) -> str:
     except (OSError, IOError) as e:
         log_message(f"Error resolving symlink {file_path}: {e}", level="WARNING")
         return file_path
+
+def get_symlink_target_path(link_path: str) -> str:
+    """
+    Return an absolute, normalized target path for a symlink, resolving relative targets.
+    """
+    if not link_path:
+        return ""
+
+    try:
+        target = os.readlink(link_path)
+
+        if not os.path.isabs(target):
+            target = os.path.abspath(os.path.join(os.path.dirname(link_path), target))
+        else:
+            target = os.path.abspath(target)
+
+        target = os.path.normpath(target)
+
+        if platform.system() == "Windows":
+            if len(target) >= 2 and target[1] == ':':
+                target = target[0].upper() + target[1:]
+
+        return target
+    except (OSError, IOError) as e:
+        log_message(f"Failed to read symlink target for {link_path}: {e}", level="DEBUG")
+        return ""
 
 def get_source_directory_from_symlink(file_path: str) -> str:
     """
