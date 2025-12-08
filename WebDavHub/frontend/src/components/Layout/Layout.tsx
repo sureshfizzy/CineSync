@@ -159,7 +159,10 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
             bgcolor: 'background.default',
             p: { xs: 1, sm: 1.5, md: 2 },
             overflowY: 'auto',
+            overflowX: 'hidden',
             height: '100%',
+            maxWidth: '100vw',
+            boxSizing: 'border-box',
           }}
         >
           <Outlet context={contextValue} />

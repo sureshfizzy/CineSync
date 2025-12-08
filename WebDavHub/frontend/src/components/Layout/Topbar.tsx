@@ -103,12 +103,12 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
     >
       <Toolbar sx={{
         minHeight: { xs: 56, sm: 64 },
-        px: { xs: 2, sm: 3 },
+        px: { xs: 0, sm: 3 },
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.3, sm: 2 } }}>
           {onMenuClick && (
             <IconButton
               color="inherit"
@@ -151,8 +151,8 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: { xs: 36, sm: 40 },
-                height: { xs: 36, sm: 40 },
+                width: { xs: 26, sm: 40 },
+                height: { xs: 26, sm: 40 },
                 borderRadius: 2,
                 overflow: 'hidden',
                 boxShadow: `0 2px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
@@ -175,13 +175,13 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
               />
             </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
               <Typography
                 variant="h6"
                 sx={{
                   fontWeight: 600,
                   color: 'text.primary',
-                  fontSize: { xs: '1.25rem', sm: '1.35rem' },
+                  fontSize: { xs: '1.15rem', sm: '1.35rem' },
                   letterSpacing: '-0.01em',
                   fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                 }}
@@ -193,14 +193,14 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                 size="small"
                 variant="outlined"
                 sx={{
-                  height: 20,
-                  fontSize: '0.65rem',
+                  height: 18,
+                  fontSize: { xs: '0.6rem', sm: '0.65rem' },
                   fontWeight: 600,
                   color: theme.palette.primary.main,
                   borderColor: theme.palette.primary.main,
                   bgcolor: alpha(theme.palette.primary.main, 0.08),
                   '& .MuiChip-label': {
-                    px: 0.75
+                    px: 0.65
                   },
                   '&:hover': {
                     bgcolor: alpha(theme.palette.primary.main, 0.12),

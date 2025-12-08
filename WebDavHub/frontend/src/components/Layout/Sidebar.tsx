@@ -9,6 +9,7 @@ import WifiIcon from '@mui/icons-material/Wifi';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import GridViewIcon from '@mui/icons-material/GridView';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { NavLink } from 'react-router-dom';
 import axios from 'axios';
 
@@ -18,6 +19,7 @@ const navItems = [
   { text: 'File Operations', icon: <AssignmentIcon />, path: '/file-operations' },
   { text: 'Favorites', icon: <StarIcon />, path: '/favorites' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+  { text: 'About', icon: <InfoOutlinedIcon />, path: '/about' },
 ];
 
 interface SidebarProps {

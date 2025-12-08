@@ -16,6 +16,7 @@ import DashboardSwitcher from './components/Dashboard/DashboardSwitcher';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
+import About from './pages/About';
 import FileOperations from './pages/FileOperations';
 import { getTheme } from './theme';
 
@@ -283,6 +284,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="file-operations" element={<FileOperations />} />
         <Route path="media/*" element={<MediaDetails />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="about" element={<About />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -332,6 +334,8 @@ function App() {
           // Ensure fixed positioning works properly
           transform: 'none !important',
           WebkitTransform: 'none !important',
+          overflowX: 'hidden',
+          maxWidth: '100vw',
         },
         body: {
           minHeight: '100vh',
@@ -340,6 +344,8 @@ function App() {
           // Override any transforms that might interfere with fixed positioning
           transform: 'none !important',
           WebkitTransform: 'none !important',
+          overflowX: 'hidden',
+          maxWidth: '100vw',
         }
       }} />
       <ConfigProvider>
