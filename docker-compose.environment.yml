@@ -90,7 +90,7 @@ services:
       - RENAME_ENABLED=${RENAME_ENABLED:-true}
       - MEDIAINFO_PARSER=${MEDIAINFO_PARSER:-false}
       - RENAME_TAGS=${RENAME_TAGS:-Resolution}
-      - MEDIAINFO_RADARR_TAGS=${MEDIAINFO_RADARR_TAGS:-{Movie Title} ({Release Year}) {Quality Full}}
+      - MEDIAINFO_RADARR_TAGS=${MEDIAINFO_RADARR_TAGS:-{Movie Title} ({Release Year}) - {Quality Full}}
       - MEDIAINFO_SONARR_STANDARD_EPISODE_FORMAT=${MEDIAINFO_SONARR_STANDARD_EPISODE_FORMAT:-{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}}
       - MEDIAINFO_SONARR_DAILY_EPISODE_FORMAT=${MEDIAINFO_SONARR_DAILY_EPISODE_FORMAT:-{Series Title} - {Air-Date} - {Episode Title} {Quality Full}}
       - MEDIAINFO_SONARR_ANIME_EPISODE_FORMAT=${MEDIAINFO_SONARR_ANIME_EPISODE_FORMAT:-{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}}

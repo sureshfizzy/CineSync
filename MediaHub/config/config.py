@@ -212,13 +212,21 @@ def custom_sports_layout():
     return token
 
 def get_mediainfo_radarr_tags():
-    """Get mediainfo radarr tags from environment variable and properly clean them"""
+    """Get mediainfo radarr tags from environment variable and keep separators"""
     tags_env = os.getenv('MEDIAINFO_RADARR_TAGS', '')
     if not tags_env:
         return []
 
-    tags = re.findall(r'\{([^{}]+)\}', tags_env)
-    return [tag.strip() for tag in tags]
+    tag_pattern = r'(?P<prefix>[\-._]?)\s*\{(?P<tag>[^{}]+)\}'
+    tags = []
+
+    for match in re.finditer(tag_pattern, tags_env):
+        prefix = match.group('prefix') or ''
+        tag = match.group('tag').strip()
+        if tag:
+            tags.append(f"{prefix}{tag}")
+
+    return tags
 
 def get_sonarr_standard_episode_format():
     """Get Sonarr standard episode format from environment variable"""
