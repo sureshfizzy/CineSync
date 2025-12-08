@@ -7,9 +7,56 @@ import platform
 from typing import Tuple, Optional, Dict, List, Set, Union, Any
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import *
 from MediaHub.utils.parser.extractor import extract_all_metadata
 from MediaHub.utils.parser.parse_anime import is_anime_filename
+
+# ============================================================================
+# Country code normalization
+# ============================================================================
+def normalize_country_code(code: Optional[str]) -> Optional[str]:
+    """
+    Normalize country codes/names to ISO alpha-2 with common aliases.
+    Handles legacy/variant entries (e.g., SU -> RU).
+    """
+    if not code:
+        return None
+    name_to_iso = {
+        'UNITED STATES': 'US', 'USA': 'US', 'US': 'US',
+        'UNITED KINGDOM': 'GB', 'UK': 'GB', 'GREAT BRITAIN': 'GB', 'BRITAIN': 'GB', 'ENGLAND': 'GB',
+        'CANADA': 'CA', 'AUSTRALIA': 'AU',
+        'GERMANY': 'DE', 'FRANCE': 'FR', 'SPAIN': 'ES', 'ITALY': 'IT',
+        'RUSSIA': 'RU', 'RUSSIAN FEDERATION': 'RU', 'SOVIET UNION': 'RU', 'SU': 'RU',
+        'INDIA': 'IN', 'CHINA': 'CN', 'JAPAN': 'JP',
+        'SOUTH KOREA': 'KR', 'KOREA': 'KR', 'NORTH KOREA': 'KP',
+        'BRAZIL': 'BR', 'MEXICO': 'MX',
+    }
+    val = str(code).strip().upper()
+    if len(val) == 2:
+        return name_to_iso.get(val, val)
+    return name_to_iso.get(val, val)
+
+def map_lang_to_locale(lang_code_or_locale: Optional[str]) -> Optional[str]:
+    """
+    Map short language codes to TMDB-friendly locales when possible (e.g., ru -> ru-RU).
+    Falls back to the provided value if no mapping exists.
+    """
+    if not lang_code_or_locale:
+        return None
+    val = str(lang_code_or_locale).strip()
+    if len(val) <= 2:
+        lc = val.lower()
+        mapping = {
+            'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE',
+            'it': 'it-IT', 'pt': 'pt-PT', 'pt-br': 'pt-BR',
+            'ru': 'ru-RU', 'ja': 'ja-JP', 'ko': 'ko-KR', 'zh': 'zh-CN',
+            'ar': 'ar-SA', 'hi': 'hi-IN', 'pl': 'pl-PL', 'cs': 'cs-CZ',
+            'tr': 'tr-TR', 'el': 'el-GR', 'he': 'he-IL', 'nl': 'nl-NL',
+            'sv': 'sv-SE', 'no': 'no-NO', 'da': 'da-DK', 'fi': 'fi-FI',
+            'id': 'id-ID', 'vi': 'vi-VN', 'ro': 'ro-RO', 'ms': 'ms-MY',
+            'th': 'th-TH', 'hu': 'hu-HU',
+        }
+        return mapping.get(lc, val)
+    return val
 
 # Cache for parsed metadata to avoid redundant parsing
 _metadata_cache = {}
@@ -689,6 +736,7 @@ def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
         return True
 
     try:
+        from MediaHub.config.config import get_4k_movie_extras_size_limit, get_movie_extras_size_limit, get_4k_show_extras_size_limit, get_show_extras_size_limit
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
         is_4k = ('2160' in file or

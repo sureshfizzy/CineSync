@@ -6,6 +6,7 @@ import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.env_creator import get_env_file_path
+from MediaHub.utils.file_utils import normalize_country_code
 
 # Beta features that are currently disabled (HARDCODED)
 BETA_DISABLED_FEATURES = {
@@ -301,6 +302,28 @@ def is_kids_separation_enabled():
 
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()
+
+def is_original_title_enabled():
+    """Check if original title usage is enabled for movies/shows/episodes."""
+    return os.getenv('ORIGINAL_TITLE', 'false').lower() in ['true', '1', 'yes']
+
+def get_original_title_countries():
+    """
+    Get list of production countries for original title usage.
+    Accepts either ISO 3166-1 alpha-2 codes or common country names.
+    """
+    value = os.getenv('ORIGINAL_TITLE_COUNTRIES', '')
+    if not value:
+        return []
+    countries = []
+    for token in value.split(','):
+        raw = token.strip()
+        if not raw:
+            continue
+        iso = normalize_country_code(raw)
+        if iso:
+            countries.append(iso)
+    return countries
 
 def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""

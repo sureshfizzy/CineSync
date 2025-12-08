@@ -78,6 +78,8 @@ services:
       # TMDb/IMDB Configuration
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - LANGUAGE=${LANGUAGE:-English}
+      - ORIGINAL_TITLE=${ORIGINAL_TITLE:-false}
+      - ORIGINAL_TITLE_COUNTRIES=${ORIGINAL_TITLE_COUNTRIES:-}
       - ANIME_SCAN=${ANIME_SCAN:-false}
       - JELLYFIN_ID_FORMAT=${JELLYFIN_ID_FORMAT:-false}
       - TMDB_FOLDER_ID=${TMDB_FOLDER_ID:-false}

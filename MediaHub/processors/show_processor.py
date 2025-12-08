@@ -10,7 +10,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
 from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data
+from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data, select_title_by_origin
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 
@@ -377,7 +377,26 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 episode_num = episode_number_match.group(1)
                 show_data = get_show_data(show_id)
                 total_episodes_from_show = show_data.get('total_episodes', 0) if show_data else 0
-                episode_result = get_episode_name(show_id, int(season_number), int(episode_num), total_episodes=total_episodes_from_show)
+                episode_lang_override = None
+                apply_lang_override = False
+                if show_data:
+                    episode_lang_override = show_data.get('original_language_code') or show_data.get('original_language')
+                    prod_countries = show_data.get('production_countries') or show_data.get('origin_countries') or []
+                    selected_show_name = select_title_by_origin(
+                        show_data.get('name'),
+                        show_data.get('original_title'),
+                        prod_countries
+                    )
+                    original_title_used = bool(show_data.get('original_title')) and selected_show_name == show_data.get('original_title')
+                    apply_lang_override = original_title_used
+                episode_result = get_episode_name(
+                    show_id,
+                    int(season_number),
+                    int(episode_num),
+                    total_episodes=total_episodes_from_show,
+                    language_override_iso=episode_lang_override,
+                    apply_language_override=apply_lang_override
+                )
                 if episode_result and len(episode_result) >= 5:
                     episode_name_result, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
                 else:

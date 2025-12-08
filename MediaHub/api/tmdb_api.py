@@ -522,8 +522,17 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 process_tmdb_covers(tmdb_id, movie_data)
 
             # Process movie data
-            original_movie_name = movie_data['title']
-            movie_name = format_movie_name(original_movie_name)
+            production_countries = [
+                country.get('iso_3166_1')
+                for country in movie_data.get('production_countries', [])
+                if country.get('iso_3166_1')
+            ]
+            chosen_name = select_title_by_origin(
+                movie_data.get('title'),
+                movie_data.get('original_title'),
+                production_countries
+            )
+            movie_name = format_movie_name(chosen_name)
             release_date = movie_data.get('release_date', '')
             movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
 
@@ -712,12 +721,19 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
             if isinstance(manual_result, dict) and manual_result.get('redirect_to_movie'):
                 chosen_movie = manual_result.get('movie_data')
                 if chosen_movie:
-                    movie_name = format_movie_name(chosen_movie.get('title'))
+                    movie_data = get_movie_data(chosen_movie.get('id'))
+                    production_countries = movie_data.get('production_countries', []) if movie_data else []
+                    chosen_name = select_title_by_origin(
+                        chosen_movie.get('title'),
+                        movie_data.get('original_title') if movie_data else None,
+                        production_countries
+                    )
+                    movie_name = format_movie_name(chosen_name)
                     release_date = chosen_movie.get('release_date')
                     movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
                     tmdb_id = chosen_movie.get('id')
 
-                    movie_data = get_movie_data(tmdb_id)
+                    movie_data = movie_data or get_movie_data(tmdb_id)
                     imdb_id = movie_data.get('imdb_id', '')
                     is_anime_genre = movie_data.get('is_anime_genre', False)
                     is_kids_content = movie_data.get('is_kids_content', False)
@@ -771,14 +787,20 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
                 break
 
     if chosen_movie:
-        original_movie_name = chosen_movie.get('title')
-        movie_name = format_movie_name(original_movie_name)
+        movie_data = get_movie_data(chosen_movie.get('id'))
+        production_countries = movie_data.get('production_countries', []) if movie_data else []
+        chosen_name = select_title_by_origin(
+            chosen_movie.get('title'),
+            movie_data.get('original_title') if movie_data else chosen_movie.get('original_title'),
+            production_countries
+        )
+        movie_name = format_movie_name(chosen_name)
         release_date = chosen_movie.get('release_date')
         movie_year = release_date.split('-')[0] if release_date else "Unknown Year"
         tmdb_id = chosen_movie.get('id')
         process_tmdb_covers(tmdb_id, chosen_movie)
 
-        movie_data = get_movie_data(tmdb_id)
+        movie_data = movie_data or get_movie_data(tmdb_id)
         imdb_id = movie_data.get('imdb_id', '')
         is_anime_genre = movie_data.get('is_anime_genre', False)
         is_kids_content = movie_data.get('is_kids_content', False)

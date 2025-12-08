@@ -240,6 +240,8 @@ func getConfigDefinitions() []ConfigValue {
 		// TMDb/IMDB Configuration
 		{Key: "TMDB_API_KEY", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Your TMDb API key for accessing TMDb services"},
 		{Key: "LANGUAGE", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Language for TMDb API requests"},
+		{Key: "ORIGINAL_TITLE", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Use original titles for movies/shows/episodes when enabled"},
+		{Key: "ORIGINAL_TITLE_COUNTRIES", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Comma-separated countries (names or ISO codes) that should use original titles"},
 		{Key: "ANIME_SCAN", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable anime-specific scanning"},
 		{Key: "TMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable TMDb folder ID functionality"},
 		{Key: "IMDB_FOLDER_ID", Category: "TMDb/IMDB Configuration", Type: "boolean", Required: false, Description: "Enable or disable IMDb folder ID functionality"},

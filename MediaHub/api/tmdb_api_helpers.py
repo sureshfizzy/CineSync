@@ -12,8 +12,8 @@ from functools import wraps
 from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, is_jellyfin_id_format_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
+from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, is_jellyfin_id_format_enabled, tmdb_api_language, is_original_title_enabled, get_original_title_countries
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename, normalize_country_code, map_lang_to_locale
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.api.media_cover import process_tmdb_covers
@@ -31,6 +31,35 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 # Get API Language
 preferred_language = tmdb_api_language()
 language_iso = get_iso_code(preferred_language)
+
+def select_title_by_origin(local_title, original_title, production_countries):
+    """
+    Pick original title when enabled and country matches configured list.
+    production_countries: list of ISO codes from TMDB (e.g., ['RU', 'SU']).
+    """
+    if not is_original_title_enabled():
+        return local_title
+
+    configured = set(get_original_title_countries())
+    if not configured:
+        return local_title
+
+    if not production_countries:
+        return local_title
+
+    normalized = []
+    for code in production_countries:
+        if not code:
+            continue
+        normalized_code = normalize_country_code(code)
+        if normalized_code:
+            normalized.append(normalized_code)
+
+    match = any(code in configured for code in normalized)
+    if match and original_title:
+        return original_title
+
+    return local_title
 
 # Create a session for connection pooling and better performance
 session = requests.Session()
@@ -100,6 +129,13 @@ def get_movie_data(tmdb_id):
         # Extract release dates for content rating
         release_dates_data = data.get('release_dates', {})
 
+        # Production countries (ISO 3166-1 alpha-2)
+        production_countries = [
+            country.get('iso_3166_1')
+            for country in data.get('production_countries', [])
+            if country.get('iso_3166_1')
+        ]
+
         # Check for family-friendly content
         has_family_indicators = has_family_content_indicators(data, keywords_data, 'movie')
 
@@ -153,7 +189,8 @@ def get_movie_data(tmdb_id):
             'status': status.lower(),
             'release_date': release_date,
             'genres': genres_str,
-            'certification': rating or ''
+            'certification': rating or '',
+            'production_countries': production_countries,
         }
 
     except requests.exceptions.RequestException as e:
@@ -195,6 +232,14 @@ def get_show_data(tmdb_id):
 
         # Extract content ratings
         content_ratings_data = data.get('content_ratings', {})
+
+        # Origin/production countries
+        origin_countries = data.get('origin_country', []) or []
+        production_countries = [
+            country.get('iso_3166_1')
+            for country in data.get('production_countries', [])
+            if country.get('iso_3166_1')
+        ]
 
         # Check for family-friendly content
         has_family_indicators = has_family_content_indicators(data, keywords_data, 'tv')
@@ -241,6 +286,7 @@ def get_show_data(tmdb_id):
             'is_anime_genre': is_anime_genre,
             'is_kids_content': is_kids_content,
             'original_language': original_language_name,
+            'original_language_code': language,
             'seasons': data.get('seasons', []),
             'name': data.get('name', ''),
             'overview': overview,
@@ -251,7 +297,9 @@ def get_show_data(tmdb_id):
             'last_air_date': last_air_date,
             'genres': genres_str,
             'certification': rating or '',
-            'total_episodes': total_episodes
+            'total_episodes': total_episodes,
+            'origin_countries': origin_countries,
+            'production_countries': production_countries,
         }
 
     except requests.exceptions.RequestException as e:
@@ -302,7 +350,7 @@ def clean_episode_title(title):
 
     return cleaned
 
-def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False, total_episodes=None):
+def get_episode_name(show_id, season_number, episode_number, max_length=60, force_anidb_style=False, total_episodes=None, language_override_iso=None, apply_language_override=False):
     """
     Fetch the episode name from TMDb API for the given show, season, and episode number.
     For anime, use AniDB-style mapping for absolute episode numbers across seasons.
@@ -327,13 +375,18 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
 
     # Check if we need to force AniDB-style mapping
     if season_number is None or force_anidb_style:
-        log_message(f"Season number is None or AniDB-style mapping forced - using absolute episode mapping", level="INFO")
+        log_message(f"Season number is None or AniDB-style mapping forced - using absolute episode mapping", level="DEBUG")
         return map_absolute_episode(show_id, episode_number, api_key, max_length, total_episodes)
 
     # First try direct episode lookup
     try:
         url = f"https://api.themoviedb.org/3/tv/{show_id}/season/{season_number}/episode/{episode_number}"
-        params = {'api_key': api_key, 'language': language_iso}
+        lang_param = map_lang_to_locale(language_override_iso) if apply_language_override and language_override_iso else map_lang_to_locale(language_iso) or language_iso
+        log_message(
+            f"Episode fetch language: override='{language_override_iso if apply_language_override else None}' resolved='{lang_param}' base='{language_iso}' apply_override={apply_language_override}",
+            level="DEBUG"
+        )
+        params = {'api_key': api_key, 'language': lang_param}
         response = session.get(url, params=params, timeout=10)
         response.raise_for_status()
         episode_data = response.json()
@@ -840,7 +893,7 @@ def display_available_episodes(episodes):
     log_message(f"- Enter episode number (1-{len(episodes)})", level="INFO")
     log_message("- Press Enter to skip episode selection", level="INFO")
 
-def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
+def handle_episode_selection(tmdb_id, season_number, auto_select, api_key, language_override_iso=None, apply_language_override=False):
     """
     Handle the episode selection process for a given season.
 
@@ -866,11 +919,7 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
 
     if auto_select:
         new_episode_number = 1
-        log_message(f"Auto-selected episode 1 of season {season_number}", level="INFO")
-
-        episode_info = get_episode_name(tmdb_id, season_number, new_episode_number)
-        if episode_info and episode_info[0]:
-            log_message(f"Auto-selected: {episode_info[0]}", level="INFO")
+        episode_info = get_episode_name(tmdb_id, season_number, new_episode_number, language_override_iso=language_override_iso, apply_language_override=apply_language_override)
         return new_episode_number
 
     display_available_episodes(episodes)
@@ -880,11 +929,7 @@ def handle_episode_selection(tmdb_id, season_number, auto_select, api_key):
         if ep_choice and int(ep_choice) in range(1, len(episodes) + 1):
             new_episode_number = int(ep_choice)
 
-            episode_info = get_episode_name(tmdb_id, season_number, new_episode_number)
-            if episode_info and episode_info[0]:
-                log_message(f"Selected: {episode_info[0]}", level="INFO")
-            else:
-                log_message(f"Selected: S{season_number:02d}E{new_episode_number:02d}", level="INFO")
+            episode_info = get_episode_name(tmdb_id, season_number, new_episode_number, language_override_iso=language_override_iso, apply_language_override=apply_language_override)
             return new_episode_number
     except ValueError:
         pass
@@ -910,13 +955,6 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     """
     # Get the original show name
     original_show_name = chosen_show.get('name')
-
-    # Helper function to format show name for the OS
-    if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
-        show_name = sanitize_windows_filename(original_show_name)
-    else:
-        show_name = original_show_name
-
     first_air_date = chosen_show.get('first_air_date')
     show_year = first_air_date.split('-')[0] if first_air_date else "Unknown Year"
     tmdb_id = chosen_show.get('id') if not tmdb_id else tmdb_id
@@ -927,6 +965,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     is_anime_genre = tv_data.get('is_anime_genre', False)
     is_kids_content = tv_data.get('is_kids_content', False)
     original_language = tv_data.get('original_language')
+    original_language_code = tv_data.get('original_language_code')
     overview = tv_data.get('overview', '')
     runtime = tv_data.get('runtime', 0)
     original_title = tv_data.get('original_title', '')
@@ -935,6 +974,23 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     last_air_date = tv_data.get('last_air_date', '')
     genres = tv_data.get('genres', '[]')
     certification = tv_data.get('certification', '')
+    origin_countries = tv_data.get('origin_countries', []) or []
+    production_countries = tv_data.get('production_countries', []) or []
+
+    # Determine display name with original-title rules
+    selected_show_name = select_title_by_origin(
+        original_show_name,
+        original_title,
+        production_countries or origin_countries
+    )
+    original_title_used = bool(original_title) and selected_show_name == original_title
+    episode_language_override = original_language_code if original_title_used else None
+
+    # Helper function to format show name for the OS
+    if platform.system().lower() == 'windows' or platform.system().lower() == 'nt':
+        show_name = sanitize_windows_filename(selected_show_name)
+    else:
+        show_name = selected_show_name
 
     # Handle season and episode selection
     new_season_number = None
@@ -1004,7 +1060,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
         log_message(f"Anime show with episode number but no season number - forcing AniDB-style mapping", level="DEBUG")
         if tmdb_id and new_episode_number:
             episode_info, mapped_season, mapped_episode, episode_title, total_episodes = get_episode_name(
-                tmdb_id, None, new_episode_number, force_anidb_style=True
+                tmdb_id, None, new_episode_number, force_anidb_style=True, language_override_iso=episode_language_override, apply_language_override=original_title_used
             )
             if mapped_season is not None:
                 new_season_number = mapped_season
@@ -1043,7 +1099,14 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     # Handle episode selection if we have a season but no episode
     if new_season_number is not None and new_episode_number is None:
         log_message(f"Season {new_season_number} selected", level="INFO")
-        new_episode_number = handle_episode_selection(tmdb_id, new_season_number, auto_select, api_key)
+        new_episode_number = handle_episode_selection(
+            tmdb_id,
+            new_season_number,
+            auto_select,
+            api_key,
+            language_override_iso=episode_language_override,
+            apply_language_override=original_title_used
+        )
 
     # Build the proper name with all available external IDs
     imdb_id = external_ids.get('imdb_id', '')
