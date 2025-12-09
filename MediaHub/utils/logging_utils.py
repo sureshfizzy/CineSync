@@ -91,7 +91,10 @@ LOG_FILE = os.path.join(LOG_DIR, f"{UTC_NOW}.log")
 # Remove old logs
 for file in os.listdir(LOG_DIR):
     if file.endswith('.log') and file != os.path.basename(LOG_FILE):
-        os.remove(os.path.join(LOG_DIR, file))
+        try:
+            os.remove(os.path.join(LOG_DIR, file))
+        except (PermissionError, FileNotFoundError, OSError):
+            pass
 
 # Check if running on Windows
 IS_WINDOWS = platform.system().lower() == 'windows'
