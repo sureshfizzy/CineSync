@@ -1,6 +1,6 @@
 import React from 'react';
-import { TextField, Switch, FormControlLabel, Select, MenuItem, Chip, Box, Typography, InputAdornment, IconButton, Tooltip, Stack, Alert } from '@mui/material';
-import { Info, Visibility, VisibilityOff, Science, Lock, Help } from '@mui/icons-material';
+import { TextField, Switch, FormControlLabel, Select, MenuItem, Chip, Box, Typography, InputAdornment, IconButton, Tooltip, Stack } from '@mui/material';
+import { Info, Visibility, VisibilityOff, Lock, Help } from '@mui/icons-material';
 
 export interface FormFieldProps {
   label: string;
@@ -16,9 +16,7 @@ export interface FormFieldProps {
   multiline?: boolean;
   rows?: number;
   beta?: boolean;
-  disabledReason?: string;
   locked?: boolean;
-  lockedBy?: string;
   showTokenHelper?: boolean;
   onTokenHelperClick?: () => void;
 }
@@ -37,9 +35,7 @@ export const FormField: React.FC<FormFieldProps> = ({
   multiline = false,
   rows = 1,
   beta = false,
-  disabledReason,
   locked = false,
-  lockedBy,
   showTokenHelper = false,
   onTokenHelperClick,
 }) => {
@@ -53,6 +49,7 @@ export const FormField: React.FC<FormFieldProps> = ({
     switch (type) {
       case 'boolean':
         return (
+          <Stack spacing={0.5} alignItems="flex-start">
           <FormControlLabel
             control={
               <Switch
@@ -62,8 +59,14 @@ export const FormField: React.FC<FormFieldProps> = ({
                 color="primary"
               />
             }
-            label=""
+              label={label}
           />
+            {(description || error) && (
+              <Typography variant="caption" color={error ? 'error' : 'text.secondary'}>
+                {error || description}
+              </Typography>
+            )}
+          </Stack>
         );
 
       case 'integer':
@@ -76,7 +79,7 @@ export const FormField: React.FC<FormFieldProps> = ({
             placeholder={placeholder}
             disabled={isFieldDisabled}
             error={!!error}
-            helperText={error}
+            helperText={error || description}
             variant="outlined"
             size="small"
             InputProps={{
@@ -96,7 +99,7 @@ export const FormField: React.FC<FormFieldProps> = ({
               placeholder={placeholder || "Comma-separated values"}
               disabled={isFieldDisabled}
               error={!!error}
-              helperText={error || "Enter values separated by commas"}
+            helperText={error || description || "Enter values separated by commas"}
               variant="outlined"
               size="small"
               multiline={multiline}
@@ -131,7 +134,7 @@ export const FormField: React.FC<FormFieldProps> = ({
             placeholder={placeholder}
             disabled={isFieldDisabled}
             error={!!error}
-            helperText={error}
+            helperText={error || description}
             variant="outlined"
             size="small"
             InputProps={{
@@ -182,7 +185,7 @@ export const FormField: React.FC<FormFieldProps> = ({
             placeholder={placeholder}
             disabled={isFieldDisabled}
             error={!!error}
-            helperText={error}
+            helperText={error || description}
             variant="outlined"
             size="small"
             multiline={multiline}
@@ -220,65 +223,15 @@ export const FormField: React.FC<FormFieldProps> = ({
   return (
     <Box sx={{ mb: 3 }}>
       {/* Locked Alert */}
-      {locked && (
-        <Alert
-          severity="error"
-          icon={<Lock />}
-          sx={{
-            mb: 2,
-            '& .MuiAlert-message': {
-              fontSize: '0.875rem'
-            }
-          }}
-        >
-          <Stack spacing={0.5}>
-            <Typography variant="body2" fontWeight={600}>
-              Configuration Locked
-            </Typography>
-            <Typography variant="body2">
-              This setting has been locked by {lockedBy || 'Administrator'} and cannot be modified by users.
-            </Typography>
-          </Stack>
-        </Alert>
-      )}
+      {/* Locked banner removed per request; rely on chip + disabled state */}
 
       {/* Beta/Disabled Alert */}
-      {(beta || disabled) && !locked && (
-        <Alert
-          severity={disabled ? "warning" : "info"}
-          icon={<Science />}
-          sx={{
-            mb: 2,
-            '& .MuiAlert-message': {
-              fontSize: '0.875rem'
-            }
-          }}
-        >
-          {disabled ? (
-            <Stack spacing={0.5}>
-              <Typography variant="body2" fontWeight={600}>
-                Beta Feature - Currently Disabled
-              </Typography>
-              <Typography variant="body2">
-                {disabledReason || "This feature is in beta testing and is currently disabled for usage. It will be available in a future release."}
-              </Typography>
-            </Stack>
-          ) : (
-            <Stack spacing={0.5}>
-              <Typography variant="body2" fontWeight={600}>
-                Beta Feature
-              </Typography>
-              <Typography variant="body2">
-                This feature is currently in beta testing. Use with caution.
-              </Typography>
-            </Stack>
-          )}
-        </Alert>
-      )}
+      {/* Removed visual message; rely on disable state only */}
 
-      {label && (
+      {(label || locked) && (
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
           <Stack direction="row" alignItems="center" spacing={1}>
+            {label && (
             <Typography
               variant="subtitle2"
               sx={{
@@ -294,6 +247,7 @@ export const FormField: React.FC<FormFieldProps> = ({
                 </Typography>
               )}
             </Typography>
+            )}
             {locked && (
               <Chip
                 label="LOCKED"

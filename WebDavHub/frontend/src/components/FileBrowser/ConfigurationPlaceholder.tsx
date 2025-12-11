@@ -16,6 +16,10 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
   const navigate = useNavigate();
 
   const handleGoToSettings = () => {
+    navigate('/setupwizard');
+  };
+
+  const handleAdvancedSettings = () => {
     navigate('/settings');
   };
 
@@ -151,7 +155,10 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
               fontWeight: 600,
             }}
           >
-            Go to Settings
+            Launch Setup
+          </Button>
+          <Button variant="outlined" onClick={handleAdvancedSettings} size="large">
+            Open Settings
           </Button>
         </Stack>
 

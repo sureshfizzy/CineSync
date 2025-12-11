@@ -127,7 +127,8 @@ func main() {
 
 	// Initialize logger early so we can use it for warnings
 	logger.Init()
-	env.LoadEnv()
+	if err := env.LoadEnv(); err != nil {
+	}
 
 	// Initialize spoofing configuration
 	if err := spoofing.InitializeConfig(); err != nil {
@@ -136,15 +137,14 @@ func main() {
 	}
 
 	rootDir := env.GetString("DESTINATION_DIR", "")
+	configMissing := false
 	if rootDir == "" {
-		logger.Warn("DESTINATION_DIR not set in .env file")
-		logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-		logger.Warn("Consider setting DESTINATION_DIR in your .env file")
-		rootDir = "."
+		configMissing = true
+		logger.Info("DESTINATION_DIR not set. Awaiting configuration via /setup; server will start in limited mode.")
 	}
 
 	// Define command-line flags with fallbacks from .env or hardcoded defaults
-	dir := flag.String("dir", env.GetString("DESTINATION_DIR", "."), "Directory to serve over WebDAV")
+	dir := flag.String("dir", env.GetString("DESTINATION_DIR", ""), "Directory to serve over WebDAV")
 	port := flag.Int("port", env.GetInt("CINESYNC_API_PORT", 8082), "Port to run the CineSync API server on")
 	ip := flag.String("ip", env.GetString("CINESYNC_IP", "0.0.0.0"), "IP address to bind the server to")
 	flag.Parse()
@@ -152,29 +152,33 @@ func main() {
 	logger.Debug("Starting with configuration: dir=%s, port=%d, ip=%s", *dir, *port, *ip)
 
 	// Ensure the directory exists and is accessible
-	if _, err := os.Stat(*dir); os.IsNotExist(err) {
+	if *dir != "" {
+		if _, err := os.Stat(*dir); os.IsNotExist(err) {
 		// Check if this is a placeholder path
 		if *dir == "/path/to/destination" || *dir == "\\path\\to\\destination" {
-			logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
-			logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-			logger.Warn("Please set DESTINATION_DIR to a valid path in your .env file")
-			*dir = "."
-		} else {
-			// Try to create the directory
-			logger.Info("Directory %s does not exist, attempting to create it", *dir)
-			if err := os.MkdirAll(*dir, 0755); err != nil {
-				logger.Warn("Failed to create directory %s: %v", *dir, err)
-				logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-				logger.Warn("Please ensure DESTINATION_DIR is set to a valid path in your .env file")
-				*dir = "."
+				logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
+				configMissing = true
 			} else {
-				logger.Info("Successfully created directory: %s", *dir)
+				logger.Info("Directory %s does not exist, attempting to create it", *dir)
+				if err := os.MkdirAll(*dir, 0755); err != nil {
+					logger.Warn("Failed to create directory %s: %v", *dir, err)
+					configMissing = true
+				} else {
+					logger.Info("Successfully created directory: %s", *dir)
+				}
 			}
 		}
 	}
 
+	if configMissing && *dir == "" {
+		logger.Warn("No valid DESTINATION_DIR set. Running in configuration-only mode until setup is completed.")
+	}
+
 	// Always use DESTINATION_DIR as the effective root
 	effectiveRootDir := *dir
+	if effectiveRootDir == "" {
+		effectiveRootDir = "."
+	}
 
 	// Initialize the server
 	srv := server.NewServer(effectiveRootDir)
@@ -192,7 +196,11 @@ func main() {
 	api.InitializeImageCache(projectDir)
 
 	// Initialize job manager
-	api.InitJobManager()
+	if !configMissing {
+		api.InitJobManager()
+	} else {
+		logger.Warn("Skipping job manager initialization until configuration is completed in /setup")
+	}
 
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
@@ -281,6 +289,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
+	apiMux.HandleFunc("/api/config/defaults", config.HandleGetDefaultConfig)
 	apiMux.HandleFunc("/api/restart", api.HandleRestart)
 
 	// Processing endpoints

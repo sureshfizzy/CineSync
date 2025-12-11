@@ -6,7 +6,6 @@ import urllib3
 import warnings
 import logging
 from dotenv import load_dotenv
-from MediaHub.utils.env_creator import get_env_file_path
 
 # Import unicodedata for Unicode normalization
 import unicodedata
@@ -60,8 +59,18 @@ warnings.filterwarnings("ignore", message="Connection pool is full, discarding c
 # Suppress specific urllib3 logging
 logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
+def _get_env_file_path():
+    if os.path.exists('/.dockerenv') or os.getenv('CONTAINER') == 'docker':
+        return '/app/db/.env'
+    cwd = os.getcwd()
+    basename = os.path.basename(cwd)
+    if basename in ('MediaHub', 'WebDavHub'):
+        parent = os.path.dirname(cwd)
+        return os.path.join(parent, 'db', '.env')
+    return os.path.join(cwd, 'db', '.env')
+
 # Load environment variables from .env file
-db_env_path = get_env_file_path()
+db_env_path = _get_env_file_path()
 load_dotenv(db_env_path)
 
 # Define log levels

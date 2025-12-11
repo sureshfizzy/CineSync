@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { getGlobalSSEInstanceSafe } from '../hooks/useCentralizedSSE';
 
@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   authEnabled: boolean;
+  refreshAuthEnabled: (withLoading?: boolean) => Promise<void>;
   user: { username: string } | null;
 }
 
@@ -76,7 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     // Add response interceptor to handle 401
     const respInterceptor = axios.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        const url = response.config?.url || '';
+        const method = (response.config?.method || '').toLowerCase();
+        if (method === 'post' && url.includes('/api/config/update-silent')) {
+          refreshAuthEnabled(false);
+        }
+        return response;
+      },
       (error) => {
         if (error.response && error.response.status === 401) {
           // Check if this is an endpoint where auth might be optional
@@ -111,47 +119,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    const checkAuthEnabled = async () => {
-      setLoading(true);
-      try {
-        const res = await axios.get('/api/auth/enabled');
-        setAuthEnabled(res.data.enabled);
-        if (!res.data.enabled) {
-          setIsAuthenticated(true);
-          setUser({ username: 'Guest' });
-          setLoading(false);
-          return;
-        }
-      } catch {
-        setAuthEnabled(true); // fallback to enabled if error
+  const refreshAuthEnabled = useCallback(async (withLoading = true) => {
+    if (withLoading) setLoading(true);
+    try {
+      const res = await axios.get('/api/auth/enabled');
+      const enabled = !!res.data?.enabled;
+      setAuthEnabled(enabled);
+
+      if (!enabled) {
+        setIsAuthenticated(true);
+        setUser({ username: 'Guest' });
+        if (withLoading) setLoading(false);
+        return;
       }
-      // If enabled, check JWT
-      const token = localStorage.getItem('cineSyncJWT');
-      if (token) {
-        try {
-          const meRes = await axios.get('/api/me', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          setUser(meRes.data);
-          setIsAuthenticated(true);
-          // Trigger SSE reconnection with existing token
-          triggerSSEReconnection();
-        } catch {
-          setIsAuthenticated(false);
-          setUser(null);
-          localStorage.removeItem('cineSyncJWT');
-          // Trigger SSE reconnection without token
-          triggerSSEReconnection();
-        }
-      } else {
+    } catch {
+      setAuthEnabled(true); // fallback to enabled if error
+    }
+
+    // If enabled, check JWT
+    const token = localStorage.getItem('cineSyncJWT');
+    if (token) {
+      try {
+        const meRes = await axios.get('/api/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUser(meRes.data);
+        setIsAuthenticated(true);
+        // Trigger SSE reconnection with existing token
+        triggerSSEReconnection();
+      } catch {
         setIsAuthenticated(false);
         setUser(null);
+        localStorage.removeItem('cineSyncJWT');
+        // Trigger SSE reconnection without token
+        triggerSSEReconnection();
       }
-      setLoading(false);
-    };
-    checkAuthEnabled();
+    } else {
+      setIsAuthenticated(false);
+      setUser(null);
+    }
+    if (withLoading) setLoading(false);
   }, []);
+
+  useEffect(() => {
+    refreshAuthEnabled(true);
+  }, [refreshAuthEnabled]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        refreshAuthEnabled(false);
+      }
+    };
+    window.addEventListener('focus', () => refreshAuthEnabled(false));
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', () => refreshAuthEnabled(false));
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [refreshAuthEnabled]);
 
   const login = async (username: string, password: string) => {
     setLoading(true);
@@ -190,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, login, logout, authEnabled, user }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, login, logout, authEnabled, refreshAuthEnabled, user }}>
       {children}
     </AuthContext.Provider>
   );

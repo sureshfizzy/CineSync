@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -168,6 +169,15 @@ func isMediaHubSettingLocked(key string) bool {
 		return setting.Locked
 	}
 	return false
+}
+
+// getLockedSettingValue returns the enforced value for a locked setting, if present
+func getLockedSettingValue(key string) (string, bool) {
+	lockData := loadClientLockedSettings()
+	if setting, exists := lockData.LockedSettings[key]; exists && setting.Locked {
+		return fmt.Sprintf("%v", setting.Value), true
+	}
+	return "", false
 }
 
 
@@ -368,22 +378,11 @@ func readEnvFile() (map[string]string, error) {
 
 	// Check if .env file exists
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
-		logger.Info(".env file not found at %s, creating from environment variables", envPath)
+		return readFromEnvironment(), nil
+	}
 
-		// Create .env file from environment variables
-		if createErr := createEnvFileFromEnvironment(); createErr != nil {
-			logger.Error("Failed to create .env file: %v", createErr)
-			return readFromEnvironment(), nil
-		}
-	} else {
-		if fileInfo, err := os.Stat(envPath); err == nil && fileInfo.Size() == 0 {
-			logger.Info(".env file exists but is empty at %s, populating from environment variables", envPath)
-
-			if createErr := createEnvFileFromEnvironment(); createErr != nil {
-				logger.Error("Failed to populate .env file: %v", createErr)
-				return readFromEnvironment(), nil
-			}
-		}
+	if fileInfo, err := os.Stat(envPath); err == nil && fileInfo.Size() == 0 {
+		return readFromEnvironment(), nil
 	}
 
 	file, err := os.Open(envPath)
@@ -439,7 +438,6 @@ func readEnvFile() (map[string]string, error) {
 
 // readFromEnvironment reads configuration directly from environment variables
 func readFromEnvironment() map[string]string {
-	logger.Info("Reading configuration directly from environment variables")
 
 	definitions := getConfigDefinitions()
 	envVars := make(map[string]string)
@@ -455,7 +453,6 @@ func readFromEnvironment() map[string]string {
 		}
 	}
 
-	logger.Info("Read %d configuration values from environment", len(envVars))
 	return envVars
 }
 
@@ -463,9 +460,38 @@ func readFromEnvironment() map[string]string {
 func writeEnvFile(envVars map[string]string) error {
 	envPath := getEnvFilePath()
 
-	// Read the original file to preserve comments and structure
 	originalFile, err := os.Open(envPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			file, createErr := os.Create(envPath)
+			if createErr != nil {
+				return fmt.Errorf("failed to create .env file: %v", createErr)
+			}
+			defer file.Close()
+
+			for key, value := range envVars {
+				quotedValue := value
+				shouldQuote := strings.Contains(value, " ") ||
+					strings.Contains(value, "#") ||
+					strings.Contains(value, "\\") ||
+					strings.Contains(value, "{") ||
+					strings.Contains(value, "}") ||
+					value == ""
+
+				if shouldQuote {
+					quotedValue = fmt.Sprintf("\"%s\"", value)
+				}
+				if _, writeErr := file.WriteString(fmt.Sprintf("%s=%s\n", key, quotedValue)); writeErr != nil {
+					return fmt.Errorf("failed to write to new .env file: %v", writeErr)
+				}
+			}
+
+			if err := file.Sync(); err != nil {
+				return fmt.Errorf("failed to sync new .env file: %v", err)
+			}
+			return nil
+		}
+
 		return fmt.Errorf("failed to open .env file: %v", err)
 	}
 	defer originalFile.Close()
@@ -485,7 +511,7 @@ func writeEnvFile(envVars map[string]string) error {
 			continue
 		}
 
-		// If it's a key=value pair, check if we need to update it
+	// If it's a key=value pair, check if we need to update it
 		if strings.Contains(trimmedLine, "=") {
 			parts := strings.SplitN(trimmedLine, "=", 2)
 			if len(parts) == 2 {
@@ -641,6 +667,11 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 	for _, def := range definitions {
 		value := envVars[def.Key]
 		locked, lockedBy := isConfigLocked(def.Key)
+		if locked {
+			if lockedValue, ok := getLockedSettingValue(def.Key); ok {
+				value = lockedValue
+			}
+		}
 		configValues = append(configValues, ConfigValue{
 			Key:         def.Key,
 			Value:       value,
@@ -763,6 +794,45 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Configuration updated successfully"})
 }
 
+// HandleGetDefaultConfig reads defaults
+func HandleGetDefaultConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Resolve helper path
+	helperPath := filepath.Join("..", "MediaHub", "utils", "config_defaults.py")
+	if _, err := os.Stat(helperPath); err != nil {
+		logger.Warn("config_defaults.py not found at %s: %v", helperPath, err)
+		http.Error(w, "Defaults helper not found", http.StatusInternalServerError)
+		return
+	}
+
+	cmd := exec.Command("python", helperPath)
+	out, err := cmd.Output()
+	if err != nil {
+		logger.Error("Failed to run config_defaults.py: %v", err)
+		http.Error(w, "Failed to load defaults", http.StatusInternalServerError)
+		return
+	}
+
+	type helperResp struct {
+		Defaults map[string]string `json:"defaults"`
+	}
+	var resp helperResp
+	if err := json.Unmarshal(out, &resp); err != nil {
+		logger.Error("Failed to parse defaults output: %v", err)
+		http.Error(w, "Failed to parse defaults", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"defaults": resp.Defaults,
+		"status":   "success",
+	})
+}
 // HandleUpdateConfigSilent handles configuration updates without triggering SSE notifications
 func HandleUpdateConfigSilent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

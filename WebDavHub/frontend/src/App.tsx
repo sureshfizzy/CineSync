@@ -18,6 +18,7 @@ import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
 import About from './pages/About';
 import FileOperations from './pages/FileOperations';
+import SetupWizard from './pages/SetupWizard';
 import { getTheme } from './theme';
 
 function LoadingScreen() {
@@ -257,6 +258,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
 
   return (
     <Routes>
+      <Route path="/setupwizard" element={<SetupWizard />} />
       <Route
         path="/login"
         element={

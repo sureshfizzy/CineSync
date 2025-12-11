@@ -5,7 +5,6 @@ import requests
 import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.utils.file_utils import normalize_country_code
 
 # Beta features that are currently disabled (HARDCODED)
@@ -105,8 +104,18 @@ def get_env_float(key, default):
     except (ValueError, TypeError):
         return default
 
+def _get_env_file_path():
+    if os.path.exists('/.dockerenv') or os.getenv('CONTAINER') == 'docker':
+        return '/app/db/.env'
+    cwd = os.getcwd()
+    basename = os.path.basename(cwd)
+    if basename in ('MediaHub', 'WebDavHub'):
+        parent = os.path.dirname(cwd)
+        return os.path.join(parent, 'db', '.env')
+    return os.path.join(cwd, 'db', '.env')
+
 # Load .env file
-dotenv_path = get_env_file_path()
+dotenv_path = _get_env_file_path()
 load_dotenv(dotenv_path)
 
 def get_directories():

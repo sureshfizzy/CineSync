@@ -52,7 +52,11 @@ interface RealDebridStatus {
   };
 }
 
-const RealDebridSettings: React.FC = () => {
+type RealDebridSettingsProps = {
+  stackInfoOnTop?: boolean;
+};
+
+const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [config, setConfig] = useState<RealDebridConfig>({
@@ -85,6 +89,14 @@ const RealDebridSettings: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
   const [testDialog, setTestDialog] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
+  const isApiKeyPresent = !!(config.apiKey && config.apiKey.trim());
+  const isMainEnabled = !!config.enabled;
+  const isApiConnected =
+    isMainEnabled &&
+    isApiKeyPresent &&
+    !!status?.apiStatus?.valid &&
+    !!status?.apiKeySet &&
+    !!status?.apiStatus?.username;
 
   const showMessage = (message: string, severity: 'success' | 'error' | 'warning' = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -242,9 +254,7 @@ const RealDebridSettings: React.FC = () => {
     );
   }
 
-  return (
-    <Box sx={{ pb: { xs: 2, md: 4 } }}>
-      {/* Header */}
+  const header = (
       <Box sx={{ mb: { xs: 2, md: 3 } }}>
         <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
           <Box
@@ -277,28 +287,32 @@ const RealDebridSettings: React.FC = () => {
             sx={{
               mb: { xs: 2, md: 3 },
               border: '1px solid',
-              borderColor: status.valid ? 'success.main' : 'error.main',
-              bgcolor: status.valid ? alpha(theme.palette.success.main, 0.05) : alpha(theme.palette.error.main, 0.05),
+            borderColor: isApiConnected ? 'success.main' : isMainEnabled ? 'warning.main' : 'divider',
+            bgcolor: isApiConnected
+              ? alpha(theme.palette.success.main, 0.05)
+              : isMainEnabled
+              ? alpha(theme.palette.warning.main, 0.06)
+              : alpha(theme.palette.divider, 0.06),
             }}
           >
             <CardContent sx={{ py: { xs: 1.5, md: 2 }, '&:last-child': { pb: { xs: 1.5, md: 2 } } }}>
               <Stack direction="row" alignItems="flex-start" spacing={2}>
-                {status.valid ? (
+              {isApiConnected ? (
                   <CheckCircle sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 ) : (
-                  <Error sx={{ color: 'error.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
+                <Error sx={{ color: isMainEnabled ? 'warning.main' : 'text.secondary', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600" sx={{ color: status.valid ? 'success.main' : 'error.main' }}>
-                    {status.valid ? 'Connected' : 'Configuration Issues'}
+                <Typography
+                  variant={isMobile ? 'subtitle1' : 'h6'}
+                  fontWeight="600"
+                  sx={{ color: isApiConnected ? 'success.main' : isMainEnabled ? 'warning.main' : 'text.secondary' }}
+                >
+                  {isApiConnected ? 'Connected' : isMainEnabled ? 'Not configured yet' : 'Disabled'}
                   </Typography>
-                  {status.apiStatus && (
+                {status.apiStatus && isApiConnected && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-                      {status.apiStatus.valid ? (
-                        `${status.apiStatus.username} (${status.apiStatus.type})`
-                      ) : (
-                        status.apiStatus.error
-                      )}
+                    {status.apiStatus.username} ({status.apiStatus.type})
                     </Typography>
                   )}
                   {Array.isArray(status.errors) && status.errors.length > 0 && (
@@ -320,10 +334,125 @@ const RealDebridSettings: React.FC = () => {
           </Card>
         )}
       </Box>
+  );
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 2, md: 3 } }}>
-        {/* Main Configuration */}
+  const infoPanel = (
         <Box>
+      <Stack spacing={{ xs: 2, md: 3 }}>
+        {/* Account Status */}
+        {!isApiConnected ? (
+          <Card>
+            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+              <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="700" sx={{ mb: 1 }}>
+                Account not connected
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Enter a valid API key and enable Real-Debrid to see account details here.
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : status?.apiStatus ? (
+          <Card>
+            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                <Speed sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 } }} />
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                  Account
+                </Typography>
+              </Stack>
+              <Stack spacing={1.5}>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Username
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.username || 'N/A'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Type
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.type || 'N/A'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Points
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.points?.toLocaleString() || 'N/A'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Expires
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.expiration || 'N/A'}</Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* HTTP DAV Status */}
+        {status?.httpDavStatus ? (
+          <Card>
+            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                <CloudDownload
+                  sx={{
+                    color: status.httpDavStatus.connected ? 'success.main' : 'error.main',
+                    fontSize: { xs: 20, md: 24 },
+                  }}
+                />
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                  HTTP DAV
+                </Typography>
+              </Stack>
+              <Stack spacing={1.5}>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Status
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    fontSize={{ xs: '0.875rem', md: '0.875rem' }}
+                    color={status.httpDavStatus.connected ? 'success.main' : 'error.main'}
+                  >
+                    {status.httpDavStatus.connected ? 'Connected' : 'Disconnected'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Credentials
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                    {status.httpDavStatus.userIdSet && status.httpDavStatus.passwordSet ? 'Configured' : 'Not Configured'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Base URL
+                  </Typography>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} sx={{ wordBreak: 'break-all' }}>
+                    https://dav.real-debrid.com/
+                  </Typography>
+                </Box>
+                {status.httpDavStatus.connectionError && (
+                  <Box>
+                    <Typography variant="caption" fontWeight="600" color="error.main" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Error
+                    </Typography>
+                    <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color="error.main">
+                      {status.httpDavStatus.connectionError}
+                    </Typography>
+                  </Box>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+
+  const mainConfig = (
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 2, md: 3 } }}>
@@ -355,6 +484,14 @@ const RealDebridSettings: React.FC = () => {
                   }
                 />
 
+          {!config.enabled && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Turn on Real-Debrid to enter API key, tokens, and DAV settings.
+            </Alert>
+          )}
+
+          {config.enabled && (
+            <Stack spacing={{ xs: 2.5, md: 3 }}>
                 <Divider />
 
                 {/* API Key */}
@@ -748,6 +885,8 @@ const RealDebridSettings: React.FC = () => {
                 {/* WebDAV Path removed per spec */}
 
                 {/* Auto Connect - removed (always enabled on server) */}
+            </Stack>
+          )}
               </Stack>
 
               {/* Action Buttons */}
@@ -787,104 +926,24 @@ const RealDebridSettings: React.FC = () => {
               </Stack>
             </CardContent>
           </Card>
-        </Box>
+  );
 
-        {/* Information Panel (Account only) */}
-        <Box>
+  const body = stackInfoOnTop ? (
           <Stack spacing={{ xs: 2, md: 3 }}>
+      {infoPanel}
+      {mainConfig}
+                  </Stack>
+  ) : (
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 2, md: 3 } }}>
+      <Box>{mainConfig}</Box>
+      <Box>{infoPanel}</Box>
+                    </Box>
+  );
 
-            {/* Account Status */}
-            {status?.apiStatus && (
-              <Card>
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
-                    <Speed sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 } }} />
-                    <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Account</Typography>
-                  </Stack>
-                  <Stack spacing={1.5}>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Username
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.username || 'N/A'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Type
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.type || 'N/A'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Points
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.points?.toLocaleString() || 'N/A'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Expires
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.expiration || 'N/A'}</Typography>
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* HTTP DAV Status */}
-            {status?.httpDavStatus && (
-              <Card>
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
-                    <CloudDownload sx={{ 
-                      color: status.httpDavStatus.connected ? 'success.main' : 'error.main', 
-                      fontSize: { xs: 20, md: 24 } 
-                    }} />
-                    <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">HTTP DAV</Typography>
-                  </Stack>
-                  <Stack spacing={1.5}>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Status
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} 
-                        color={status.httpDavStatus.connected ? 'success.main' : 'error.main'}>
-                        {status.httpDavStatus.connected ? 'Connected' : 'Disconnected'}
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Credentials
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
-                        {status.httpDavStatus.userIdSet && status.httpDavStatus.passwordSet ? 'Configured' : 'Not Configured'}
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Base URL
-                      </Typography>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} sx={{ wordBreak: 'break-all' }}>
-                        https://dav.real-debrid.com/
-                      </Typography>
-                    </Box>
-                    {status.httpDavStatus.connectionError && (
-                      <Box>
-                        <Typography variant="caption" fontWeight="600" color="error.main" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                          Error
-                        </Typography>
-                        <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color="error.main">
-                          {status.httpDavStatus.connectionError}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
-          </Stack>
-        </Box>
-      </Box>
+  return (
+    <Box sx={{ pb: { xs: 2, md: 4 } }}>
+      {header}
+      {body}
 
       {/* Test Connection Dialog */}
       <Dialog

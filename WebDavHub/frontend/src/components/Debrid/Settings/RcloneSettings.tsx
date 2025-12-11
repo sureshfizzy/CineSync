@@ -56,7 +56,11 @@ interface RcloneStatus {
   waitingReason?: string;
 }
 
-const RcloneSettings: React.FC = () => {
+type RcloneSettingsProps = {
+  stackInfoOnTop?: boolean;
+};
+
+const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [config, setConfig] = useState<RcloneConfig>({
@@ -354,9 +358,7 @@ const RcloneSettings: React.FC = () => {
     );
   }
 
-  return (
-    <Box sx={{ pb: { xs: 2, md: 4 }, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
-      {/* Header */}
+  const header = (
       <Box sx={{ mb: { xs: 1.5, md: 3 } }}>
         <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
           <Box
@@ -432,10 +434,56 @@ const RcloneSettings: React.FC = () => {
           </Card>
         )}
       </Box>
+  );
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 1.5, md: 3 } }}>
+  const infoPanel = (
+    <Box>
+      <Stack spacing={{ xs: 1.5, md: 3 }}>
+        {/* Windows Info */}
+        {navigator.platform.toLowerCase().includes('win') && (
+          <Card>
+            <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                <Science sx={{ color: 'info.main', fontSize: { xs: 20, md: 24 } }} />
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Windows Requirements</Typography>
+              </Stack>
+              <Stack spacing={1.5}>
+                <Box>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                    <strong>WinFsp Required:</strong> Install WinFsp from <a href="https://github.com/winfsp/winfsp/releases" target="_blank" rel="noopener noreferrer">GitHub</a> to enable FUSE filesystem support.
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                    <strong>Mount Paths:</strong> Use drive letters (Z:\) or full paths (C:\mounts\realdebrid). Avoid using existing directories.
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                    <strong>Administrator:</strong> Running as administrator may be required for some mount operations.
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        )}
+      </Stack>
+    </Box>
+  );
+
+  const bodyWithGrid = (
+    <Box
+      sx={{
+        display: 'grid',
+        gap: { xs: 1.5, md: 3 },
+        gridTemplateColumns: stackInfoOnTop ? '1fr' : { xs: '1fr', md: '2fr 1fr' },
+        gridTemplateAreas: stackInfoOnTop
+          ? `"info" "main"`
+          : { xs: `"main" "info"`, md: `"main info"` },
+      }}
+    >
         {/* Main Configuration */}
-        <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+      <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden', gridArea: 'main' }}>
           <Card sx={{ width: '100%', maxWidth: '100%' }}>
             <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 3 } }}>
@@ -1170,40 +1218,14 @@ const RcloneSettings: React.FC = () => {
         </Box>
 
         {/* Information Panel */}
-        <Box>
-          <Stack spacing={{ xs: 1.5, md: 3 }}>
-            {/* Windows Info */}
-            {navigator.platform.toLowerCase().includes('win') && (
-              <Card>
-                <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
-                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
-                    <Science sx={{ color: 'info.main', fontSize: { xs: 20, md: 24 } }} />
-                    <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Windows Requirements</Typography>
-                  </Stack>
-                  <Stack spacing={1.5}>
-                    <Box>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
-                        <strong>WinFsp Required:</strong> Install WinFsp from <a href="https://github.com/winfsp/winfsp/releases" target="_blank" rel="noopener noreferrer">GitHub</a> to enable FUSE filesystem support.
-                      </Typography>
+      <Box sx={{ gridArea: 'info' }}>{infoPanel}</Box>
                     </Box>
-                    <Box>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
-                        <strong>Mount Paths:</strong> Use drive letters (Z:\) or full paths (C:\mounts\realdebrid). Avoid using existing directories.
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
-                        <strong>Administrator:</strong> Running as administrator may be required for some mount operations.
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
+  );
 
-        </Stack>
-      </Box>
-      </Box>
+  return (
+    <Box sx={{ pb: { xs: 2, md: 4 }, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+      {header}
+      {bodyWithGrid}
 
       {/* Snackbar */}
       <Snackbar
