@@ -4,25 +4,29 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { MediaDetailsData, SeasonFolderInfo } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchEpisodesFromTmdb } from '../api/tmdbApi';
+import FileActionMenu from '../FileBrowser/FileActionMenu';
 
 interface SeasonListProps {
   data: MediaDetailsData;
   seasonFolders: SeasonFolderInfo[];
-  setSeasonDialogOpen: (open: boolean) => void;
-  setSelectedSeason: (season: any) => void;
-  setSelectedSeasonFolder: (folder: SeasonFolderInfo | null) => void;
+  handleViewDetails: any;
+  fetchSeasonFolders: any;
+  handleDeleted: any;
+  handleError: any;
   isArrDashboardContext?: boolean;
 }
 
 const SeasonList: React.FC<SeasonListProps> = ({
   data,
   seasonFolders,
-  setSeasonDialogOpen,
-  setSelectedSeason,
-  setSelectedSeasonFolder,
+  handleViewDetails,
+  fetchSeasonFolders,
+  handleDeleted,
+  handleError,
   isArrDashboardContext = false,
 }) => {
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
+  const [expandedEpisodes, setExpandedEpisodes] = useState<Set<string>>(new Set());
   const [episodesData, setEpisodesData] = useState<Map<number, any[]>>(new Map());
   const [loadingEpisodes, setLoadingEpisodes] = useState<Set<number>>(new Set());
   const theme = useTheme();
@@ -47,6 +51,19 @@ const SeasonList: React.FC<SeasonListProps> = ({
         return newSet;
       });
     }
+  };
+
+  const toggleEpisodeExpansion = (seasonNumber: number, episodeNumber: number) => {
+    const key = `${seasonNumber}-${episodeNumber}`;
+    setExpandedEpisodes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   // Function to toggle season expansion
@@ -76,7 +93,10 @@ const SeasonList: React.FC<SeasonListProps> = ({
           <Typography variant="h6" fontWeight={600} gutterBottom>Seasons</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <AnimatePresence>
-              {data.seasons.filter(s => s.season_number > 0).map((season: any, idx: number) => {
+              {[...data.seasons]
+                .filter(s => s.season_number > 0)
+                .sort((a, b) => b.season_number - a.season_number)
+                .map((season: any, idx: number) => {
                 const folder = seasonFolders.find(f => f.seasonNumber === season.season_number);
                 const availableCount = folder ? folder.episodes.length : 0;
                 const totalCount = season.episode_count || (season.episodes ? season.episodes.length : 0);
@@ -103,20 +123,16 @@ const SeasonList: React.FC<SeasonListProps> = ({
                       sx={{ 
                         p: 2, 
                         borderRadius: 2, 
-                        cursor: (folder && !isArrDashboardContext) ? 'pointer' : 'default', 
+                        cursor: isArrDashboardContext ? 'pointer' : 'default', 
                         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', 
                         '&:hover': { 
                           boxShadow: 6, 
                           bgcolor: 'action.hover',
-                          transform: (folder && !isArrDashboardContext) ? 'translateY(-2px)' : 'none'
+                          transform: isArrDashboardContext ? 'translateY(-2px)' : 'none'
                         } 
                       }}
                       onClick={() => {
-                        if (folder && !isArrDashboardContext) {
-                          setSelectedSeason(season);
-                          setSelectedSeasonFolder(folder);
-                          setSeasonDialogOpen(true);
-                        } else if (isArrDashboardContext) {
+                        if (isArrDashboardContext) {
                           toggleSeasonExpansion(season.season_number);
                         }
                       }}
@@ -193,77 +209,125 @@ const SeasonList: React.FC<SeasonListProps> = ({
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                 {episodesData.get(season.season_number)?.map((episode: any) => {
                                   const isAvailable = isEpisodeAvailable(season.season_number, episode.episode_number);
+                                  const episodeFile = folder?.episodes.find(ep => ep.episodeNumber === episode.episode_number);
                                   return (
-                                    <Box
-                                      key={episode.id}
-                                      sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 2,
-                                        p: 1.5,
-                                        borderRadius: 1,
-                                        bgcolor: alpha(theme.palette.background.paper, 0.3),
-                                        border: '1px solid',
-                                        borderColor: alpha(theme.palette.divider, 0.1),
-                                        transition: 'all 0.2s ease',
-                                        '&:hover': {
-                                          bgcolor: alpha(theme.palette.background.paper, 0.6),
-                                          transform: 'translateX(4px)'
-                                        }
-                                      }}
-                                    >
-                                      {/* Availability Dot */}
+                                    <React.Fragment key={episode.id}>
                                       <Box
                                         sx={{
-                                          width: 8,
-                                          height: 8,
-                                          borderRadius: '50%',
-                                          bgcolor: isAvailable ? 'success.main' : 'warning.main',
-                                          boxShadow: isAvailable 
-                                            ? '0 0 8px rgba(76, 175, 80, 0.4)' 
-                                            : '0 0 8px rgba(255, 152, 0, 0.4)',
-                                          flexShrink: 0
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 2,
+                                          p: 1.5,
+                                          borderRadius: 1,
+                                          bgcolor: alpha(theme.palette.background.paper, 0.3),
+                                          border: '1px solid',
+                                          borderColor: alpha(theme.palette.divider, 0.1),
+                                          transition: 'all 0.2s ease',
+                                          cursor: folder ? 'pointer' : 'default',
+                                          '&:hover': {
+                                            bgcolor: alpha(theme.palette.background.paper, 0.6),
+                                            transform: 'translateX(4px)'
+                                          }
                                         }}
-                                      />
-                                      
-                                      {/* Episode Number */}
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          fontWeight: 600,
-                                          minWidth: '40px',
-                                          color: 'text.secondary'
-                                        }}
-                                      >
-                                        E{episode.episode_number}
-                                      </Typography>
-                                      
-                                      {/* Episode Title */}
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          flex: 1,
-                                          fontWeight: isAvailable ? 500 : 400,
-                                          color: isAvailable ? 'text.primary' : 'text.secondary'
+                                        onClick={() => {
+                                          toggleEpisodeExpansion(season.season_number, episode.episode_number);
                                         }}
                                       >
-                                        {episode.name || `Episode ${episode.episode_number}`}
-                                      </Typography>
-                                      
-                                      {/* Air Date */}
-                                      {episode.air_date && (
-                                        <Typography
-                                          variant="caption"
+                                        {/* Availability Dot */}
+                                        <Box
                                           sx={{
-                                            color: 'text.secondary',
-                                            minWidth: '80px',
-                                            textAlign: 'right'
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: '50%',
+                                            bgcolor: isAvailable ? 'success.main' : 'warning.main',
+                                            boxShadow: isAvailable 
+                                              ? '0 0 8px rgba(76, 175, 80, 0.4)' 
+                                              : '0 0 8px rgba(255, 152, 0, 0.4)',
+                                            flexShrink: 0
+                                          }}
+                                        />
+                                        
+                                        {/* Episode Number */}
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            fontWeight: 600,
+                                            minWidth: '40px',
+                                            color: 'text.secondary'
                                           }}
                                         >
-                                          {new Date(episode.air_date).toLocaleDateString()}
+                                          E{episode.episode_number}
                                         </Typography>
+                                        
+                                        {/* Episode Title */}
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            flex: 1,
+                                            fontWeight: isAvailable ? 500 : 400,
+                                            color: isAvailable ? 'text.primary' : 'text.secondary'
+                                          }}
+                                        >
+                                          {episode.name || `Episode ${episode.episode_number}`}
+                                        </Typography>
+                                        
+                                        {/* Air Date */}
+                                        {episode.air_date && (
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              color: 'text.secondary',
+                                              minWidth: '80px',
+                                              textAlign: 'right'
+                                            }}
+                                          >
+                                            {new Date(episode.air_date).toLocaleDateString()}
+                                          </Typography>
+                                        )}
+
+                                        {episodeFile && (
+                                          <Box
+                                            sx={{ ml: 1 }}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <FileActionMenu
+                                              file={{
+                                                name: episodeFile.name,
+                                                type: 'file',
+                                                size: episodeFile.size,
+                                                modified: episodeFile.modified,
+                                                path: episodeFile.path,
+                                                sourcePath: episodeFile.path
+                                              }}
+                                              currentPath={folder ? `${folder.folderName}`.replace(/^\/+/, '') : ''}
+                                              onViewDetails={handleViewDetails}
+                                              onRename={fetchSeasonFolders}
+                                              onDeleted={handleDeleted}
+                                              onError={handleError}
+                                              onNavigateBack={undefined}
+                                            />
+                                          </Box>
+                                        )}
+                                      </Box>
+                                      {expandedEpisodes.has(`${season.season_number}-${episode.episode_number}`) && episode.overview && (
+                                        <Box
+                                          sx={{
+                                            mt: 1,
+                                            ml: 5,
+                                            mr: 1,
+                                            p: 1,
+                                            borderRadius: 1,
+                                            bgcolor: alpha(theme.palette.background.paper, 0.5),
+                                            border: '1px solid',
+                                            borderColor: alpha(theme.palette.divider, 0.1)
+                                          }}
+                                        >
+                                          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                                            {episode.overview}
+                                          </Typography>
+                                        </Box>
                                       )}
-                                    </Box>
+                                    </React.Fragment>
                                   );
                                 })}
                               </Box>
