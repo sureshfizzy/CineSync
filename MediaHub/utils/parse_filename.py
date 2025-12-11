@@ -293,6 +293,8 @@ def parse_filename(filename, include_tmdb_lookup=True):
             "is_repack": False,
             "is_proper": False,
             "hdr": None,
+            "air_date": None,
+            "is_daily": False,
             "tmdb_id": None,
             "imdb_id": None,
             "tvdb_id": None
@@ -334,7 +336,9 @@ def parse_filename(filename, include_tmdb_lookup=True):
             "hdr": None,
             "tmdb_id": None,
             "imdb_id": None,
-            "tvdb_id": None
+            "tvdb_id": None,
+            "air_date": None,
+            "is_daily": False
         }
 
 def parse_multiple_files(filenames, include_tmdb_lookup=True, max_workers=None):
@@ -386,7 +390,9 @@ def parse_multiple_files(filenames, include_tmdb_lookup=True, max_workers=None):
                     "hdr": None,
                     "tmdb_id": None,
                     "imdb_id": None,
-                    "tvdb_id": None
+                    "tvdb_id": None,
+                    "air_date": None,
+                    "is_daily": False
                 }
                 results.append(error_result)
 

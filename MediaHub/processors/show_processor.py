@@ -10,7 +10,7 @@ from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
 from MediaHub.utils.file_utils import *
 from MediaHub.utils.mediainfo import *
-from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data, select_title_by_origin
+from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data, select_title_by_origin, find_episode_by_air_date
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 
@@ -67,10 +67,19 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     quality_source = file_result.get('quality_source', '')
     quality_parts = [part for part in [resolution_info, quality_source] if part]
     quality = ' '.join(quality_parts) if quality_parts else None
+    air_date = file_result.get('air_date')
+    is_daily_show = file_result.get('is_daily', False)
+    if is_daily_show:
+        log_message(f"Daily show detected. Air date: {air_date}", level="INFO")
 
     # Store original parameters before they get overwritten by file parsing
     original_season_number = season_number
     original_episode_number = episode_number
+
+    if is_daily_show and original_season_number is None:
+        season_number = None
+    if is_daily_show and original_episode_number is None:
+        episode_number = None
 
     if file_result.get('episode_identifier') or file_result.get('season_number'):
         show_name = file_result.get('title', '')
@@ -141,6 +150,16 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         season_number = original_season_number
     if original_episode_number is not None:
         episode_number = original_episode_number
+
+    if is_daily_show and air_date:
+        if not episode_identifier:
+            episode_identifier = air_date
+        if original_season_number is None:
+            season_number = None
+        if original_episode_number is None:
+            episode_number = None
+        create_season_folder = True
+        episode_number = None
 
     # Initialize remaining variables
     new_name = file
@@ -231,6 +250,8 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Extract year from file first, then parent folder or show name for TMDb search
     year = file_result.get('year') or extract_year(parent_folder_name) or extract_year(show_name)
+    if is_daily_show and air_date and not year:
+        year = int(air_date.split('-')[0])
 
     # Set initial show_folder for processing
     show_folder = show_name
@@ -241,6 +262,17 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         proper_show_name = show_folder
     else:
         proper_show_name = show_folder
+
+    if is_daily_show and air_date:
+        daily_pattern = re.compile(r'(?:19|20)\d{2}[.\-_\s]?(?:0[1-9]|1[0-2])[.\-_\s]?(?:0[1-9]|[12]\d|3[01])')
+        match = daily_pattern.search(show_folder)
+        if match:
+            base_show = show_folder[:match.start()]
+            base_show = re.sub(r'[._]', ' ', base_show).strip(' -._')
+            if base_show:
+                show_folder = base_show
+                proper_show_name = base_show
+                show_name = base_show
     if not anime_result:
         # Check if TMDB ID is provided and determine if it's actually a movie (only with manual search)
         if tmdb_id and manual_search:
@@ -267,9 +299,11 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
         while retry_count < max_retries and result is None:
             retry_count += 1
-            log_message(f"TMDb show search attempt {retry_count}/{max_retries} for: {show_folder} ({year})", level="DEBUG")
+            log_message(f"TMDb show search attempt {retry_count}/{max_retries} for: {show_folder} ({search_year if 'search_year' in locals() else year})", level="DEBUG")
 
-            result = search_tv_show(show_folder, year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra, manual_search=manual_search)
+            search_year = None if is_daily_show else year
+
+            result = search_tv_show(show_folder, search_year, auto_select=auto_select, actual_dir=actual_dir, file=file, root=root, episode_match=episode_match, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, season_number=season_number, episode_number=episode_number, is_extra=is_extra, force_extra=force_extra, manual_search=manual_search)
 
             # Check if manual search selected a movie and redirect to movie processing
             if isinstance(result, dict) and result.get('redirect_to_movie'):
@@ -365,10 +399,32 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             else:
                 show_folder = re.sub(r' \{tmdb-[^}]+\}', '', show_folder)
 
+        if is_daily_show and air_date and tmdb_id:
+            airdate_match = find_episode_by_air_date(tmdb_id, air_date)
+            if airdate_match:
+                resolved_season, resolved_episode, resolved_title, total_eps = airdate_match
+                if resolved_season is not None:
+                    season_number = f"{int(resolved_season):02d}"
+                if resolved_episode is not None:
+                    episode_number = f"{int(resolved_episode):02d}"
+                if resolved_title:
+                    episode_title = resolved_title
+                if total_eps:
+                    total_episodes = total_eps
+                if season_number and episode_number:
+                    episode_identifier = f"S{season_number}E{episode_number}"
+                create_season_folder = True
+            else:
+                if season_number is None:
+                    season_number = "01"
+                if not episode_identifier:
+                    episode_identifier = air_date
+                create_season_folder = True
+
     show_folder = show_folder.replace('/', '')
 
     # Only retrieve episode data if not already provided by anime processor
-    if episode_identifier and not is_extra and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
+    if episode_identifier and not is_extra and not is_daily_show and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
         tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name) or re.search(r'\{tmdb-(\d+)\}', proper_show_name)
         if tmdb_id_match:
             show_id = tmdb_id_match.group(1)
@@ -589,6 +645,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
     else:
         if episode_identifier and rename_enabled and not is_extra:
             episode_name = episode_title
+            absolute_episode = anime_result.get('absolute_episode') if anime_result else None
 
             # Check if MEDIAINFO PARSER is enabled to determine naming strategy
             sonarr_naming_failed = False
@@ -600,19 +657,26 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                 if is_anime_genre or anime_result:
                     content_type = "anime"
                     # Get absolute episode number if available from anime result
-                    absolute_episode = anime_result.get('absolute_episode') if anime_result else None
                     show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
                     new_name = get_sonarr_episode_filename(
                         file, root, show_name_for_sonarr, show_name, season_number,
                         episode_number, episode_identifier, episode_name,
-                        content_type=content_type, absolute_episode=absolute_episode
+                        content_type=content_type, absolute_episode=absolute_episode, air_date=air_date
+                    )
+                elif is_daily_show:
+                    content_type = "daily"
+                    show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
+                    new_name = get_sonarr_episode_filename(
+                        file, root, show_name_for_sonarr, show_name, season_number,
+                        episode_number, episode_identifier, episode_name,
+                        content_type=content_type, air_date=air_date
                     )
                 else:
                     show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
                     new_name = get_sonarr_episode_filename(
                         file, root, show_name_for_sonarr, show_name, season_number,
                         episode_number, episode_identifier, episode_name,
-                        content_type=None
+                        content_type=content_type
                     )
 
                 # Check if Sonarr naming returned a basic legacy format
@@ -629,7 +693,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
             # Use processor legacy naming if mediainfo parser is disabled OR if Sonarr naming failed
             if not mediainfo_parser() or sonarr_naming_failed:
-                if episode_name:
+                if is_daily_show:
+                    if air_date:
+                        base_name = f"{show_name} - {air_date}"
+                    else:
+                        base_name = f"{show_name} - {episode_identifier}"
+                    if episode_name:
+                        base_name = f"{base_name} - {episode_name}"
+                    log_message(f"Renaming {file}", level="INFO")
+                elif episode_name:
                     base_name = f"{show_name} - S{season_number}E{episode_number} - {episode_name}".replace(' - -', ' -')
                     log_message(f"Renaming {file}", level="INFO")
                 else:

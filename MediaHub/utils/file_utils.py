@@ -315,11 +315,14 @@ def clean_query(query: str) -> Dict[str, Any]:
         elif metadata.episode:
             # If we have episode but no season, just use episode number
             result['episode_identifier'] = f"E{metadata.episode:02d}"
+        elif metadata.air_date:
+            # Date-based (daily) episodes use air-date as identifier
+            result['episode_identifier'] = metadata.air_date
         else:
             result['episode_identifier'] = None
 
-        result['show_name'] = result['title'] if metadata.season or metadata.episode else None
-        result['create_season_folder'] = bool(metadata.season or metadata.episode)
+        result['show_name'] = result['title'] if metadata.season or metadata.episode or metadata.is_daily else None
+        result['create_season_folder'] = bool(metadata.season or metadata.episode or metadata.is_daily)
         result['is_extra'] = metadata.is_extra
         result['dubbed'] = metadata.is_dubbed
         result['subbed'] = metadata.is_subbed

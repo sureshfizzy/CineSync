@@ -326,6 +326,25 @@ def check_anime_genre(genres, language):
 # HELPER FUNCTIONS
 # ============================================================================
 
+def _is_daily_query(query: str) -> bool:
+    """
+    Heuristic to detect date-based (daily) queries by looking for YYYY.MM.DD/variants.
+    """
+    if not query or not isinstance(query, str):
+        return False
+    date_pattern = re.compile(r'(?:19|20)\d{2}[.\-_\s]?(0[1-9]|1[0-2])[.\-_\s]?(0[1-9]|[12]\d|3[01])')
+    return bool(date_pattern.search(query))
+
+def _is_daily_context(original_query: str, file: str = None) -> bool:
+    """
+    Detect daily/date-based context using the original query or file path/filename.
+    """
+    if _is_daily_query(original_query):
+        return True
+    if file and _is_daily_query(file):
+        return True
+    return False
+
 def clean_episode_title(title):
     """
     Clean episode title by removing trailing/leading whitespace, normalizing spaces,
@@ -417,6 +436,62 @@ def get_episode_name(show_id, season_number, episode_number, max_length=60, forc
     except requests.exceptions.RequestException as e:
         log_message(f"TMDB episode fetch failed - Network error: {e}", level="ERROR")
         return None, None, None, None, total_episodes
+
+
+def find_episode_by_air_date(tmdb_id, air_date, language_override_iso=None):
+    """
+    Locate a season/episode by exact air_date for daily/date-based shows.
+
+    Returns:
+        tuple or None: (season_number, episode_number, episode_title, total_episodes)
+    """
+    if not tmdb_id or not air_date:
+        return None
+
+    try:
+        api_key = get_api_key()
+        if not api_key:
+            return None
+
+        lang_param = map_lang_to_locale(language_override_iso) if language_override_iso else map_lang_to_locale(language_iso) or language_iso
+
+        show_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}"
+        show_params = {"api_key": api_key, "language": lang_param}
+        show_resp = session.get(show_url, params=show_params, timeout=10)
+        show_resp.raise_for_status()
+        show_json = show_resp.json()
+        seasons = show_json.get('seasons', []) if show_json else []
+
+        seasons_sorted = sorted(seasons, key=lambda s: (s.get('season_number') == 0, s.get('season_number') or 0))
+
+        for season in seasons_sorted:
+            season_num = season.get('season_number')
+            if season_num is None:
+                continue
+
+            season_url = f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_num}"
+            season_params = {"api_key": api_key, "language": lang_param}
+            season_resp = session.get(season_url, params=season_params, timeout=10)
+            if season_resp.status_code == 404:
+                continue
+            season_resp.raise_for_status()
+            season_json = season_resp.json()
+            episodes = season_json.get('episodes', []) if season_json else []
+            total_eps = len(episodes)
+
+            for ep in episodes:
+                if ep.get('air_date') == air_date:
+                    return (
+                        season_num,
+                        ep.get('episode_number'),
+                        ep.get('name'),
+                        total_eps
+                    )
+
+        return None
+    except Exception as e:
+        log_message(f"find_episode_by_air_date failed: {e}", level="DEBUG")
+        return None
 
 def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60, total_episodes=None):
     """
@@ -1003,6 +1078,9 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     elif is_extra:
         log_message(f"Processing extra content file: {file}", level="INFO")
 
+    # Determine if this is a daily/date-based context
+    is_daily_context = _is_daily_context(original_query, file)
+
     # Check if we already have season_number and episode_number
     if season_number is not None and not is_extra:
         try:
@@ -1020,7 +1098,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Invalid episode number provided: {episode_number}", level="ERROR")
             new_episode_number = None
 
-    if new_season_number is None and original_query:
+    if new_season_number is None and original_query and not is_daily_context:
         seasons = tv_data.get('seasons', [])
         if seasons:
             original_query_lower = original_query.lower()
@@ -1070,7 +1148,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
                 log_message(f"AniDB-style mapping failed, proceeding with season selection", level="WARNING")
 
     # If we don't have season_number but need to select it
-    if new_season_number is None and not is_extra and (not episode_match or (episode_match and not season_number)):
+    if new_season_number is None and not is_extra and (not episode_match or (episode_match and not season_number)) and not is_daily_context:
         seasons = get_show_seasons(tmdb_id)
         if seasons:
             log_message(f"No season number identified, proceeding with season selection", level="INFO")
@@ -1097,7 +1175,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Note: Episode {new_episode_number} will be treated as absolute episode number", level="INFO")
 
     # Handle episode selection if we have a season but no episode
-    if new_season_number is not None and new_episode_number is None:
+    if new_season_number is not None and new_episode_number is None and not is_daily_context:
         log_message(f"Season {new_season_number} selected", level="INFO")
         new_episode_number = handle_episode_selection(
             tmdb_id,
