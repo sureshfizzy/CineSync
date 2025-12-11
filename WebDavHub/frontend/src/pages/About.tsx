@@ -17,6 +17,7 @@ import CloudDoneRoundedIcon from '@mui/icons-material/CloudDoneRounded';
 import LibraryBooksRoundedIcon from '@mui/icons-material/LibraryBooksRounded';
 import { Link as RouterLink } from 'react-router-dom';
 import logoImage from '../assets/logo.png';
+import packageJson from '../../package.json';
 
 type GitHubStats = {
   stars: number | null;
@@ -74,6 +75,7 @@ export default function About() {
   });
   const [techStack, setTechStack] = useState<TechItem[]>([]);
   const [contributors, setContributors] = useState<Contributor[]>([]);
+  const buildTag = packageJson.version ? `v${packageJson.version}` : 'dev-build';
 
   useEffect(() => {
     let cancelled = false;
@@ -199,6 +201,12 @@ export default function About() {
               color="primary"
               variant="outlined"
               icon={<EmojiEventsRoundedIcon fontSize="small" />}
+              sx={{ fontWeight: 700 }}
+            />
+            <Chip
+              label={`Build ${buildTag}`}
+              color="secondary"
+              variant="outlined"
               sx={{ fontWeight: 700 }}
             />
           </Stack>
