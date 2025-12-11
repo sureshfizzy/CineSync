@@ -5,16 +5,10 @@ import requests
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
-from dotenv import load_dotenv
 from urllib.parse import quote
 from logging.handlers import RotatingFileHandler
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
-from MediaHub.utils.env_creator import get_env_file_path
-
-# Load environment variables
-db_env_path = get_env_file_path()
-load_dotenv(db_env_path)
 
 def get_plex_library_sections() -> List[dict]:
     """Fetch Plex library sections."""

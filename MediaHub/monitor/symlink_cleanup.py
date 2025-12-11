@@ -9,11 +9,9 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.append(base_dir)
 
 # Local imports from MediaHub
-from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from threading import Event
-from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
@@ -22,10 +20,6 @@ from MediaHub.config.config import *
 from MediaHub.processors.db_utils import *
 from MediaHub.utils.plex_utils import *
 from MediaHub.processors.symlink_utils import *
-
-# Load .env file
-db_env_path = get_env_file_path()
-load_dotenv(db_env_path)
 
 def run_symlink_cleanup(dest_dir):
     symlinks_deleted = False

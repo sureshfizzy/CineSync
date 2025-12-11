@@ -9,14 +9,8 @@ import sqlite3
 from typing import List, Tuple, Optional
 from sqlite3 import DatabaseError
 from functools import wraps
-from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.utils.file_utils import get_symlink_target_path
-
-# Load environment variables
-db_env_path = get_env_file_path()
-load_dotenv(db_env_path)
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")
