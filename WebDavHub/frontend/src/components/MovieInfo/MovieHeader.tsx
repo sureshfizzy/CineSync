@@ -314,6 +314,20 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             {data.overview}
           </Typography>
 
+          {/* File Actions for the selected file */}
+          {selectedFile && (
+            <Box sx={{ mt: 2, mb: 3 }}>
+              <MovieFileActions
+                data={data}
+                folderName={folderName}
+                currentPath={currentPath}
+                placement="belowDescription"
+                fileInfo={selectedFile}
+                onNavigateBack={onNavigateBack}
+              />
+            </Box>
+          )}
+
           {/* Overview Section - Only show in ArrDashboard context */}
           {isArrDashboardContext && (
             <motion.div
@@ -448,21 +462,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                 </Box>
               </Box>
             </motion.div>
-          )}
-
-          {/* File Actions - Simple Button Layout - Hide in ArrDashboard context */}
-          {selectedFile && !isArrDashboardContext && (
-            <Box sx={{ mt: 2, mb: 1 }}>
-              <MovieFileActions
-                data={data}
-                folderName={folderName}
-                currentPath={currentPath}
-                placement="belowDescription"
-                fileInfo={selectedFile}
-                onNavigateBack={onNavigateBack}
-              />
-            </Box>
-          )}
+            )}
 
         </motion.div>
       </Box>

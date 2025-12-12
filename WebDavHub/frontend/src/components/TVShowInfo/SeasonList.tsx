@@ -293,11 +293,14 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                             <FileActionMenu
                                               file={{
                                                 name: episodeFile.name,
-                                                type: 'file',
+                                                type: 'file' as const,
                                                 size: episodeFile.size,
                                                 modified: episodeFile.modified,
                                                 path: episodeFile.path,
-                                                sourcePath: episodeFile.path
+                                                fullPath: episodeFile.path,
+                                                sourcePath: episodeFile.path,
+                                                webdavPath: episodeFile.path,
+                                                destinationPath: episodeFile.path
                                               }}
                                               currentPath={folder ? `${folder.folderName}`.replace(/^\/+/, '') : ''}
                                               onViewDetails={handleViewDetails}

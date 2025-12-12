@@ -39,18 +39,16 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
         <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1, textAlign: { xs: 'center', md: 'left' } }}>
           {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
         </Typography>
-        {!isArrDashboardContext && (
-          <ShowFileActions
-            data={data}
-            folderName={folderName}
-            currentPath={currentPath}
-            placement="belowTitle"
-            onRename={onRename}
-            onError={onError}
-            refreshTrigger={refreshTrigger}
-            onNavigateBack={onNavigateBack}
-          />
-        )}
+        <ShowFileActions
+          data={data}
+          folderName={folderName}
+          currentPath={currentPath}
+          placement="belowTitle"
+          onRename={onRename}
+          onError={onError}
+          refreshTrigger={refreshTrigger}
+          onNavigateBack={onNavigateBack}
+        />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' }, textAlign: { xs: 'center', md: 'left' } }}>
           {genres.map((g: { id: number; name: string }) => (
             <Chip key={g.id} label={g.name} color="primary" variant="outlined" />
@@ -70,6 +68,17 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           </Box>
         )}
         <Typography variant="body1" sx={{ mb: 2 }}>{data.overview}</Typography>
+
+        <ShowFileActions
+          data={data}
+          folderName={folderName}
+          currentPath={currentPath}
+          placement="belowDescription"
+          onRename={onRename}
+          onError={onError}
+          refreshTrigger={refreshTrigger}
+          onNavigateBack={onNavigateBack}
+        />
 
         {/* Overview Section - Only show in ArrDashboard context */}
         {isArrDashboardContext && (
@@ -167,18 +176,6 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           </motion.div>
         )}
 
-        {!isArrDashboardContext && (
-          <ShowFileActions
-            data={data}
-            folderName={folderName}
-            currentPath={currentPath}
-            placement="belowDescription"
-            onRename={onRename}
-            onError={onError}
-            refreshTrigger={refreshTrigger}
-            onNavigateBack={onNavigateBack}
-          />
-        )}
       </Box>
     </Box>
   );
