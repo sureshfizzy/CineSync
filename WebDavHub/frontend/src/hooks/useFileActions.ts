@@ -37,6 +37,7 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [moveErrorDialogOpen, setMoveErrorDialogOpen] = useState(false);
+  const [overwriteDialogOpen, setOverwriteDialogOpen] = useState(false);
   const [fileBeingMoved, setFileBeingMoved] = useState<FileItem | null>(null);
   const [lastMoveAttempt, setLastMoveAttempt] = useState<{targetPath: string} | null>(null);
 
@@ -151,7 +152,14 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
     setLastMoveAttempt(null);
   };
 
-  const handleMoveSubmit = async (targetPath: string) => {
+  const handleOverwriteDialogClose = () => {
+    setOverwriteDialogOpen(false);
+    setMoveError(null);
+    setMoveErrorDialogOpen(false);
+    setLastMoveAttempt(null);
+  };
+
+  const handleMoveSubmit = async (targetPath: string, overwrite: boolean = false) => {
     if (!fileBeingMoved) return;
     const file = fileBeingMoved;
 
@@ -162,7 +170,7 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
     const sourcePath = file.fullPath || file.sourcePath || joinPaths(currentPath, file.name);
 
     try {
-      await moveFile(sourcePath, targetPath);
+      await moveFile(sourcePath, targetPath, overwrite);
       
       // Update persistent file details DB
       await upsertFileDetail({
@@ -182,12 +190,29 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
       if (onDeleted) onDeleted();
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || error.response?.data || error.message || 'Failed to move file';
+      const isTargetExistsError = errorMessage.toLowerCase().includes('target already exists') || 
+                                 errorMessage.toLowerCase().includes('already exists');
+      
       setMoveError(errorMessage);
       setLastMoveAttempt({ targetPath });
       setMoveDialogOpen(false);
       setMoveLoading(false);
-      setMoveErrorDialogOpen(true);
+
+      if (isTargetExistsError) {
+        setMoveErrorDialogOpen(false);
+        setOverwriteDialogOpen(true);
+      } else {
+        setOverwriteDialogOpen(false);
+        setMoveErrorDialogOpen(true);
+      }
     }
+  };
+
+  const handleOverwriteMove = async () => {
+    if (!fileBeingMoved || !lastMoveAttempt) return;
+    setMoveError(null);
+    setOverwriteDialogOpen(false);
+    await handleMoveSubmit(lastMoveAttempt.targetPath, true);
   };
 
   const handleRenameDialogClose = () => {
@@ -229,11 +254,14 @@ export function useFileActions({ currentPath, onRename, onDeleted, onModify }: U
     moveLoading,
     moveError,
     moveErrorDialogOpen,
+    overwriteDialogOpen,
     fileBeingMoved,
     lastMoveAttempt,
     handleMoveClick,
     handleMoveSubmit,
+    handleOverwriteMove,
     handleMoveDialogClose,
     handleMoveErrorDialogClose,
+    handleOverwriteDialogClose,
   };
 }

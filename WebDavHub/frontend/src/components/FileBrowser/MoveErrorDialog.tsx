@@ -1,12 +1,11 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, IconButton, useTheme, Alert, Chip } from '@mui/material';
-import { Close as CloseIcon, ErrorOutline as ErrorIcon, DriveFileMove as MoveIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { Close as CloseIcon, ErrorOutline as ErrorIcon, DriveFileMove as MoveIcon } from '@mui/icons-material';
 
 interface MoveErrorDialogProps {
   open: boolean;
   onClose: () => void;
   onRetry?: () => void;
-  onOverwrite?: () => void;
   fileName: string;
   targetPath: string;
   errorMessage: string;
@@ -16,16 +15,11 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
   open,
   onClose,
   onRetry,
-  onOverwrite,
   fileName,
   targetPath,
   errorMessage
 }) => {
   const theme = useTheme();
-
-  const isTargetExistsError = errorMessage.toLowerCase().includes('target already exists') || 
-                             errorMessage.toLowerCase().includes('already exists');
-
   return (
     <Dialog
       open={open}
@@ -67,45 +61,24 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
 
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 3 }}>
-          {isTargetExistsError ? (
-            <Alert 
-              severity="warning" 
-              icon={<WarningIcon />}
-              sx={{ 
-                mb: 3,
-                borderRadius: 2,
-                '& .MuiAlert-message': {
-                  width: '100%'
-                }
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
-                File Already Exists
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                A file or folder with the same name already exists in the destination folder.
-              </Typography>
-            </Alert>
-          ) : (
-            <Alert 
-              severity="error" 
-              icon={<ErrorIcon />}
-              sx={{ 
-                mb: 3,
-                borderRadius: 2,
-                '& .MuiAlert-message': {
-                  width: '100%'
-                }
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
-                Move Operation Failed
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {errorMessage}
-              </Typography>
-            </Alert>
-          )}
+          <Alert 
+            severity="error" 
+            icon={<ErrorIcon />}
+            sx={{ 
+              mb: 3,
+              borderRadius: 2,
+              '& .MuiAlert-message': {
+                width: '100%'
+              }
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+              Move Operation Failed
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {errorMessage}
+            </Typography>
+          </Alert>
 
           <Box sx={{ 
             bgcolor: theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50], 
@@ -156,18 +129,6 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
         >
           Cancel
         </Button>
-        
-        {isTargetExistsError && onOverwrite && (
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={onOverwrite}
-            startIcon={<WarningIcon />}
-            sx={{ minWidth: 120 }}
-          >
-            Replace
-          </Button>
-        )}
         
         {onRetry && (
           <Button

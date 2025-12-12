@@ -15,6 +15,7 @@ import { useFileActions } from '../../hooks/useFileActions';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import MoveFileDialog from './MoveFileDialog';
 import MoveErrorDialog from './MoveErrorDialog';
+import OverwriteDialog from './OverwriteDialog';
 import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 import BulkActionsBar from './BulkActionsBar';
 import BulkMoveDialog from './BulkMoveDialog';
@@ -84,6 +85,13 @@ const PosterView = memo(({
   const [bulkMoveDialogOpen, setBulkMoveDialogOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkConflict, setBulkConflict] = useState<{
+    item: FileItem;
+    targetPath: string;
+    remaining: FileItem[];
+  } | null>(null);
+  const [bulkConflictError, setBulkConflictError] = useState<string | null>(null);
+  const [bulkOverwriteAll, setBulkOverwriteAll] = useState(false);
 
   const handleContextMenu = useCallback((event: React.MouseEvent, file: FileItem) => {
     event.preventDefault();
@@ -129,23 +137,86 @@ const PosterView = memo(({
   }, []);
 
 
+  const processBulkItems = useCallback(async (
+    items: FileItem[],
+    targetPath: string,
+    forceOverwrite: boolean = false
+  ) => {
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+      try {
+        await moveFile(sourcePath, targetPath, forceOverwrite);
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.error || error?.response?.data || error?.message || 'Failed to move file';
+        const isTargetExistsError = errorMessage.toLowerCase().includes('target already exists') ||
+                                    errorMessage.toLowerCase().includes('already exists');
+        if (isTargetExistsError && !forceOverwrite) {
+          setBulkConflict({
+            item,
+            targetPath,
+            remaining: items.slice(idx + 1),
+          });
+          setBulkConflictError(null);
+          setBulkLoading(false);
+          return false;
+        }
+        throw error;
+      }
+    }
+    return true;
+  }, [currentPath]);
+
   const handleBulkMoveSubmit = useCallback(async (targetPath: string) => {
     setBulkLoading(true);
+    setBulkOverwriteAll(false);
     try {
-      const selected = getSelectedItems(files);
-      for (const item of selected) {
-        const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
-        await moveFile(sourcePath, targetPath);
+      const selected = Array.from(getSelectedItems(files));
+      const completed = await processBulkItems(selected, targetPath, bulkOverwriteAll);
+      if (completed) {
+        setBulkMoveDialogOpen(false);
+        exitSelectionMode();
+        if (onDeleted) onDeleted();
       }
-      setBulkMoveDialogOpen(false);
-      exitSelectionMode();
-      if (onDeleted) onDeleted();
     } catch (error) {
       console.error('Bulk move failed:', error);
     } finally {
+      if (!bulkConflict) {
+        setBulkLoading(false);
+      }
+    }
+  }, [getSelectedItems, files, processBulkItems, exitSelectionMode, onDeleted, bulkConflict]);
+
+  const handleBulkOverwriteCancel = useCallback(() => {
+    setBulkConflict(null);
+    setBulkConflictError(null);
+    setBulkLoading(false);
+  }, []);
+
+  const handleBulkOverwriteConfirm = useCallback(async (applyAll?: boolean) => {
+    if (!bulkConflict) return;
+    setBulkConflictError(null);
+    setBulkLoading(true);
+    if (applyAll) setBulkOverwriteAll(true);
+    const { item, targetPath, remaining } = bulkConflict;
+    const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+    try {
+      await moveFile(sourcePath, targetPath, true);
+      const forceOverwrite = bulkOverwriteAll || applyAll || false;
+      const done = await processBulkItems(remaining, targetPath, forceOverwrite);
+      if (done) {
+        setBulkConflict(null);
+        setBulkMoveDialogOpen(false);
+        exitSelectionMode();
+        if (onDeleted) onDeleted();
+      }
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error?.response?.data || error?.message || 'Failed to overwrite';
+      setBulkConflictError(errorMessage);
+    } finally {
       setBulkLoading(false);
     }
-  }, [getSelectedItems, files, currentPath, exitSelectionMode, onDeleted]);
+  }, [bulkConflict, currentPath, exitSelectionMode, onDeleted, processBulkItems]);
 
   const handleBulkDeleteSubmit = useCallback(async () => {
     setBulkLoading(true);
@@ -651,19 +722,43 @@ const PosterView = memo(({
       />
 
       {/* Move Error Dialog */}
-      <MoveErrorDialog
-        open={fileActions.moveErrorDialogOpen}
-        onClose={fileActions.handleMoveErrorDialogClose}
-        onRetry={() => {
-          if (fileActions.lastMoveAttempt) {
-            fileActions.handleMoveErrorDialogClose();
-            fileActions.handleMoveSubmit(fileActions.lastMoveAttempt.targetPath);
-          }
-        }}
+      {!fileActions.overwriteDialogOpen && (
+        <MoveErrorDialog
+          open={fileActions.moveErrorDialogOpen}
+          onClose={fileActions.handleMoveErrorDialogClose}
+          onRetry={() => {
+            if (fileActions.lastMoveAttempt) {
+              fileActions.handleMoveErrorDialogClose();
+              fileActions.handleMoveSubmit(fileActions.lastMoveAttempt.targetPath);
+            }
+          }}
+          fileName={fileActions.fileBeingMoved?.name || ''}
+          targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
+          errorMessage={fileActions.moveError || ''}
+        />
+      )}
+
+      {/* Overwrite Dialog */}
+      <OverwriteDialog
+        open={fileActions.overwriteDialogOpen}
+        onClose={fileActions.handleOverwriteDialogClose}
+        onConfirm={fileActions.handleOverwriteMove}
         fileName={fileActions.fileBeingMoved?.name || ''}
         targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
-        errorMessage={fileActions.moveError || ''}
       />
+
+      {/* Bulk Overwrite Dialog */}
+      {bulkConflict && (
+        <OverwriteDialog
+          open={true}
+          onClose={handleBulkOverwriteCancel}
+          onConfirm={() => handleBulkOverwriteConfirm(true)}
+          fileName={bulkConflict.item.name}
+          targetPath={bulkConflict.targetPath}
+          errorMessage={bulkConflictError || undefined}
+          hideFileName
+        />
+      )}
 
       {/* Bulk Actions */}
       <BulkActionsBar
@@ -696,4 +791,4 @@ const PosterView = memo(({
 
 PosterView.displayName = 'PosterView';
 
-export default PosterView;
+export { PosterView as default };
