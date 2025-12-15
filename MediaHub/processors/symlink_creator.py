@@ -1217,10 +1217,8 @@ def process_file(args, force=False, batch_apply=False):
             else:
                 log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
         else:
-            # Instead of overwriting, create a versioned name for the new symlink
-            log_message(f"Symlink exists but points to different source, creating versioned name", level="INFO")
-            # The version numbering will be handled later in the code
-
+            # Instead of overwriting, handle versioned name for the new symlink
+            log_message(f"Symlink exists but points to different source, handling version conflict", level="INFO")
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
@@ -1229,6 +1227,13 @@ def process_file(args, force=False, batch_apply=False):
     # Check for filename conflicts and generate unique filename if needed
     original_dest_file = dest_file
     dest_file = generate_unique_filename(dest_file, src_file)
+
+    if dest_file is None:
+        reason = "File skipped - duplicate version already exists"
+        log_message(f"Skipping duplicate version: {os.path.basename(original_dest_file)}", level="INFO")
+        log_message(f"Adding skipped duplicate to database: {src_file} (reason: {reason})", level="DEBUG")
+        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        return
     
     if dest_file != original_dest_file:
         log_message(f"Filename conflict detected, using versioned name: {os.path.basename(dest_file)}", level="INFO")

@@ -178,6 +178,7 @@ const wizardSteps: Step[] = [
       '4K_MOVIE_EXTRAS_SIZE_LIMIT',
       'ALLOWED_EXTENSIONS',
       'SKIP_ADULT_PATTERNS',
+      'SKIP_VERSIONS',
     ],
   },
   {
@@ -543,6 +544,7 @@ export default function SetupWizard() {
     RELATIVE_SYMLINK: 'Create relative symlinks instead of absolute paths.',
     SKIP_EXTRAS_FOLDER: 'Skip processing extras folders.',
     SKIP_ADULT_PATTERNS: 'Skip files matching adult patterns.',
+    SKIP_VERSIONS: 'Skip extra versions of the same release group (avoid Version 2/3 when only the group differs).',
     ENABLE_PLEX_UPDATE: 'Trigger Plex library updates after processing.',
     CINESYNC_AUTH_ENABLED: 'Require authentication for UI/API.',
     MEDIAHUB_AUTO_START: 'Auto-start MediaHub service when CineSync starts.',

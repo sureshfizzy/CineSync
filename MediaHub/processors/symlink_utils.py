@@ -14,6 +14,7 @@ from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 from MediaHub.utils.plex_utils import update_plex_after_deletion
+from MediaHub.config.config import is_skip_versions_enabled
 
 def generate_unique_filename(dest_file, src_file=None):
 	"""Generate a unique filename by adding version numbers if conflicts occur.
@@ -24,6 +25,7 @@ def generate_unique_filename(dest_file, src_file=None):
 	
 	Returns:
 		A unique file path, either the original or with version numbering
+		None if SKIP_VERSIONS is enabled and there's a conflict
 	"""
 	if not os.path.exists(dest_file):
 		return dest_file
@@ -37,6 +39,11 @@ def generate_unique_filename(dest_file, src_file=None):
 				return dest_file
 		except (OSError, IOError):
 			pass
+	
+	# Check if version skipping is enabled
+	if is_skip_versions_enabled():
+		log_message(f"Skipping file due to conflict - {os.path.basename(dest_file)}", level="INFO")
+		return None
 	
 	# If the existing file is a symlink pointing to a different source, create versioned name
 	if os.path.islink(dest_file):

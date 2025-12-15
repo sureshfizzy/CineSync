@@ -283,6 +283,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "4K_MOVIE_EXTRAS_SIZE_LIMIT", Category: "File Handling Configuration", Type: "integer", Required: false, Description: "Maximum allowed file size for 4K movie extras in MB (higher limit for 4K content)"},
 		{Key: "ALLOWED_EXTENSIONS", Category: "File Handling Configuration", Type: "array", Required: false, Description: "Allowed file extensions for processing"},
 		{Key: "SKIP_ADULT_PATTERNS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable skipping of specific file patterns"},
+		{Key: "SKIP_VERSIONS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Skip creating extra versions for the same release (avoids Version 2/3 when the release group is the only difference)"},
 		{Key: "FILE_OPERATIONS_AUTO_MODE", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable auto-processing mode for file operations", Hidden: true},
 
 		// Real-Time Monitoring Configuration
