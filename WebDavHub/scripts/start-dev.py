@@ -399,46 +399,6 @@ class WebDavHubDevelopmentServer:
         print("🛑 Press Ctrl+C to stop both servers")
         print("="*70 + "\n")
 
-    def cleanup_rclone_mounts(self):
-        """Clean up CineSync rclone processes and mounts"""
-        import platform
-        import subprocess
-        
-        mount_paths = []
-        
-        try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    if proc.info['name'] and 'rclone' in proc.info['name'].lower():
-                        cmdline = proc.info.get('cmdline', [])
-                        if cmdline and any('CineSync:' in arg for arg in cmdline):
-                            # Extract mount path (argument after "CineSync:")
-                            for i, arg in enumerate(cmdline):
-                                if 'CineSync:' in arg and i + 1 < len(cmdline):
-                                    path = cmdline[i + 1]
-                                    if path and not path.startswith('-'):
-                                        mount_paths.append(path)
-                                    break
-
-                            print(f"Cleaning up CineSync rclone process: PID={proc.pid}")
-                            proc.terminate()
-                            proc.wait(timeout=3) if proc.is_running() else None
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-                    pass
-        except Exception as e:
-            print(f"Warning: Error during rclone cleanup: {e}")
-
-        if platform.system() == "Linux":
-            for path in mount_paths:
-                for cmd in [["fusermount3", "-u"], ["fusermount", "-u"], ["umount"], 
-                           ["fusermount3", "-uz"], ["fusermount", "-uz"], ["umount", "-l"]]:
-                    try:
-                        if subprocess.run(cmd + [path], capture_output=True, timeout=5).returncode == 0:
-                            print(f"Unmounted {path} using {cmd[0]}")
-                            break
-                    except:
-                        continue
-
     def cleanup(self):
         """Clean up running processes"""
         print("\n🧹 Cleaning up processes...")
@@ -463,9 +423,6 @@ class WebDavHubDevelopmentServer:
                 self.backend_process.kill()
             except Exception as e:
                 print(f"Error stopping backend server: {e}")
-
-        print("Cleaning up any remaining rclone processes...")
-        self.cleanup_rclone_mounts()
 
         print("✅ Cleanup completed")
 

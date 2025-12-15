@@ -113,6 +113,8 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
 
+	rm.cleanupStaleMountAtPath(config.MountPath)
+
 	// Check if already mounted
 	if mount, exists := rm.mounts[config.MountPath]; exists {
 		if rm.isProcessRunning(mount.ProcessID) {
@@ -282,10 +284,15 @@ func (rm *RcloneManager) Unmount(mountPath string) (*MountStatus, error) {
 		mountPath = normalizedPath
 	}
 
-	// Kill the rclone process
+	if runtime.GOOS != "windows" {
+		rm.forceUnmountPath(mount.MountPath)
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Then kill the rclone process if still running
 	if rm.isProcessRunning(mount.ProcessID) {
 		if err := rm.forceKill(mount.ProcessID); err != nil {
-			return &MountStatus{Error: fmt.Sprintf("failed to kill process: %v", err)}, err
+			logger.Warn("Failed to kill rclone process %d: %v", mount.ProcessID, err)
 		}
 	}
 
@@ -631,6 +638,66 @@ func (rm *RcloneManager) forceKill(pid int) error {
 	}
 }
 
+// cleanupStaleMountAtPath cleans up a stale mount at a specific path
+func (rm *RcloneManager) cleanupStaleMountAtPath(mountPath string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	if _, err := os.Stat(mountPath); err != nil {
+		return
+	}
+
+	isStale := false
+
+	_, err := os.ReadDir(mountPath)
+	if err != nil && strings.Contains(err.Error(), "transport endpoint is not connected") {
+		isStale = true
+	}
+
+	if !isStale && rm.isInProcMounts(mountPath) && err != nil {
+		isStale = true
+	}
+
+	if isStale {
+		rm.forceUnmountPath(mountPath)
+	}
+}
+
+// isInProcMounts checks if a path appears in /proc/mounts
+func (rm *RcloneManager) isInProcMounts(mountPath string) bool {
+	if runtime.GOOS == "windows" {
+		return false
+	}
+	
+	cmd := exec.Command("grep", "-qs", mountPath, "/proc/mounts")
+	return cmd.Run() == nil
+}
+
+// forceUnmountPath forcefully unmounts a path using fusermount
+func (rm *RcloneManager) forceUnmountPath(mountPath string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	logger.Info("Unmounting filesystem at %s", mountPath)
+
+	unmountCommands := [][]string{
+		{"fusermount3", "-uz", mountPath},
+		{"fusermount", "-uz", mountPath},
+		{"umount", "-l", mountPath},
+	}
+
+	for _, cmdArgs := range unmountCommands {
+		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return
+		}
+		logger.Debug("Failed to unmount with %s: %v (output: %s)", cmdArgs[0], err, string(output))
+	}
+}
+
 // CleanupStaleMounts removes mounts that are no longer running
 func (rm *RcloneManager) CleanupStaleMounts() {
 	rm.mutex.Lock()
@@ -673,8 +740,15 @@ func (rm *RcloneManager) CleanupAllMounts() {
 	
 	logger.Info("Cleaning up all rclone mounts...")
 	for path, mount := range rm.mounts {
+		logger.Info("Unmounting: Path=%s, PID=%d", path, mount.ProcessID)
+		if runtime.GOOS != "windows" {
+			rm.forceUnmountPath(mount.MountPath)
+			time.Sleep(500 * time.Millisecond)
+		}
+		
+		// Then kill the process if it's still running
 		if rm.isProcessRunning(mount.ProcessID) {
-			logger.Info("Stopping rclone mount: Path=%s, PID=%d", path, mount.ProcessID)
+			logger.Info("Killing rclone process: PID=%d", mount.ProcessID)
 			if err := rm.forceKill(mount.ProcessID); err != nil {
 				logger.Error("Failed to kill rclone process %d: %v", mount.ProcessID, err)
 			}
