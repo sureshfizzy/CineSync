@@ -1,7 +1,9 @@
 import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
+import DebridSidebar from '../Debrid/DebridSidebar';
+import { ArrSidebar } from '../ArrDashboard';
 import Topbar from './Topbar';
 
 interface LayoutProps {
@@ -64,6 +66,19 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
     handleRefresh,
   };
 
+  const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>('current');
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.view === 'arrdash' || detail?.view === 'current') {
+        setActiveDashboardView(detail.view);
+      }
+    };
+    window.addEventListener('dashboardViewChanged', handler as EventListener);
+    return () => window.removeEventListener('dashboardViewChanged', handler as EventListener);
+  }, []);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
       <Topbar toggleTheme={toggleTheme} mode={mode} onMenuClick={isMobile ? handleDrawerToggle : undefined} />
@@ -86,11 +101,18 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               height: '100%',
             }}
           >
-            <Sidebar
-              currentView={view}
-              onViewChange={handleViewChange}
-              onRefresh={handleRefresh}
-            />
+            {(location.pathname.startsWith('/dashboard/debrid')) ? (
+              <DebridSidebar />
+            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+             location.pathname.startsWith('/dashboard/') ? (
+              <ArrSidebar />
+            ) : (
+              <Sidebar
+                currentView={view}
+                onViewChange={handleViewChange}
+                onRefresh={handleRefresh}
+              />
+            ))}
           </Box>
         )}
 
@@ -114,12 +136,19 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
               },
             }}
           >
-            <Sidebar
-              onNavigate={handleSidebarNavigate}
-              currentView={view}
-              onViewChange={handleViewChange}
-              onRefresh={handleRefresh}
-            />
+            {(location.pathname.startsWith('/dashboard/debrid')) ? (
+              <DebridSidebar />
+            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
+             location.pathname.startsWith('/dashboard/') ? (
+              <ArrSidebar />
+            ) : (
+              <Sidebar
+                onNavigate={handleSidebarNavigate}
+                currentView={view}
+                onViewChange={handleViewChange}
+                onRefresh={handleRefresh}
+              />
+            ))}
           </Drawer>
         )}
 
@@ -130,7 +159,10 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
             bgcolor: 'background.default',
             p: { xs: 1, sm: 1.5, md: 2 },
             overflowY: 'auto',
+            overflowX: 'hidden',
             height: '100%',
+            maxWidth: '100vw',
+            boxSizing: 'border-box',
           }}
         >
           <Outlet context={contextValue} />

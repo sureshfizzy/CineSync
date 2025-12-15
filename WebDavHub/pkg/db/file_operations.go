@@ -696,7 +696,7 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 	if hasReasonColumn {
 		query = `
 			SELECT
-				file_path,
+				COALESCE(file_path, '') as file_path,
 				COALESCE(destination_path, '') as destination_path,
 				COALESCE(tmdb_id, '') as tmdb_id,
 				COALESCE(season_number, '') as season_number,
@@ -708,7 +708,7 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 	} else {
 		query = `
 			SELECT
-				file_path,
+				COALESCE(file_path, '') as file_path,
 				COALESCE(destination_path, '') as destination_path,
 				COALESCE(tmdb_id, '') as tmdb_id,
 				COALESCE(season_number, '') as season_number
@@ -1262,7 +1262,7 @@ func getDeletedEntriesWithPagination(db *sql.DB, limit, offset int, searchQuery 
 		searchPattern := "%" + searchQuery + "%"
 		query = `
 			SELECT
-				file_path,
+				COALESCE(file_path, '') as file_path,
 				COALESCE(destination_path, '') as destination_path,
 				COALESCE(tmdb_id, '') as tmdb_id,
 				COALESCE(season_number, '') as season_number,
@@ -1278,7 +1278,7 @@ func getDeletedEntriesWithPagination(db *sql.DB, limit, offset int, searchQuery 
 	} else {
 		query = `
 			SELECT
-				file_path,
+				COALESCE(file_path, '') as file_path,
 				COALESCE(destination_path, '') as destination_path,
 				COALESCE(tmdb_id, '') as tmdb_id,
 				COALESCE(season_number, '') as season_number,

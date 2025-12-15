@@ -1,10 +1,9 @@
 import { useState, lazy, Suspense, useCallback } from 'react';
 import { Box, Snackbar, Alert, IconButton } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ShowHeader from './ShowHeader';
 import SeasonList from './SeasonList';
-import SeasonDialog from './SeasonDialog';
 import CastList from './CastList';
 import useSeasonFolders from './useSeasonFolders';
 import { MediaDetailsData } from './types';
@@ -21,12 +20,13 @@ interface TVShowInfoProps {
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
 export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: TVShowInfoProps) {
-  const [seasonDialogOpen, setSeasonDialogOpen] = useState(false);
-  const [selectedSeason, setSelectedSeason] = useState<any>(null);
-  const [selectedSeasonFolder, setSelectedSeasonFolder] = useState<any>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Detect if we're in ArrDashboard context
+  const isArrDashboardContext = location.state?.returnPage === 1 && location.state?.returnSearch === '';
 
   // Function to trigger refresh of file actions
   const handleRefresh = useCallback(() => {
@@ -40,7 +40,6 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   const {
     seasonFolders,
     loadingFiles,
-    errorFiles,
     fetchSeasonFolders,
     handleViewDetails,
     handleDeleted,
@@ -48,7 +47,6 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
     detailsDialogOpen,
     setDetailsDialogOpen,
     selectedFile,
-    setSelectedFile,
     detailsData,
     videoPlayerOpen,
     setVideoPlayerOpen,
@@ -88,29 +86,20 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               onError={(error) => setSnackbar({ open: true, message: error, severity: 'error' })}
               refreshTrigger={refreshTrigger}
               onNavigateBack={handleNavigateBack}
+              isArrDashboardContext={isArrDashboardContext}
+              isLoadingFiles={loadingFiles}
+              seasonFolders={seasonFolders}
             />
           </Box>
         </Box>
         <SeasonList
           data={data}
           seasonFolders={seasonFolders}
-          setSeasonDialogOpen={setSeasonDialogOpen}
-          setSelectedSeason={setSelectedSeason}
-          setSelectedSeasonFolder={setSelectedSeasonFolder}
-        />
-        <SeasonDialog
-          open={seasonDialogOpen}
-          onClose={() => setSeasonDialogOpen(false)}
-          selectedSeason={selectedSeason}
-          selectedSeasonFolder={selectedSeasonFolder}
-          loadingFiles={loadingFiles}
-          errorFiles={errorFiles}
-          fetchSeasonFolders={fetchSeasonFolders}
           handleViewDetails={handleViewDetails}
+          fetchSeasonFolders={fetchSeasonFolders}
           handleDeleted={handleDeleted}
           handleError={handleError}
-          setVideoPlayerOpen={setVideoPlayerOpen}
-          setSelectedFile={setSelectedFile}
+          isArrDashboardContext={isArrDashboardContext}
         />
         <CastList data={data} getPosterUrl={getPosterUrl} />
         <DetailsDialog

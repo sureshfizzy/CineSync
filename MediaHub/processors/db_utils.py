@@ -15,13 +15,13 @@ from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.env_creator import get_env_file_path
 from MediaHub.config.config import (
     get_db_throttle_rate, get_db_max_retries, get_db_retry_delay,
     get_db_batch_size, get_db_max_workers, get_db_max_records,
     get_db_connection_timeout, get_db_cache_size,
     get_cinesync_ip, get_cinesync_api_port
 )
+from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.api.tmdb_api_helpers import get_movie_data, get_show_data, get_episode_name
 
 def format_file_size(size):
@@ -36,8 +36,7 @@ def format_file_size(size):
 from MediaHub.utils.dashboard_utils import send_dashboard_notification
 
 # Load environment variables
-db_env_path = get_env_file_path()
-load_dotenv(db_env_path)
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DB_DIR = os.path.join(BASE_DIR, "db")
@@ -209,6 +208,7 @@ def initialize_db(conn):
         required_columns = {
             "destination_path": "TEXT",
             "base_path": "TEXT",
+            "root_folder": "TEXT",
             "tmdb_id": "TEXT",
             "season_number": "TEXT",
             "reason": "TEXT",
@@ -262,7 +262,7 @@ def initialize_db(conn):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS deleted_files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT, destination_path TEXT,
-                base_path TEXT, tmdb_id TEXT, season_number TEXT, reason TEXT, media_type TEXT,
+                base_path TEXT, root_folder TEXT, tmdb_id TEXT, season_number TEXT, reason TEXT, media_type TEXT,
                 proper_name TEXT, year TEXT, episode_number TEXT, imdb_id TEXT, is_anime_genre INTEGER,
                 language TEXT, quality TEXT, tvdb_id TEXT, league_id TEXT, sportsdb_event_id TEXT,
                 sport_name TEXT, sport_round INTEGER, sport_location TEXT, sport_session TEXT,
@@ -275,6 +275,7 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON processed_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_destination_path ON processed_files(destination_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_base_path ON processed_files(base_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_root_folder ON processed_files(root_folder)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tmdb_id ON processed_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_season_number ON processed_files(season_number)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reason ON processed_files(reason)")
@@ -306,9 +307,29 @@ def initialize_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_time ON processed_files(sport_time)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sport_date ON processed_files(sport_date)")
 
+        # Check if deleted_files table has all required columns and add missing ones
+        cursor.execute("PRAGMA table_info(deleted_files)")
+        deleted_columns = [column[1] for column in cursor.fetchall()]
+
+        required_deleted_columns = {
+            "file_path": "TEXT",
+            "destination_path": "TEXT",
+            "base_path": "TEXT",
+            "root_folder": "TEXT",
+            "tmdb_id": "TEXT",
+            "deleted_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            "trash_file_name": "TEXT"
+        }
+
+        for col_name, col_type in required_deleted_columns.items():
+            if col_name not in deleted_columns:
+                cursor.execute(f"ALTER TABLE deleted_files ADD COLUMN {col_name} {col_type}")
+
         # Create indexes for deleted_files table
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_file_path ON deleted_files(file_path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_destination_path ON deleted_files(destination_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_base_path ON deleted_files(base_path)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_root_folder ON deleted_files(root_folder)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_tmdb_id ON deleted_files(tmdb_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_at ON deleted_files(deleted_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trash_file_name ON deleted_files(trash_file_name)")
@@ -319,7 +340,7 @@ def initialize_db(conn):
         cursor.execute("PRAGMA table_info(processed_files)")
         final_columns = [column[1] for column in cursor.fetchall()]
 
-        expected_columns = {"file_path", "destination_path", "base_path", "tmdb_id", "season_number",
+        expected_columns = {"file_path", "destination_path", "base_path", "root_folder", "tmdb_id", "season_number",
                           "reason", "file_size", "error_message", "processed_at", "media_type",
                           "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre",
                           "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id", "sport_name",
@@ -404,7 +425,7 @@ def is_file_processed(conn, file_path):
         return False
 
 def extract_base_path_from_destination_path(dest_path, proper_name=None, media_type=None, sport_name=None):
-    """Extract base path - everything between DESTINATION_DIR and the title folder
+    """Extract base path and root folder from destination path
 
     Args:
         dest_path: Full destination path
@@ -412,14 +433,18 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None, media_t
                     If provided, will be used to identify the title folder precisely
         media_type: The media type (e.g., 'Sports', 'Movies', 'Shows')
         sport_name: The sport name for sports content (e.g., 'Formula 1', 'UFC')
+    
+    Returns:
+        tuple: (base_path, root_folder) where root_folder = destination_dir + base_path
+               Returns (None, None) if extraction fails
     """
     if not dest_path:
-        return None
+        return None, None
 
     # Get the destination directory from environment
     dest_dir = os.getenv("DESTINATION_DIR", "")
     if not dest_dir:
-        return None
+        return None, None
 
     # Normalize paths
     dest_dir = os.path.normpath(dest_dir)
@@ -430,65 +455,84 @@ def extract_base_path_from_destination_path(dest_path, proper_name=None, media_t
         relative_path = dest_path[len(dest_dir):].lstrip(os.sep)
         parts = relative_path.split(os.sep)
 
+        base_path = None
+
         # Special handling for Sports content
         if media_type == 'Sports' and sport_name:
             for i, part in enumerate(parts):
                 if sport_name.lower() in part.lower() or part.lower() in sport_name.lower():
                     if i > 0:
-                        return os.sep.join(parts[:i])
+                        base_path = os.sep.join(parts[:i])
                     else:
-                        return None
-            if len(parts) >= 2:
-                return parts[0]  # Just return "Sports" as base path
+                        base_path = None
+                    break
+            if base_path is None and len(parts) >= 2:
+                base_path = parts[0]  # Just return "Sports" as base path
 
         # Existing logic for non-sports content
-        if proper_name:
+        elif proper_name:
             for i, part in enumerate(parts[:-1]):
                 if part == proper_name or part.startswith(proper_name):
                     if i > 0:
-                        return os.sep.join(parts[:i])
+                        base_path = os.sep.join(parts[:i])
                     else:
-                        return None
-
-        if len(parts) >= 4:
-            season_keywords = ['season', 'series', 'specials', 'extras']
-            for i, part in enumerate(parts):
-                if any(keyword in part.lower() for keyword in season_keywords):
-                    if i >= 2:
-                        return os.sep.join(parts[:i-1])
+                        base_path = None
                     break
 
-            # Check for extras/specials at any level
-            extras_keywords = ['extras', 'specials']
-            for i, part in enumerate(parts[:-1]):
-                if part.lower() in extras_keywords:
-                    return parts[0]
-            return os.sep.join(parts[:-2])
-        elif len(parts) >= 3:
-            season_keywords = ['season', 'series', 'specials', 'extras']
-            if any(keyword in parts[2].lower() for keyword in season_keywords):
-                return parts[0]
-            elif any(keyword in parts[1].lower() for keyword in season_keywords):
-                return parts[0]
-            else:
-                return os.sep.join(parts[:-2])
-        elif len(parts) >= 2:
-            return parts[0]
-        elif len(parts) >= 1:
-            return parts[0]
+        if base_path is None:
+            if len(parts) >= 4:
+                season_keywords = ['season', 'series', 'specials', 'extras']
+                for i, part in enumerate(parts):
+                    if any(keyword in part.lower() for keyword in season_keywords):
+                        if i >= 2:
+                            base_path = os.sep.join(parts[:i-1])
+                        break
 
-    return None
+                # Check for extras/specials at any level
+                if base_path is None:
+                    extras_keywords = ['extras', 'specials']
+                    for i, part in enumerate(parts[:-1]):
+                        if part.lower() in extras_keywords:
+                            base_path = parts[0]
+                            break
+                    if base_path is None:
+                        base_path = os.sep.join(parts[:-2])
+            elif len(parts) >= 3:
+                season_keywords = ['season', 'series', 'specials', 'extras']
+                if any(keyword in parts[2].lower() for keyword in season_keywords):
+                    base_path = parts[0]
+                elif any(keyword in parts[1].lower() for keyword in season_keywords):
+                    base_path = parts[0]
+                else:
+                    base_path = os.sep.join(parts[:-2])
+            elif len(parts) >= 2:
+                base_path = parts[0]
+            elif len(parts) >= 1:
+                base_path = parts[0]
+
+        # Calculate root folder: destination_dir + base_path
+        if base_path:
+            root_folder = os.path.join(dest_dir, base_path)
+            return base_path, root_folder
+        else:
+            return None, None
+
+    return None, None
 
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_city=None, sport_country=None, sport_time=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None, episode_title=None, total_episodes=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_city=None, sport_country=None, sport_time=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None, episode_title=None, total_episodes=None, root_folder=None):
     source_path = normalize_file_path(source_path)
     if dest_path:
         dest_path = normalize_file_path(dest_path)
 
-    # Extract base path from destination path using proper_name
-    base_path = extract_base_path_from_destination_path(dest_path, proper_name, media_type, sport_name)
+    # Extract base path and root folder from destination path using proper_name
+    base_path, extracted_root_folder = extract_base_path_from_destination_path(dest_path, proper_name, media_type, sport_name)
+    
+    # Use extracted root folder if not provided
+    if root_folder is None:
+        root_folder = extracted_root_folder
 
     # Get file size if not provided and source file exists
     if file_size is None and source_path and os.path.exists(source_path):
@@ -516,6 +560,7 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
         # Optional columns and their corresponding values
         optional_data = {
             'base_path': base_path,
+            'root_folder': root_folder,
             'error_message': error_message,
             'processed_at': 'datetime(\'now\')',  # Special SQL function
             'media_type': media_type,
@@ -716,7 +761,7 @@ def display_missing_files(conn, destination_folder, cleanup_missing=False):
                             if os.path.islink(potential_new_path):
                                 try:
                                     # Check if the symlink points to our source file
-                                    link_target = os.readlink(potential_new_path)
+                                    link_target = get_symlink_target_path(potential_new_path)
                                     # Use improved normalization for both paths
                                     normalized_link_target = normalize_file_path(link_target)
                                     normalized_source_path = normalize_file_path(source_path)
@@ -847,14 +892,14 @@ def update_renamed_file(conn, old_dest_path, new_dest_path):
             new_proper_name = clean_title if clean_title else original_proper_name
 
             proper_name_for_base_path = new_proper_name if media_type != 'tv' else None
-            new_base_path = extract_base_path_from_destination_path(new_dest_path, proper_name_for_base_path, media_type, None)
+            new_base_path, new_root_folder = extract_base_path_from_destination_path(new_dest_path, proper_name_for_base_path, media_type, None)
 
-            # Update destination_path, base_path, and proper_name
+            # Update destination_path, base_path, root_folder, and proper_name
             cursor.execute("""
                 UPDATE processed_files
-                SET destination_path = ?, base_path = ?, proper_name = ?
+                SET destination_path = ?, base_path = ?, root_folder = ?, proper_name = ?
                 WHERE destination_path = ?
-            """, (new_dest_path, new_base_path, new_proper_name, old_dest_path))
+            """, (new_dest_path, new_base_path, new_root_folder, new_proper_name, old_dest_path))
 
             if cursor.rowcount > 0:
                 log_message(f"Updated renamed file in database: {old_dest_path} -> {new_dest_path} (base_path: {new_base_path}, proper_name: {new_proper_name})", level="INFO")
@@ -893,7 +938,7 @@ def _check_path_exists_batch(paths_batch):
             existing_paths.append(path)
             if os.path.islink(path):
                 try:
-                    link_target = normalize_file_path(os.readlink(path))
+                    link_target = normalize_file_path(get_symlink_target_path(path))
                     reverse_index[link_target] = path
                 except (OSError, IOError):
                     pass
@@ -1133,7 +1178,7 @@ def populate_missing_file_sizes(cursor, conn):
                 try:
                     # For symlinks, get the size of the target file
                     if os.path.islink(dest_path):
-                        target = os.readlink(dest_path)
+                        target = get_symlink_target_path(dest_path)
                         if os.path.exists(target):
                             file_size = os.path.getsize(target)
                     else:
@@ -1197,7 +1242,7 @@ def populate_all_file_sizes(conn):
                     try:
                         # For symlinks, get the size of the target file
                         if os.path.islink(dest_path):
-                            target = os.readlink(dest_path)
+                            target = get_symlink_target_path(dest_path)
                             if os.path.exists(target):
                                 file_size = os.path.getsize(target)
                         else:
@@ -1296,7 +1341,7 @@ def save_deleted_file(conn, source_path, dest_path, tmdb_id=None, season_number=
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            SELECT file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
                    media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                    language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
                    sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1308,7 +1353,7 @@ def save_deleted_file(conn, source_path, dest_path, tmdb_id=None, season_number=
         result = cursor.fetchone()
         
         if result:
-            (file_path, destination_path, base_path, tmdb_id_db, season_number_db, reason,
+            (file_path, destination_path, base_path, root_folder, tmdb_id_db, season_number_db, reason,
              media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
              language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
              sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1321,6 +1366,7 @@ def save_deleted_file(conn, source_path, dest_path, tmdb_id=None, season_number=
             file_path = source_path
             destination_path = dest_path
             base_path = None
+            root_folder = None
             final_tmdb_id = tmdb_id
             final_season_number = season_number
             reason = None
@@ -1336,14 +1382,14 @@ def save_deleted_file(conn, source_path, dest_path, tmdb_id=None, season_number=
         # Insert into deleted_files table
         cursor.execute("""
             INSERT INTO deleted_files (
-                file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
                 media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                 language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
                 sport_round, sport_location, sport_session, sport_venue, sport_date,
                 file_size, processed_at, deletion_reason, trash_file_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            file_path, destination_path, base_path, final_tmdb_id, final_season_number, reason,
+            file_path, destination_path, base_path, root_folder, final_tmdb_id, final_season_number, reason,
             media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
             language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
             sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1389,7 +1435,7 @@ def get_deleted_files(conn, limit=None, offset=None, search_query=None):
     try:
         cursor = conn.cursor()
         query = """
-            SELECT id, file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            SELECT id, file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
                    media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                    language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
                    sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1456,7 +1502,7 @@ def restore_deleted_file(conn, deleted_file_id):
         
         # Get the deleted file record
         cursor.execute("""
-            SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            SELECT file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
                    media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                    language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
                    sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1471,7 +1517,7 @@ def restore_deleted_file(conn, deleted_file_id):
             log_message(f"Deleted file with ID {deleted_file_id} not found", level="ERROR")
             return False
         
-        (file_path, destination_path, base_path, tmdb_id, season_number, reason,
+        (file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
          media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
          language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
          sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1487,14 +1533,14 @@ def restore_deleted_file(conn, deleted_file_id):
         # Insert back into processed_files (using INSERT OR REPLACE to handle duplicates)
         cursor.execute("""
             INSERT OR REPLACE INTO processed_files (
-                file_path, destination_path, base_path, tmdb_id, season_number, reason,
+                file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
                 media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                 language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
                 sport_round, sport_location, sport_session, sport_venue, sport_date,
                 file_size, processed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            file_path, destination_path, base_path, tmdb_id, season_number, reason,
+            file_path, destination_path, base_path, root_folder, tmdb_id, season_number, reason,
             media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
             language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
             sport_round, sport_location, sport_session, sport_venue, sport_date,
@@ -1595,7 +1641,7 @@ def track_force_recreation(source_path, new_dest_path, new_tmdb_id, new_season_n
     except Exception as e:
         log_message(f"Error tracking force recreation: {e}", level="DEBUG")
 
-def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None):
+def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, root_folder=None):
     """Save file processing failure directly to database"""
     try:
         save_processed_file(
@@ -1613,15 +1659,16 @@ def save_file_failure(source_path, tmdb_id=None, season_number=None, reason="", 
             is_anime_genre=is_anime_genre,
             language=language,
             quality=quality,
-            tvdb_id=tvdb_id
+            tvdb_id=tvdb_id,
+            root_folder=root_folder
         )
         log_message(f"Saved failure to database: {source_path} - {reason}", level="DEBUG")
     except Exception as e:
         log_message(f"Failed to save failure to database: {e}", level="DEBUG")
 
-def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, tvdb_id=None):
+def track_file_failure(source_path, tmdb_id=None, season_number=None, reason="", error_message="", media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, tvdb_id=None, root_folder=None):
     """Track file processing failure in both database and WebDavHub"""
-    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, None, None, tvdb_id)
+    save_file_failure(source_path, tmdb_id, season_number, reason, error_message, media_type, proper_name, year, episode_number, imdb_id, is_anime_genre, None, None, tvdb_id, root_folder)
 
     try:
         payload = {
@@ -1872,6 +1919,8 @@ def search_database(conn, pattern):
         
         if "base_path" in columns:
             extra_columns.append("base_path")
+        if "root_folder" in columns:
+            extra_columns.append("root_folder")
         if all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"]):
             extra_columns.extend(["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
         if "error_message" in columns:
@@ -1906,6 +1955,8 @@ def search_database(conn, pattern):
         searchable_columns = ["file_path", "destination_path", "tmdb_id", "proper_name", "imdb_id", "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id"]
         if "base_path" in columns:
             searchable_columns.append("base_path")
+        if "root_folder" in columns:
+            searchable_columns.append("root_folder")
         if "episode_title" in columns:
             searchable_columns.append("episode_title")
         
@@ -1957,6 +2008,8 @@ def search_database(conn, pattern):
                     log_message(f"Year: {result_dict['year']}", level="INFO")
                 if result_dict.get('base_path'):
                     log_message(f"Base Path: {result_dict['base_path']}", level="INFO")
+                if result_dict.get('root_folder'):
+                    log_message(f"Root Folder: {result_dict['root_folder']}", level="INFO")
                 if result_dict.get('season_number') is not None:
                     log_message(f"Season Number: {result_dict['season_number']}", level="INFO")
                 if result_dict.get('episode_number') is not None:
@@ -2040,6 +2093,8 @@ def search_database_silent(conn, pattern):
         
         if "base_path" in columns:
             extra_columns.append("base_path")
+        if "root_folder" in columns:
+            extra_columns.append("root_folder")
         if all(col in columns for col in ["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"]):
             extra_columns.extend(["media_type", "proper_name", "year", "episode_number", "imdb_id", "is_anime_genre"])
         if "error_message" in columns:
@@ -2074,6 +2129,8 @@ def search_database_silent(conn, pattern):
         searchable_columns = ["file_path", "destination_path", "tmdb_id", "proper_name", "imdb_id", "language", "quality", "tvdb_id", "league_id", "sportsdb_event_id"]
         if "base_path" in columns:
             searchable_columns.append("base_path")
+        if "root_folder" in columns:
+            searchable_columns.append("root_folder")
         if "episode_title" in columns:
             searchable_columns.append("episode_title")
 
@@ -2167,6 +2224,7 @@ def update_database_to_new_format(conn):
             "file_path TEXT PRIMARY KEY",
             "destination_path TEXT",
             "base_path TEXT",
+            "root_folder TEXT",
             "tmdb_id TEXT",
             "season_number TEXT",
             "reason TEXT",
@@ -2366,9 +2424,11 @@ def _process_single_entry(entry, api_key):
                     pass
 
             if dest_path:
-                base_path = extract_base_path_from_destination_path(dest_path, None, media_type, sport_name)
+                base_path, root_folder = extract_base_path_from_destination_path(dest_path, None, media_type, sport_name)
                 if base_path:
                     updates['base_path'] = base_path
+                if root_folder:
+                    updates['root_folder'] = root_folder
 
             return {
                 'file_path': file_path,
@@ -2533,9 +2593,11 @@ def _process_single_entry(entry, api_key):
                 pass
 
         if dest_path:
-            base_path = extract_base_path_from_destination_path(dest_path, updates.get('proper_name'), media_type, sport_name)
+            base_path, root_folder = extract_base_path_from_destination_path(dest_path, updates.get('proper_name'), media_type, sport_name)
             if base_path:
                 updates['base_path'] = base_path
+            if root_folder:
+                updates['root_folder'] = root_folder
 
         return {
             'file_path': file_path,

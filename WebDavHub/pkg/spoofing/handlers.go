@@ -1,19 +1,20 @@
 package spoofing
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "os"
+    "path/filepath"
+    "runtime"
+    "strconv"
+    "strings"
+    "sync"
+    "time"
 
-	"cinesync/pkg/logger"
-	"github.com/gorilla/websocket"
+    "cinesync/pkg/logger"
+    "github.com/gorilla/websocket"
+    prowlarrapi "cinesync/pkg/prowlarr"
 )
 
 var processStartTime = time.Now()
@@ -200,7 +201,16 @@ func HandleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine app name based on service type for Prowlarr compatibility
+	appName := "Radarr"
+	if config.ServiceType == "sonarr" {
+		appName = "Sonarr"
+	} else if config.ServiceType == "auto" {
+		appName = "Radarr"
+	}
+
 	status := SystemStatusResponse{
+		AppName:                appName,
 		Version:                config.Version,
 		BuildTime:              processStartTime.Format(time.RFC3339),
 		AppGuid:                config.AppGuid,
@@ -449,7 +459,7 @@ func HandleSpoofedHealth(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedRootFolder handles the /api/v3/rootfolder endpoint for both Radarr and Sonarr
 func HandleSpoofedRootFolder(w http.ResponseWriter, r *http.Request) {
-	rootFolders, err := getRootFoldersFromDatabase()
+	rootFolders, err := GetRootFoldersFromDatabase()
 	if err != nil {
 		logger.Error("Failed to get root folders: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -608,7 +618,7 @@ func HandleSpoofedFilesystem(w http.ResponseWriter, r *http.Request) {
 
 	// If no path specified, return root folders
 	if path == "" {
-		rootFolders, err := getRootFoldersFromDatabase()
+		rootFolders, err := GetRootFoldersFromDatabase()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
@@ -646,7 +656,7 @@ func HandleSpoofedFilesystem(w http.ResponseWriter, r *http.Request) {
 func getFilesystemContents(dirPath string, includeFiles bool) ([]map[string]interface{}, error) {
 	cleanPath := filepath.Clean(dirPath)
 
-	rootFolders, err := getRootFoldersFromDatabase()
+	rootFolders, err := GetRootFoldersFromDatabase()
 	if err != nil {
 		return nil, err
 	}
@@ -739,8 +749,131 @@ func HandleSpoofedDownloadClient(w http.ResponseWriter, r *http.Request) {
 
 // HandleSpoofedIndexer handles the /api/v3/indexer endpoint for both Radarr and Sonarr
 func HandleSpoofedIndexer(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexer: %v", err)
+			handleErrorResponse(w, "Indexer request failed", http.StatusInternalServerError)
+		}
+	}()
+
+    prowlarrapi.HandleSpoofedIndexerCRUD(w, r)
+}
+
+// HandleSpoofedIndexerSchema handles the /api/v3/indexer/schema endpoint that Prowlarr calls
+func HandleSpoofedIndexerSchema(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexerSchema: %v", err)
+			handleErrorResponse(w, "Indexer schema request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	// It needs to return Newznab and Torznab schemas with proper fields
+	schemas := []map[string]interface{}{
+		{
+			"id":               0,
+			"name":             "Newznab",
+			"Implementation":   "Newznab",
+			"configContract":   "NewznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
+				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox", "value": ""},
+				{"name": "categories", "label": "Categories", "type": "select", "value": []int{}},
+				{"name": "animeCategories", "label": "Anime Categories", "type": "select", "value": []int{}},
+				{"name": "animeStandardFormatSearch", "label": "Anime Standard Format Search", "type": "checkbox", "value": false},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number", "value": 1},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number", "value": 1.0},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number", "value": 0},
+				{"name": "seedCriteria.seasonPackSeedTime", "label": "Season Pack Seed Time", "type": "number", "value": 0},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox", "value": false},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox", "value": false},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox", "value": false},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select", "value": []int{}},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox", "value": ""},
+			},
+		},
+		{
+			"id":               0,
+			"name":             "Torznab",
+			"Implementation":   "Torznab",
+			"configContract":   "TorznabSettings",
+			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
+			"tags":             []int{},
+			"fields": []map[string]interface{}{
+				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
+				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
+				{"name": "apiKey", "label": "API Key", "type": "textbox", "value": ""},
+				{"name": "categories", "label": "Categories", "type": "select", "value": []int{}},
+				{"name": "animeCategories", "label": "Anime Categories", "type": "select", "value": []int{}},
+				{"name": "animeStandardFormatSearch", "label": "Anime Standard Format Search", "type": "checkbox", "value": false},
+				{"name": "minimumSeeders", "label": "Minimum Seeders", "type": "number", "value": 1},
+				{"name": "seedCriteria.seedRatio", "label": "Seed Ratio", "type": "number", "value": 1.0},
+				{"name": "seedCriteria.seedTime", "label": "Seed Time", "type": "number", "value": 0},
+				{"name": "seedCriteria.seasonPackSeedTime", "label": "Season Pack Seed Time", "type": "number", "value": 0},
+				{"name": "rejectBlocklistedTorrentHashesWhileGrabbing", "label": "Reject Blocklisted", "type": "checkbox", "value": false},
+				{"name": "multiLanguages", "label": "Multi Languages", "type": "checkbox", "value": false},
+				{"name": "removeYear", "label": "Remove Year", "type": "checkbox", "value": false},
+				{"name": "requiredFlags", "label": "Required Flags", "type": "select", "value": []int{}},
+				{"name": "additionalParameters", "label": "Additional Parameters", "type": "textbox", "value": ""},
+			},
+		},
+	}
+
+	logger.Info("Prowlarr requesting indexer schemas - returning Newznab and Torznab schemas")
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode([]map[string]interface{}{})
+	if err := json.NewEncoder(w).Encode(schemas); err != nil {
+		logger.Error("Failed to encode indexer schemas response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// HandleSpoofedIndexerTest handles the /api/v3/indexer/test endpoint that Prowlarr calls during TestConnection
+func HandleSpoofedIndexerTest(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("Panic in HandleSpoofedIndexerTest: %v", err)
+			handleErrorResponse(w, "Indexer test request failed", http.StatusInternalServerError)
+		}
+	}()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse the indexer test request
+	var indexerTest map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&indexerTest); err != nil {
+		logger.Error("Failed to decode indexer test request: %v", err)
+		handleErrorResponse(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Prowlarr testing indexer connection: %v", indexerTest["Name"])
+
+	config := GetConfig()
+	appVersion := config.Version
+
+	// Set the required headers that Prowlarr checks
+	w.Header().Set("X-Application-Version", appVersion)
+	w.Header().Set("Content-Type", "application/json")
+
+	// Return a successful test response
+	testResult := map[string]interface{}{
+		"isValid": true,
+		"errors":  []interface{}{},
+	}
+
+	logger.Info("Indexer test successful, returned version: %s", appVersion)
+
+	if err := json.NewEncoder(w).Encode(testResult); err != nil {
+		logger.Error("Failed to encode indexer test response: %v", err)
+		handleErrorResponse(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // HandleSpoofedImportList handles the /api/v3/importlist endpoint for Radarr
@@ -1621,4 +1754,120 @@ func getMovieDetailsForSignalR(movieID int) map[string]interface{} {
 		"popularity":          movie.Popularity,
 		"sizeOnDisk":          movie.SizeOnDisk,
 	}
+}
+
+// Prowlarr API Handler Functions
+
+// ProwlarrApplicationTestRequest represents the test request for Prowlarr applications
+type ProwlarrApplicationTestRequest struct {
+	BaseURL          string                 `json:"baseUrl"`
+	APIKey           string                 `json:"apiKey"`
+	SyncCategories   []int                  `json:"syncCategories"`
+	AnimeSyncCategories []int               `json:"animeSyncCategories"`
+	Tags             []int                  `json:"tags"`
+	Name             string                 `json:"name"`
+	Implementation   string                 `json:"implementation"`
+	ConfigContract   string                 `json:"configContract"`
+	InfoLink         string                 `json:"infoLink"`
+	Fields           []interface{}          `json:"fields"`
+}
+
+// ProwlarrApplicationTestResponse represents the response for application tests
+type ProwlarrApplicationTestResponse struct {
+	IsValid      bool                   `json:"isValid"`
+	Errors       []ProwlarrValidationFailure    `json:"errors"`
+}
+
+// ProwlarrValidationFailure represents validation errors
+type ProwlarrValidationFailure struct {
+	PropertyName string `json:"propertyName"`
+	ErrorMessage string `json:"errorMessage"`
+	Severity     string `json:"severity"`
+}
+
+// validateProwlarrApplication validates an application configuration and tests connection
+func validateProwlarrApplication(req ProwlarrApplicationTestRequest) ProwlarrApplicationTestResponse {
+	var errors []ProwlarrValidationFailure
+
+	// Validate required fields
+	if req.BaseURL == "" {
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "BaseUrl",
+			ErrorMessage: "Base URL is required",
+			Severity:     "error",
+		})
+	}
+
+	if req.APIKey == "" {
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "ApiKey", 
+			ErrorMessage: "API Key is required",
+			Severity:     "error",
+		})
+	}
+
+	// If basic validation failed, return early
+	if len(errors) > 0 {
+		return ProwlarrApplicationTestResponse{
+			IsValid: false,
+			Errors:  errors,
+		}
+	}
+
+	// Test connection to the application
+	if err := testProwlarrApplicationConnection(req.BaseURL, req.APIKey); err != nil {
+		serviceName := "Application"
+		if req.Implementation != "" {
+			serviceName = req.Implementation
+		}
+		errors = append(errors, ProwlarrValidationFailure{
+			PropertyName: "BaseUrl",
+			ErrorMessage: fmt.Sprintf("Unable to complete application test, cannot connect to %s. %s", serviceName, err.Error()),
+			Severity:     "error",
+		})
+	}
+
+	return ProwlarrApplicationTestResponse{
+		IsValid: len(errors) == 0,
+		Errors:  errors,
+	}
+}
+
+// testProwlarrApplicationConnection tests the connection to Radarr/Sonarr
+func testProwlarrApplicationConnection(baseURL, apiKey string) error {
+	// Normalize URL
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	testURL := baseURL + "/api/v3/system/status"
+
+	// Create request
+	req, err := http.NewRequest("GET", testURL, nil)
+	if err != nil {
+		return err
+	}
+
+	// Add API key header
+	req.Header.Set("X-Api-Key", apiKey)
+
+	// Make request with timeout
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication failed - check API key")
+	} else if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Try to decode response to ensure it's valid JSON
+	var statusResponse map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&statusResponse); err != nil {
+		return fmt.Errorf("invalid response format")
+	}
+
+	return nil
 }

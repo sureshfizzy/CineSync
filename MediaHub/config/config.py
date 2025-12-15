@@ -5,7 +5,7 @@ import requests
 import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.env_creator import get_env_file_path
+from MediaHub.utils.file_utils import normalize_country_code
 
 # Beta features that are currently disabled (HARDCODED)
 BETA_DISABLED_FEATURES = {
@@ -104,8 +104,18 @@ def get_env_float(key, default):
     except (ValueError, TypeError):
         return default
 
+def _get_env_file_path():
+    if os.path.exists('/.dockerenv') or os.getenv('CONTAINER') == 'docker':
+        return '/app/db/.env'
+    cwd = os.getcwd()
+    basename = os.path.basename(cwd)
+    if basename in ('MediaHub', 'WebDavHub'):
+        parent = os.path.dirname(cwd)
+        return os.path.join(parent, 'db', '.env')
+    return os.path.join(cwd, 'db', '.env')
+
 # Load .env file
-dotenv_path = get_env_file_path()
+dotenv_path = _get_env_file_path()
 load_dotenv(dotenv_path)
 
 def get_directories():
@@ -138,6 +148,9 @@ def is_movie_collection_enabled():
 def is_skip_extras_folder_enabled():
     return os.getenv('SKIP_EXTRAS_FOLDER', 'false').lower() in ['true', '1', 'yes']
 
+def use_relative_symlinks():
+    return os.getenv('RELATIVE_SYMLINK', 'false').lower() in ['true', '1', 'yes']
+
 def get_show_extras_size_limit():
      return get_env_int('SHOW_EXTRAS_SIZE_LIMIT', 5)
 
@@ -158,6 +171,9 @@ def is_source_structure_enabled():
 
 def is_skip_patterns_enabled():
     return os.getenv('SKIP_ADULT_PATTERNS', 'false').lower() == 'true'
+
+def is_skip_versions_enabled():
+    return os.getenv('SKIP_VERSIONS', 'false').lower() in ['true', '1', 'yes']
 
 def is_rclone_mount_enabled():
     return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
@@ -208,13 +224,21 @@ def custom_sports_layout():
     return token
 
 def get_mediainfo_radarr_tags():
-    """Get mediainfo radarr tags from environment variable and properly clean them"""
+    """Get mediainfo radarr tags from environment variable and keep separators"""
     tags_env = os.getenv('MEDIAINFO_RADARR_TAGS', '')
     if not tags_env:
         return []
 
-    tags = re.findall(r'\{([^{}]+)\}', tags_env)
-    return [tag.strip() for tag in tags]
+    tag_pattern = r'(?P<prefix>[\-._]?)\s*\{(?P<tag>[^{}]+)\}'
+    tags = []
+
+    for match in re.finditer(tag_pattern, tags_env):
+        prefix = match.group('prefix') or ''
+        tag = match.group('tag').strip()
+        if tag:
+            tags.append(f"{prefix}{tag}")
+
+    return tags
 
 def get_sonarr_standard_episode_format():
     """Get Sonarr standard episode format from environment variable"""
@@ -298,6 +322,28 @@ def is_kids_separation_enabled():
 
 def tmdb_api_language():
     return os.getenv('LANGUAGE', 'ENGLISH').lower()
+
+def is_original_title_enabled():
+    """Check if original title usage is enabled for movies/shows/episodes."""
+    return os.getenv('ORIGINAL_TITLE', 'false').lower() in ['true', '1', 'yes']
+
+def get_original_title_countries():
+    """
+    Get list of production countries for original title usage.
+    Accepts either ISO 3166-1 alpha-2 codes or common country names.
+    """
+    value = os.getenv('ORIGINAL_TITLE_COUNTRIES', '')
+    if not value:
+        return []
+    countries = []
+    for token in value.split(','):
+        raw = token.strip()
+        if not raw:
+            continue
+        iso = normalize_country_code(raw)
+        if iso:
+            countries.append(iso)
+    return countries
 
 def mediainfo_parser():
     """Check if MEDIA PARSER is enabled in configuration"""

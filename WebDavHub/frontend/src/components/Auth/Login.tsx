@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -38,9 +38,30 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [needsConfiguration, setNeedsConfiguration] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+
+  // Check if setup is needed
+  useEffect(() => {
+    let mounted = true;
+    axios
+      .get('/api/config-status')
+      .then((res) => {
+        if (mounted) setNeedsConfiguration(res.data?.needsConfiguration || false);
+      })
+      .catch(() => {
+        if (mounted) setNeedsConfiguration(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (needsConfiguration === true) {
+    return <Navigate to="/setupwizard" replace />;
+  }
 
   // Get the return URL from location state or default to dashboard
   const from = (location.state as LocationState)?.from?.pathname || '/dashboard';

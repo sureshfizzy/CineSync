@@ -84,6 +84,9 @@ func SetRootDir(dir string) {
 			}()
 		}
 	}
+	if err := db.InitDebridDB(); err != nil {
+		logger.Warn("Failed to initialize debrid DB: %v", err)
+	}
 
 	// Initialize folder cache for fast navigation
 	if !isPlaceholderConfig {
@@ -194,6 +197,7 @@ type FileInfo struct {
 	IsMediaFile  bool `json:"isMediaFile,omitempty"`
 	SourcePath   string `json:"sourcePath,omitempty"`
 	DestinationPath string `json:"destinationPath,omitempty"`
+    Quality string `json:"quality,omitempty"`
 }
 
 type Stats struct {
@@ -249,6 +253,7 @@ type RenameResponse struct {
 type MoveRequest struct {
 	SourcePath string `json:"sourcePath"`
 	TargetPath string `json:"targetPath"`
+	Overwrite  bool   `json:"overwrite,omitempty"`
 }
 
 type MoveResponse struct {
@@ -651,6 +656,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 					fileInfo.HasSeasonFolders = true
 				}
 			}
+			if dbFolder.Quality != "" {
+				fileInfo.Quality = dbFolder.Quality
+			}
 
 			// Get poster path from TMDB cache using database metadata
 			if dbFolder.TmdbID != "" && dbFolder.MediaType != "" {
@@ -862,6 +870,9 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 				fileInfo.Size = formatFileSize(dbInfo.FileSize)
 				fileInfo.SourcePath = dbInfo.SourcePath
 				fileInfo.DestinationPath = dbInfo.DestinationPath
+				if dbInfo.Quality != "" {
+					fileInfo.Quality = dbInfo.Quality
+				}
 				if dbInfo.TmdbID != "" {
 					fileInfo.TmdbId = dbInfo.TmdbID
 				}
@@ -2886,14 +2897,27 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := os.Stat(targetFullPath); err == nil {
-		logger.Warn("Error: target already exists: %s", targetFullPath)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(MoveResponse{
-			Success: false,
-			Error:   "Target already exists. A file or folder with this name already exists in the destination.",
-		})
-		return
+		if req.Overwrite {
+			if err := os.RemoveAll(targetFullPath); err != nil {
+				logger.Warn("Error: failed to remove existing target for overwrite: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(MoveResponse{
+					Success: false,
+					Error:   "Failed to remove existing target: " + err.Error(),
+				})
+				return
+			}
+		} else {
+			logger.Info("Target already exists (overwrite available): %s", targetFullPath)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(MoveResponse{
+				Success: false,
+				Error:   "Target already exists. A file or folder with this name already exists in the destination.",
+			})
+			return
+		}
 	}
 
 	// Ensure target directory exists

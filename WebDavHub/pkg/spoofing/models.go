@@ -4,6 +4,7 @@ import "time"
 
 // SystemStatusResponse represents the system status for both Radarr and Sonarr
 type SystemStatusResponse struct {
+	AppName                string `json:"appName"`
 	Version                string `json:"version"`
 	BuildTime              string `json:"buildTime"`
 	AppGuid                string `json:"appGuid"`

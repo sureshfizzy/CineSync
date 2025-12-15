@@ -2,7 +2,12 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
-from MediaHub.utils.env_creator import get_env_file_path
+from MediaHub.config.config import _get_env_file_path
+from MediaHub.utils.file_utils import get_symlink_target_path
+
+# Locate environment file using shared config helper
+ENV_FILE_PATH = _get_env_file_path()
+load_dotenv(ENV_FILE_PATH)
 
 def setup_logging(log_folder):
     if not os.path.exists(log_folder):
@@ -23,13 +28,13 @@ def read_directories(config_file):
         sys.exit(1)
     return directories
 
-def get_fallback_directory(env_file):
-    load_dotenv(env_file)
+def get_fallback_directory():
+    load_dotenv(ENV_FILE_PATH)
     destination_dir = os.getenv('DESTINATION_DIR')
     if destination_dir:
         return [destination_dir]
     else:
-        logging.error(f"Destination_dir not found in {env_file}")
+        logging.error(f"DESTINATION_DIR not found in {ENV_FILE_PATH}")
         sys.exit(1)
 
 def find_broken_symlinks(directory):
@@ -38,7 +43,8 @@ def find_broken_symlinks(directory):
         for name in files + dirs:
             path = os.path.join(root, name)
             if os.path.islink(path):
-                if not os.path.exists(os.readlink(path)):
+                target = get_symlink_target_path(path)
+                if not target or not os.path.exists(target):
                     broken_symlinks.append(path)
     return broken_symlinks
 
@@ -47,8 +53,7 @@ def main():
     broken_links_folder = os.path.join(script_dir, '..', '..', 'BrokenLinkVault')
     logs_folder = os.path.join(broken_links_folder, 'logs')
     config_file = os.path.join(broken_links_folder, 'broken_links_config.txt')
-    env_file = get_env_file_path()
-    load_dotenv(env_file)
+    load_dotenv(ENV_FILE_PATH)
 
     # Create directories
     if not os.path.exists(broken_links_folder):
@@ -62,7 +67,7 @@ def main():
     # Read directories from the configuration file or fallback to .env
     directories = read_directories(config_file)
     if not directories:
-        directories = get_fallback_directory(env_file)
+        directories = get_fallback_directory()
 
     for directory in directories:
         if os.path.isdir(directory):

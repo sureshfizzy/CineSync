@@ -10,15 +10,19 @@ import (
 )
 
 // LoadEnv loads environment variables from .env file
-func LoadEnv() {
+func LoadEnv() error {
     envPath := config.GetEnvFilePath()
 
-    err := godotenv.Load(envPath)
-    if err != nil {
-        logger.Warn("Could not load .env from %s. Using defaults.", envPath)
-    } else {
+	if _, statErr := os.Stat(envPath); statErr != nil {
+		return statErr
+	}
+
+	if err := godotenv.Load(envPath); err != nil {
+		return err
+	}
+
         logger.Debug("Environment variables loaded from %s", envPath)
-    }
+	return nil
 }
 
 // ReloadEnv reloads environment variables from .env file at runtime

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Typography, Chip, Paper } from '@mui/material';
+import { Box, Typography, Chip, Paper, alpha, useTheme } from '@mui/material';
+import { motion } from 'framer-motion';
 import { MediaDetailsData } from './types';
 import ShowFileActions from './ShowFileActions';
 
@@ -12,14 +13,18 @@ interface ShowHeaderProps {
   onError?: (error: string) => void;
   refreshTrigger?: number;
   onNavigateBack?: () => void;
+  isArrDashboardContext?: boolean;
+  isLoadingFiles?: boolean;
+  seasonFolders?: any[];
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [] }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
   const genres = data.genres || [];
   const country = data.production_countries?.[0]?.name;
+  const theme = useTheme();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 4 }, alignItems: { xs: 'center', md: 'flex-start' } }}>
@@ -63,6 +68,7 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           </Box>
         )}
         <Typography variant="body1" sx={{ mb: 2 }}>{data.overview}</Typography>
+
         <ShowFileActions
           data={data}
           folderName={folderName}
@@ -73,6 +79,103 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           refreshTrigger={refreshTrigger}
           onNavigateBack={onNavigateBack}
         />
+
+        {/* Overview Section - Only show in ArrDashboard context */}
+        {isArrDashboardContext && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            style={{
+              willChange: 'opacity, transform',
+              transform: 'translateZ(0)',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }}
+          >
+            <Box sx={{ 
+              mb: 3, 
+              p: 2, 
+              bgcolor: alpha(theme.palette.background.paper, 0.8), 
+              borderRadius: 2, 
+              border: '1px solid', 
+              borderColor: alpha(theme.palette.divider, 0.3),
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)'
+            }}>
+              <Box sx={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: { xs: 1.5, sm: 2 }, 
+                alignItems: 'center', 
+                justifyContent: { xs: 'center', md: 'flex-start' },
+                '& > *': {
+                  flexShrink: 0
+                }
+              }}>
+                {/* Status */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ 
+                    width: 4, 
+                    height: 16, 
+                    bgcolor: isLoadingFiles ? 'info.main' : (seasonFolders.length > 0 ? 'success.main' : 'warning.main'), 
+                    borderRadius: 0.5,
+                    boxShadow: isLoadingFiles ? '0 0 8px rgba(33, 150, 243, 0.3)' : (seasonFolders.length > 0 ? '0 0 8px rgba(76, 175, 80, 0.3)' : '0 0 8px rgba(255, 152, 0, 0.3)')
+                  }} />
+                  <Typography variant="body2" sx={{ 
+                    fontWeight: 600, 
+                    color: 'text.primary',
+                    fontSize: '0.875rem'
+                  }}>
+                    {isLoadingFiles ? 'Checking...' : (seasonFolders.length > 0 ? 'Available' : 'Not Available')}
+                  </Typography>
+                </Box>
+
+                {/* Original Language */}
+                {data.original_language && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ 
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Original Language:
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 600, 
+                      color: 'text.primary', 
+                      textTransform: 'capitalize',
+                      fontSize: '0.875rem'
+                    }}>
+                      {data.original_language}
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Country */}
+                {data.production_countries && data.production_countries.length > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ 
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Country:
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 600, 
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {data.production_countries[0].name}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          </motion.div>
+        )}
+
       </Box>
     </Box>
   );

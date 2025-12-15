@@ -11,7 +11,7 @@ import threading
 import traceback
 import io
 import time
-from dotenv import load_dotenv
+import tempfile
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
 if hasattr(sys.stdout, 'buffer'):
@@ -30,7 +30,6 @@ from MediaHub.processors.symlink_creator import *
 from MediaHub.monitor.polling_monitor import *
 from MediaHub.processors.symlink_utils import *
 from MediaHub.utils.file_utils import resolve_symlink_to_source
-from MediaHub.utils.env_creator import ensure_env_file_exists, get_env_file_path
 from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
 from MediaHub.utils.global_events import *
 
@@ -43,14 +42,6 @@ LOCK_TIMEOUT = 3600
 
 # Set up global variables to track processes
 background_processes = []
-
-# Ensure .env file exists before trying to load it
-if not ensure_env_file_exists():
-    print("Failed to create .env file. Continuing with environment variables only.")
-
-# Load .env file
-db_env_path = get_env_file_path()
-load_dotenv(db_env_path)
 
 def wait_for_mount():
     """Wait for the rclone mount to become available with minimal logging."""
@@ -117,9 +108,9 @@ def display_missing_files_with_mount_check(dest_dir):
         return []
 
 def ensure_windows_temp_directory():
-    """Create the C:\\temp directory if it does not exist on Windows."""
+    """Create a temp directory if it does not exist on Windows."""
     if platform.system() == 'Windows':
-        temp_dir = 'C:\\temp'
+        temp_dir = tempfile.gettempdir()
         if not os.path.exists(temp_dir):
             try:
                 os.makedirs(temp_dir)

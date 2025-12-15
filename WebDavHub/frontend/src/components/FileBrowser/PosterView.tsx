@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, memo } from 'react';
-import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox } from '@mui/material';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha, Chip } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -15,6 +15,7 @@ import { useFileActions } from '../../hooks/useFileActions';
 import ModifyDialog from './ModifyDialog/ModifyDialog';
 import MoveFileDialog from './MoveFileDialog';
 import MoveErrorDialog from './MoveErrorDialog';
+import OverwriteDialog from './OverwriteDialog';
 import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 import BulkActionsBar from './BulkActionsBar';
 import BulkMoveDialog from './BulkMoveDialog';
@@ -37,6 +38,8 @@ interface PosterViewProps {
   onRename: () => void;
   onDeleted: () => void;
   onNavigateBack?: () => void;
+  sizeVariant?: 'default' | 'compact';
+  showArrBadges?: boolean;
 }
 
 const PosterView = memo(({
@@ -50,6 +53,8 @@ const PosterView = memo(({
   onRename,
   onDeleted,
   onNavigateBack,
+  sizeVariant = 'default',
+  showArrBadges = false,
 }: PosterViewProps) => {
   const theme = useTheme();
   const [contextMenu, setContextMenu] = useState<{
@@ -80,6 +85,13 @@ const PosterView = memo(({
   const [bulkMoveDialogOpen, setBulkMoveDialogOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkConflict, setBulkConflict] = useState<{
+    item: FileItem;
+    targetPath: string;
+    remaining: FileItem[];
+  } | null>(null);
+  const [bulkConflictError, setBulkConflictError] = useState<string | null>(null);
+  const [bulkOverwriteAll, setBulkOverwriteAll] = useState(false);
 
   const handleContextMenu = useCallback((event: React.MouseEvent, file: FileItem) => {
     event.preventDefault();
@@ -125,23 +137,86 @@ const PosterView = memo(({
   }, []);
 
 
+  const processBulkItems = useCallback(async (
+    items: FileItem[],
+    targetPath: string,
+    forceOverwrite: boolean = false
+  ) => {
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+      try {
+        await moveFile(sourcePath, targetPath, forceOverwrite);
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.error || error?.response?.data || error?.message || 'Failed to move file';
+        const isTargetExistsError = errorMessage.toLowerCase().includes('target already exists') ||
+                                    errorMessage.toLowerCase().includes('already exists');
+        if (isTargetExistsError && !forceOverwrite) {
+          setBulkConflict({
+            item,
+            targetPath,
+            remaining: items.slice(idx + 1),
+          });
+          setBulkConflictError(null);
+          setBulkLoading(false);
+          return false;
+        }
+        throw error;
+      }
+    }
+    return true;
+  }, [currentPath]);
+
   const handleBulkMoveSubmit = useCallback(async (targetPath: string) => {
     setBulkLoading(true);
+    setBulkOverwriteAll(false);
     try {
-      const selected = getSelectedItems(files);
-      for (const item of selected) {
-        const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
-        await moveFile(sourcePath, targetPath);
+      const selected = Array.from(getSelectedItems(files));
+      const completed = await processBulkItems(selected, targetPath, bulkOverwriteAll);
+      if (completed) {
+        setBulkMoveDialogOpen(false);
+        exitSelectionMode();
+        if (onDeleted) onDeleted();
       }
-      setBulkMoveDialogOpen(false);
-      exitSelectionMode();
-      if (onDeleted) onDeleted();
     } catch (error) {
       console.error('Bulk move failed:', error);
     } finally {
+      if (!bulkConflict) {
+        setBulkLoading(false);
+      }
+    }
+  }, [getSelectedItems, files, processBulkItems, exitSelectionMode, onDeleted, bulkConflict]);
+
+  const handleBulkOverwriteCancel = useCallback(() => {
+    setBulkConflict(null);
+    setBulkConflictError(null);
+    setBulkLoading(false);
+  }, []);
+
+  const handleBulkOverwriteConfirm = useCallback(async (applyAll?: boolean) => {
+    if (!bulkConflict) return;
+    setBulkConflictError(null);
+    setBulkLoading(true);
+    if (applyAll) setBulkOverwriteAll(true);
+    const { item, targetPath, remaining } = bulkConflict;
+    const sourcePath = item.fullPath || item.sourcePath || joinPaths(currentPath, item.name);
+    try {
+      await moveFile(sourcePath, targetPath, true);
+      const forceOverwrite = bulkOverwriteAll || applyAll || false;
+      const done = await processBulkItems(remaining, targetPath, forceOverwrite);
+      if (done) {
+        setBulkConflict(null);
+        setBulkMoveDialogOpen(false);
+        exitSelectionMode();
+        if (onDeleted) onDeleted();
+      }
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error?.response?.data || error?.message || 'Failed to overwrite';
+      setBulkConflictError(errorMessage);
+    } finally {
       setBulkLoading(false);
     }
-  }, [getSelectedItems, files, currentPath, exitSelectionMode, onDeleted]);
+  }, [bulkConflict, currentPath, exitSelectionMode, onDeleted, processBulkItems]);
 
   const handleBulkDeleteSubmit = useCallback(async () => {
     setBulkLoading(true);
@@ -177,13 +252,18 @@ const PosterView = memo(({
         className="poster-grid"
         sx={{
           display: 'grid',
-          gridTemplateColumns: {
+          gridTemplateColumns: sizeVariant === 'compact' ? {
+            xs: 'repeat(3, 1fr)',
+            sm: 'repeat(4, 1fr)',
+            md: 'repeat(6, 1fr)',
+            lg: 'repeat(7, 1fr)'
+          } : {
             xs: 'repeat(2, 1fr)',
             sm: 'repeat(3, 1fr)',
             md: 'repeat(4, 1fr)',
             lg: 'repeat(5, 1fr)'
           },
-          gap: 3,
+          gap: sizeVariant === 'compact' ? 1.5 : 3,
           p: 1
         }}>
         {files.map((file) => {
@@ -191,7 +271,7 @@ const PosterView = memo(({
           const loaded = imgLoadedMap[file.name] || false;
           const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
           const tmdbId = file.tmdbId || (tmdb && tmdb.id);
-          const hasPosterPath = !!posterPath;
+          const hasPosterPath = !!posterPath || !!tmdbId;
 
           return (
             <Paper
@@ -277,6 +357,28 @@ const PosterView = memo(({
                       }
                     }}
                   />
+                )}
+                
+                {/* Quality Badge */}
+                {showArrBadges && file.quality && !isSelectionMode && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      zIndex: 5,
+                      bgcolor: alpha(theme.palette.success.main, 0.9),
+                      color: 'white',
+                      px: 1,
+                      py: 0.25,
+                      borderRadius: 1,
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    {file.quality}
+                  </Box>
                 )}
                 {(() => {
                   const title = file.title || (tmdb && tmdb.title) || file.name;
@@ -401,7 +503,7 @@ const PosterView = memo(({
                   sx={{
                     fontWeight: 500,
                     textAlign: 'center',
-                    fontSize: { xs: '0.9rem', sm: '1rem' },
+                    fontSize: sizeVariant === 'compact' ? { xs: '0.8rem', sm: '0.9rem' } : { xs: '0.9rem', sm: '1rem' },
                     mb: 0.5,
                     lineHeight: 1.2,
                     overflow: 'hidden',
@@ -431,6 +533,36 @@ const PosterView = memo(({
                     })()}
                   </Typography>
                 )}
+
+                {/* Status row */}
+                {showArrBadges && (() => {
+                  const isAvailable = (file.status === 'imported' || file.status === 'available' || !!file.quality);
+                  const showMonitored = !!file.isLibraryItem;
+                  return (
+                  <Box sx={{
+                    mt: 0.5,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 1
+                  }}>
+                    {showMonitored && (
+                      <Chip size="small" label="Monitored" sx={{
+                        height: 20,
+                        fontSize: '0.7rem',
+                        bgcolor: alpha(theme.palette.info.main, 0.1),
+                        color: theme.palette.info.main,
+                      }} />
+                    )}
+
+                    <Chip size="small" label={isAvailable ? 'Available' : 'Missing'} sx={{
+                      height: 20,
+                      fontSize: '0.7rem',
+                      bgcolor: isAvailable ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.warning.main, 0.12),
+                      color: isAvailable ? theme.palette.success.main : theme.palette.warning.main,
+                    }} />
+                  </Box>
+                  );
+                })()}
               </Box>
             </Paper>
           );
@@ -590,19 +722,43 @@ const PosterView = memo(({
       />
 
       {/* Move Error Dialog */}
-      <MoveErrorDialog
-        open={fileActions.moveErrorDialogOpen}
-        onClose={fileActions.handleMoveErrorDialogClose}
-        onRetry={() => {
-          if (fileActions.lastMoveAttempt) {
-            fileActions.handleMoveErrorDialogClose();
-            fileActions.handleMoveSubmit(fileActions.lastMoveAttempt.targetPath);
-          }
-        }}
+      {!fileActions.overwriteDialogOpen && (
+        <MoveErrorDialog
+          open={fileActions.moveErrorDialogOpen}
+          onClose={fileActions.handleMoveErrorDialogClose}
+          onRetry={() => {
+            if (fileActions.lastMoveAttempt) {
+              fileActions.handleMoveErrorDialogClose();
+              fileActions.handleMoveSubmit(fileActions.lastMoveAttempt.targetPath);
+            }
+          }}
+          fileName={fileActions.fileBeingMoved?.name || ''}
+          targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
+          errorMessage={fileActions.moveError || ''}
+        />
+      )}
+
+      {/* Overwrite Dialog */}
+      <OverwriteDialog
+        open={fileActions.overwriteDialogOpen}
+        onClose={fileActions.handleOverwriteDialogClose}
+        onConfirm={fileActions.handleOverwriteMove}
         fileName={fileActions.fileBeingMoved?.name || ''}
         targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
-        errorMessage={fileActions.moveError || ''}
       />
+
+      {/* Bulk Overwrite Dialog */}
+      {bulkConflict && (
+        <OverwriteDialog
+          open={true}
+          onClose={handleBulkOverwriteCancel}
+          onConfirm={() => handleBulkOverwriteConfirm(true)}
+          fileName={bulkConflict.item.name}
+          targetPath={bulkConflict.targetPath}
+          errorMessage={bulkConflictError || undefined}
+          hideFileName
+        />
+      )}
 
       {/* Bulk Actions */}
       <BulkActionsBar
@@ -635,4 +791,4 @@ const PosterView = memo(({
 
 PosterView.displayName = 'PosterView';
 
-export default PosterView;
+export { PosterView as default };

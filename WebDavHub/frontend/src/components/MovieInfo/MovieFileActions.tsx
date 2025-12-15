@@ -105,14 +105,15 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
       <>
         <FileActionMenu
           file={{
-            name: folderName || 'Unknown Folder',
-            type: 'directory' as const,
-            fullPath: filePath,
-            sourcePath: filePath,
-            webdavPath: filePath,
-            path: filePath,
-            size: '0 B',
-            modified: new Date().toISOString()
+            name: fileInfo.name || folderName || 'Unknown File',
+            type: 'file' as const,
+            fullPath: fileInfo.fullPath || fileInfo.sourcePath || fullFilePath,
+            sourcePath: fileInfo.sourcePath || fileInfo.fullPath || fullFilePath,
+            webdavPath: fileInfo.webdavPath || fullFilePath,
+            path: fileInfo.path || fullFilePath,
+            size: fileInfo.size || '0 B',
+            modified: fileInfo.modified || new Date().toISOString(),
+            destinationPath: fileInfo.destinationPath
           }}
           currentPath={currentPath}
           onViewDetails={() => {}}

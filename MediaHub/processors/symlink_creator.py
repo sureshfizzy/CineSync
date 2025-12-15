@@ -21,7 +21,7 @@ from threading import Event
 from MediaHub.processors.movie_processor import process_movie
 from MediaHub.processors.show_processor import process_show
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.file_utils import build_dest_index, is_anime_file, should_skip_processing
+from MediaHub.utils.file_utils import build_dest_index, get_symlink_target_path, is_anime_file, should_skip_processing
 from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.utils.webdav_api import send_structured_message
 from MediaHub.config.config import *
@@ -465,6 +465,22 @@ def _cleanup_old_symlink(old_symlink_info, new_dest_file=None):
     else:
         log_message(f"Force mode: Skipping cleanup as symlink location unchanged: {new_dest_file}", level="DEBUG")
 
+def _select_symlink_target(src_file, dest_file):
+    if not use_relative_symlinks():
+        return src_file
+
+    try:
+        src_drive = os.path.splitdrive(src_file)[0].lower()
+        dest_drive = os.path.splitdrive(dest_file)[0].lower()
+
+        if platform.system() == "Windows" and src_drive != dest_drive:
+            return src_file
+
+        dest_dir = os.path.dirname(dest_file)
+        return os.path.relpath(src_file, dest_dir)
+    except Exception:
+        return src_file
+
 # Global cache for first selection in batch processing
 first_selection_cache = {
     'tmdb_id': None,
@@ -631,7 +647,9 @@ def process_file(args, force=False, batch_apply=False):
                 for filename in os.listdir(dir_path):
                     potential_new_path = os.path.join(dir_path, filename)
                     if os.path.islink(potential_new_path):
-                        link_target = normalize_file_path(os.readlink(potential_new_path))
+                        link_target = get_symlink_target_path(potential_new_path)
+                        if link_target:
+                            link_target = normalize_file_path(link_target)
                         if link_target == src_file:
                             log_message(f"Detected renamed file: {existing_dest_path} -> {potential_new_path}", level="INFO")
                             update_renamed_file(existing_dest_path, potential_new_path)
@@ -1022,7 +1040,9 @@ def process_file(args, force=False, batch_apply=False):
             potential_symlink = os.path.join(dest_dir, filename)
             if os.path.islink(potential_symlink):
                 try:
-                    link_target = normalize_file_path(os.readlink(potential_symlink))
+                    link_target = get_symlink_target_path(potential_symlink)
+                    if link_target:
+                        link_target = normalize_file_path(link_target)
                     log_message(f"Found symlink {potential_symlink} -> {link_target}", level="DEBUG")
                     if link_target == normalized_src_file:
                         existing_symlink_for_source = potential_symlink
@@ -1152,7 +1172,7 @@ def process_file(args, force=False, batch_apply=False):
 
     # Check if symlink already exists at the exact destination path
     if os.path.islink(dest_file):
-        existing_src = normalize_file_path(os.readlink(dest_file))
+        existing_src = normalize_file_path(get_symlink_target_path(dest_file))
         if existing_src == normalized_src_file:
             # For sports content, check SportsDB event ID instead of TMDB ID
             if media_type == 'Sports':
@@ -1197,10 +1217,8 @@ def process_file(args, force=False, batch_apply=False):
             else:
                 log_message(f"Symlink exists but metadata incomplete - processing to extract metadata: {dest_file} -> {src_file}", level="INFO")
         else:
-            # Instead of overwriting, create a versioned name for the new symlink
-            log_message(f"Symlink exists but points to different source, creating versioned name", level="INFO")
-            # The version numbering will be handled later in the code
-
+            # Instead of overwriting, handle versioned name for the new symlink
+            log_message(f"Symlink exists but points to different source, handling version conflict", level="INFO")
 
     if os.path.exists(dest_file) and not os.path.islink(dest_file):
         log_message(f"File already exists at destination: {os.path.basename(dest_file)}", level="INFO")
@@ -1209,14 +1227,22 @@ def process_file(args, force=False, batch_apply=False):
     # Check for filename conflicts and generate unique filename if needed
     original_dest_file = dest_file
     dest_file = generate_unique_filename(dest_file, src_file)
+
+    if dest_file is None:
+        reason = "File skipped - duplicate version already exists"
+        log_message(f"Skipping duplicate version: {os.path.basename(original_dest_file)}", level="INFO")
+        log_message(f"Adding skipped duplicate to database: {src_file} (reason: {reason})", level="DEBUG")
+        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        return
     
     if dest_file != original_dest_file:
         log_message(f"Filename conflict detected, using versioned name: {os.path.basename(dest_file)}", level="INFO")
 
     # Create symlink
     try:
-        os.symlink(src_file, dest_file)
-        log_message(f"Created symlink: {dest_file} -> {src_file}", level="INFO")
+        link_target = _select_symlink_target(src_file, dest_file)
+        os.symlink(link_target, dest_file)
+        log_message(f"Created symlink: {dest_file} -> {link_target}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
         # Extract media information for structured message

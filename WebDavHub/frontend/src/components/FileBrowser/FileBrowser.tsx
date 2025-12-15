@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination, Fade } from '@mui/material';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
+import { Box, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, IconButton, Divider, useTheme, useMediaQuery, Pagination, Fade, Tabs, Tab } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { debounce } from '@mui/material/utils';
 import { useLayoutContext } from '../Layout/Layout';
 import { searchTmdb } from '../api/tmdbApi';
 import { TmdbResult } from '../api/tmdbApi';
 import { FileItem, SortOption } from './types';
-import { getFileIcon, joinPaths, formatDate, sortFiles } from './fileUtils';
+import { getFileIcon, joinPaths, formatDate, sortFiles, formatBytes } from './fileUtils';
 import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
@@ -59,6 +59,8 @@ const PaginationComponent = ({ totalPages, page, onPageChange, isMobile }: {
 // FileBrowserContent component that uses the bulk selection context
 const FileBrowserContent: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const inDebridPage = location.pathname.startsWith('/dashboard/debrid');
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { view, setView, handleRefresh } = useLayoutContext();
@@ -103,7 +105,7 @@ const FileBrowserContent: React.FC = () => {
   const [search, setSearch] = useState(searchFromUrl);
   const [isSearching, setIsSearching] = useState(false);
   const [isLetterFiltering, setIsLetterFiltering] = useState(false);
-  const [sortOption, setSortOption] = useState<SortOption>('name-asc');
+  const [sortOption, setSortOption] = useState<SortOption>(inDebridPage ? 'modified-desc' as SortOption : 'name-asc');
   const [selectedLetter, setSelectedLetter] = useState<string | null>(letterFromUrl);
   const [configStatus, setConfigStatus] = useState<{
     isPlaceholder: boolean;
@@ -129,6 +131,11 @@ const FileBrowserContent: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<{current: number, total: number} | null>(null);
+
+  // Real-Debrid integration
+  const initialSource: 'local' | 'realdebrid' = inDebridPage ? 'realdebrid' : 'local';
+  const [browserSource, setBrowserSource] = useState<'local' | 'realdebrid'>(initialSource);
+  const [rdEnabled, setRdEnabled] = useState(false);
 
   useEffect(() => {
     const urlPage = parseInt(searchParams.get('page') || '1', 10);
@@ -190,7 +197,60 @@ const FileBrowserContent: React.FC = () => {
     };
   }, []);
 
+  // Check RD status on mount and when switching back to local
+  useEffect(() => {
+    const fetchRdStatus = async () => {
+      try {
+        const res = await axios.get('/api/realdebrid/status');
+        const valid = !!res.data && (res.data.valid === true || res.data.apiStatus?.valid);
+        setRdEnabled(valid);
+      } catch (e) {
+        setRdEnabled(false);
+      }
+    };
+    fetchRdStatus();
+  }, []);
+
+  const loadRdDownloads = async (pageNum: number = 1) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await axios.get('/api/realdebrid/downloads', {
+        params: {
+          page: pageNum,
+          limit: ITEMS_PER_PAGE,
+        }
+      });
+      const items = Array.isArray(res.data?.files) ? res.data.files : [];
+      const mapped: FileItem[] = items.map((f: any) => ({
+        name: f.name,
+        path: f.path || `/realdebrid${f.name}`,
+        fullPath: f.path || `/realdebrid${f.name}`,
+        type: 'file',
+        size: formatBytes(f.size || 0),
+        modified: f.modTime || f.created || new Date().toISOString(),
+        webdavPath: f.link || f.download,
+      } as any));
+      setFiles(mapped);
+      // Set total pages from server response
+      const totalPages = res.data?.totalPages || 1;
+      setTotalPages(totalPages);
+      setHasLoadedData(true);
+    } catch (e) {
+      setError('Failed to load Real-Debrid downloads');
+      setFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchFiles = async (path: string, pageNum: number = page, searchQuery?: string, isSearchOperation: boolean = false, letterFilter?: string) => {
+    if (browserSource === 'realdebrid') {
+      if (!isSearchOperation) {
+        setLoading(false);
+      }
+      return;
+    }
     if (!isSearchOperation) {
       setLoading(true);
     }
@@ -277,14 +337,23 @@ const FileBrowserContent: React.FC = () => {
   useEffect(() => {
     const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
     const currentUrlLetter = searchParams.get('letter') || undefined;
-    fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
+    if (browserSource === 'realdebrid') {
+      setView('list');
+      loadRdDownloads(currentUrlPage);
+    } else {
+      fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
+    }
   }, [currentPath]);
 
   useEffect(() => {
     const currentUrlPage = parseInt(searchParams.get('page') || '1', 10);
     const currentUrlLetter = searchParams.get('letter') || undefined;
     if (currentUrlPage !== page) {
-      fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
+      if (browserSource === 'realdebrid') {
+        loadRdDownloads(currentUrlPage);
+      } else {
+        fetchFiles(currentPath, currentUrlPage, search, false, currentUrlLetter);
+      }
     }
   }, [searchParams.get('page')]);
 
@@ -425,7 +494,11 @@ const FileBrowserContent: React.FC = () => {
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
-    fetchFiles(currentPath, value, search, search.trim().length > 0, selectedLetter || undefined);
+    if (browserSource === 'realdebrid') {
+      loadRdDownloads(value);
+    } else {
+      fetchFiles(currentPath, value, search, search.trim().length > 0, selectedLetter || undefined);
+    }
   };
 
   const handleLetterClick = (letter: string | null) => {
@@ -722,19 +795,48 @@ const FileBrowserContent: React.FC = () => {
 
   return (
     <Box sx={{ flexGrow: 1, position: 'relative' }}>
+      {/* Source Tabs */}
+      {rdEnabled && !inDebridPage && (
+        <Box sx={{ mb: 2 }}>
+          <Tabs
+            value={browserSource}
+            onChange={(_, v) => {
+              setBrowserSource(v);
+              if (v === 'realdebrid') {
+                setPage(1);
+                loadRdDownloads(1);
+                if (view !== 'list') setView('list');
+              }
+            }}
+            sx={{
+              '& .MuiTab-root': { textTransform: 'none', fontWeight: 600 },
+            }}
+          >
+            <Tab value="local" label="Local Files" />
+            <Tab value="realdebrid" label="Real-Debrid" />
+          </Tabs>
+        </Box>
+      )}
       <Header
-        currentPath={currentPath}
+        currentPath={browserSource === 'realdebrid' ? '/' : currentPath}
         search={search}
-        view={view}
+        view={browserSource === 'realdebrid' ? 'list' : view}
         sortOption={sortOption}
         isSearching={isSearching}
         isSelectionMode={isSelectionMode}
-        onPathClick={handlePathClick}
-        onUpClick={handleUpClick}
+        onPathClick={browserSource === 'realdebrid' ? () => {} : handlePathClick}
+        onUpClick={browserSource === 'realdebrid' ? () => {} : handleUpClick}
         onSearchChange={setSearch}
-        onViewChange={setView}
+        onViewChange={(newView) => {
+          // Prevent poster mode in Real-Debrid tab
+          if (browserSource === 'realdebrid') {
+            setView('list');
+            return;
+          }
+          setView(newView);
+        }}
         onSortChange={setSortOption}
-        onRefresh={handleRefresh}
+        onRefresh={browserSource === 'realdebrid' ? () => loadRdDownloads(page) : handleRefresh}
         onToggleSelectionMode={toggleSelectionMode}
       />
 
@@ -769,15 +871,37 @@ const FileBrowserContent: React.FC = () => {
       )}
 
       {/* Alphabet Index */}
-      <AlphabetIndex
-        selectedLetter={selectedLetter}
-        onLetterClick={handleLetterClick}
-        loading={isLetterFiltering}
-      />
+      {browserSource !== 'realdebrid' && (
+        <AlphabetIndex
+          selectedLetter={selectedLetter}
+          onLetterClick={handleLetterClick}
+          loading={isLetterFiltering}
+        />
+      )}
 
       <Fade in={!isLetterFiltering} timeout={300}>
         <Box>
-          {view === 'poster' ? (
+          {browserSource === 'realdebrid' ? (
+            <>
+              <ListView
+                files={filteredFiles}
+                currentPath={currentPath}
+                formatDate={formatDate}
+                onItemClick={handleListViewFileClick}
+                onViewDetails={handleViewDetails}
+                onRename={() => debouncedRefresh(currentPath)}
+                onDeleted={() => debouncedRefresh(currentPath)}
+                onError={setError}
+                onNavigateBack={handleNavigateBack}
+              />
+              <PaginationComponent
+                totalPages={totalPages}
+                page={page}
+                onPageChange={handlePageChange}
+                isMobile={isMobile}
+              />
+            </>
+          ) : view === 'poster' ? (
             <>
               <PosterView
                 files={filteredFiles}

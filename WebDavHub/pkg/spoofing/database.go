@@ -319,30 +319,29 @@ func getSeriesFromDatabaseInternal(mediaHubDB *sql.DB) ([]SeriesResource, error)
 	return series, rows.Err()
 }
 
-// getRootFoldersFromDatabase retrieves unique root folders from the database
-func getRootFoldersFromDatabase() ([]RootFolder, error) {
+// GetRootFoldersFromDatabase retrieves unique root folders from the database
+func GetRootFoldersFromDatabase() ([]RootFolder, error) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return nil, err
 	}
 
 	query := `
-		SELECT DISTINCT
-			CASE
-				WHEN UPPER(media_type) = 'MOVIE' THEN 'Movies'
-				WHEN UPPER(media_type) = 'TV' THEN 'TV Shows'
-				ELSE 'Media'
-			END as folder_name,
-			CASE
-				WHEN UPPER(media_type) = 'MOVIE' THEN '/movies'
-				WHEN UPPER(media_type) = 'TV' THEN '/tv'
-				ELSE '/media'
-			END as folder_path
-		FROM processed_files
-		WHERE destination_path IS NOT NULL
-		AND destination_path != ''
-		AND media_type IS NOT NULL
-		ORDER BY folder_name`
+		SELECT DISTINCT folder_path FROM (
+			SELECT root_folder as folder_path
+			FROM library_items
+			WHERE root_folder IS NOT NULL
+			AND root_folder != ''
+			AND media_type IS NOT NULL
+			
+			UNION
+			
+			SELECT root_folder as folder_path
+			FROM processed_files
+			WHERE root_folder IS NOT NULL
+			AND root_folder != ''
+		)
+		ORDER BY folder_path`
 
 	rows, err := mediaHubDB.Query(query)
 	if err != nil {
@@ -354,8 +353,8 @@ func getRootFoldersFromDatabase() ([]RootFolder, error) {
 	id := 1
 
 	for rows.Next() {
-		var folderName, folderPath string
-		if err := rows.Scan(&folderName, &folderPath); err != nil {
+		var folderPath string
+		if err := rows.Scan(&folderPath); err != nil {
 			continue
 		}
 

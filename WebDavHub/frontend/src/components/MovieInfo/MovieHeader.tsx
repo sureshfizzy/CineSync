@@ -13,21 +13,54 @@ interface MovieHeaderProps {
   onNavigateBack?: () => void;
   selectedVersionIndex: number;
   onVersionChange: (index: number) => void;
+  isArrDashboardContext?: boolean;
+  isLoadingFiles?: boolean;
 }
 
 
 
 // Helper function to format file size
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return 'Unknown size';
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+const formatFileSize = (value: number | string | undefined) => {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+  if (value === undefined || value === null) return 'Unknown size';
+
+  if (typeof value === 'number') {
+    if (value <= 0 || !Number.isFinite(value)) return 'Unknown size';
+    let size = value;
+    let idx = 0;
+    while (size >= 1024 && idx < units.length - 1) {
+      size /= 1024;
+      idx++;
+    }
+    return `${size.toFixed(1)} ${units[idx]}`;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return 'Unknown size';
+
+  const match = trimmed.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/i);
+  if (!match) return trimmed;
+
+  const amount = parseFloat(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Unknown size';
+
+  const unit = (match[2] || 'B').toUpperCase();
+  const unitIndex = Math.max(units.indexOf(unit as any), 0);
+  let bytes = amount * Math.pow(1024, unitIndex);
+
+  let displayIdx = 0;
+  while (bytes >= 1024 && displayIdx < units.length - 1) {
+    bytes /= 1024;
+    displayIdx++;
+  }
+
+  return `${bytes.toFixed(1)} ${units[displayIdx]}`;
 };
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack, selectedVersionIndex, onVersionChange }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack, selectedVersionIndex, onVersionChange, isArrDashboardContext = false, isLoadingFiles = false }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -86,8 +119,6 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
               alt={data.title}
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />
-
-
           </Paper>
         </motion.div>
 
@@ -283,9 +314,9 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             {data.overview}
           </Typography>
 
-          {/* File Actions - Simple Button Layout */}
+          {/* File Actions for the selected file */}
           {selectedFile && (
-            <Box sx={{ mt: 2, mb: 1 }}>
+            <Box sx={{ mt: 2, mb: 3 }}>
               <MovieFileActions
                 data={data}
                 folderName={folderName}
@@ -296,6 +327,142 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
               />
             </Box>
           )}
+
+          {/* Overview Section - Only show in ArrDashboard context */}
+          {isArrDashboardContext && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.3 }}
+              style={{
+                willChange: 'opacity, transform',
+                transform: 'translateZ(0)',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden'
+              }}
+            >
+              <Box sx={{ 
+                mb: 3, 
+                p: 2, 
+                bgcolor: alpha(theme.palette.background.paper, 0.8), 
+                borderRadius: 2, 
+                border: '1px solid', 
+                borderColor: alpha(theme.palette.divider, 0.3),
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)'
+              }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: { xs: 1.5, sm: 2 }, 
+                  alignItems: 'center', 
+                  justifyContent: { xs: 'center', md: 'flex-start' },
+                  '& > *': {
+                    flexShrink: 0
+                  }
+                }}>
+                  {/* Status */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ 
+                      width: 4, 
+                      height: 16, 
+                      bgcolor: isLoadingFiles ? 'info.main' : (files.length > 0 ? 'success.main' : 'warning.main'), 
+                      borderRadius: 0.5,
+                      boxShadow: isLoadingFiles ? '0 0 8px rgba(33, 150, 243, 0.3)' : (files.length > 0 ? '0 0 8px rgba(76, 175, 80, 0.3)' : '0 0 8px rgba(255, 152, 0, 0.3)')
+                    }} />
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 600, 
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {isLoadingFiles ? 'Checking...' : (files.length > 0 ? 'Downloaded' : 'Not Available')}
+                    </Typography>
+                  </Box>
+
+                  {/* Quality Profile - Only show if files are available */}
+                  {files.length > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" sx={{ 
+                        color: 'text.secondary',
+                        fontSize: '0.875rem',
+                        fontWeight: 500
+                      }}>
+                        Quality Profile:
+                      </Typography>
+                      <Typography variant="body2" sx={{ 
+                        fontWeight: 600, 
+                        color: 'text.primary',
+                        fontSize: '0.875rem'
+                      }}>
+                        {selectedFile?.quality || 'Unknown'}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Size */}
+                  {selectedFile && selectedFile.size && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" sx={{ 
+                        color: 'text.secondary',
+                        fontSize: '0.875rem',
+                        fontWeight: 500
+                      }}>
+                        Size:
+                      </Typography>
+                      <Typography variant="body2" sx={{ 
+                        fontWeight: 600, 
+                        color: 'text.primary',
+                        fontSize: '0.875rem'
+                      }}>
+                        {formatFileSize(selectedFile.size)}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Original Language */}
+                  {data.original_language && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" sx={{ 
+                        color: 'text.secondary',
+                        fontSize: '0.875rem',
+                        fontWeight: 500
+                      }}>
+                        Original Language:
+                      </Typography>
+                      <Typography variant="body2" sx={{ 
+                        fontWeight: 600, 
+                        color: 'text.primary', 
+                        textTransform: 'capitalize',
+                        fontSize: '0.875rem'
+                      }}>
+                        {data.original_language}
+                      </Typography>
+                    </Box>
+                  )}
+
+                {/* Studio */}
+                {data.production_countries && data.production_countries.length > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ 
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Country:
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 600, 
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {data.production_countries[0].name}
+                    </Typography>
+                  </Box>
+                )}
+                </Box>
+              </Box>
+            </motion.div>
+            )}
 
         </motion.div>
       </Box>

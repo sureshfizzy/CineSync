@@ -1,7 +1,8 @@
 package spoofing
 
 import (
-	"net/http"
+    "net/http"
+    prowlarrapi "cinesync/pkg/prowlarr"
 )
 
 // RegisterRoutes registers all spoofing routes with the given mux
@@ -47,6 +48,10 @@ func RegisterRoutes(mux *http.ServeMux) {
 		"/api/v3/downloadclient/": HandleSpoofedDownloadClient,
 		"/api/v3/indexer":         HandleSpoofedIndexer,
 		"/api/v3/indexer/":        HandleSpoofedIndexer,
+		"/api/v3/indexer/schema":  HandleSpoofedIndexerSchema,
+		"/api/v3/indexer/schema/": HandleSpoofedIndexerSchema,
+		"/api/v3/indexer/test":    HandleSpoofedIndexerTest,
+		"/api/v3/indexer/test/":   HandleSpoofedIndexerTest,
 		"/api/v3/importlist":      HandleSpoofedImportList,
 		"/api/v3/importlist/":     HandleSpoofedImportList,
 		"/api/v3/queue":           HandleSpoofedQueue,
@@ -135,6 +140,34 @@ func RegisterRoutes(mux *http.ServeMux) {
 
 	// Add circuit breaker status endpoint for monitoring
 	mux.HandleFunc("/api/spoofing/circuit-breaker/status", HandleCircuitBreakerStatus)
+
+	// Prowlarr v1 API endpoints for Radarr/Sonarr integration
+    prowlarrEndpoints := map[string]http.HandlerFunc{
+        "/api/v1/applications":         prowlarrapi.HandleProwlarrApplications,
+        "/api/v1/applications/":        prowlarrapi.HandleProwlarrApplications,
+        "/api/v1/applications/test":    prowlarrapi.HandleProwlarrApplicationTest,
+        "/api/v1/system/status":        prowlarrapi.HandleProwlarrSystemStatus,
+        "/api/v1/system/status/":       prowlarrapi.HandleProwlarrSystemStatus,
+        "/api/v1/indexer":              prowlarrapi.HandleProwlarrIndexers,
+        "/api/v1/indexer/":             prowlarrapi.HandleProwlarrIndexers,
+        "/api/v1/search":               prowlarrapi.HandleProwlarrSearch,
+        "/api/v1/search/":              prowlarrapi.HandleProwlarrSearch,
+    }
+
+	// Register Prowlarr endpoints with resilience wrappers
+	for path, handler := range prowlarrEndpoints {
+		resilientHandler := HandlerWrapper(RetryHandlerWrapper(handler, 3), 30)
+		mux.HandleFunc(path, AuthMiddleware(resilientHandler))
+	}
+
+	// Torznab endpoints (indexer proxy for Radarr)
+    mux.HandleFunc("/torznab/", func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Query().Get("t") == "caps" {
+            prowlarrapi.HandleTorznabCaps(w, r)
+        } else {
+            prowlarrapi.HandleTorznabSearch(w, r)
+        }
+    })
 
 	// Register common endpoints with resilience wrappers
 	for path, handler := range commonEndpoints {

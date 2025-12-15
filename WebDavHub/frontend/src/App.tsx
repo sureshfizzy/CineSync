@@ -12,11 +12,13 @@ import { SSEProvider } from './components/SSEProvider';
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
 import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
-import Dashboard from './components/Dashboard/Dashboard';
+import DashboardSwitcher from './components/Dashboard/DashboardSwitcher';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import MediaDetails from './pages/MediaDetails';
 import Settings from './pages/Settings';
+import About from './pages/About';
 import FileOperations from './pages/FileOperations';
+import SetupWizard from './pages/SetupWizard';
 import { getTheme } from './theme';
 
 function LoadingScreen() {
@@ -256,6 +258,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
 
   return (
     <Routes>
+      <Route path="/setupwizard" element={<SetupWizard />} />
       <Route
         path="/login"
         element={
@@ -277,12 +280,13 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         }
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dashboard/*" element={<DashboardSwitcher />} />
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
         <Route path="file-operations" element={<FileOperations />} />
         <Route path="media/*" element={<MediaDetails />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="about" element={<About />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -332,6 +336,8 @@ function App() {
           // Ensure fixed positioning works properly
           transform: 'none !important',
           WebkitTransform: 'none !important',
+          overflowX: 'hidden',
+          maxWidth: '100vw',
         },
         body: {
           minHeight: '100vh',
@@ -340,6 +346,8 @@ function App() {
           // Override any transforms that might interfere with fixed positioning
           transform: 'none !important',
           WebkitTransform: 'none !important',
+          overflowX: 'hidden',
+          maxWidth: '100vw',
         }
       }} />
       <ConfigProvider>

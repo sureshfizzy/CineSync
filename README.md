@@ -58,6 +58,9 @@ CineSync creates symbolic links from source directories to destination directori
 - **🎯 Smart Content Separation** - Automatic categorization for Kids content, 4K media, and Anime with customizable rules
 - **🔄 Real-Time Updates** - Live dashboard updates and instant media server integration (Plex/Jellyfin/Emby)
 - **🗃️ Database Management** - Built-in database with export capabilities and advanced search functionality
+- **🧰 Built-in Rclone & RD Repair** - Ships with rclone plus an integrated RealDebrid repair flow to automatically re-check and fix broken items
+- **🛠️ Bazarrr Integration** - Native Bazarrr hookup to enrich metadata and subtitles alongside your library automation
+- **⚡ Instant RD Mounts** - RealDebrid mounts with IO maps for smooth playback and near-instant availability
 
 ## Web Interface Features
 

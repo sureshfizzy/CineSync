@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -46,6 +47,39 @@ var (
 	hasBasePathColumn    bool
 )
 
+var invalidPathChars = regexp.MustCompile(`[\\/:*?"<>|]`)
+
+func sanitizeFolderName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "sanitized_filename"
+	}
+
+	replacements := map[string]string{
+		":": " -",
+		"/": "-",
+		"\\": "-",
+		"*": "x",
+		"?": "",
+		"\"": "'",
+		"<": "(",
+		">": ")",
+		"|": "-",
+	}
+
+	for old, repl := range replacements {
+		name = strings.ReplaceAll(name, old, repl)
+	}
+
+	name = invalidPathChars.ReplaceAllString(name, "")
+	name = strings.Trim(name, " .")
+
+	if name == "" {
+		return "sanitized_filename"
+	}
+	return name
+}
+
 // checkFileSizeColumnExists checks if the file_size column exists in processed_files table
 func checkFileSizeColumnExists() bool {
 	fileSizeColumnExists.Do(func() {
@@ -57,7 +91,7 @@ func checkFileSizeColumnExists() bool {
 
 		var dummy sql.NullInt64
 		err = mediaHubDB.QueryRow("SELECT file_size FROM processed_files LIMIT 1").Scan(&dummy)
-		hasFileSizeColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasFileSizeColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasFileSizeColumn
 }
@@ -74,7 +108,7 @@ func checkReasonColumnExists() bool {
 		// Simple query to check if column exists - if it fails, column doesn't exist
 		var dummy sql.NullString
 		err = mediaHubDB.QueryRow("SELECT reason FROM processed_files LIMIT 1").Scan(&dummy)
-		hasReasonColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasReasonColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasReasonColumn
 }
@@ -91,7 +125,7 @@ func checkBasePathColumnExists() bool {
 		// Simple query to check if column exists - if it fails, column doesn't exist
 		var dummy sql.NullString
 		err = mediaHubDB.QueryRow("SELECT base_path FROM processed_files LIMIT 1").Scan(&dummy)
-		hasBasePathColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+		hasBasePathColumn = err == nil || (!strings.Contains(err.Error(), "no such column") && !strings.Contains(err.Error(), "no such table"))
 	})
 	return hasBasePathColumn
 }
@@ -283,8 +317,6 @@ func InvalidateFolderCache() {
 	cache.pathFolders = make(map[string][]FolderInfo)
 	cache.totalCounts = make(map[string]int)
 	cache.initialized = false
-
-	logger.Info("Folder cache invalidated")
 }
 
 // InvalidateFolderCacheForCategory clears the cache for a specific category
@@ -355,6 +387,7 @@ func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, medi
 	} else {
 		folderName = properName
 	}
+	folderName = sanitizeFolderName(folderName)
 
 	// Check if this folder already exists in cache
 	if cachedFolders, exists := cache.pathFolders[category]; exists {
@@ -743,6 +776,7 @@ type FileInfo struct {
 	EpisodeNumber   int
 	SourcePath      string
 	DestinationPath string
+	Quality         string
 }
 
 // GetFileSizeFromDatabase retrieves file size from the processed_files table by file path
@@ -784,6 +818,7 @@ type FolderInfo struct {
 	SeasonNumber int    `json:"season_number,omitempty"`
 	FileCount    int    `json:"file_count"`
 	Modified     string `json:"modified,omitempty"`
+	Quality      string `json:"quality,omitempty"`
 }
 
 func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
@@ -913,7 +948,8 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
 			MAX(processed_at) as latest_processed_at,
-			COUNT(*) OVER() as total_count
+			COUNT(*) OVER() as total_count,
+			COALESCE(MAX(quality), '') as quality
 		FROM processed_files
 		WHERE base_path = ?
 		AND proper_name IS NOT NULL
@@ -936,7 +972,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 		var folder FolderInfo
 		var latestProcessedAt string
 
-		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount, &folder.Quality)
 		if err != nil {
 			continue
 		}
@@ -950,6 +986,7 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		apiPath := "/" + strings.ReplaceAll(basePath, string(filepath.Separator), "/") + "/" + folder.FolderName
 		folder.FolderPath = apiPath
 		folder.Modified = latestProcessedAt
@@ -1130,6 +1167,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		if basePath != "" {
 			apiBasePath := strings.ReplaceAll(basePath, "\\", "/")
 			folder.FolderPath = "/" + apiBasePath + "/" + folder.FolderName
@@ -1204,6 +1242,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		folder.FolderPath = "/" + category + "/" + folder.FolderName
 		folder.Modified = latestProcessedAt
 
@@ -1297,6 +1336,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		folder.FolderPath = "/" + basePath + "/" + folder.FolderName
 		folder.Modified = latestProcessedAt
 
@@ -1379,6 +1419,7 @@ func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter s
 			continue
 		}
 
+		folder.FolderName = sanitizeFolderName(folder.FolderName)
 		apiPath := "/" + strings.ReplaceAll(normalizedCategory, string(filepath.Separator), "/") + "/" + folder.FolderName
 		folder.FolderPath = apiPath
 		folder.Modified = latestProcessedAt
@@ -1417,6 +1458,7 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	var episodeNumber sql.NullInt64
 	var sourcePath sql.NullString
 	var destinationPath sql.NullString
+	var quality sql.NullString
 
 	hasFileSizeColumn := checkFileSizeColumnExists()
 	fileSizeSelect := "NULL as file_size"
@@ -1430,12 +1472,13 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 		COALESCE(season_number, 0) as season_number,
 		COALESCE(episode_number, 0) as episode_number,
 		COALESCE(file_path, '') as source_path,
-		COALESCE(destination_path, '') as destination_path
+		COALESCE(destination_path, '') as destination_path,
+		COALESCE(quality, '') as quality
 	FROM processed_files
 	WHERE file_path = ? OR destination_path = ?
 	LIMIT 1`
 
-	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber, &episodeNumber, &sourcePath, &destinationPath)
+	err = mediaHubDB.QueryRow(query, filePath, filePath).Scan(&fileSize, &tmdbID, &seasonNumber, &episodeNumber, &sourcePath, &destinationPath, &quality)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			logger.Debug("Failed to query file info for %s: %v", filePath, err)
@@ -1461,6 +1504,9 @@ func GetFileInfoFromDatabase(filePath string) (FileInfo, bool) {
 	}
 	if destinationPath.Valid {
 		info.DestinationPath = destinationPath.String
+	}
+	if quality.Valid {
+		info.Quality = quality.String
 	}
 
 	return info, true

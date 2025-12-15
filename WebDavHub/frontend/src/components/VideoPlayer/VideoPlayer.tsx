@@ -287,7 +287,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
         >
           <video
             ref={videoRef}
-            src={videoUrl}
+            {...(videoUrl ? { src: videoUrl } : {})}
             style={{
               width: '100%',
               height: '100%',

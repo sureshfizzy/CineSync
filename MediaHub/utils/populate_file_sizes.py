@@ -16,6 +16,7 @@ sys.path.insert(0, project_root)
 
 from MediaHub.processors.db_utils import main_pool, log_message, initialize_db
 from MediaHub.processors.db_utils import with_connection, throttle, retry_on_db_lock
+from MediaHub.utils.file_utils import get_symlink_target_path
 
 @throttle
 @retry_on_db_lock
@@ -73,7 +74,7 @@ def populate_file_sizes(conn):
                 try:
                     # For symlinks, get the size of the target file
                     if os.path.islink(dest_path):
-                        target = os.readlink(dest_path)
+                        target = get_symlink_target_path(dest_path)
                         if os.path.exists(target):
                             file_size = os.path.getsize(target)
                     else:

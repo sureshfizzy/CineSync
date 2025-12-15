@@ -22,6 +22,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/realdebrid"
 	"cinesync/pkg/server"
 	"cinesync/pkg/spoofing"
 	"cinesync/pkg/webdav"
@@ -126,7 +127,8 @@ func main() {
 
 	// Initialize logger early so we can use it for warnings
 	logger.Init()
-	env.LoadEnv()
+	if err := env.LoadEnv(); err != nil {
+	}
 
 	// Initialize spoofing configuration
 	if err := spoofing.InitializeConfig(); err != nil {
@@ -135,15 +137,14 @@ func main() {
 	}
 
 	rootDir := env.GetString("DESTINATION_DIR", "")
+	configMissing := false
 	if rootDir == "" {
-		logger.Warn("DESTINATION_DIR not set in .env file")
-		logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-		logger.Warn("Consider setting DESTINATION_DIR in your .env file")
-		rootDir = "."
+		configMissing = true
+		logger.Info("DESTINATION_DIR not set. Awaiting configuration via /setup; server will start in limited mode.")
 	}
 
 	// Define command-line flags with fallbacks from .env or hardcoded defaults
-	dir := flag.String("dir", env.GetString("DESTINATION_DIR", "."), "Directory to serve over WebDAV")
+	dir := flag.String("dir", env.GetString("DESTINATION_DIR", ""), "Directory to serve over WebDAV")
 	port := flag.Int("port", env.GetInt("CINESYNC_API_PORT", 8082), "Port to run the CineSync API server on")
 	ip := flag.String("ip", env.GetString("CINESYNC_IP", "0.0.0.0"), "IP address to bind the server to")
 	flag.Parse()
@@ -151,29 +152,33 @@ func main() {
 	logger.Debug("Starting with configuration: dir=%s, port=%d, ip=%s", *dir, *port, *ip)
 
 	// Ensure the directory exists and is accessible
-	if _, err := os.Stat(*dir); os.IsNotExist(err) {
+	if *dir != "" {
+		if _, err := os.Stat(*dir); os.IsNotExist(err) {
 		// Check if this is a placeholder path
 		if *dir == "/path/to/destination" || *dir == "\\path\\to\\destination" {
-			logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
-			logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-			logger.Warn("Please set DESTINATION_DIR to a valid path in your .env file")
-			*dir = "."
-		} else {
-			// Try to create the directory
-			logger.Info("Directory %s does not exist, attempting to create it", *dir)
-			if err := os.MkdirAll(*dir, 0755); err != nil {
-				logger.Warn("Failed to create directory %s: %v", *dir, err)
-				logger.Warn("Using current directory as fallback. Some functionality may not work properly.")
-				logger.Warn("Please ensure DESTINATION_DIR is set to a valid path in your .env file")
-				*dir = "."
+				logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
+				configMissing = true
 			} else {
-				logger.Info("Successfully created directory: %s", *dir)
+				logger.Info("Directory %s does not exist, attempting to create it", *dir)
+				if err := os.MkdirAll(*dir, 0755); err != nil {
+					logger.Warn("Failed to create directory %s: %v", *dir, err)
+					configMissing = true
+				} else {
+					logger.Info("Successfully created directory: %s", *dir)
+				}
 			}
 		}
 	}
 
+	if configMissing && *dir == "" {
+		logger.Warn("No valid DESTINATION_DIR set. Running in configuration-only mode until setup is completed.")
+	}
+
 	// Always use DESTINATION_DIR as the effective root
 	effectiveRootDir := *dir
+	if effectiveRootDir == "" {
+		effectiveRootDir = "."
+	}
 
 	// Initialize the server
 	srv := server.NewServer(effectiveRootDir)
@@ -191,7 +196,11 @@ func main() {
 	api.InitializeImageCache(projectDir)
 
 	// Initialize job manager
-	api.InitJobManager()
+	if !configMissing {
+		api.InitJobManager()
+	} else {
+		logger.Warn("Skipping job manager initialization until configuration is completed in /setup")
+	}
 
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
@@ -241,10 +250,46 @@ func main() {
 	apiMux.HandleFunc("/api/database/export", db.HandleDatabaseExport)
 	apiMux.HandleFunc("/api/database/update", db.HandleDatabaseUpdate)
 	apiMux.HandleFunc("/api/series", api.HandleSeries)
+	apiMux.HandleFunc("/api/library/movie", api.HandleAddMovie)
+	apiMux.HandleFunc("/api/library/series", api.HandleAddSeries)
+	apiMux.HandleFunc("/api/library", api.HandleGetLibrary)
+	apiMux.HandleFunc("/api/library/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			api.HandleUpdateLibraryItem(w, r)
+		} else if r.Method == http.MethodDelete {
+			api.HandleDeleteLibraryItem(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	
+	// Root folders management endpoints
+	apiMux.HandleFunc("/api/root-folders", api.HandleRootFolders)
+	apiMux.HandleFunc("/api/root-folders/", api.HandleRootFolders)
+	
+	// Indexer management endpoints
+	apiMux.HandleFunc("/api/indexers", api.HandleIndexers)
+	apiMux.HandleFunc("/api/indexers/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/test") {
+			api.HandleIndexerTest(w, r)
+		} else if strings.HasSuffix(path, "/search") {
+			api.HandleIndexerSearch(w, r)
+		} else if strings.HasSuffix(path, "/caps") {
+			api.HandleIndexerCaps(w, r)
+		} else {
+			api.HandleIndexerByID(w, r)
+		}
+	})
+
+apiMux.HandleFunc("/api/indexers/test-config", api.HandleIndexerTestConfig)
+apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
+	
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
+	apiMux.HandleFunc("/api/config/defaults", config.HandleGetDefaultConfig)
 	apiMux.HandleFunc("/api/restart", api.HandleRestart)
 
 	// Processing endpoints
@@ -281,6 +326,31 @@ func main() {
 	apiMux.HandleFunc("/api/spoofing/regenerate-key", func(w http.ResponseWriter, r *http.Request) {
 		api.HandleRegenerateAPIKey(w, r)
 	})
+
+	// Real-Debrid configuration endpoints
+	apiMux.HandleFunc("/api/realdebrid/config", api.HandleRealDebridConfig)
+	apiMux.HandleFunc("/api/realdebrid/test", api.HandleRealDebridTest)
+	apiMux.HandleFunc("/api/realdebrid/httpdav/test", api.HandleRealDebridHttpDavTest)
+	apiMux.HandleFunc("/api/realdebrid/httpdav/", api.HandleRealDebridHttpDav)
+	apiMux.HandleFunc("/api/realdebrid/status", api.HandleRealDebridStatus)
+	apiMux.HandleFunc("/api/realdebrid/refresh", api.HandleRealDebridRefresh)
+	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)
+	apiMux.HandleFunc("/api/realdebrid/downloads", api.HandleRealDebridDownloads)
+	apiMux.HandleFunc("/api/realdebrid/rclone/mount", api.HandleRcloneMount)
+	apiMux.HandleFunc("/api/realdebrid/rclone/unmount", api.HandleRcloneUnmount)
+	apiMux.HandleFunc("/api/realdebrid/rclone/status", api.HandleRcloneStatus)
+	apiMux.HandleFunc("/api/realdebrid/rclone/test", api.HandleRcloneTest)
+	apiMux.HandleFunc("/api/realdebrid/dashboard-stats", api.HandleDebridDashboardStats)
+	apiMux.HandleFunc("/api/realdebrid/torrent-manager-stats", api.HandleTorrentManagerStats)
+	apiMux.HandleFunc("/api/realdebrid/repair-status", api.HandleRepairStatus)
+	apiMux.HandleFunc("/api/realdebrid/repair-queue", api.HandleRepairQueue)
+	apiMux.HandleFunc("/api/realdebrid/repair-queue/delete", api.HandleRepairQueueDelete)
+	apiMux.HandleFunc("/api/realdebrid/repair-all", api.HandleRepairAllFiltered)
+	apiMux.HandleFunc("/api/realdebrid/repair-stats", api.HandleRepairStats)
+	apiMux.HandleFunc("/api/realdebrid/repair-start", api.HandleRepairStart)
+	apiMux.HandleFunc("/api/realdebrid/repair-stop", api.HandleRepairStop)
+	apiMux.HandleFunc("/api/realdebrid/repair-torrent", api.HandleRepairTorrent)
+	apiMux.HandleFunc("/api/realdebrid/repair-delete", api.HandleRepairDelete)
 
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)
@@ -324,6 +394,31 @@ func main() {
 		}
 		http.NotFound(w, r)
 	})
+
+	// Auto-mount rclone
+	go func() {
+		cfgMgr := realdebrid.GetConfigManager()
+		cfg := cfgMgr.GetConfig()
+		if !cfg.Enabled {
+			return
+		}
+		rc := cfg.RcloneSettings
+		if !rc.Enabled || !rc.AutoMountOnStart || rc.MountPath == "" {
+			return
+		}
+
+		rcloneManager := realdebrid.GetRcloneManager()
+		status := rcloneManager.GetStatus(rc.MountPath)
+		if status != nil && status.Mounted {
+			logger.Info("Rclone already mounted at startup on %s", rc.MountPath)
+			return
+		}
+
+		logger.Info("Auto-mounting rclone at startup: %s", rc.MountPath)
+		if _, err := rcloneManager.Mount(rc, cfg.APIKey); err != nil {
+			logger.Error("Auto-mount rclone failed: %v", err)
+		}
+	}()
 
 	// Auto-start MediaHub service if enabled (delayed to appear after startup summary)
 	if env.IsBool("MEDIAHUB_AUTO_START", true) {
@@ -421,7 +516,13 @@ func main() {
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-shutdown
-		logger.Info("Shutting down: stopping job manager and checkpointing SQLite WAL...")
+		logger.Info("Shutting down: cleaning up rclone mounts, stopping job manager and checkpointing SQLite WAL...")
+
+		// Cleanup all rclone mounts
+		rcloneManager := realdebrid.GetRcloneManager()
+		rcloneManager.CleanupAllMounts()
+
+		// Stop job manager and cleanup databases
 		api.StopJobManager()
 		if db.DB() != nil {
 			db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
@@ -432,6 +533,9 @@ func main() {
 			db.GetSourceDB().Exec("PRAGMA wal_checkpoint(TRUNCATE);")
 			db.GetSourceDB().Exec("PRAGMA optimize;")
 			db.CloseSourceDB()
+		}
+		if debridDB := db.GetDebridDB(); debridDB != nil {
+			debridDB.Close()
 		}
 		os.Exit(0)
 	}()
@@ -454,13 +558,21 @@ func main() {
 		logger.Warn("Authentication is disabled")
 	}
 
+	// Kick RD prefetch if configured
+	go func() {
+		time.Sleep(2 * time.Second)
+		api.PrefetchRealDebridData()
+	}()
+
 	// Wrap the root mux with global panic recovery
+	// HTTP server with no timeouts
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      globalPanicRecoveryMiddleware(rootMux),
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  300 * time.Second,
+		Addr:           addr,
+		Handler:        globalPanicRecoveryMiddleware(rootMux),
+		ReadTimeout:    0,
+		WriteTimeout:   0,
+		IdleTimeout:    300 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	log.Fatal(server.ListenAndServe())

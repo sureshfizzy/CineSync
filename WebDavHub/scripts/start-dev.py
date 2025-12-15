@@ -22,21 +22,35 @@ import time
 import argparse
 import socket
 import psutil
+import urllib.request
+import urllib.error
+import urllib.parse
+import json
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
-# Add MediaHub to path for importing env_creator
-sys.path.append(str(Path(__file__).parent.parent.parent / "MediaHub"))
-from utils.env_creator import get_env_file_path
+# Local helper: compute env path without env_creator
+def get_env_file_path():
+    if os.path.exists('/.dockerenv') or os.getenv('CONTAINER') == 'docker':
+        return '/app/db/.env'
+    cwd = os.getcwd()
+    basename = os.path.basename(cwd)
+    if basename in ('MediaHub', 'WebDavHub'):
+        parent = os.path.dirname(cwd)
+        return os.path.join(parent, 'db', '.env')
+    return os.path.join(cwd, 'db', '.env')
 
 class WebDavHubDevelopmentServer:
     def __init__(self):
         self.backend_process: Optional[subprocess.Popen] = None
         self.frontend_process: Optional[subprocess.Popen] = None
         self.env_vars: Dict[str, str] = {}
+        self.api_host = "localhost"
         self.api_port = 8082
         self.ui_port = 5173
         self.network_ip = self.get_network_ip()
+        self.setup_required = False
+        self._client_locked_cache: Optional[Dict] = None
 
     def get_network_ip(self) -> str:
         """Get the actual network IP address"""
@@ -58,6 +72,44 @@ class WebDavHubDevelopmentServer:
 
         args = parser.parse_args()
 
+    def _load_client_locked_settings(self):
+        """Load client locked settings JSON once."""
+        if self._client_locked_cache is not None:
+            return
+        
+        script_dir = Path(__file__).parent.absolute()
+        webdavhub_dir = script_dir.parent
+        path = webdavhub_dir.parent / "MediaHub" / "utils" / "client_locked_settings.json"
+        
+        if not path.exists():
+            cwd = Path.cwd()
+            path = cwd.parent / "MediaHub" / "utils" / "client_locked_settings.json"
+            if not path.exists():
+                path = cwd / ".." / "MediaHub" / "utils" / "client_locked_settings.json"
+                path = path.resolve()
+        
+        if not path.exists():
+            self._client_locked_cache = {}
+            return
+        
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                self._client_locked_cache = data.get("locked_settings", {}) or {}
+        except Exception as e:
+            print(f"⚠️  Warning: Could not load client_locked_settings.json from {path}: {e}")
+            self._client_locked_cache = {}
+
+    def _get_locked_value(self, key: str) -> Optional[str]:
+        """Return locked value from client_locked_settings.json if locked."""
+        self._load_client_locked_settings()
+        if not self._client_locked_cache:
+            return None
+        setting = self._client_locked_cache.get(key)
+        if setting and setting.get("locked"):
+            return str(setting.get("value", ""))
+        return None
+
     def setup_working_directory(self):
         """Change to WebDavHub directory (2 folders back from script location)"""
         script_dir = Path(__file__).parent.absolute()
@@ -73,21 +125,35 @@ class WebDavHubDevelopmentServer:
         if env_file.exists():
             self._parse_env_file(env_file)
         else:
-            print("Warning: No .env file found. Using default values.")
+            print("ℹ️  No .env file found. Starting in setup mode.")
+            self.setup_required = True
 
-        # Get ports from environment variables with defaults
-        # Priority: Docker environment variables > .env file > defaults
+        # Priority: client_locked_settings.json (if locked) > Docker env > .env > defaults
+        self.api_host = os.environ.get('CINESYNC_IP', self.env_vars.get('CINESYNC_IP', 'localhost'))
+        if self.api_host == '0.0.0.0':
+            self.api_host = 'localhost'
+
         try:
-            api_port_str = os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
+            locked_api_port = self._get_locked_value('CINESYNC_API_PORT')
+            api_port_str = locked_api_port if locked_api_port is not None else os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
             self.api_port = int(api_port_str) if api_port_str and api_port_str.strip() else 8082
         except (ValueError, TypeError):
             self.api_port = 8082
 
         try:
-            ui_port_str = os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173'))
+            locked_ui_port = self._get_locked_value('CINESYNC_UI_PORT')
+            ui_port_str = locked_ui_port if locked_ui_port is not None else os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173'))
             self.ui_port = int(ui_port_str) if ui_port_str and ui_port_str.strip() else 5173
         except (ValueError, TypeError):
             self.ui_port = 5173
+
+        self.env_vars['CINESYNC_API_PORT'] = str(self.api_port)
+        self.env_vars['CINESYNC_UI_PORT'] = str(self.ui_port)
+
+        if not self.env_vars.get('DESTINATION_DIR'):
+            self.setup_required = True
+            self.env_vars.setdefault('MEDIAHUB_AUTO_START', 'false')
+            self.env_vars.setdefault('RTM_AUTO_START', 'false')
 
     def _parse_env_file(self, env_file: Path):
         """Parse .env file and extract environment variables"""
@@ -107,17 +173,14 @@ class WebDavHubDevelopmentServer:
 
     def check_prerequisites(self):
         """Check if required files and dependencies exist"""
-        # Check if Go binary exists
         if not Path("cinesync").exists() and not Path("cinesync.exe").exists():
             print("❌ Go binary not found. Please run 'python scripts/build-dev.py' first.")
             sys.exit(1)
 
-        # Check if frontend directory exists
         if not Path("frontend").exists():
             print("❌ Frontend directory not found.")
             sys.exit(1)
 
-        # Check if frontend dependencies are installed
         if not Path("frontend/node_modules").exists():
             print("❌ Frontend dependencies not installed. Please run 'python scripts/build-dev.py' first.")
             sys.exit(1)
@@ -126,30 +189,117 @@ class WebDavHubDevelopmentServer:
 
     def check_database_directory(self):
         """Check database directory status"""
-        # Silently check database directory without verbose output
         pass
 
     def validate_environment(self):
         """Validate environment variables"""
-        # Check if DESTINATION_DIR is set (warning only, not fatal)
         if not self.env_vars.get('DESTINATION_DIR'):
-            print("⚠️  Warning: DESTINATION_DIR not set in .env file")
-            print("   Some CineSync functionality may not work properly")
-            print("   Consider setting DESTINATION_DIR in your .env file")
+            print("⚠️  DESTINATION_DIR not set (setup will prompt for it).")
+            print("   Some functionality may be limited until you save settings in /setup.")
+
+    def wait_for_backend_api(self, max_wait: int = 30) -> bool:
+        """Wait for backend API to be ready"""
+        print("Waiting for backend API to be ready...")
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            try:
+                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/status"
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    if response.status == 200:
+                        print("✅ Backend API is ready")
+                        return True
+            except (urllib.error.URLError, socket.timeout, ConnectionRefusedError):
+                time.sleep(1)
+        
+        print("⚠️  Backend API did not become ready in time")
+        return False
+
+    def is_auto_start_enabled(self) -> bool:
+        """Check if MediaHub or RTM auto-start is enabled"""
+        mediahub_auto = self.env_vars.get('MEDIAHUB_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+        rtm_auto = self.env_vars.get('RTM_AUTO_START', 'false').lower() in ('true', '1', 'yes')
+        return mediahub_auto or rtm_auto
+
+    def get_mount_path_from_config(self) -> Optional[str]:
+        """Get mount path from Real-Debrid config API"""
+        try:
+            url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/config"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode('utf-8'))
+                    config = data.get('config', {})
+                    rclone_settings = config.get('rcloneSettings', {})
+                    mount_path = rclone_settings.get('mountPath')
+                    enabled = rclone_settings.get('enabled', False)
+                    auto_mount = rclone_settings.get('autoMountOnStart', False)
+                    
+                    if enabled and auto_mount and mount_path:
+                        return mount_path
+        except Exception as e:
+            pass
+        return None
+
+    def wait_for_mount(self, mount_path: str, max_wait: int = 60) -> bool:
+        """Wait for rclone mount to be ready by checking both API status and filesystem access"""
+        if not mount_path:
+            return False
+        
+        print(f"⏳ Waiting for mount at {mount_path} to be ready...")
+        start_time = time.time()
+        last_log = 0
+        
+        while time.time() - start_time < max_wait:
+            # Check API status first
+            api_mounted = False
+            try:
+                encoded_path = urllib.parse.quote(mount_path, safe='')
+                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/rclone/status?path={encoded_path}"
+                with urllib.request.urlopen(url, timeout=3) as response:
+                    if response.status == 200:
+                        data = json.loads(response.read().decode('utf-8'))
+                        status = data.get('status', {})
+                        if status.get('waiting'):
+                            waiting_reason = status.get('waitingReason', '')
+                            if time.time() - last_log > 5:
+                                print(f"   Mount waiting: {waiting_reason}")
+                                last_log = time.time()
+                            time.sleep(2)
+                            continue
+                        if status.get('error'):
+                            print(f"❌ Mount error: {status.get('error')}")
+                            return False
+                        api_mounted = status.get('mounted', False)
+            except:
+                pass
+            
+            # Verify mount is actually accessible on filesystem
+            if api_mounted:
+                try:
+                    mount_dir = Path(mount_path)
+                    if mount_dir.exists() and mount_dir.is_dir():
+                        # Try to access it
+                        list(mount_dir.iterdir())
+                        print(f"✅ Mount is ready at {mount_path}")
+                        return True
+                except:
+                    pass
+            
+            time.sleep(2)
+        
+        print(f"⚠️  Mount not ready after {max_wait}s, continuing anyway...")
+        return False
 
     def start_backend_server(self):
         """Start the Go backend server"""
         print(f"Starting Go backend server on port {self.api_port}...")
 
         try:
-            # Start backend with all environment variables
             env = os.environ.copy()
             env.update(self.env_vars)
 
-            # Determine the correct executable name
             executable = "./cinesync.exe" if Path("cinesync.exe").exists() else "./cinesync"
 
-            # Start backend process with output visible in terminal
             self.backend_process = subprocess.Popen(
                 [executable],
                 env=env,
@@ -157,15 +307,25 @@ class WebDavHubDevelopmentServer:
                 stderr=None
             )
 
-            # Wait for backend to start and show its startup messages
             time.sleep(3)
 
-            # Check if backend is still running
             if self.backend_process.poll() is not None:
                 print("❌ Backend server failed to start")
                 sys.exit(1)
 
             print("✅ Backend server started successfully")
+
+            if not self.wait_for_backend_api():
+                print("⚠️  Continuing despite API not being ready...")
+
+            if self.is_auto_start_enabled():
+                time.sleep(2)
+                mount_path = self.get_mount_path_from_config()
+                if mount_path:
+                    print(f"\n🔗 Auto-start enabled - waiting for mount before MediaHub/RTM starts...")
+                    self.wait_for_mount(mount_path)
+                else:
+                    print("ℹ️  Auto-start enabled but no auto-mount configured")
 
         except Exception as e:
             print(f"Error starting backend server: {e}")
@@ -174,7 +334,6 @@ class WebDavHubDevelopmentServer:
     def find_pnpm_command(self):
         """Find pnpm command using shell resolution"""
         try:
-            # Use shell=True to properly resolve commands on Windows
             subprocess.run("pnpm --version", shell=True, check=True, capture_output=True, text=True)
             return "pnpm"
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -184,7 +343,6 @@ class WebDavHubDevelopmentServer:
         """Start the React frontend development server"""
         print(f"Starting React frontend development server on port {self.ui_port}...")
 
-        # Find pnpm command
         pnpm_cmd = self.find_pnpm_command()
         if not pnpm_cmd:
             print("❌ pnpm not found. Please install pnpm first:")
@@ -195,13 +353,11 @@ class WebDavHubDevelopmentServer:
         print(f"Using package manager: {pnpm_cmd}")
 
         try:
-            # Set environment variables for the frontend process
             env = os.environ.copy()
             env.update(self.env_vars)
             env["CINESYNC_UI_PORT"] = str(self.ui_port)
             env["CINESYNC_API_PORT"] = str(self.api_port)
 
-            # Use 'dev' command for development server with hot reload
             self.frontend_process = subprocess.Popen(
                 "pnpm run dev --host",
                 shell=True,
@@ -211,10 +367,8 @@ class WebDavHubDevelopmentServer:
                 stderr=None
             )
 
-            # Wait for frontend to start and show its startup messages
             time.sleep(3)
 
-            # Check if frontend is still running
             if self.frontend_process.poll() is not None:
                 print("❌ Frontend development server failed to start")
                 self.cleanup()
@@ -263,8 +417,9 @@ class WebDavHubDevelopmentServer:
             print("Stopping backend server...")
             try:
                 self.backend_process.terminate()
-                self.backend_process.wait(timeout=5)
+                self.backend_process.wait(timeout=10)
             except subprocess.TimeoutExpired:
+                print("Backend server did not stop gracefully, force killing...")
                 self.backend_process.kill()
             except Exception as e:
                 print(f"Error stopping backend server: {e}")
@@ -275,7 +430,6 @@ class WebDavHubDevelopmentServer:
         """Wait for processes to complete or handle interruption"""
         try:
             while True:
-                # Check if both processes are still running
                 backend_running = self.backend_process and self.backend_process.poll() is None
                 frontend_running = self.frontend_process and self.frontend_process.poll() is None
 
@@ -301,36 +455,18 @@ class WebDavHubDevelopmentServer:
         try:
             print("🔧 Starting CineSync Development Servers...\n")
 
-            # Parse command line arguments
             self.parse_arguments()
-
-            # Setup working directory
             self.setup_working_directory()
-
-            # Load environment variables
             self.load_environment_variables()
-
-            # Validate environment
             self.validate_environment()
-
-            # Check prerequisites
             self.check_prerequisites()
-
-            # Check database directory
             self.check_database_directory()
 
             print("🚀 Starting development servers...\n")
 
-            # Start backend server first
             self.start_backend_server()
-
-            # Start frontend development server second
             self.start_frontend_server()
-
-            # Display server information
             self.display_server_info()
-
-            # Wait for processes
             self.wait_for_processes()
 
         except Exception as e:

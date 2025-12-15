@@ -73,6 +73,7 @@ class MediaMetadata:
     title: str
     alternative_title: Optional[str] = None
     year: Optional[int] = None
+    air_date: Optional[str] = None
 
     # Video specs
     resolution: Optional[str] = None
@@ -117,6 +118,7 @@ class MediaMetadata:
     is_tv_show: bool = False
     is_movie: bool = False
     is_extra: bool = False
+    is_daily: bool = False
 
     # Technical flags
     hdr: Optional[str] = None
@@ -159,6 +161,8 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         return _filename_cache[filename]
 
     parsed = _parse_filename_structure(filename)
+    air_date = _extract_air_date_from_parsed(parsed)
+    is_daily = bool(air_date)
 
     # Extract alternative title from original filename before any cleaning
     from MediaHub.utils.parser.utils import extract_alternative_title
@@ -179,6 +183,10 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
     is_tv = _is_tv_show(parsed)
     episode = _extract_episode_from_parsed(parsed)
     season = _extract_season_from_parsed(parsed)
+
+    # For date-based (daily) shows, treat as TV but don't force season numbers
+    if is_daily:
+        is_tv = True
 
     # If we found an episode number
     if episode is not None:
@@ -210,12 +218,19 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
             if sport_year and not year:
                 year = sport_year
 
+    # Use air-date year as fallback year for daily shows
+    if not year and air_date:
+        year = int(air_date.split('-')[0])
+
     is_movie = not is_tv and not is_sports and bool(title)
+    if is_daily:
+        is_movie = False
 
     metadata = MediaMetadata(
         title=title,
         alternative_title=alternative_title,
         year=year,
+        air_date=air_date,
         resolution=_extract_resolution_from_parsed(parsed),
         video_codec=_extract_video_codec_from_parsed(parsed),
         video_profile=_extract_video_profile_from_parsed(parsed),
@@ -227,10 +242,11 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
         is_subbed=_extract_subbed_flag_from_parsed(parsed),
         release_group=_extract_release_group_from_parsed(parsed),
         edition=_extract_edition_from_parsed(parsed),
-        season=_extract_season_from_parsed(parsed),
+        season=season,
         episode=episode,
         is_tv_show=is_tv,
         is_movie=is_movie,
+        is_daily=is_daily,
         is_extra=is_extra,
         episode_title=_extract_episode_title_from_parsed(parsed),
         hdr=_extract_hdr_from_parsed(parsed),
@@ -664,8 +680,35 @@ def _parse_filename_structure(filename: str) -> ParsedFilename:
     )
 
 
+def _extract_air_date_from_parsed(parsed: ParsedFilename) -> Optional[str]:
+    """
+    Extract air date (YYYY-MM-DD) for date-based TV shows/daily episodes.
+    Supports separators ., -, _, or space. Returns None if not found.
+    """
+    if not parsed or not parsed.original:
+        return None
+
+    air_date_pattern = re.compile(r'\b((?:19|20)\d{2})[.\-_\s]?(0[1-9]|1[0-2])[.\-_\s]?(0[1-9]|[12]\d|3[01])\b')
+    direct_match = air_date_pattern.search(parsed.original)
+    if direct_match:
+        year, month, day = direct_match.group(1), direct_match.group(2), direct_match.group(3)
+        return f"{year}-{month}-{day}"
+
+    parts = [p.strip().rstrip('.') for p in parsed.parts]
+    for i in range(len(parts) - 2):
+        year_part, month_part, day_part = parts[i], parts[i + 1], parts[i + 2]
+        if re.match(r'^(?:19|20)\d{2}$', year_part):
+            if re.match(r'^(0?[1-9]|1[0-2])$', month_part) and re.match(r'^(0?[1-9]|[12]\d|3[01])$', day_part):
+                return f"{year_part}-{month_part.zfill(2)}-{day_part.zfill(2)}"
+
+    return None
+
+
 def _is_tv_show(parsed: ParsedFilename) -> bool:
     """Detect if this appears to be a TV show."""
+    if _extract_air_date_from_parsed(parsed):
+        return True
+
     episode_patterns = [
         r'^S\d{1,2}\.E\d{1,4}$',  # Dot-separated season/episode format like S01.E01, S01.E1024
         r'^S\d{1,2}E\d{1,4}$',
@@ -884,6 +927,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
     years = parsed.years_found
     technical_terms = parsed.technical_terms
     parts = parsed.parts
+    air_date = _extract_air_date_from_parsed(parsed)
 
     if not parts:
         return ""
@@ -902,6 +946,15 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         i = 0
         while i < len(parts):
             clean_part = parts[i].strip().rstrip('.')
+
+            if air_date:
+                if re.match(r'^(?:19|20)\d{2}[.\-_\s]?(0[1-9]|1[0-2])[.\-_\s]?(0[1-9]|[12]\d|3[01])$', clean_part):
+                    break
+                if re.match(r'^(?:19|20)\d{2}$', clean_part) and i + 2 < len(parts):
+                    month_candidate = parts[i + 1].strip().rstrip('.')
+                    day_candidate = parts[i + 2].strip().rstrip('.')
+                    if re.match(r'^(0?[1-9]|1[0-2])$', month_candidate) and re.match(r'^(0?[1-9]|[12]\d|3[01])$', day_candidate):
+                        break
 
             # Stop at parentheses years
             if clean_part.startswith('(') and re.match(r'^\(\d{4}\)$', clean_part):

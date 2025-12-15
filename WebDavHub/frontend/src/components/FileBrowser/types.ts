@@ -28,6 +28,14 @@ export interface FileItem {
   processingStatus?: string;
   seasonNumber?: number | null;
   lastProcessedAt?: number | null;
+  quality?: string;
+  // Library item properties
+  isLibraryItem?: boolean;
+  libraryItemId?: number;
+  qualityProfile?: string;
+  monitorPolicy?: string;
+  tags?: string[];
+  status?: 'wanted' | 'searching' | 'downloading' | 'imported' | 'failed' | 'missing' | 'available';
 }
 
 export interface MobileListItemProps {

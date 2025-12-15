@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cinesync/pkg/env"
@@ -79,6 +82,7 @@ func HandleScanForImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Scanning directory for import: %s", path)
+	ctx := r.Context()
 
 	// Check if directory exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -92,165 +96,213 @@ func HandleScanForImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get video files from directory
-	videoFiles, err := getVideoFilesFromDirectory(path)
-	if err != nil {
-		logger.Error("Failed to scan directory %s: %v", path, err)
-		response := ScanImportResponse{
-			Error: fmt.Sprintf("Failed to scan directory: %v", err),
-			Done:  true,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
 
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-			return
-		}
-
-		totalFiles := len(videoFiles)
-		logger.Info("Found %d video files to process", totalFiles)
-
-		// Send initial progress
-		progressResponse := ScanImportResponse{
-			Progress: &ScanProgress{
-				Current: skip,
-				Total:   totalFiles,
-			},
-		}
-		data, _ := json.Marshal(progressResponse)
+	initialProgress := ScanImportResponse{
+		Progress: &ScanProgress{
+			Current: skip,
+			Total:   0,
+		},
+	}
+	if data, err := json.Marshal(initialProgress); err == nil {
 		w.Write(data)
 		w.Write([]byte("\n"))
 		flusher.Flush()
+	}
 
-		// Process files in parallel using goroutines
-		maxWorkers := env.GetInt("MAX_PROCESSES", runtime.NumCPU())
-		if maxWorkers > 20 {
-			maxWorkers = 20
-		}
-		if maxWorkers < 1 {
-			maxWorkers = 1
-		}
+	maxWorkers := env.GetInt("MAX_PROCESSES", runtime.NumCPU())
+	if maxWorkers > 20 {
+		maxWorkers = 20
+	}
+	if maxWorkers < 1 {
+		maxWorkers = 1
+	}
 
-		logger.Debug("Starting parallel processing with %d workers for %d files", maxWorkers, len(videoFiles)-skip)
+	jobs := make(chan IndexedJob, maxWorkers*2)
+	results := make(chan IndexedResult, maxWorkers*2)
+	totalCh := make(chan int, 1)
+	scanErrCh := make(chan error, 1)
 
-		type IndexedJob struct {
-			File  VideoFileInfo
-			Index int
-		}
-		type IndexedResult struct {
-			File  ScanImportFile
-			Index int
-		}
+	go streamVideoFilesFromDirectory(ctx, path, skip, jobs, totalCh, scanErrCh)
 
-		jobs := make(chan IndexedJob, len(videoFiles))
-		results := make(chan IndexedResult, len(videoFiles))
-
-		// Start worker goroutines
-		for w := 0; w < maxWorkers; w++ {
-			go func() {
-				for job := range jobs {
-					select {
-					case <-r.Context().Done():
-						return
-					default:
-					}
-
-					fallbackEpisode := job.Index + skip + 1
-					parsedFile := parseVideoFileForImport(job.File, fallbackEpisode)
-					results <- IndexedResult{File: parsedFile, Index: job.Index}
-				}
-			}()
-		}
-
-		// Send jobs to workers with proper indexing
-		remainingFiles := videoFiles[skip:]
+	var workerWG sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		workerWG.Add(1)
 		go func() {
-			defer close(jobs)
-			for i, file := range remainingFiles {
+			defer workerWG.Done()
+			for job := range jobs {
 				select {
-				case <-r.Context().Done():
+				case <-ctx.Done():
 					return
-				case jobs <- IndexedJob{File: file, Index: i}:
+				default:
+				}
+
+				fallbackEpisode := job.Index + skip + 1
+				parsedFile := parseVideoFileForImport(job.File, fallbackEpisode)
+
+				select {
+				case <-ctx.Done():
+					return
+				case results <- IndexedResult{File: parsedFile, Index: job.Index}:
 				}
 			}
 		}()
+	}
 
-		// Collect results in order and stream them
-		resultBuffer := make([]ScanImportFile, len(remainingFiles))
-		receivedResults := make([]bool, len(remainingFiles))
-		processedCount := 0
-		nextToStream := 0
+	go func() {
+		workerWG.Wait()
+		close(results)
+	}()
 
-		for processedCount < len(remainingFiles) {
-			select {
-			case <-r.Context().Done():
-				logger.Info("Client disconnected during streaming scan")
+	totalFiles := 0
+	totalAfterSkip := 0
+	scanComplete := false
+	nextToStream := 0
+	buffer := make(map[int]ScanImportFile)
+
+	for {
+		select {
+		case err := <-scanErrCh:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("Failed to scan directory %s: %v", path, err)
+				response := ScanImportResponse{
+					Error: fmt.Sprintf("Failed to scan directory: %v", err),
+					Done:  true,
+				}
+				data, _ := json.Marshal(response)
+				w.Write(data)
+				w.Write([]byte("\n"))
+				flusher.Flush()
 				return
-			case result := <-results:
-				processedCount++
+			}
+		case total := <-totalCh:
+			totalFiles = total
+			if total > skip {
+				totalAfterSkip = total - skip
+			} else {
+				totalAfterSkip = 0
+			}
+			scanComplete = true
+			progressResponse := ScanImportResponse{
+				Progress: &ScanProgress{
+					Current: skip + nextToStream,
+					Total:   totalFiles,
+				},
+			}
+			if data, err := json.Marshal(progressResponse); err == nil {
+				w.Write(data)
+				w.Write([]byte("\n"))
+				flusher.Flush()
+			}
+			if totalAfterSkip == 0 {
+				completionResponse := ScanImportResponse{
+					Done: true,
+					Progress: &ScanProgress{
+						Current: totalFiles,
+						Total:   totalFiles,
+					},
+				}
+				if data, err := json.Marshal(completionResponse); err == nil {
+					w.Write(data)
+					w.Write([]byte("\n"))
+					flusher.Flush()
+				}
+				logger.Info("Completed streaming scan for %d files", totalFiles)
+				return
+			}
 
-				// Store result in correct position
-				resultBuffer[result.Index] = result.File
-				receivedResults[result.Index] = true
+		case result, ok := <-results:
+			if !ok {
+				completionResponse := ScanImportResponse{
+					Done: true,
+					Progress: &ScanProgress{
+						Current: totalFiles,
+						Total:   totalFiles,
+					},
+				}
+				if data, err := json.Marshal(completionResponse); err == nil {
+					w.Write(data)
+					w.Write([]byte("\n"))
+					flusher.Flush()
+				}
+				logger.Info("Completed streaming scan for %d files", totalFiles)
+				return
+			}
 
-				// Stream all consecutive results starting from nextToStream
-				for nextToStream < len(remainingFiles) && receivedResults[nextToStream] {
-					parsedFile := resultBuffer[nextToStream]
+			buffer[result.Index] = result.File
+			for {
+				file, exists := buffer[nextToStream]
+				if !exists {
+					break
+				}
 
-					// Send the parsed file result
-					fileResponse := ScanImportResponse{
-						File: &parsedFile,
+				currentTotal := totalFiles
+				if currentTotal == 0 {
+					// Total not known yet; show progress based on streamed count
+					currentTotal = skip + nextToStream + 1
+				}
+
+				fileResponse := ScanImportResponse{
+					File: &file,
+					Progress: &ScanProgress{
+						Current: skip + nextToStream + 1,
+						Total:   currentTotal,
+					},
+				}
+
+				data, err := json.Marshal(fileResponse)
+				if err != nil {
+					logger.Error("Failed to marshal file response: %v", err)
+					delete(buffer, nextToStream)
+					nextToStream++
+					continue
+				}
+
+				if _, err := w.Write(data); err != nil {
+					logger.Error("Failed to write streaming response: %v", err)
+					return
+				}
+				if _, err := w.Write([]byte("\n")); err != nil {
+					logger.Error("Failed to write newline: %v", err)
+					return
+				}
+
+				flusher.Flush()
+				delete(buffer, nextToStream)
+				nextToStream++
+
+				if scanComplete && totalAfterSkip > 0 && nextToStream >= totalAfterSkip {
+					completionResponse := ScanImportResponse{
+						Done: true,
 						Progress: &ScanProgress{
-							Current: skip + nextToStream + 1,
+							Current: totalFiles,
 							Total:   totalFiles,
 						},
 					}
-
-					data, err := json.Marshal(fileResponse)
-					if err != nil {
-						logger.Error("Failed to marshal file response: %v", err)
-						continue
+					if data, err := json.Marshal(completionResponse); err == nil {
+						w.Write(data)
+						w.Write([]byte("\n"))
+						flusher.Flush()
 					}
-
-					if _, err := w.Write(data); err != nil {
-						logger.Error("Failed to write streaming response: %v", err)
-						return
-					}
-
-					if _, err := w.Write([]byte("\n")); err != nil {
-						logger.Error("Failed to write newline: %v", err)
-						return
-					}
-
-					flusher.Flush()
-					nextToStream++
+					logger.Info("Completed streaming scan for %d files", totalFiles)
+					return
 				}
 			}
+
+		case <-ctx.Done():
+			logger.Info("Client disconnected during streaming scan")
+			return
 		}
-
-		// Send completion signal
-		completionResponse := ScanImportResponse{
-			Done: true,
-			Progress: &ScanProgress{
-				Current: totalFiles,
-				Total:   totalFiles,
-			},
-		}
-
-		data, _ = json.Marshal(completionResponse)
-		w.Write(data)
-		w.Write([]byte("\n"))
-		flusher.Flush()
-
-		logger.Info("Completed streaming scan for %d files", totalFiles)
+	}
 }
 
 // VideoFileInfo represents basic info about a video file
@@ -352,6 +404,78 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 	}
 
 	return videoFiles, nil
+}
+
+// streamVideoFilesFromDirectory walks a directory tree, sending video files as they are found.
+func streamVideoFilesFromDirectory(ctx context.Context, dirPath string, skip int, jobs chan<- IndexedJob, totalCh chan<- int, errCh chan<- error) {
+	defer close(jobs)
+
+	videoExtensions := map[string]struct{}{
+		".mkv":  {}, ".mp4": {}, ".avi": {}, ".mov": {}, ".wmv": {}, ".flv": {},
+		".webm": {}, ".m4v": {}, ".mpg": {}, ".mpeg": {}, ".3gp": {}, ".ogv": {},
+		".ts": {}, ".m2ts": {}, ".mts": {}, ".strm": {},
+	}
+
+	total := 0
+
+	walkErr := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if ctx != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(d.Name()))
+		if _, ok := videoExtensions[ext]; !ok {
+			return nil
+		}
+
+		total++
+
+		if total <= skip {
+			return nil
+		}
+
+		var size int64
+		if info, infoErr := d.Info(); infoErr == nil {
+			size = info.Size()
+		}
+
+		job := IndexedJob{
+			File: VideoFileInfo{
+				Name: d.Name(),
+				Path: path,
+				Size: size,
+			},
+			Index: total - skip - 1,
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case jobs <- job:
+		}
+
+		return nil
+	})
+
+	if walkErr != nil && !errors.Is(walkErr, context.Canceled) {
+		errCh <- walkErr
+	} else {
+		errCh <- nil
+	}
+
+	totalCh <- total
 }
 
 // processFilesInParallel processes files using parallel workers and returns results in order

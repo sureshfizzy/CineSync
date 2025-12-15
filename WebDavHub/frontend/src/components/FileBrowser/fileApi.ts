@@ -122,9 +122,10 @@ export async function getFileDetail(path: string) {
   return response.data;
 }
 
-export async function moveFile(sourcePath: string, targetPath: string): Promise<void> {
+export async function moveFile(sourcePath: string, targetPath: string, overwrite: boolean = false): Promise<void> {
   await axios.post('/api/move', {
     sourcePath,
-    targetPath
+    targetPath,
+    overwrite
   });
 }

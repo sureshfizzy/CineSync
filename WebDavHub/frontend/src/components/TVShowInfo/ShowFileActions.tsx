@@ -98,6 +98,29 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
   const handleModify = () => setModifyDialogOpen(true);
   const handleModifyClose = () => setModifyDialogOpen(false);
 
+  const fullFilePath = filePath.endsWith(fileInfo.name) ? filePath : `${filePath}/${fileInfo.name}`;
+
+  const fileForMenu = fileInfo.type === 'file' ? {
+    name: fileInfo.name || folderName || 'Unknown File',
+    type: 'file' as const,
+    fullPath: fileInfo.fullPath || fileInfo.sourcePath || fullFilePath,
+    sourcePath: fileInfo.sourcePath || fileInfo.fullPath || fullFilePath,
+    webdavPath: fileInfo.webdavPath || fullFilePath,
+    path: fileInfo.path || fullFilePath,
+    size: fileInfo.size || '0 B',
+    modified: fileInfo.modified || new Date().toISOString(),
+    destinationPath: fileInfo.destinationPath
+  } : {
+    name: folderName || 'Unknown Folder',
+    type: 'directory' as const,
+    fullPath: filePath,
+    sourcePath: filePath,
+    webdavPath: filePath,
+    path: filePath,
+    size: '0 B',
+    modified: new Date().toISOString()
+  };
+
   return (
     <Box
       sx={{
@@ -109,16 +132,7 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
     >
       <>
         <FileActionMenu
-          file={{
-            name: folderName || 'Unknown Folder',
-            type: 'directory' as const,
-            fullPath: filePath,
-            sourcePath: filePath,
-            webdavPath: filePath,
-            path: filePath,
-            size: '0 B',
-            modified: new Date().toISOString()
-          }}
+          file={fileForMenu}
           currentPath={currentPath}
           onViewDetails={() => {}}
           onRename={handleRename}

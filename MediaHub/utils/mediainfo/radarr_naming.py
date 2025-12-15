@@ -35,14 +35,32 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
             if not tags_to_use:
                 return f"{movie_name} ({year})"
 
-            # Initialize filename_parts with base movie name and year
-            filename_parts = [f"{movie_name} ({year})"]
+            filename_result = f"{movie_name} ({year})"
+
+            def append_with_separator(current, separator, value):
+                """Append tag value with the correct separator handling"""
+                if not value:
+                    return current
+
+                if separator == '-':
+                    return f"{current} - {value}"
+                if separator in ['.', '_']:
+                    return f"{current}{separator}{value}"
+
+                return f"{current} {value}"
 
             # Build filename with Radarr tags
             for tag in tags_to_use:
                 clean_tag = tag.strip()
                 original_tag = clean_tag
-                field_name = clean_tag
+                separator = ''
+
+                if clean_tag and clean_tag[0] in ['-', '.', '_']:
+                    separator = clean_tag[0]
+                    field_name = clean_tag[1:].strip()
+                else:
+                    field_name = clean_tag
+
                 if field_name.startswith('[') and not field_name.endswith(']'):
                     field_name = field_name[1:]
                 elif not field_name.startswith('[') and field_name.endswith(']'):
@@ -51,8 +69,6 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                     field_name = field_name[1:-1]
                 elif field_name.startswith('{') and field_name.endswith('}'):
                     field_name = field_name[1:-1]  # Remove { }
-                elif field_name.startswith('-'):
-                    field_name = field_name[1:]     # Remove leading -
 
                 if field_name in ['Movie CleanTitle', 'Movie Title', 'Release Year', '(Release Year)']:
                     continue
@@ -61,13 +77,13 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                 if field_name == 'Edition Tags' and 'Edition Tags' in media_info:
                     value = media_info['Edition Tags']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle MediaInfo 3D
                 elif field_name == 'MediaInfo 3D' and 'MediaInfo 3D' in media_info:
                     value = media_info['MediaInfo 3D']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle Custom Formats - only if Quality Full doesn't already contain source info
                 elif field_name == 'Custom Formats' and 'Custom Formats' in media_info:
@@ -84,68 +100,69 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                                 value = ' '.join(custom_formats_list) if custom_formats_list else ''
 
                             if value:
-                                filename_parts.append(value)
+                                filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle Quality Full with proper formatting - keep original format
                 elif field_name == 'Quality Full' and 'Quality Full' in media_info:
                     value = media_info['Quality Full']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle MediaInfo AudioCodec
                 elif field_name in ['MediaInfo AudioCodec', 'Mediainfo AudioCodec'] and 'MediaInfo AudioCodec' in media_info:
                     value = media_info['MediaInfo AudioCodec']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle MediaInfo AudioChannels
                 elif field_name in ['MediaInfo AudioChannels', 'Mediainfo AudioChannels'] and 'MediaInfo AudioChannels' in media_info:
                     value = media_info['MediaInfo AudioChannels']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle MediaInfo VideoDynamicRangeType
                 elif field_name == 'MediaInfo VideoDynamicRangeType' and 'MediaInfo VideoDynamicRangeType' in media_info:
                     value = media_info['MediaInfo VideoDynamicRangeType']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle MediaInfo VideoCodec (handle both case variations)
                 elif field_name in ['MediaInfo VideoCodec', 'Mediainfo VideoCodec'] and 'MediaInfo VideoCodec' in media_info:
                     value = media_info['MediaInfo VideoCodec']
                     if value:
-                        filename_parts.append(value)
+                        filename_result = append_with_separator(filename_result, separator, value)
 
                 # Handle ID tokens (new format)
                 elif field_name.lower() == 'tmdbid' and 'TmdbId' in media_info:
                     value = media_info['TmdbId']
                     if value:
                         if is_jellyfin_id_format_enabled():
-                            filename_parts.append(f"[tmdbid-{value}]")
+                            filename_result = append_with_separator(filename_result, separator, f"[tmdbid-{value}]")
                         else:
-                            filename_parts.append(f"{{tmdb-{value}}}")
+                            filename_result = append_with_separator(filename_result, separator, f"{{tmdb-{value}}}")
 
                 elif field_name.lower() == 'imdbid' and 'ImdbId' in media_info:
                     value = media_info['ImdbId']
                     if value:
                         if is_jellyfin_id_format_enabled():
-                            filename_parts.append(f"[imdbid-{value}]")
+                            filename_result = append_with_separator(filename_result, separator, f"[imdbid-{value}]")
                         else:
-                            filename_parts.append(f"{{imdb-{value}}}")
+                            filename_result = append_with_separator(filename_result, separator, f"{{imdb-{value}}}")
 
                 elif field_name.lower() == 'tvdbid' and 'TvdbId' in media_info:
                     value = media_info['TvdbId']
                     if value:
                         if is_jellyfin_id_format_enabled():
-                            filename_parts.append(f"[tvdbid-{value}]")
+                            filename_result = append_with_separator(filename_result, separator, f"[tvdbid-{value}]")
                         else:
-                            filename_parts.append(f"{{tvdb-{value}}}")
+                            filename_result = append_with_separator(filename_result, separator, f"{{tvdb-{value}}}")
 
                 # Handle Release Group
                 elif field_name == 'Release Group' and 'Release Group' in media_info:
                     value = media_info['Release Group']
                     if value:
-                        filename_parts.append(f"-{value}")
+                        release_separator = separator or '-'
+                        filename_result = append_with_separator(filename_result, release_separator, value)
 
                 # Generic handler for other tags
                 elif field_name in media_info:
@@ -153,12 +170,12 @@ def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info
                     if value:
                         if isinstance(value, list):
                             formatted_value = '+'.join([str(item).upper() for item in value])
-                            filename_parts.append(formatted_value)
+                            filename_result = append_with_separator(filename_result, separator, formatted_value)
                         else:
-                            filename_parts.append(str(value))
+                            filename_result = append_with_separator(filename_result, separator, str(value))
 
-            result = ' '.join(filename_parts)
-            return result
+            filename_result = re.sub(r'\s{2,}', ' ', filename_result).strip()
+            return filename_result
 
         else:
             return f"{movie_name} ({year})"
@@ -189,6 +206,8 @@ def apply_radarr_movie_tags(movie_name, year, media_info, tags_to_use):
         
         for tag in tags_to_use:
             clean_tag = tag.strip()
+            if clean_tag and clean_tag[0] in ['-', '.', '_']:
+                clean_tag = clean_tag[1:].strip()
             
             # Handle Radarr-specific Quality tags
             if clean_tag == 'Quality Full' and 'Quality Full' in media_info:

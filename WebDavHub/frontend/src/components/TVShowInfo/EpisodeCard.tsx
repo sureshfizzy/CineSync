@@ -337,7 +337,17 @@ const EpisodeCard: React.FC<EpisodeCardProps> = ({
             </Box>
 
             <FileActionMenu
-              file={{ name: file.name, type: 'file', size: file.size, modified: file.modified, path: file.path, sourcePath: file.path }}
+              file={{
+                name: file.name,
+                type: 'file' as const,
+                size: file.size,
+                modified: file.modified,
+                path: file.path,
+                fullPath: file.path,
+                sourcePath: file.path,
+                webdavPath: file.path,
+                destinationPath: file.path
+              }}
               currentPath={selectedSeasonFolder ? `${selectedSeasonFolder.folderName}`.replace(/^\/+/, '') : ''}
               onViewDetails={handleViewDetails}
               onRename={fetchSeasonFolders}
