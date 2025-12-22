@@ -22,7 +22,7 @@ from datetime import datetime
 
 
 class CineSyncInstallerBuilder:
-    VERSION = "3.2.0-alpha"
+    VERSION = "3.2.1-alpha"
     
     def __init__(self, clean_build=False):
         self.root_dir = Path(__file__).parent.parent.parent.absolute()

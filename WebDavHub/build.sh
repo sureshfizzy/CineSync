@@ -1,7 +1,7 @@
 #!/bin/bash
 
 APP_NAME="cinesync"
-VERSION="3.2.0-alpha"
+VERSION="3.2.1-alpha"
 
 PLATFORMS=(
     "darwin amd64"
