@@ -11,6 +11,11 @@ from MediaHub.utils.parser.extractor import extract_all_metadata
 from MediaHub.utils.parser.parse_anime import is_anime_filename
 
 # ============================================================================
+# OS Detection
+# ============================================================================
+IS_WINDOWS = platform.system() == 'Windows'
+
+# ============================================================================
 # Country code normalization
 # ============================================================================
 def normalize_country_code(code: Optional[str]) -> Optional[str]:
@@ -608,23 +613,33 @@ def get_source_directory_from_symlink(file_path: str) -> str:
 # ============================================================================
 
 def sanitize_windows_filename(filename: str) -> str:
-    """Sanitize a filename to be compatible with Windows filesystem."""
+    """
+    Sanitize a filename to be compatible with the current OS filesystem.
+
+    On Windows: Replaces colons with ' -' and other invalid characters.
+    On Unix/Linux/macOS: Keeps colons valid, only replaces truly invalid characters.
+    """
     if not isinstance(filename, str):
         return ""
 
     if not filename.strip():
         return "sanitized_filename"
 
-    # Windows filename restrictions: \ / : * ? " < > |
+    # Base replacements for all OS
     replacements = {
-        ':': ' -', '/': '-', '\\': '-', '*': 'x', '?': '',
+        '/': '-', '\\': '-', '*': 'x', '?': '',
         '"': "'", '<': '(', '>': ')', '|': '-'
     }
+    invalid_chars_pattern = r'[\\/*?"<>|]'
+
+    if IS_WINDOWS:
+        replacements[':'] = ' -'
+        invalid_chars_pattern = r'[\\/:*?"<>|]'
 
     for char, replacement in replacements.items():
         filename = filename.replace(char, replacement)
 
-    filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+    filename = re.sub(invalid_chars_pattern, '', filename)
     filename = filename.strip(' .')
 
     if not filename:

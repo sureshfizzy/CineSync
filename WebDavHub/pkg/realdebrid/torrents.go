@@ -5,6 +5,7 @@ import (
     "fmt"
     "path"
     "path/filepath"
+    "runtime"
     "strings"
     "sync"
     "sync/atomic"
@@ -22,6 +23,9 @@ const (
 	CHECKSUM_TIMEOUT = 10 * time.Second
     INFO_CACHE_TTL = 24 * time.Hour
 )
+
+// OS-specific constants
+var isWindows = runtime.GOOS == "windows"
 
 // LibraryState represents the current state of the torrent library for change detection
 type LibraryState struct {
@@ -58,7 +62,13 @@ func truncateFilename(filename string) string {
 
 // SanitizeFilename sanitizes a filename for use in paths
 func SanitizeFilename(name string) string {
-	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	replacePairs := []string{"/", "_", "\\", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_"}
+
+	if isWindows {
+		replacePairs = append([]string{":", "_"}, replacePairs...)
+	}
+
+	r := strings.NewReplacer(replacePairs...)
 	return r.Replace(name)
 }
 

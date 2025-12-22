@@ -21,6 +21,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// OS-specific constants
+var isWindows = runtime.GOOS == "windows"
+
 // DatabaseRecord represents a record from the processed_files table
 type DatabaseRecord struct {
 	FilePath        string `json:"file_path"`
@@ -55,23 +58,23 @@ func sanitizeFolderName(name string) string {
 		return "sanitized_filename"
 	}
 
+	// Base replacements for all OS
 	replacements := map[string]string{
-		":": " -",
-		"/": "-",
-		"\\": "-",
-		"*": "x",
-		"?": "",
-		"\"": "'",
-		"<": "(",
-		">": ")",
-		"|": "-",
+		"/": "-", "\\": "-", "*": "x", "?": "",
+		"\"": "'", "<": "(", ">": ")", "|": "-",
+	}
+	invalidPattern := `[\\/*?"<>|]`
+
+	if isWindows {
+		replacements[":"] = " -"
+		invalidPattern = `[\\/:*?"<>|]`
 	}
 
 	for old, repl := range replacements {
 		name = strings.ReplaceAll(name, old, repl)
 	}
 
-	name = invalidPathChars.ReplaceAllString(name, "")
+	name = regexp.MustCompile(invalidPattern).ReplaceAllString(name, "")
 	name = strings.Trim(name, " .")
 
 	if name == "" {
