@@ -19,8 +19,15 @@ if hasattr(sys.stdout, 'buffer'):
 if hasattr(sys.stderr, 'buffer'):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Append the parent directory to the system path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# System utilities
+from MediaHub.utils.system_utils import is_frozen, get_application_path
+if is_frozen():
+    # Running as compiled executable
+    executable_dir = get_application_path()
+    sys.path.append(str(executable_dir.parent))
+else:
+    # Running as Python script
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Local imports from MediaHub
 from MediaHub.config.config import *
@@ -35,7 +42,11 @@ from MediaHub.utils.global_events import *
 
 db_initialized = False
 
-POLLING_MONITOR_PATH = os.path.join(os.path.dirname(__file__), 'monitor', 'polling_monitor.py')
+# Polling monitor path
+if is_frozen():
+    POLLING_MONITOR_PATH = None
+else:
+    POLLING_MONITOR_PATH = os.path.join(os.path.dirname(__file__), 'monitor', 'polling_monitor.py')
 LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
 MONITOR_PID_FILE = '/tmp/monitor_pid.txt' if platform.system() != 'Windows' else 'C:\\temp\\monitor_pid.txt'
 LOCK_TIMEOUT = 3600
@@ -117,7 +128,7 @@ def ensure_windows_temp_directory():
                 log_message(f"Created directory: {temp_dir}", level="INFO")
             except OSError as e:
                 log_message(f"Error creating directory {temp_dir}: {e}", level="ERROR")
-                exit(1)
+                sys.exit(1)
 
 def is_process_running(pid):
     """Check if a process with a given PID is still running."""
@@ -311,7 +322,7 @@ def log_system_configuration():
         dashboard_check_interval = get_dashboard_check_interval()
 
 def start_polling_monitor():
-    """Start the polling monitor as a subprocess and track its PID."""
+    """Start the polling monitor as a subprocess."""
     global background_processes
 
     if check_lock_file():
@@ -322,30 +333,36 @@ def start_polling_monitor():
     log_message("Processing complete. Setting up directory monitoring.", level="INFO")
 
     try:
-        python_command = 'python' if platform.system() == 'Windows' else 'python3'
-        process = subprocess.Popen([python_command, POLLING_MONITOR_PATH])
+        if is_frozen():
+            log_message("Running polling monitor in thread", level="DEBUG")
+            from MediaHub.monitor.polling_monitor import main as monitor_main
+            monitor_main()
+        else:
+            log_message("Running polling monitor as subprocess", level="DEBUG")
+            python_command = 'python' if platform.system() == 'Windows' else 'python3'
+            process = subprocess.Popen([python_command, POLLING_MONITOR_PATH])
 
-        try:
-            current_process = psutil.Process()
-            affinity = current_process.cpu_affinity()
-            child_process = psutil.Process(process.pid)
-            child_process.cpu_affinity(affinity)
-            log_message(f"Set CPU affinity for polling monitor to cores {affinity}", level="DEBUG")
-        except Exception as e:
-            log_message(f"Could not set CPU affinity for polling monitor: {e}", level="DEBUG")
+            try:
+                current_process = psutil.Process()
+                affinity = current_process.cpu_affinity()
+                child_process = psutil.Process(process.pid)
+                child_process.cpu_affinity(affinity)
+                log_message(f"Set CPU affinity for polling monitor to cores {affinity}", level="DEBUG")
+            except Exception as e:
+                log_message(f"Could not set CPU affinity for polling monitor: {e}", level="DEBUG")
 
-        background_processes.append(process)
+            background_processes.append(process)
 
-        with open(MONITOR_PID_FILE, 'w') as f:
-            f.write(str(process.pid))
+            with open(MONITOR_PID_FILE, 'w') as f:
+                f.write(str(process.pid))
 
-        log_message(f"Started polling monitor with PID {process.pid}", level="INFO")
+            log_message(f"Started polling monitor with PID {process.pid}", level="INFO")
 
-        while not terminate_flag.is_set():
-            if process.poll() is not None:
-                log_message(f"Polling monitor exited with code {process.returncode}", level="INFO")
-                break
-            time.sleep(0.1)
+            while not terminate_flag.is_set():
+                if process.poll() is not None:
+                    log_message(f"Polling monitor exited with code {process.returncode}", level="INFO")
+                    break
+                time.sleep(0.1)
 
     except Exception as e:
         log_message(f"Error running monitor script: {e}", level="ERROR")
@@ -418,12 +435,17 @@ def start_webdav_server():
     global background_processes
 
     # Always start CineSync server
-    webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
+    if is_frozen():
+        executable_dir = get_application_path()
+        base_dir = executable_dir.parent
+        webdav_dir = base_dir
+    else:
+        webdav_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'WebDavHub')
     if platform.system() == 'Windows':
         webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
     else:
         webdav_script = os.path.join(webdav_dir, 'cinesync')
-    webdav_port = int(os.getenv('CINESYNC_API_PORT'))
+    webdav_port = int(os.getenv('CINESYNC_PORT'))
 
     # Check if the CineSync server is already running on the specified port
     if is_port_in_use(webdav_port):
@@ -511,7 +533,7 @@ def main(dest_dir):
     # Ensure --force-show and --force-movie aren't used together
     if args.force_show and args.force_movie:
         log_message("Error: Cannot use --force-show and --force-movie together", level="ERROR")
-        exit(1)
+        sys.exit(1)
 
     if args.vacuum:
         vacuum_database()
@@ -638,7 +660,7 @@ def main(dest_dir):
     dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
     if not src_dirs_str or not dest_dir:
         log_message("Source or destination directory not set in environment variables.", level="ERROR")
-        exit(1)
+        sys.exit(1)
     src_dirs = src_dirs_str.split(',')
 
     # Wait for mount before creating symlinks if needed
@@ -695,7 +717,7 @@ if __name__ == "__main__":
     dest_dir = get_setting_with_client_lock('DESTINATION_DIR', '', 'string')
     if not src_dirs_str or not dest_dir:
         log_message("Source or destination directory not set.", level="ERROR")
-        exit(1)
+        sys.exit(1)
     src_dirs = src_dirs_str.split(',')
 
     try:

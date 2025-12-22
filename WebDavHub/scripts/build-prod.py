@@ -178,8 +178,11 @@ class WebDavHubProductionBuilder:
     def show_completion_message(self):
         """Show build completion message"""
         print("\n🎉 Production build completed successfully!")
+        print("\n✅ Frontend is embedded in the Go binary")
         print("\nNext steps:")
-        print("- Run python scripts/start-prod.py to start production servers")
+        print("- Run ./cinesync (or cinesync.exe on Windows) to start the server")
+        print("- Access the UI at http://localhost:8082")
+        print("- Or use python scripts/start-prod.py for development mode")
         print("- Or use Docker to run the production build")
         
     def run(self):
@@ -199,14 +202,14 @@ class WebDavHubProductionBuilder:
             # Update Go dependencies
             self.update_go_dependencies()
             
-            # Build backend
-            self.build_backend()
-            
-            # Install frontend dependencies
+            # Install frontend dependencies FIRST
             self.install_frontend_dependencies()
             
-            # Build frontend for production
+            # Build frontend for production BEFORE backend (creates dist folder for Go embed)
             self.build_frontend()
+            
+            # Build backend AFTER frontend (so it can embed dist folder)
+            self.build_backend()
             
             # Show completion message
             self.show_completion_message()

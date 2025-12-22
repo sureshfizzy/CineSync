@@ -1358,7 +1358,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
 
 def _extract_year_from_parsed(parsed: ParsedFilename) -> Optional[int]:
-    """Extract year from parsed filename data using centralized parse_year logic."""
+    """Extract year from parsed filename data parse_year logic."""
     # Use centralized year extraction from parse_year.py
     return extract_year(parsed.original)
 

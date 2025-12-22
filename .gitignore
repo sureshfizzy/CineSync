@@ -1,19 +1,73 @@
-# Ignore Python bytecode files
+# Python bytecode files
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 
 # IDE files
 .vscode/
 .idea/
 
-# Ignore other potential bytecode files
-*.pyd
-/db
-cache/
+# Database and data files
+/db/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs and cache
 logs/
-WebDavHub/frontend/node_modules/
-WebDavHub/data/
+cache/
+
+# Build artifacts
 WebDavHub/cinesync
 WebDavHub/cinesync.exe
+WebDavHub/frontend/node_modules/
 WebDavHub/frontend/dist/
+WebDavHub/data/
+MediaHub/build/
+MediaHub/dist/
+MediaHub/MediaHub.exe
+
+# Distribution and installer artifacts
+distribution/*/build/
+distribution/*/output/
+distribution/*/downloads/
+
+# Downloaded utilities (auto-downloaded during build)
+distribution/windows/nssm_temp.zip
+distribution/windows/ffmpeg_temp.zip
+distribution/windows/rclone_temp.zip
+distribution/windows/nssm-*/
+distribution/windows/ffmpeg-*/
+distribution/windows/rclone-*/
+distribution/windows/nssm.exe
+distribution/windows/ffprobe.exe
+distribution/windows/rclone.exe
+
+distribution/linux/rclone_temp.zip
+distribution/linux/rclone-*/
+distribution/linux/rclone
+distribution/linux/ffprobe
+
+distribution/macos/rclone_temp.zip
+distribution/macos/rclone-*/
+distribution/macos/rclone
+distribution/macos/ffprobe
+
+# Keep these files (tracked in git)
+!distribution/windows/build_installer.py
+!distribution/windows/CineSync-Installer.iss
+!distribution/windows/README.md
+!distribution/linux/build_installer.py
+!distribution/linux/install.sh
+!distribution/linux/uninstall.sh
+!distribution/linux/cinesync.service
+!distribution/linux/README.md
+!distribution/macos/build_installer.py
+!distribution/macos/install.sh
+!distribution/macos/uninstall.sh
+!distribution/macos/com.cinesync.app.plist
+!distribution/macos/README.md
+
+# Environment files
+.env

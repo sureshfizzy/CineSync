@@ -1441,7 +1441,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	if ip == "" {
 		ip = "0.0.0.0"
 	}
-	port := os.Getenv("CINESYNC_API_PORT")
+	port := os.Getenv("CINESYNC_PORT")
 	if port == "" {
 		port = "8082"
 	}

@@ -6,7 +6,6 @@ import axios from 'axios';
 interface RuntimeConfig {
   tmdbApiKey?: string;
   apiPort?: number;
-  uiPort?: number;
   ip?: string;
   webdavEnabled?: boolean;
   destinationDir?: string;
@@ -62,11 +61,8 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
             case 'TMDB_API_KEY':
               newConfig.tmdbApiKey = item.value;
               break;
-            case 'CINESYNC_API_PORT':
+            case 'CINESYNC_PORT':
               newConfig.apiPort = item.value ? parseInt(item.value, 10) : undefined;
-              break;
-            case 'CINESYNC_UI_PORT':
-              newConfig.uiPort = item.value ? parseInt(item.value, 10) : undefined;
               break;
             case 'CINESYNC_IP':
               newConfig.ip = item.value;
@@ -162,7 +158,6 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
         onClose={() => setShowRestartPopup(false)}
         onRestart={handleRestart}
         newApiPort={config.apiPort?.toString()}
-        newUiPort={config.uiPort?.toString()}
       />
     </ConfigContext.Provider>
   );

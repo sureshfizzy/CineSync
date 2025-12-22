@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Stack, Divider, IconButton, Tooltip, useTheme, useMediaQuery, alpha } from '@mui/material';
+import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Stack, Divider, useTheme, useMediaQuery, alpha } from '@mui/material';
 import { Storage, Settings, CheckCircle, Error, Refresh, Science, FolderOpen, MenuBook, ExpandMore, ExpandLess } from '@mui/icons-material';
 import axios from 'axios';
 import CineSyncMountGuide from './CineSyncMountGuide';
@@ -14,7 +14,6 @@ interface RcloneConfig {
   bufferSize: string;
   dirCacheTime: string;
   pollInterval: string;
-  rclonePath: string;
   vfsReadChunkSize: string;
   vfsReadChunkSizeLimit: string;
   streamBufferSize: string;
@@ -73,7 +72,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     bufferSize: '16M',
     dirCacheTime: '15s',
     pollInterval: '15s',
-    rclonePath: '',
     vfsReadChunkSize: '64M',
     vfsReadChunkSizeLimit: '128M',
     streamBufferSize: '10M',
@@ -107,7 +105,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [mounting, setMounting] = useState(false);
   const [unmounting, setUnmounting] = useState(false);
@@ -184,34 +181,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
       showMessage('Failed to save configuration', 'error');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const testRclone = async () => {
-    setTesting(true);
-    try {
-      const response = await axios.post('/api/realdebrid/rclone/test', { rclonePath: config.rclonePath });
-      if (response.data.success) {
-        showMessage('Rclone test successful!', 'success');
-      } else {
-        showMessage(`Rclone test failed: ${response.data.error}`, 'error');
-      }
-    } catch (error) {
-      console.error('Rclone test failed:', error);
-      showMessage('Rclone test failed', 'error');
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const viewConfig = async () => {
-    try {
-      const response = await axios.get('/api/realdebrid/config');
-      const configPath = response.data.configPath || 'Unknown';
-      showMessage(`Rclone config location: ${configPath}`, 'info');
-    } catch (error) {
-      console.error('Failed to get config info:', error);
-      showMessage('Failed to get config info', 'error');
     }
   };
 
@@ -539,48 +508,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         </Box>
                       }
                     />
-
-                    {/* Rclone Path (Windows only - hidden on Linux/Unix) */}
-                    {serverOS === 'windows' && (
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>
-                          Rclone Executable Path
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          size={isMobile ? 'small' : 'medium'}
-                          value={config.rclonePath}
-                          onChange={(e) => handleConfigChange('rclonePath', e.target.value)}
-                          placeholder="C:\Program Files\rclone\rclone.exe"
-                          helperText="Path to rclone.exe (leave empty to use PATH)"
-                          InputProps={{
-                            endAdornment: (
-                              <Stack direction="row" spacing={0.5}>
-                                <Tooltip title="Test">
-                                  <IconButton
-                                    onClick={testRclone}
-                                    disabled={testing}
-                                    edge="end"
-                                    size="small"
-                                  >
-                                    {testing ? <CircularProgress size={18} /> : <Science fontSize="small" />}
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="View Config Location">
-                                  <IconButton
-                                    onClick={viewConfig}
-                                    edge="end"
-                                    size="small"
-                                  >
-                                    <Settings fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Stack>
-                            ),
-                          }}
-                        />
-                      </Box>
-                    )}
 
                     {/* Mount Path */}
                     <Box>

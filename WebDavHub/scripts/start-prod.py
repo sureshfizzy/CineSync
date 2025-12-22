@@ -44,9 +44,8 @@ class WebDavHubProductionServer:
         self.backend_process: Optional[subprocess.Popen] = None
         self.frontend_process: Optional[subprocess.Popen] = None
         self.env_vars: Dict[str, str] = {}
-        self.api_host = "localhost"
-        self.api_port = 8082
-        self.ui_port = 5173
+        self.server_host = "localhost"
+        self.server_port = 8082
         self.network_ip = self.get_network_ip()
         self.setup_required = False
         self._client_locked_cache: Optional[Dict] = None
@@ -128,26 +127,18 @@ class WebDavHubProductionServer:
             self.setup_required = True
 
         # Priority: client_locked_settings.json (if locked) > Docker env > .env > defaults
-        self.api_host = os.environ.get('CINESYNC_IP', self.env_vars.get('CINESYNC_IP', 'localhost'))
-        if self.api_host == '0.0.0.0':
-            self.api_host = 'localhost'
+        self.server_host = os.environ.get('CINESYNC_IP', self.env_vars.get('CINESYNC_IP', 'localhost'))
+        if self.server_host == '0.0.0.0':
+            self.server_host = 'localhost'
 
         try:
-            locked_api_port = self._get_locked_value('CINESYNC_API_PORT')
-            api_port_str = locked_api_port if locked_api_port is not None else os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
-            self.api_port = int(api_port_str) if api_port_str and api_port_str.strip() else 8082
+            locked_port = self._get_locked_value('CINESYNC_PORT')
+            port_str = locked_port if locked_port is not None else os.environ.get('CINESYNC_PORT', self.env_vars.get('CINESYNC_PORT', '8082'))
+            self.server_port = int(port_str) if port_str and port_str.strip() else 8082
         except (ValueError, TypeError):
-            self.api_port = 8082
+            self.server_port = 8082
 
-        try:
-            locked_ui_port = self._get_locked_value('CINESYNC_UI_PORT')
-            ui_port_str = locked_ui_port if locked_ui_port is not None else os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173'))
-            self.ui_port = int(ui_port_str) if ui_port_str and ui_port_str.strip() else 5173
-        except (ValueError, TypeError):
-            self.ui_port = 5173
-
-        self.env_vars['CINESYNC_API_PORT'] = str(self.api_port)
-        self.env_vars['CINESYNC_UI_PORT'] = str(self.ui_port)
+        self.env_vars['CINESYNC_PORT'] = str(self.server_port)
 
         if not self.env_vars.get('DESTINATION_DIR'):
             self.setup_required = True
@@ -212,18 +203,6 @@ class WebDavHubProductionServer:
             print("❌ Go binary not found. Please run 'python scripts/build-prod.py' first.")
             sys.exit(1)
 
-        if not Path("frontend").exists():
-            print("❌ Frontend directory not found.")
-            sys.exit(1)
-
-        if not Path("frontend/node_modules").exists():
-            print("❌ Frontend dependencies not installed. Please run 'python scripts/build-prod.py' first.")
-            sys.exit(1)
-
-        if not Path("frontend/dist").exists():
-            print("❌ Frontend build not found. Please run 'python scripts/build-prod.py' first.")
-            sys.exit(1)
-
         print("✅ Prerequisites check passed")
 
     def check_database_directory(self):
@@ -248,20 +227,20 @@ class WebDavHubProductionServer:
 
     def wait_for_backend_api(self, max_wait: int = 30) -> bool:
         """Wait for backend API to be ready"""
-        print("Waiting for backend API to be ready...")
+        print("Waiting for CineSync server to be ready...")
         start_time = time.time()
         
         while time.time() - start_time < max_wait:
             try:
-                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/status"
+                url = f"http://{self.server_host}:{self.server_port}/api/realdebrid/status"
                 with urllib.request.urlopen(url, timeout=2) as response:
                     if response.status == 200:
-                        print("✅ Backend API is ready")
+                        print("✅ CineSync server is ready")
                         return True
             except (urllib.error.URLError, socket.timeout, ConnectionRefusedError):
                 time.sleep(1)
         
-        print("⚠️  Backend API did not become ready in time")
+        print("⚠️  CineSync server did not become ready in time")
         return False
 
     def is_auto_start_enabled(self) -> bool:
@@ -273,7 +252,7 @@ class WebDavHubProductionServer:
     def get_mount_path_from_config(self) -> Optional[str]:
         """Get mount path from Real-Debrid config API"""
         try:
-            url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/config"
+            url = f"http://{self.server_host}:{self.server_port}/api/realdebrid/config"
             with urllib.request.urlopen(url, timeout=5) as response:
                 if response.status == 200:
                     data = json.loads(response.read().decode('utf-8'))
@@ -302,7 +281,7 @@ class WebDavHubProductionServer:
             api_mounted = False
             try:
                 encoded_path = urllib.parse.quote(mount_path, safe='')
-                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/rclone/status?path={encoded_path}"
+                url = f"http://{self.server_host}:{self.server_port}/api/realdebrid/rclone/status?path={encoded_path}"
                 with urllib.request.urlopen(url, timeout=3) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode('utf-8'))
@@ -338,7 +317,7 @@ class WebDavHubProductionServer:
 
     def start_backend_server(self):
         """Start the Go backend server"""
-        print(f"Starting Go backend server on port {self.api_port}...")
+        print(f"Starting CineSync server on port {self.server_port}...")
 
         try:
             env = os.environ.copy()
@@ -354,10 +333,10 @@ class WebDavHubProductionServer:
             time.sleep(3)
 
             if self.backend_process.poll() is not None:
-                print("❌ Backend server failed to start")
+                print("❌ CineSync server failed to start")
                 sys.exit(1)
 
-            print("✅ Backend server started successfully")
+            print("✅ CineSync server started successfully")
 
             if not self.wait_for_backend_api():
                 print("⚠️  Continuing despite API not being ready...")
@@ -375,79 +354,25 @@ class WebDavHubProductionServer:
             print(f"Error starting backend server: {e}")
             sys.exit(1)
 
-    def find_pnpm_command(self):
-        """Find pnpm command using shell resolution"""
-        try:
-            subprocess.run("pnpm --version", shell=True, check=True, capture_output=True, text=True)
-            return "pnpm"
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return None
-
-    def start_frontend_server(self):
-        """Start the React frontend server"""
-        print(f"Starting React frontend server on port {self.ui_port}...")
-
-        pnpm_cmd = self.find_pnpm_command()
-        if not pnpm_cmd:
-            print("❌ pnpm not found. Please install pnpm first:")
-            print("  npm install -g pnpm")
-            self.cleanup()
-            sys.exit(1)
-
-        print(f"Using package manager: {pnpm_cmd}")
-
-        try:
-            env = os.environ.copy()
-            env.update(self.env_vars)
-            env["CINESYNC_UI_PORT"] = str(self.ui_port)
-            env["CINESYNC_API_PORT"] = str(self.api_port)
-
-            self.frontend_process = subprocess.Popen(
-                "pnpm run preview --host",
-                shell=True,
-                cwd="frontend",
-                env=env,
-                stdout=None,
-                stderr=None
-            )
-
-            time.sleep(3)
-
-            if self.frontend_process.poll() is not None:
-                print("❌ Frontend server failed to start")
-                self.cleanup()
-                sys.exit(1)
-
-            print("✅ Frontend server started successfully")
-
-        except Exception as e:
-            print(f"Error starting frontend server: {e}")
-            self.cleanup()
-            sys.exit(1)
-
     def display_server_info(self):
         """Display information about running servers"""
         print("\n" + "="*70)
-        print("🏭 CineSync Production Servers Started Successfully!")
+        print("🏭 CineSync Production Server Started Successfully!")
         print("="*70)
-        print(f"🔧 Backend API Server:")
-        print(f"   ➜ Local:    http://localhost:{self.api_port}")
-        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}")
-        print(f"🎨 Frontend Server:")
-        print(f"   ➜ Local:    http://localhost:{self.ui_port}")
-        print(f"   ➜ Network:  http://{self.network_ip}:{self.ui_port}")
-        print(f"🌐 WebDAV Access:")
-        print(f"   ➜ Local:    http://localhost:{self.api_port}/webdav/")
-        print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}/webdav/")
+        print(f"🌐 CineSync Server (API + UI):")
+        print(f"   ➜ Local:    http://localhost:{self.server_port}")
+        print(f"   ➜ Network:  http://{self.network_ip}:{self.server_port}")
+        print(f"\n📡 API Endpoints:")
+        print(f"   ➜ API:      http://localhost:{self.server_port}/api/")
+        print(f"   ➜ WebDAV:   http://localhost:{self.server_port}/webdav/")
         print("="*70)
-        print("🛑 Press Ctrl+C to stop both servers")
+        print("🛑 Press Ctrl+C to stop the server")
         print("="*70 + "\n")
 
     def wait_for_processes(self):
-        """Wait for either process to finish"""
+        """Wait for backend process to finish"""
         try:
-            while (self.backend_process and self.backend_process.poll() is None and
-                   self.frontend_process and self.frontend_process.poll() is None):
+            while self.backend_process and self.backend_process.poll() is None:
                 time.sleep(1)
         except KeyboardInterrupt:
             pass
@@ -472,10 +397,9 @@ class WebDavHubProductionServer:
 
             self.check_database_directory()
 
-            print("🚀 Starting production servers...\n")
+            print("🚀 Starting production server...\n")
 
             self.start_backend_server()
-            self.start_frontend_server()
             self.display_server_info()
             self.wait_for_processes()
 

@@ -19,6 +19,7 @@ import (
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 )
 
 // MediaHub service management
@@ -48,7 +49,7 @@ type MediaHubActivity struct {
 	LastActivity string   `json:"lastActivity,omitempty"`
 }
 
-// getMediaHubPaths returns the paths for MediaHub script and related files
+// getMediaHubPaths returns the paths for MediaHub lock files
 func getMediaHubPaths() (string, string, string, error) {
 	// Get the current working directory
 	cwd, err := os.Getwd()
@@ -58,8 +59,7 @@ func getMediaHubPaths() (string, string, string, error) {
 
 	// Go up one level to get to the CineSync root
 	rootDir := filepath.Dir(cwd)
-
-	scriptPath := filepath.Join(rootDir, "MediaHub", "main.py")
+	mediaHubDir := filepath.Join(rootDir, "MediaHub")
 
 	// Use the same paths that the Python script uses
 	var lockFile, monitorPidFile string
@@ -71,7 +71,7 @@ func getMediaHubPaths() (string, string, string, error) {
 		monitorPidFile = "/tmp/monitor_pid.txt"
 	}
 
-	return scriptPath, lockFile, monitorPidFile, nil
+	return mediaHubDir, lockFile, monitorPidFile, nil
 }
 
 // readPIDFromFile reads a PID from a file
@@ -139,17 +139,20 @@ func StartMediaHubService() error {
 		return fmt.Errorf("MediaHub service is already running")
 	}
 
-	scriptPath, _, _, err := getMediaHubPaths()
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		return fmt.Errorf("failed to get MediaHub paths: %v", err)
+		return fmt.Errorf("failed to get MediaHub executable: %v", err)
 	}
 
-	// Start MediaHub process
-	pythonCmd := getPythonCommandForMediaHub()
+	logger.Info("Starting MediaHub using: %s", mediaHubExec.String())
+
+	// Get command and arguments
+	cmd, args := mediaHubExec.GetCommand("--auto-select")
 
 	mediaHubProcessMux.Lock()
-	mediaHubProcess = exec.Command(pythonCmd, scriptPath, "--auto-select")
-	mediaHubProcess.Dir = filepath.Dir(scriptPath)
+	mediaHubProcess = exec.Command(cmd, args...)
+	mediaHubProcess.Dir = mediaHubExec.WorkDir
 
 	// Create pipes to capture stdout and stderr for auto-start
 	stdout, err := mediaHubProcess.StdoutPipe()
@@ -400,21 +403,22 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scriptPath, _, _, err := getMediaHubPaths()
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		logger.Error("Failed to get MediaHub paths: %v", err)
-		http.Error(w, "Failed to get script paths", http.StatusInternalServerError)
+		logger.Error("Failed to get MediaHub executable: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to get MediaHub executable: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Start MediaHub process
-	pythonCmd := getPythonCommandForMediaHub()
+	cmd, args := mediaHubExec.GetCommand("--auto-select")
 
 	mediaHubProcessMux.Lock()
-	mediaHubProcess = exec.Command(pythonCmd, scriptPath, "--auto-select")
+	mediaHubProcess = exec.Command(cmd, args...)
 
 	// Set working directory to MediaHub directory
-	mediaHubProcess.Dir = filepath.Dir(scriptPath)
+	mediaHubProcess.Dir = mediaHubExec.WorkDir
 
 	// Create pipes to capture stdout and stderr
 	stdout, err := mediaHubProcess.StdoutPipe()
@@ -434,6 +438,7 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start the process
+	logger.Info("Starting MediaHub: %s with args: %v", cmd, args)
 	if err := mediaHubProcess.Start(); err != nil {
 		mediaHubProcessMux.Unlock()
 		logger.Error("Failed to start MediaHub process: %v", err)

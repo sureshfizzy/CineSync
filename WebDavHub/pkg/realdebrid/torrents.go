@@ -329,6 +329,17 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	
+	// FIRST: Add all torrents to the map immediately so they appear in the mount
+	logger.Info("[SetPrefetch] Adding all %d torrents to directory map...", len(torrents))
+	for i := range torrents {
+		item := &torrents[i]
+		accessKey := GetDirectoryName(item.Filename)
+		allTorrents.Set(accessKey, item)
+		tm.idToItemMap.Set(item.ID, item)
+	}
+	logger.Info("[SetPrefetch] All torrents added to map, now enriching file lists...")
+	
+	// SECOND: Enrich file lists in background
 	loadedCount := 0
 	missingCount := 0
 	alreadyCachedCount := 0
@@ -336,7 +347,6 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	
 	for i := range torrents {
 		item := &torrents[i]
-		accessKey := GetDirectoryName(item.Filename)
 		if len(item.CachedFiles) == 0 {
 			if tm.infoStore != nil {
 				if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
@@ -361,9 +371,6 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 		} else {
 			alreadyCachedCount++
 		}
-		
-		allTorrents.Set(accessKey, item)
-		tm.idToItemMap.Set(item.ID, item)
 	}
 	
 	elapsed := time.Since(startTime)

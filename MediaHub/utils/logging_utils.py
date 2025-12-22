@@ -6,6 +6,7 @@ import urllib3
 import warnings
 import logging
 from dotenv import load_dotenv
+from MediaHub.utils.system_utils import is_frozen, get_logs_directory
 
 # Import unicodedata for Unicode normalization
 import unicodedata
@@ -86,24 +87,14 @@ LOG_LEVELS = {
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_LEVEL = LOG_LEVELS.get(LOG_LEVEL.upper(), 20)
 
-# Set up logs directory
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
+# Set up logs directory utility
+LOG_DIR = str(get_logs_directory())
 
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 # Set up log file
-UTC_NOW = datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
-LOG_FILE = os.path.join(LOG_DIR, f"{UTC_NOW}.log")
-
-# Remove old logs
-for file in os.listdir(LOG_DIR):
-    if file.endswith('.log') and file != os.path.basename(LOG_FILE):
-        try:
-            os.remove(os.path.join(LOG_DIR, file))
-        except (PermissionError, FileNotFoundError, OSError):
-            pass
+LOG_FILE = os.path.join(LOG_DIR, "mediahub.log")
 
 # Check if running on Windows
 IS_WINDOWS = platform.system().lower() == 'windows'

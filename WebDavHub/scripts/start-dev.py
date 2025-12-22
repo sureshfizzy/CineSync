@@ -134,21 +134,20 @@ class WebDavHubDevelopmentServer:
             self.api_host = 'localhost'
 
         try:
-            locked_api_port = self._get_locked_value('CINESYNC_API_PORT')
-            api_port_str = locked_api_port if locked_api_port is not None else os.environ.get('CINESYNC_API_PORT', self.env_vars.get('CINESYNC_API_PORT', '8082'))
+            locked_api_port = self._get_locked_value('CINESYNC_PORT')
+            api_port_str = locked_api_port if locked_api_port is not None else os.environ.get('CINESYNC_PORT', self.env_vars.get('CINESYNC_PORT', '8082'))
             self.api_port = int(api_port_str) if api_port_str and api_port_str.strip() else 8082
         except (ValueError, TypeError):
             self.api_port = 8082
 
+        # UI_PORT is only for Vite dev server (hot-reload mode), not used in production
         try:
-            locked_ui_port = self._get_locked_value('CINESYNC_UI_PORT')
-            ui_port_str = locked_ui_port if locked_ui_port is not None else os.environ.get('CINESYNC_UI_PORT', self.env_vars.get('CINESYNC_UI_PORT', '5173'))
+            ui_port_str = os.environ.get('VITE_DEV_PORT', self.env_vars.get('VITE_DEV_PORT', '5173'))
             self.ui_port = int(ui_port_str) if ui_port_str and ui_port_str.strip() else 5173
         except (ValueError, TypeError):
             self.ui_port = 5173
 
-        self.env_vars['CINESYNC_API_PORT'] = str(self.api_port)
-        self.env_vars['CINESYNC_UI_PORT'] = str(self.ui_port)
+        self.env_vars['CINESYNC_PORT'] = str(self.api_port)
 
         if not self.env_vars.get('DESTINATION_DIR'):
             self.setup_required = True
@@ -355,8 +354,9 @@ class WebDavHubDevelopmentServer:
         try:
             env = os.environ.copy()
             env.update(self.env_vars)
-            env["CINESYNC_UI_PORT"] = str(self.ui_port)
-            env["CINESYNC_API_PORT"] = str(self.api_port)
+            # Only set VITE_DEV_PORT for Vite dev server
+            env["VITE_DEV_PORT"] = str(self.ui_port)
+            env["CINESYNC_PORT"] = str(self.api_port)
 
             self.frontend_process = subprocess.Popen(
                 "pnpm run dev --host",
@@ -386,13 +386,17 @@ class WebDavHubDevelopmentServer:
         print("\n" + "="*70)
         print("🎉 CineSync Development Servers Started Successfully!")
         print("="*70)
-        print(f"🔧 Backend API Server:")
+        print(f"🔧 Backend API Server (Production Mode):")
         print(f"   ➜ Local:    http://localhost:{self.api_port}")
         print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}")
-        print(f"🎨 Frontend Dev Server:")
+        print(f"   ➜ UI:       http://localhost:{self.api_port}  (embedded)")
+        print(f"\n🎨 Frontend Dev Server (Hot-Reload Mode):")
         print(f"   ➜ Local:    http://localhost:{self.ui_port}")
         print(f"   ➜ Network:  http://{self.network_ip}:{self.ui_port}")
-        print(f"🌐 WebDAV Access:")
+        print(f"\n💡 Tips:")
+        print(f"   • Use http://localhost:{self.ui_port} for frontend development with hot-reload")
+        print(f"   • Use http://localhost:{self.api_port} to test production-like single-port setup")
+        print(f"\n🌐 WebDAV Access:")
         print(f"   ➜ Local:    http://localhost:{self.api_port}/webdav/")
         print(f"   ➜ Network:  http://{self.network_ip}:{self.api_port}/webdav/")
         print("="*70)

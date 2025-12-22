@@ -148,6 +148,15 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 	// Reset global client so it picks up new config on next request
 	realdebrid.ResetGlobalClient()
 
+	// If API key was updated and enabled, trigger torrent prefetch
+	if _, hasAPIKey := updates["apiKey"]; hasAPIKey {
+		config := configManager.GetConfig()
+		if config.Enabled && config.APIKey != "" {
+			logger.Info("API key updated, triggering torrent fetch...")
+			fetchAndLoadTorrents(config.APIKey)
+		}
+	}
+
 	// Return updated configuration
 	config := configManager.GetConfig()
 	status := configManager.GetConfigStatus()
@@ -737,9 +746,6 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	if pollInterval, ok := rcloneConfigMap["pollInterval"].(string); ok && pollInterval != "" {
 		rcloneConfig.PollInterval = pollInterval
 	}
-	if rclonePath, ok := rcloneConfigMap["rclonePath"].(string); ok {
-		rcloneConfig.RclonePath = rclonePath
-	}
 	if vfsReadChunkSize, ok := rcloneConfigMap["vfsReadChunkSize"].(string); ok && vfsReadChunkSize != "" {
 		rcloneConfig.VfsReadChunkSize = vfsReadChunkSize
 	}
@@ -900,51 +906,6 @@ func HandleRcloneStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleRcloneTest handles rclone test requests
-func HandleRcloneTest(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var request struct {
-		RclonePath string `json:"rclonePath"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	rcloneManager := realdebrid.GetRcloneManager()
-	isAvailable := rcloneManager.IsRcloneAvailable(request.RclonePath)
-
-	if isAvailable {
-		response := map[string]interface{}{
-			"success": true,
-			"message": "Rclone is available",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	} else {
-		response := map[string]interface{}{
-			"success": false,
-			"error":   "Rclone is not available at the specified path",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	}
-}
-
 // Background prefetch on server start (called from main)
 var rdPrefetchOnce bool
 var cachedTorrents []realdebrid.TorrentItem
@@ -962,10 +923,15 @@ func PrefetchRealDebridData() {
         return
     }
 
+    fetchAndLoadTorrents(cfg.APIKey)
+}
+
+// fetchAndLoadTorrents is the internal function that actually fetches and loads torrents
+func fetchAndLoadTorrents(apiKey string) {
     go func() {
         logger.Info("[RD] Prefetch started")
-        client := realdebrid.NewClient(cfg.APIKey)
-        tm := realdebrid.GetTorrentManager(cfg.APIKey)
+        client := realdebrid.NewClient(apiKey)
+        tm := realdebrid.GetTorrentManager(apiKey)
 
         // Fetch all torrents in batches
         torrents, err := client.GetAllTorrents(1000, func(current, total int) {

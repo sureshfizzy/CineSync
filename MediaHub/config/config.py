@@ -487,9 +487,14 @@ def get_cinesync_ip():
         return 'localhost'
     return ip
 
+def get_cinesync_port():
+    """Get CineSync server port from environment variable"""
+    return os.getenv('CINESYNC_PORT', '8082')
+
+# Legacy alias for backward compatibility
 def get_cinesync_api_port():
-    """Get CineSync API port from environment variable"""
-    return os.getenv('CINESYNC_API_PORT', '8082')
+    """Deprecated: Use get_cinesync_port() instead"""
+    return get_cinesync_port()
 
 def get_tmdb_api_key():
     """

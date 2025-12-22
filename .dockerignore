@@ -1,29 +1,38 @@
+# Git and IDE files
+.git/
+.gitignore
+.vscode/
+.idea/
+
 # Python bytecode files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Build artifacts
+# Build artifacts (rebuilt in container)
 WebDavHub/cinesync
 WebDavHub/cinesync.exe
 WebDavHub/frontend/dist/
 WebDavHub/frontend/node_modules/
-MediaHub/utils/mediainfo/ffprobe.exe
+MediaHub/build/
+MediaHub/dist/
+MediaHub/MediaHub.exe
 
-# Data and logs
-/db
-cache/
-WebDavHub/data/
-logs
-Screenshots
+# Database and data files (mounted as volumes)
+/db/
+*.db
+*.db-shm
+*.db-wal
 
-# Git and IDE files
-.git
-.gitignore
-.vscode/
-.idea/
+# Logs and cache (mounted as volumes)
+logs/
+
+# Distribution folder (build artifacts and installers not needed)
+distribution/
+
+# Screenshots and docs
+Screenshots/
 
 # Environment files
 .env
-.env.local

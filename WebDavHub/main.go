@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -29,6 +31,9 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
+//go:embed frontend/dist
+var frontendFS embed.FS
 
 // globalPanicRecoveryMiddleware provides top-level panic recovery for the entire server
 func globalPanicRecoveryMiddleware(next http.Handler) http.Handler {
@@ -120,6 +125,39 @@ func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filePath)
 }
 
+// createFrontendHandler creates an HTTP handler for serving the embedded frontend
+func createFrontendHandler() http.Handler {
+	distFS, err := fs.Sub(frontendFS, "frontend/dist")
+	if err != nil {
+		logger.Fatal("Failed to access embedded frontend: %v", err)
+	}
+
+	fileServer := http.FileServer(http.FS(distFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		file, err := distFS.Open(strings.TrimPrefix(path, "/"))
+		if err == nil {
+			stat, err := file.Stat()
+			file.Close()
+			if err == nil && !stat.IsDir() {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// Return 404 for missing assets instead of serving index.html
+		if strings.HasPrefix(path, "/assets/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// For all other paths (SPA routes), serve index.html
+		r.URL.Path = "/"
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	// Load .env from db directory
 	dotenvPath := config.GetEnvFilePath()
@@ -127,6 +165,8 @@ func main() {
 
 	// Initialize logger early so we can use it for warnings
 	logger.Init()
+	defer logger.Close()
+	
 	if err := env.LoadEnv(); err != nil {
 	}
 
@@ -145,7 +185,7 @@ func main() {
 
 	// Define command-line flags with fallbacks from .env or hardcoded defaults
 	dir := flag.String("dir", env.GetString("DESTINATION_DIR", ""), "Directory to serve over WebDAV")
-	port := flag.Int("port", env.GetInt("CINESYNC_API_PORT", 8082), "Port to run the CineSync API server on")
+	port := flag.Int("port", env.GetInt("CINESYNC_PORT", 8082), "Port to run the CineSync server on (serves both API and UI)")
 	ip := flag.String("ip", env.GetString("CINESYNC_IP", "0.0.0.0"), "IP address to bind the server to")
 	flag.Parse()
 
@@ -339,7 +379,6 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/rclone/mount", api.HandleRcloneMount)
 	apiMux.HandleFunc("/api/realdebrid/rclone/unmount", api.HandleRcloneUnmount)
 	apiMux.HandleFunc("/api/realdebrid/rclone/status", api.HandleRcloneStatus)
-	apiMux.HandleFunc("/api/realdebrid/rclone/test", api.HandleRcloneTest)
 	apiMux.HandleFunc("/api/realdebrid/dashboard-stats", api.HandleDebridDashboardStats)
 	apiMux.HandleFunc("/api/realdebrid/torrent-manager-stats", api.HandleTorrentManagerStats)
 	apiMux.HandleFunc("/api/realdebrid/repair-status", api.HandleRepairStatus)
@@ -384,15 +423,19 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	// MediaCover Handler (no authentication required for poster images)
 	rootMux.HandleFunc("/MediaCover/", handleMediaCover)
 
-	// Root path handler for the server itself
+	// Serve embedded frontend files
+	frontendHandler := createFrontendHandler()
+	
+	// Root path handler
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			logger.Info("Root path / accessed by %s", r.RemoteAddr)
-			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte("CineSync Server is active.\nAPI access at /api/\nWebDAV access at /webdav/\n"))
+		if strings.HasPrefix(r.URL.Path, "/api/") || 
+		   strings.HasPrefix(r.URL.Path, "/webdav/") || 
+		   strings.HasPrefix(r.URL.Path, "/MediaCover/") ||
+		   strings.HasPrefix(r.URL.Path, "/signalr/") {
+			http.NotFound(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		frontendHandler.ServeHTTP(w, r)
 	})
 
 	// Auto-mount rclone
@@ -542,14 +585,9 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 
 	// Start server
 	addr := fmt.Sprintf("%s:%d", *ip, *port)
-	rootInfo := *dir
-	if effectiveRootDir != *dir {
-		rootInfo = fmt.Sprintf("%s (using CineSync folder as root)", *dir)
-	}
 
 	logger.Info("CineSync server started on %s", addr)
-	logger.Info("Serving content from: %s", rootInfo)
-
+	
 	// Authentication status
 	if env.IsBool("CINESYNC_AUTH_ENABLED", true) {
 		credentials := auth.GetCredentials()

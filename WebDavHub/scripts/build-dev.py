@@ -90,8 +90,12 @@ class WebDavHubDevelopmentBuilder:
         """Build Go backend"""
         print("🔧 Building Go backend...")
         try:
-            subprocess.run(["go", "build", "-o", "cinesync", "."], check=True)
-            print("✅ Go backend built successfully")
+            # Determine the correct executable name based on OS
+            import platform
+            exe_name = "cinesync.exe" if platform.system() == "Windows" else "cinesync"
+            
+            subprocess.run(["go", "build", "-o", exe_name, "."], check=True)
+            print(f"✅ Go backend built successfully ({exe_name})")
         except subprocess.CalledProcessError:
             print("❌ Failed to build Go backend")
             sys.exit(1)

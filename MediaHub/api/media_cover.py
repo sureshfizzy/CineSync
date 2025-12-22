@@ -1,12 +1,15 @@
 import os
+import sys
 import requests
 import sqlite3
 from pathlib import Path
 from typing import Optional, Dict, Any
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.system_utils import is_frozen, get_db_directory
 
-BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-DB_DIR = os.path.join(BASE_DIR, "db")
+# Determine base directory utility
+BASE_DIR = str(get_db_directory().parent)
+DB_DIR = str(get_db_directory())
 MEDIA_COVER_DIR = os.path.join(DB_DIR, "MediaCover")
 
 os.makedirs(MEDIA_COVER_DIR, exist_ok=True)

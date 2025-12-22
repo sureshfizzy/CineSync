@@ -478,7 +478,7 @@ const Settings: React.FC = () => {
 
       // For CineSync Configuration category, prioritize server settings then auth
       if (category === 'CineSync Configuration') {
-        const cinesyncOrder = ['CINESYNC_IP', 'CINESYNC_API_PORT', 'CINESYNC_UI_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'];
+        const cinesyncOrder = ['CINESYNC_IP', 'CINESYNC_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'];
         const aIndex = cinesyncOrder.indexOf(a.key);
         const bIndex = cinesyncOrder.indexOf(b.key);
 

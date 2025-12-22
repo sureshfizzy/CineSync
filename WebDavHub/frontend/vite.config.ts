@@ -23,8 +23,8 @@ function getEnvFilePath(): string {
 const envPath = getEnvFilePath();
 dotenv.config({ path: envPath });
 
-const uiPort = process.env.CINESYNC_UI_PORT ? parseInt(process.env.CINESYNC_UI_PORT, 10) : 5173;
-const apiPort = process.env.CINESYNC_API_PORT ? parseInt(process.env.CINESYNC_API_PORT, 10) : 8082;
+const uiPort = process.env.VITE_DEV_PORT ? parseInt(process.env.VITE_DEV_PORT, 10) : 5173;
+const apiPort = process.env.CINESYNC_PORT ? parseInt(process.env.CINESYNC_PORT, 10) : 8082;
 const host = process.env.CINESYNC_IP || true;
 
 // TMDB API key with fallback mechanism

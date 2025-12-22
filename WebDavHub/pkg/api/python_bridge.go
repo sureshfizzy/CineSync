@@ -16,6 +16,7 @@ import (
 	"io"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/env"
+	"cinesync/pkg/mediahub"
 )
 
 // PythonBridgeRequest represents the request payload for running the python bridge
@@ -358,20 +359,28 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	args := []string{"../MediaHub/main.py", realPath}
-	if req.DisableMonitor {
-		args = append(args, "--disable-monitor")
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get MediaHub executable: %v", err), http.StatusInternalServerError)
+		return
 	}
-	args = append(args, "--force")
+
+	// Build MediaHub arguments
+	mediaHubArgs := []string{realPath}
+	if req.DisableMonitor {
+		mediaHubArgs = append(mediaHubArgs, "--disable-monitor")
+	}
+	mediaHubArgs = append(mediaHubArgs, "--force")
 	if req.BatchApply {
-		args = append(args, "--batch-apply")
+		mediaHubArgs = append(mediaHubArgs, "--batch-apply")
 	}
 	if req.ManualSearch {
-		args = append(args, "--manual-search")
+		mediaHubArgs = append(mediaHubArgs, "--manual-search")
 	}
 	if req.AutoSelect {
-		args = append(args, "--auto-select")
-		args = append(args, "--use-source-db")
+		mediaHubArgs = append(mediaHubArgs, "--auto-select")
+		mediaHubArgs = append(mediaHubArgs, "--use-source-db")
 	}
 
 	// Add selected action option if provided
@@ -382,43 +391,44 @@ func HandlePythonBridge(w http.ResponseWriter, r *http.Request) {
 		case "auto-select":
 			// --auto-select is handled above
 		case "force-show":
-			args = append(args, "--force-show")
+			mediaHubArgs = append(mediaHubArgs, "--force-show")
 		case "force-movie":
-			args = append(args, "--force-movie")
+			mediaHubArgs = append(mediaHubArgs, "--force-movie")
 		case "force-extra":
-			args = append(args, "--force-extra")
+			mediaHubArgs = append(mediaHubArgs, "--force-extra")
 		case "skip":
-			args = append(args, "--skip")
+			mediaHubArgs = append(mediaHubArgs, "--skip")
 		}
 	}
 
 	// Add ID-based arguments if provided
 	if req.SelectedIds != nil {
 		if imdbId, ok := req.SelectedIds["imdb"]; ok && imdbId != "" {
-			args = append(args, "--imdb", imdbId)
+			mediaHubArgs = append(mediaHubArgs, "--imdb", imdbId)
 		}
 		if tmdbId, ok := req.SelectedIds["tmdb"]; ok && tmdbId != "" {
-			args = append(args, "--tmdb", tmdbId)
+			mediaHubArgs = append(mediaHubArgs, "--tmdb", tmdbId)
 		}
 		if tvdbId, ok := req.SelectedIds["tvdb"]; ok && tvdbId != "" {
-			args = append(args, "--tvdb", tvdbId)
+			mediaHubArgs = append(mediaHubArgs, "--tvdb", tvdbId)
 		}
 		if seasonEpisode, ok := req.SelectedIds["season-episode"]; ok && seasonEpisode != "" {
-			args = append(args, "--season-episode", seasonEpisode)
+			mediaHubArgs = append(mediaHubArgs, "--season-episode", seasonEpisode)
 		}
 	}
 
-	// Get the appropriate Python command for this platform
-	pythonCmd := getPythonCommand()
+	// Get command and combined arguments
+	command, args := mediaHubExec.GetCommand(mediaHubArgs...)
 
 	// Log the start of processing
-	logger.Info("Starting Python bridge processing for: %s", filepath.Base(realPath))
+	logger.Info("Starting MediaHub processing (%s) for: %s", mediaHubExec.String(), filepath.Base(realPath))
 
 	// Create command context with cancel
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, pythonCmd, args...)
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Dir = mediaHubExec.WorkDir
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -681,30 +691,40 @@ func handleBulkAutoProcess(w http.ResponseWriter, r *http.Request, req PythonBri
 		return
 	}
 
-	args := []string{"../MediaHub/main.py"}
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		sendResponse(PythonBridgeResponse{Error: fmt.Sprintf("Failed to get MediaHub executable: %v", err), Done: true})
+		return
+	}
+
+	// Build MediaHub arguments
+	mediaHubArgs := []string{}
 
 	if req.DisableMonitor {
-		args = append(args, "--disable-monitor")
+		mediaHubArgs = append(mediaHubArgs, "--disable-monitor")
 	}
-	args = append(args, "--force")
+	mediaHubArgs = append(mediaHubArgs, "--force")
 	if req.BatchApply {
-		args = append(args, "--batch-apply")
+		mediaHubArgs = append(mediaHubArgs, "--batch-apply")
 	}
 	if req.ManualSearch {
-		args = append(args, "--manual-search")
+		mediaHubArgs = append(mediaHubArgs, "--manual-search")
 	}
 	if req.AutoSelect {
-		args = append(args, "--auto-select", "--use-source-db")
+		mediaHubArgs = append(mediaHubArgs, "--auto-select", "--use-source-db")
 	}
 
-	pythonCmd := getPythonCommand()
-	logger.Info("Executing bulk auto processing command: %s %s", pythonCmd, strings.Join(args, " "))
-	logger.Debug("Bulk command breakdown - Python: %s, Args: %v", pythonCmd, args)
+	// Get command and combined arguments
+	command, args := mediaHubExec.GetCommand(mediaHubArgs...)
+	logger.Info("Executing bulk auto processing: %s %s", command, strings.Join(args, " "))
+	logger.Debug("Bulk command breakdown - Command: %s, Args: %v", command, args)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, pythonCmd, args...)
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Dir = mediaHubExec.WorkDir
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -927,16 +947,28 @@ func HandleSkipProcessing(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Skip processing request for: %s", req.Path)
 
-	// Prepare command args for skip processing
-	args := []string{"../MediaHub/main.py", req.Path, "--skip", "--disable-monitor"}
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		response := ProcessingResponse{
+			Success: false,
+			Message: "Failed to get MediaHub executable",
+			Details: err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-	// Get the appropriate Python command
-	pythonCmd := getPythonCommand()
+	// Get command and arguments
+	command, args := mediaHubExec.GetCommand(req.Path, "--skip", "--disable-monitor")
 
-	logger.Info("Executing skip processing command: %s %v", pythonCmd, args)
+	logger.Info("Executing skip processing: %s %v", command, args)
 
 	// Execute the command
-	cmd := exec.Command(pythonCmd, args...)
+	cmd := exec.Command(command, args...)
+	cmd.Dir = mediaHubExec.WorkDir
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

@@ -203,7 +203,7 @@ const wizardSteps: Step[] = [
     description: 'Bind IP, ports, and authentication',
     accent: '#3b82f6',
     icon: <ApiRounded />,
-    keys: ['CINESYNC_IP', 'CINESYNC_API_PORT', 'CINESYNC_UI_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'],
+    keys: ['CINESYNC_IP', 'CINESYNC_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'],
   },
   {
     id: 'services',

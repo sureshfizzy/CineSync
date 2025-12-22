@@ -2,8 +2,10 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -43,14 +45,18 @@ var (
 		"ERROR": ERROR,
 		"FATAL": FATAL,
 	}
+	logFile *os.File
 )
 
 // Init initializes the logger with the specified log level from environment
 func Init() {
+	if err := setupLogFile(); err != nil {
+		log.Printf("Failed to setup log file: %v, logging to stdout only", err)
+	}
+
 	logLevel := os.Getenv("LOG_LEVEL")
-        log.SetFlags(0)
+	log.SetFlags(0)
 	if logLevel == "" {
-		// Default to INFO if not specified
 		currentLevel = INFO
 		return
 	}
@@ -109,4 +115,46 @@ func Error(format string, args ...interface{}) {
 // Fatal logs a message at FATAL level and then exits the application
 func Fatal(format string, args ...interface{}) {
 	log.Fatalln(formatMessage(FATAL, format, args...))
+}
+
+// setupLogFile creates and configures the log file
+func setupLogFile() error {
+	var logsDir string
+	if _, err := os.Stat("/.dockerenv"); err == nil || os.Getenv("CONTAINER") == "docker" {
+		logsDir = "/app/logs"
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current directory: %v", err)
+		}
+
+		basename := filepath.Base(cwd)
+		if basename == "WebDavHub" {
+			logsDir = filepath.Join(filepath.Dir(cwd), "logs")
+		} else {
+			logsDir = filepath.Join(cwd, "logs")
+		}
+	}
+
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create logs directory: %v", err)
+	}
+
+	logPath := filepath.Join(logsDir, "cinesync.log")
+
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %v", err)
+	}
+
+	logFile = file
+	multiWriter := io.MultiWriter(file, os.Stdout)
+	log.SetOutput(multiWriter)
+	return nil
+}
+
+func Close() {
+	if logFile != nil {
+		logFile.Close()
+	}
 }

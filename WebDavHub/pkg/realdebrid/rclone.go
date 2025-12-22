@@ -1,6 +1,7 @@
 package realdebrid
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"cinesync/pkg/env"
@@ -57,6 +57,39 @@ func GetRcloneManager() *RcloneManager {
 // GetServerOS returns the server's operating system
 func GetServerOS() string {
 	return runtime.GOOS
+}
+
+// getBundledRclonePath returns the path to bundled rclone.exe on Windows
+func getBundledRclonePath() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	
+	exeDir := filepath.Dir(exePath)
+
+	bundledPath := filepath.Join(exeDir, "..", "utils", "rclone.exe")
+	
+	if _, err := os.Stat(bundledPath); err == nil {
+		return bundledPath
+	}
+	
+	return ""
+}
+
+// getRcloneCommand returns the rclone command path
+func getRcloneCommand() string {
+	if runtime.GOOS == "windows" {
+		bundledPath := getBundledRclonePath()
+		if bundledPath != "" {
+			return bundledPath
+		}
+	}
+	return "rclone"
 }
 
 // startCleanupRoutine starts a background routine to clean up stale mounts
@@ -192,31 +225,43 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	}
 
 	// Check if rclone is available
-	if !rm.isRcloneAvailable(config.RclonePath) {
+	if !rm.isRcloneAvailable() {
 		return &MountStatus{Error: "rclone is not installed or not in PATH"}, fmt.Errorf("rclone is not available")
 	}
 
 	// Create rclone config if it doesn't exist
-	if err := CreateRcloneConfig(apiKey, config.RclonePath); err != nil {
+	if err := CreateRcloneConfig(apiKey); err != nil {
 		return &MountStatus{Error: fmt.Sprintf("failed to create rclone config: %v", err)}, err
 	}
 
 	// Build rclone command
 	args := rm.buildRcloneArgs(config)
-	
-	// Debug logging
-	rcloneCmd := "rclone"
-	if config.RclonePath != "" {
-		rcloneCmd = config.RclonePath
-	}
+
+	rcloneCmd := getRcloneCommand()
 
 	// Start rclone process
 	cmd := exec.Command(rcloneCmd, args...)
 	rm.setProcessAttributes(cmd)
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		logger.Error("Failed to create stderr pipe: %v", err)
+	}
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("Failed to start rclone command: %v", err)
 		return &MountStatus{Error: fmt.Sprintf("failed to start rclone: %v", err)}, err
+	}
+
+	if stderrPipe != nil {
+		go func() {
+			scanner := bufio.NewScanner(stderrPipe)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if len(line) > 0 {
+					logger.Warn("Rclone stderr: %s", line)
+				}
+			}
+		}()
 	}
 
 	// Wait a moment for mount to initialize
@@ -230,7 +275,7 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 		
 		// Check if the mount point is accessible
 		if _, err := os.Stat(config.MountPath); err != nil {
-			logger.Warn("Mount point may not be accessible: %v", err)
+			logger.Debug("Mount point not yet accessible: %v", err)
 		}
 	} else {
 		if !rm.isMountPoint(config.MountPath) {
@@ -462,45 +507,9 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 }
 
 // obscurePassword uses rclone to obscure a password
-func obscurePassword(password string, rclonePath string) (string, error) {
-	
-	// If no path configured, try to find rclone
-	if rclonePath == "" {
-		if runtime.GOOS == "windows" {
-			// On Windows, search for rclone in common locations
-			logger.Info("No rclone path configured, searching for rclone...")
-			rcloneCmd := "rclone.exe"
-			
-			// Try common rclone locations on Windows
-			possiblePaths := []string{
-				rcloneCmd, // PATH
-				"C:\\Program Files\\rclone\\rclone.exe",
-				"C:\\Program Files (x86)\\rclone\\rclone.exe",
-				"C:\\Users\\" + os.Getenv("USERNAME") + "\\AppData\\Local\\rclone\\rclone.exe",
-			}
-			
-			for _, path := range possiblePaths {
-				if _, err := exec.LookPath(path); err == nil {
-					rclonePath = path
-					break
-				}
-			}
-		} else {
-			rclonePath = "rclone"
-		}
-	} else {
-		if _, err := os.Stat(rclonePath); err != nil {
-			logger.Warn("Configured rclone path does not exist: %s", rclonePath)
-			rclonePath = ""
-		}
-	}
-	
-	if rclonePath == "" {
-		return "", fmt.Errorf("rclone not found")
-	}
-	
-	// Run rclone obscure directly without cmd.exe
-	cmd := exec.Command(rclonePath, "obscure", password)
+func obscurePassword(password string) (string, error) {
+	rcloneCmd := getRcloneCommand()
+	cmd := exec.Command(rcloneCmd, "obscure", password)
 	
 	// Capture both stdout and stderr
 	var stdout, stderr bytes.Buffer
@@ -526,11 +535,8 @@ func obscurePassword(password string, rclonePath string) (string, error) {
 }
 
 // isRcloneAvailable checks if rclone is installed and available
-func (rm *RcloneManager) isRcloneAvailable(rclonePath string) bool {
-	rcloneCmd := "rclone"
-	if rclonePath != "" {
-		rcloneCmd = rclonePath
-	}
+func (rm *RcloneManager) isRcloneAvailable() bool {
+	rcloneCmd := getRcloneCommand()
 	cmd := exec.Command(rcloneCmd, "version")
 	if err := cmd.Run(); err != nil {
 		return false
@@ -539,8 +545,8 @@ func (rm *RcloneManager) isRcloneAvailable(rclonePath string) bool {
 }
 
 // IsRcloneAvailable is a public method to check if rclone is available
-func (rm *RcloneManager) IsRcloneAvailable(rclonePath string) bool {
-	return rm.isRcloneAvailable(rclonePath)
+func (rm *RcloneManager) IsRcloneAvailable() bool {
+	return rm.isRcloneAvailable()
 }
 
 // isProcessRunning checks if a process is still running
@@ -553,14 +559,7 @@ func (rm *RcloneManager) isProcessRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
-	
-	// On Unix systems, signal 0 can be used to check if process exists
-	if runtime.GOOS != "windows" {
-		err = process.Signal(syscall.Signal(0))
-		return err == nil
-	}
-
-	return true
+	return isProcessRunningPlatform(pid, process)
 }
 
 // isMountPoint checks if a path is a mount point (Unix only)
@@ -760,20 +759,32 @@ func (rm *RcloneManager) CleanupAllMounts() {
 
 // GetRcloneConfigPath returns the path to rclone config file
 func GetRcloneConfigPath() string {
-	homeDir, err := os.UserHomeDir()
+	rcloneCmd := getRcloneCommand()
+	cmd := exec.Command(rcloneCmd, "config", "file")
+	output, err := cmd.Output()
 	if err != nil {
+		logger.Error("Failed to get rclone config path: %v", err)
 		return ""
 	}
 	
-	if runtime.GOOS == "windows" {
-		return filepath.Join(homeDir, "AppData", "Roaming", "rclone", "cinesync.conf")
-	} else {
-		return filepath.Join(homeDir, ".config", "rclone", "cinesync.conf")
+	configFileOutput := strings.TrimSpace(string(output))
+	lines := strings.Split(configFileOutput, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Configuration file") || filepath.Ext(line) == ".conf" {
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				configPath := parts[len(parts)-1]
+				configDir := filepath.Dir(configPath)
+				return filepath.Join(configDir, "cinesync.conf")
+			}
+		}
 	}
+	logger.Error("Could not parse rclone config path from output: %s", configFileOutput)
+	return ""
 }
 
 // CreateRcloneConfig creates a basic rclone config for Real-Debrid
-func CreateRcloneConfig(apiKey string, rclonePath string) error {
+func CreateRcloneConfig(apiKey string) error {
 	configPath := GetRcloneConfigPath()
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
@@ -787,7 +798,7 @@ func CreateRcloneConfig(apiKey string, rclonePath string) error {
 
 	// Check if config already exists
 	if _, err := os.Stat(configPath); err == nil {
-		return UpdateRcloneConfig(apiKey, rclonePath)
+		return UpdateRcloneConfig(apiKey)
 	}
 
     // Enforce default remote name
@@ -796,9 +807,9 @@ func CreateRcloneConfig(apiKey string, rclonePath string) error {
 	// Get CineSync credentials for authentication
 	username := env.GetString("CINESYNC_USERNAME", "admin")
 	password := env.GetString("CINESYNC_PASSWORD", "admin")
-	webdavPort := env.GetInt("CINESYNC_API_PORT", 8082)
+	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
 	
-	obscuredPassword, err := obscurePassword(password, rclonePath)
+	obscuredPassword, err := obscurePassword(password)
 	if err != nil {
 		logger.Error("Failed to obscure password: %v", err)
 		logger.Warn("Using plain text password as fallback")
@@ -821,7 +832,7 @@ vendor = other
 }
 
 // UpdateRcloneConfig updates the rclone config with new API key
-func UpdateRcloneConfig(apiKey string, rclonePath string) error {
+func UpdateRcloneConfig(apiKey string) error {
 	configPath := GetRcloneConfigPath()
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
@@ -837,9 +848,9 @@ func UpdateRcloneConfig(apiKey string, rclonePath string) error {
 	// Create updated config for Real-Debrid Virtual Filesystem
 	username := env.GetString("CINESYNC_USERNAME", "admin")
 	password := env.GetString("CINESYNC_PASSWORD", "admin")
-	webdavPort := env.GetInt("CINESYNC_API_PORT", 8082)
+	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
 	
-	obscuredPassword, err := obscurePassword(password, rclonePath)
+	obscuredPassword, err := obscurePassword(password)
 	if err != nil {
 		logger.Error("Failed to obscure password: %v", err)
 		obscuredPassword = password

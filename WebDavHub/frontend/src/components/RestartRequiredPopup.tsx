@@ -34,7 +34,6 @@ interface RestartRequiredPopupProps {
   onClose: () => void;
   onRestart: () => void;
   newApiPort?: string;
-  newUiPort?: string;
 }
 
 const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
@@ -42,7 +41,6 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
   onClose,
   onRestart,
   newApiPort,
-  newUiPort,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -70,17 +68,7 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
         setRestartComplete(true);
         setTimeout(() => {
           localStorage.removeItem('cineSyncJWT');
-
-          // Check if ports changed and redirect accordingly
-          const currentPort = window.location.port;
-          const currentHost = window.location.hostname;
-
-          if (newUiPort && newUiPort !== currentPort) {
-            const newUrl = `${window.location.protocol}//${currentHost}:${newUiPort}${window.location.pathname}`;
-            window.location.href = newUrl;
-          } else {
-            window.location.reload();
-          }
+          window.location.reload();
         }, 2000);
       }, 3000);
       
@@ -270,18 +258,6 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
                   • API port changes (new: {newApiPort})
                 </Typography>
               )}
-              {newUiPort && newUiPort !== window.location.port && (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: theme.palette.mode === 'dark' ? '#93c5fd' : '#2563eb',
-                    fontWeight: 500,
-                    fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                  }}
-                >
-                  • UI port changes (new: {newUiPort})
-                </Typography>
-              )}
             </Box>
 
             <Typography
@@ -294,12 +270,12 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
               }}
             >
               The restart process will take a few seconds. You'll be automatically redirected once complete.
-              {((newApiPort && newApiPort !== '8082') || (newUiPort && newUiPort !== window.location.port)) && (
+              {newApiPort && newApiPort !== '8082' && (
                 <><br /><br />Note: You'll need to log in again after the restart due to port changes.</>
               )}
             </Typography>
 
-            {((newApiPort && newApiPort !== '8082') || (newUiPort && newUiPort !== window.location.port)) && (
+            {newApiPort && newApiPort !== '8082' && (
               <Box
                 sx={{
                   backgroundColor: theme.palette.mode === 'dark'

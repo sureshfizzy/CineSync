@@ -101,8 +101,7 @@ def collect_defaults():
         "PLEX_TOKEN": "",
         # Server
         "CINESYNC_IP": "0.0.0.0",
-        "CINESYNC_API_PORT": "8082",
-        "CINESYNC_UI_PORT": "5173",
+        "CINESYNC_PORT": "8082",
         "CINESYNC_AUTH_ENABLED": "true",
         "CINESYNC_USERNAME": "admin",
         "CINESYNC_PASSWORD": "admin",

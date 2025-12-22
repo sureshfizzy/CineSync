@@ -32,7 +32,6 @@ type RcloneSettings struct {
 	BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
 	DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
 	PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
-	RclonePath           string `json:"rclonePath" yaml:"rclonePath"`
 	VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
 	VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
 	StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
@@ -123,7 +122,6 @@ func GetConfigManager() *ConfigManager {
                     BufferSize:           "16M",
                     DirCacheTime:         "15s",
                     PollInterval:         "15s",
-                    RclonePath:           "",
                     VfsReadChunkSize:     "64M",
                     VfsReadChunkSizeLimit: "128M",
                     StreamBufferSize:     "10M",
@@ -327,9 +325,6 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if pollInterval, ok := rcloneSettingsMap["pollInterval"].(string); ok && pollInterval != "" {
 					rcloneSettings.PollInterval = pollInterval
-				}
-				if rclonePath, ok := rcloneSettingsMap["rclonePath"].(string); ok {
-					rcloneSettings.RclonePath = rclonePath // Allow empty string for PATH
 				}
 				if vfsReadChunkSize, ok := rcloneSettingsMap["vfsReadChunkSize"].(string); ok && vfsReadChunkSize != "" {
 					rcloneSettings.VfsReadChunkSize = vfsReadChunkSize
@@ -651,7 +646,6 @@ func (cm *ConfigManager) ResetConfig() error {
             BufferSize:           "16M",
             DirCacheTime:         "15s",
             PollInterval:         "15s",
-            RclonePath:           "",
             VfsReadChunkSize:     "64M",
             VfsReadChunkSizeLimit: "128M",
             StreamBufferSize:     "10M",

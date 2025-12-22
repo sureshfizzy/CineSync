@@ -1,11 +1,13 @@
 import subprocess
 import json
 import os
+import sys
 import platform
 from MediaHub.utils.ffprobe_parser import *
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.mediainfo import extract_media_info, keywords
 from MediaHub.api.api_utils import api_retry
+from MediaHub.utils.system_utils import is_frozen, get_application_path
 
 def get_ffprobe_path():
     """
@@ -15,11 +17,11 @@ def get_ffprobe_path():
         str: Path to ffprobe executable
     """
     if platform.system() == 'Windows':
-        local_ffprobe = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediainfo', 'ffprobe.exe')
-        if os.path.exists(local_ffprobe):
-            return local_ffprobe
+        if is_frozen():
+            executable_dir = get_application_path()
+            return os.path.join(executable_dir, 'ffprobe.exe')
         else:
-            return 'ffprobe.exe'
+            return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediainfo', 'ffprobe.exe')
     else:
         return 'ffprobe'
 

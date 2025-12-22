@@ -1,12 +1,10 @@
 package config
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	"github.com/joho/godotenv"
 )
 
 // SSE client management for configuration change notifications
@@ -297,8 +296,7 @@ func getConfigDefinitions() []ConfigValue {
 
 		// CineSync Configuration
 		{Key: "CINESYNC_IP", Category: "CineSync Configuration", Type: "string", Required: false, Description: "The IP address to bind the CineSync server"},
-		{Key: "CINESYNC_API_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the API server runs"},
-		{Key: "CINESYNC_UI_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the UI server runs"},
+		{Key: "CINESYNC_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the server runs (serves both API and UI)"},
 		{Key: "CINESYNC_AUTH_ENABLED", Category: "CineSync Configuration", Type: "boolean", Required: false, Description: "Enable or disable CineSync authentication"},
 		{Key: "CINESYNC_USERNAME", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Username for CineSync authentication"},
 		{Key: "CINESYNC_PASSWORD", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Password for CineSync authentication"},
@@ -336,8 +334,7 @@ func createEnvFileFromEnvironment() error {
 		envVars["CINESYNC_LAYOUT"] = "true"
 		envVars["LOG_LEVEL"] = "INFO"
 		envVars["CINESYNC_IP"] = "0.0.0.0"
-		envVars["CINESYNC_API_PORT"] = "8082"
-		envVars["CINESYNC_UI_PORT"] = "5173"
+		envVars["CINESYNC_PORT"] = "8082"
 		envVars["CINESYNC_AUTH_ENABLED"] = "true"
 		envVars["CINESYNC_USERNAME"] = "admin"
 		envVars["CINESYNC_PASSWORD"] = "admin"
@@ -386,45 +383,15 @@ func readEnvFile() (map[string]string, error) {
 		return readFromEnvironment(), nil
 	}
 
-	file, err := os.Open(envPath)
+	envVars, err := godotenv.Read(envPath)
 	if err != nil {
-		logger.Warn("Failed to open .env file: %v, falling back to environment variables", err)
+		logger.Warn("Failed to read .env file with godotenv: %v, falling back to environment variables", err)
 		return readFromEnvironment(), nil
 	}
-	defer file.Close()
 
-	envVars := make(map[string]string)
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse key=value pairs
-		if strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-
-				// Remove quotes if present
-				if (strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"")) ||
-				   (strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
-					value = value[1 : len(value)-1]
-				}
-
-				envVars[key] = value
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		logger.Warn("Error reading .env file: %v, falling back to environment variables", err)
-		return readFromEnvironment(), nil
+	// Log DESTINATION_DIR for debugging
+	if destDir, ok := envVars["DESTINATION_DIR"]; ok {
+		logger.Debug("Read DESTINATION_DIR from .env: %s (length: %d)", destDir, len(destDir))
 	}
 
 	// Handle Kubernetes-compatible alternative: if _4K_SEPARATION is set but 4K_SEPARATION is not, use _4K_SEPARATION
@@ -460,141 +427,18 @@ func readFromEnvironment() map[string]string {
 // writeEnvFile writes the environment variables back to the .env file
 func writeEnvFile(envVars map[string]string) error {
 	envPath := getEnvFilePath()
-
-	originalFile, err := os.Open(envPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			file, createErr := os.Create(envPath)
-			if createErr != nil {
-				return fmt.Errorf("failed to create .env file: %v", createErr)
-			}
-			defer file.Close()
-
-			for key, value := range envVars {
-				quotedValue := value
-				shouldQuote := strings.Contains(value, " ") ||
-					strings.Contains(value, "#") ||
-					strings.Contains(value, "\\") ||
-					strings.Contains(value, "{") ||
-					strings.Contains(value, "}") ||
-					value == ""
-
-				if shouldQuote {
-					quotedValue = fmt.Sprintf("\"%s\"", value)
-				}
-				if _, writeErr := file.WriteString(fmt.Sprintf("%s=%s\n", key, quotedValue)); writeErr != nil {
-					return fmt.Errorf("failed to write to new .env file: %v", writeErr)
-				}
-			}
-
-			if err := file.Sync(); err != nil {
-				return fmt.Errorf("failed to sync new .env file: %v", err)
-			}
-			return nil
-		}
-
-		return fmt.Errorf("failed to open .env file: %v", err)
-	}
-	defer originalFile.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(originalFile)
-	updatedKeys := make(map[string]bool)
-	originalQuoting := make(map[string]bool)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmedLine := strings.TrimSpace(line)
-
-		// If it's a comment or empty line, keep as is
-		if trimmedLine == "" || strings.HasPrefix(trimmedLine, "#") {
-			lines = append(lines, line)
-			continue
-		}
-
-	// If it's a key=value pair, check if we need to update it
-		if strings.Contains(trimmedLine, "=") {
-			parts := strings.SplitN(trimmedLine, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				originalValue := strings.TrimSpace(parts[1])
-
-				// Check if the original value was quoted
-				wasQuoted := (strings.HasPrefix(originalValue, "\"") && strings.HasSuffix(originalValue, "\"")) ||
-							(strings.HasPrefix(originalValue, "'") && strings.HasSuffix(originalValue, "'"))
-				originalQuoting[key] = wasQuoted
-
-				if newValue, exists := envVars[key]; exists {
-					// Determine how to quote the new value
-					quotedValue := newValue
-					shouldQuote := wasQuoted ||
-								  strings.Contains(newValue, " ") ||
-								  strings.Contains(newValue, "#") ||
-								  strings.Contains(newValue, "\\") ||
-								  strings.Contains(newValue, "{") ||
-								  strings.Contains(newValue, "}") ||
-								  newValue == ""
-
-					if shouldQuote {
-						quotedValue = fmt.Sprintf("\"%s\"", newValue)
-					}
-					lines = append(lines, fmt.Sprintf("%s=%s", key, quotedValue))
-					updatedKeys[key] = true
-				} else {
-					// Keep the original line if key not in updates
-					lines = append(lines, line)
-				}
-			} else {
-				lines = append(lines, line)
-			}
-		} else {
-			lines = append(lines, line)
-		}
+	
+	// Ensure the directory exists
+	envDir := filepath.Dir(envPath)
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		logger.Error("Failed to create directory %s: %v", envDir, err)
+		return fmt.Errorf("failed to create directory %s: %v", envDir, err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading .env file: %v", err)
+	if err := godotenv.Write(envVars, envPath); err != nil {
+		logger.Error("Failed to write .env file: %v", err)
+		return fmt.Errorf("failed to write .env file: %v", err)
 	}
-
-	// Add any new keys that weren't in the original file
-	for key, value := range envVars {
-		if !updatedKeys[key] {
-			quotedValue := value
-			shouldQuote := strings.Contains(value, " ") ||
-						  strings.Contains(value, "#") ||
-						  strings.Contains(value, "\\") ||
-						  strings.Contains(value, "{") ||
-						  strings.Contains(value, "}") ||
-						  value == ""
-
-			if shouldQuote {
-				quotedValue = fmt.Sprintf("\"%s\"", value)
-			}
-			lines = append(lines, fmt.Sprintf("%s=%s", key, quotedValue))
-		}
-	}
-
-	// Close the original file before writing
-	originalFile.Close()
-
-	// Write directly to the original file instead of using temp file + rename
-	file, err := os.OpenFile(envPath, os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open .env file for writing: %v", err)
-	}
-	defer file.Close()
-
-	for _, line := range lines {
-		if _, err := file.WriteString(line + "\n"); err != nil {
-			return fmt.Errorf("failed to write to .env file: %v", err)
-		}
-	}
-
-	// Ensure data is written to disk
-	if err := file.Sync(); err != nil {
-		return fmt.Errorf("failed to sync .env file: %v", err)
-	}
-
 	return nil
 }
 
@@ -772,7 +616,7 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			logger.Info("Authentication settings changed: %s", update.Key)
 		}
 		// Check if server restart is required
-		if update.Key == "CINESYNC_IP" || update.Key == "CINESYNC_API_PORT" || update.Key == "CINESYNC_UI_PORT" {
+		if update.Key == "CINESYNC_IP" || update.Key == "CINESYNC_PORT" {
 			serverRestartRequired = true
 			logger.Info("Server restart required for setting: %s", update.Key)
 		}
@@ -795,42 +639,125 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Configuration updated successfully"})
 }
 
-// HandleGetDefaultConfig reads defaults
+// getConfigDefaults returns the default configuration values
+func getConfigDefaults() map[string]string {
+	return map[string]string{
+		// Directories and structure
+		"SOURCE_DIR":           "",
+		"DESTINATION_DIR":      "",
+		"USE_SOURCE_STRUCTURE": "false",
+		"CINESYNC_LAYOUT":      "true",
+		"ANIME_SEPARATION":     "true",
+		"4K_SEPARATION":        "true",
+		"KIDS_SEPARATION":      "false",
+		"CUSTOM_SHOW_FOLDER":   "Shows",
+		"CUSTOM_4KSHOW_FOLDER": "4KShows",
+		"CUSTOM_ANIME_SHOW_FOLDER": "AnimeShows",
+		"CUSTOM_MOVIE_FOLDER":      "Movies",
+		"CUSTOM_4KMOVIE_FOLDER":    "4KMovies",
+		"CUSTOM_ANIME_MOVIE_FOLDER": "AnimeMovies",
+		"CUSTOM_KIDS_MOVIE_FOLDER":  "KidsMovies",
+		"CUSTOM_KIDS_SHOW_FOLDER":   "KidsShows",
+		"CUSTOM_SPORTS_FOLDER":      "Sports",
+		// Resolution mappings
+		"SHOW_RESOLUTION_STRUCTURE":            "false",
+		"SHOW_RESOLUTION_FOLDER_REMUX_4K":      "UltraHDRemuxShows",
+		"SHOW_RESOLUTION_FOLDER_REMUX_1080P":   "1080pRemuxLibrary",
+		"SHOW_RESOLUTION_FOLDER_REMUX_DEFAULT": "RemuxShows",
+		"SHOW_RESOLUTION_FOLDER_2160P":         "UltraHD",
+		"SHOW_RESOLUTION_FOLDER_1080P":         "FullHD",
+		"SHOW_RESOLUTION_FOLDER_720P":          "SDClassics",
+		"SHOW_RESOLUTION_FOLDER_480P":          "Retro480p",
+		"SHOW_RESOLUTION_FOLDER_DVD":           "RetroDVD",
+		"SHOW_RESOLUTION_FOLDER_DEFAULT":       "Shows",
+		"MOVIE_RESOLUTION_STRUCTURE":            "false",
+		"MOVIE_RESOLUTION_FOLDER_REMUX_4K":      "4KRemux",
+		"MOVIE_RESOLUTION_FOLDER_REMUX_1080P":   "1080pRemux",
+		"MOVIE_RESOLUTION_FOLDER_REMUX_DEFAULT": "MoviesRemux",
+		"MOVIE_RESOLUTION_FOLDER_2160P":         "UltraHD",
+		"MOVIE_RESOLUTION_FOLDER_1080P":         "FullHD",
+		"MOVIE_RESOLUTION_FOLDER_720P":          "SDMovies",
+		"MOVIE_RESOLUTION_FOLDER_480P":          "Retro480p",
+		"MOVIE_RESOLUTION_FOLDER_DVD":           "DVDClassics",
+		"MOVIE_RESOLUTION_FOLDER_DEFAULT":       "Movies",
+		// Logging
+		"LOG_LEVEL": "INFO",
+		// Rclone
+		"RCLONE_MOUNT":          "false",
+		"MOUNT_CHECK_INTERVAL":  "30",
+		// Metadata / IDs
+		"TMDB_API_KEY":            "your_tmdb_api_key_here",
+		"LANGUAGE":                "English",
+		"ORIGINAL_TITLE":          "false",
+		"ORIGINAL_TITLE_COUNTRIES": "",
+		"ANIME_SCAN":              "false",
+		"JELLYFIN_ID_FORMAT":      "false",
+		"TMDB_FOLDER_ID":          "false",
+		"IMDB_FOLDER_ID":          "false",
+		"TVDB_FOLDER_ID":          "false",
+		// Renaming
+		"RENAME_ENABLED":                             "false",
+		"MEDIAINFO_PARSER":                           "false",
+		"RENAME_TAGS":                                "Resolution",
+		"MEDIAINFO_RADARR_TAGS":                      "{Movie Title} ({Release Year}) - {Quality Full}",
+		"MEDIAINFO_SONARR_STANDARD_EPISODE_FORMAT":   "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+		"MEDIAINFO_SONARR_DAILY_EPISODE_FORMAT":      "{Series Title} - {Air-Date} - {Episode Title} {Quality Full}",
+		"MEDIAINFO_SONARR_ANIME_EPISODE_FORMAT":      "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+		"MEDIAINFO_SONARR_SEASON_FOLDER_FORMAT":      "Season{season}",
+		// Collections
+		"MOVIE_COLLECTION_ENABLED": "false",
+		"MOVIE_COLLECTIONS_FOLDER": "Collections",
+		// System
+		"RELATIVE_SYMLINK": "false",
+		"MAX_CORES":        "2",
+		"MAX_PROCESSES":    "8",
+		// File handling
+		"SKIP_EXTRAS_FOLDER":        "true",
+		"SHOW_EXTRAS_SIZE_LIMIT":    "5",
+		"MOVIE_EXTRAS_SIZE_LIMIT":   "250",
+		"4K_SHOW_EXTRAS_SIZE_LIMIT": "800",
+		"4K_MOVIE_EXTRAS_SIZE_LIMIT": "2048",
+		"ALLOWED_EXTENSIONS":        ".mp4,.mkv,.srt,.avi,.mov,.divx,.strm",
+		"SKIP_ADULT_PATTERNS":       "true",
+		"SKIP_VERSIONS":             "false",
+		// Monitoring
+		"SLEEP_TIME":               "60",
+		"SYMLINK_CLEANUP_INTERVAL": "600",
+		// Plex
+		"ENABLE_PLEX_UPDATE": "false",
+		"PLEX_URL":           "",
+		"PLEX_TOKEN":         "",
+		// Server
+		"CINESYNC_IP":           "0.0.0.0",
+		"CINESYNC_PORT":         "8082",
+		"CINESYNC_AUTH_ENABLED": "true",
+		"CINESYNC_USERNAME":     "admin",
+		"CINESYNC_PASSWORD":     "admin",
+		// Services
+		"MEDIAHUB_AUTO_START":        "true",
+		"RTM_AUTO_START":             "false",
+		"FILE_OPERATIONS_AUTO_MODE":  "true",
+		// Database
+		"DB_THROTTLE_RATE": "10",
+		"DB_MAX_RETRIES":   "3",
+		"DB_RETRY_DELAY":   "1.0",
+		"DB_BATCH_SIZE":    "1000",
+		"DB_MAX_WORKERS":   "20",
+	}
+}
+
+// HandleGetDefaultConfig returns default configuration values
 func HandleGetDefaultConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Resolve helper path
-	helperPath := filepath.Join("..", "MediaHub", "utils", "config_defaults.py")
-	if _, err := os.Stat(helperPath); err != nil {
-		logger.Warn("config_defaults.py not found at %s: %v", helperPath, err)
-		http.Error(w, "Defaults helper not found", http.StatusInternalServerError)
-		return
-	}
-
-	cmd := exec.Command("python", helperPath)
-	out, err := cmd.Output()
-	if err != nil {
-		logger.Error("Failed to run config_defaults.py: %v", err)
-		http.Error(w, "Failed to load defaults", http.StatusInternalServerError)
-		return
-	}
-
-	type helperResp struct {
-		Defaults map[string]string `json:"defaults"`
-	}
-	var resp helperResp
-	if err := json.Unmarshal(out, &resp); err != nil {
-		logger.Error("Failed to parse defaults output: %v", err)
-		http.Error(w, "Failed to parse defaults", http.StatusInternalServerError)
-		return
-	}
+	defaults := getConfigDefaults()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"defaults": resp.Defaults,
+		"defaults": defaults,
 		"status":   "success",
 	})
 }
@@ -854,7 +781,12 @@ func HandleUpdateConfigSilent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read current environment variables
-	envVars, _ := readEnvFile()
+	envVars, err := readEnvFile()
+	if err != nil {
+		logger.Error("Failed to read env file in update-silent: %v", err)
+		http.Error(w, "Failed to read configuration", http.StatusInternalServerError)
+		return
+	}
 
 	// Apply updates
 	for _, update := range request.Updates {
@@ -867,6 +799,7 @@ func HandleUpdateConfigSilent(w http.ResponseWriter, r *http.Request) {
 
 	// Write back to file
 	if err := writeEnvFile(envVars); err != nil {
+		logger.Error("Failed to write env file in update-silent: %v", err)
 		http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
 		return
 	}

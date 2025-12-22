@@ -15,6 +15,7 @@ from sqlite3 import DatabaseError
 from functools import wraps
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
+from MediaHub.utils.system_utils import is_frozen, get_db_directory
 from MediaHub.config.config import (
     get_db_throttle_rate, get_db_max_retries, get_db_retry_delay,
     get_db_batch_size, get_db_max_workers, get_db_max_records,
@@ -38,8 +39,9 @@ from MediaHub.utils.dashboard_utils import send_dashboard_notification
 # Load environment variables
 load_dotenv()
 
-BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-DB_DIR = os.path.join(BASE_DIR, "db")
+# Determine base directory utility
+BASE_DIR = str(get_db_directory().parent)
+DB_DIR = str(get_db_directory())
 DB_FILE = os.path.join(DB_DIR, "processed_files.db")
 ARCHIVE_DB_FILE = os.path.join(DB_DIR, "processed_files_archive.db")
 LOCK_FILE = os.path.join(DB_DIR, "db_initialized.lock")
