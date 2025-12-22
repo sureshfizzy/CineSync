@@ -19,15 +19,14 @@ if hasattr(sys.stdout, 'buffer'):
 if hasattr(sys.stderr, 'buffer'):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# System utilities
-from MediaHub.utils.system_utils import is_frozen, get_application_path
-if is_frozen():
-    # Running as compiled executable
-    executable_dir = get_application_path()
-    sys.path.append(str(executable_dir.parent))
+# Setup sys.path
+if getattr(sys, 'frozen', False):
+    executable_dir = os.path.dirname(sys.executable)
+    sys.path.insert(0, executable_dir)
 else:
-    # Running as Python script
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from MediaHub.utils.system_utils import is_frozen, get_application_path
 
 # Local imports from MediaHub
 from MediaHub.config.config import *

@@ -18,7 +18,7 @@ if [ "$PUID" != "$current_uid" ] || [ "$PGID" != "$current_gid" ]; then
 fi
 
 # Ensure critical directories exist and have proper ownership
-mkdir -p /app/db /app/logs /app/db/cache /app/.config 2>/dev/null || true
+mkdir -p /app/db /app/logs /app/db/cache /app/.config /app/.config/rclone 2>/dev/null || true
 chown -R appuser:appuser /app/db 2>/dev/null || true
 chown -R appuser:appuser /app/logs 2>/dev/null || true
 chown -R appuser:appuser /app/.config 2>/dev/null || true
