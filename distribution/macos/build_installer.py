@@ -300,7 +300,23 @@ class MacOSInstallerBuilder:
             self.print_warning("To create a standalone binary, build on macOS with: pyinstaller MediaHub.spec")
             return None
         
-        self.print_step("Building MediaHub with PyInstaller...")
+        try:
+            subprocess.run(["pyinstaller", "--version"], capture_output=True, check=True)
+            self.print_step("PyInstaller found, building MediaHub...")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.print_step("PyInstaller not found, installing...")
+            try:
+                subprocess.run(
+                    ["pip3", "install", "pyinstaller"],
+                    check=True,
+                    capture_output=False
+                )
+                self.print_success("PyInstaller installed successfully")
+                self.print_step("Building MediaHub with PyInstaller...")
+            except subprocess.CalledProcessError:
+                self.print_error("Failed to install PyInstaller")
+                self.print_warning("Falling back to Python source distribution")
+                return None
         
         try:
             # Run PyInstaller with the spec file
@@ -434,12 +450,16 @@ class MacOSInstallerBuilder:
         
         launch_dir = self.build_dir / "LaunchAgents"
         launch_dir.mkdir(exist_ok=True)
+        launchd_path = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
         
         # WebDavHub LaunchAgent
         webdavhub_plist = {
             'Label': f'{self.BUNDLE_ID}.webdavhub',
             'ProgramArguments': ['/Applications/CineSync.app/Contents/MacOS/cinesync'],
             'WorkingDirectory': '/Applications/CineSync.app/Contents/WebDavHub',
+            'EnvironmentVariables': {
+                'PATH': launchd_path
+            },
             'RunAtLoad': True,
             'KeepAlive': True,
             'StandardOutPath': '/tmp/cinesync-webdavhub.log',
@@ -453,8 +473,11 @@ class MacOSInstallerBuilder:
         # MediaHub LaunchAgent
         mediahub_plist = {
             'Label': f'{self.BUNDLE_ID}.mediahub',
-            'ProgramArguments': ['/usr/bin/python3', '/Applications/CineSync.app/Contents/MediaHub/main.py'],
+            'ProgramArguments': ['/Applications/CineSync.app/Contents/MediaHub/venv/bin/python', '/Applications/CineSync.app/Contents/MediaHub/main.py'],
             'WorkingDirectory': '/Applications/CineSync.app/Contents/MediaHub',
+            'EnvironmentVariables': {
+                'PATH': launchd_path
+            },
             'RunAtLoad': True,
             'KeepAlive': True,
             'StandardOutPath': '/tmp/cinesync-mediahub.log',
@@ -481,6 +504,17 @@ set -e
 
 echo "Installing CineSync {self.VERSION}..."
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"
+
+# Get the actual user (not root when using sudo)
+if [ -n "${{SUDO_USER}}" ]; then
+    ACTUAL_USER="$SUDO_USER"
+else
+    ACTUAL_USER="$(whoami)"
+fi
+echo "Installing for user: $ACTUAL_USER"
+
 # Copy app bundle
 echo "Copying application..."
 if [ -d "/Applications/CineSync.app" ]; then
@@ -488,29 +522,93 @@ if [ -d "/Applications/CineSync.app" ]; then
     rm -rf "/Applications/CineSync.app"
 fi
 
-cp -R "CineSync.app" "/Applications/"
+cp -R "$SCRIPT_DIR/CineSync.app" "/Applications/"
 echo "✓ Application installed"
 
-# Install Python dependencies
+# Fix ownership of the application directory to the actual user
+echo "Setting ownership..."
+chown -R "$ACTUAL_USER:staff" "/Applications/CineSync.app"
+echo "✓ Ownership set correctly"
+
+# Install Python dependencies using virtual environment
 echo "Installing MediaHub dependencies..."
 cd "/Applications/CineSync.app/Contents/MediaHub"
-if command -v pip3 &> /dev/null; then
-    pip3 install -r requirements.txt
-    echo "✓ Dependencies installed"
-else
-    echo "Warning: pip3 not found. Please install manually:"
-    echo "  pip3 install -r /Applications/CineSync.app/Contents/MediaHub/requirements.txt"
+
+# Check for Python 3
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Error: Python 3 is not installed."
+    echo "Please install Python 3:"
+    echo "  brew install python3"
+    exit 1
 fi
+
+# Create virtual environment as the actual user (not root)
+echo "Creating virtual environment..."
+if [ -d "venv" ]; then
+    rm -rf venv
+fi
+
+# Create venv as the actual user to ensure proper permissions
+if [ -n "${{SUDO_USER}}" ]; then
+    # Running under sudo, create as the actual user
+    sudo -u "$ACTUAL_USER" python3 -m venv venv
+else
+    python3 -m venv venv
+fi
+echo "✓ Virtual environment created"
+
+# Activate virtual environment and install dependencies
+echo "Installing dependencies in virtual environment..."
+if [ -n "${{SUDO_USER}}" ]; then
+    # Install as the actual user
+    sudo -u "$ACTUAL_USER" bash -c "source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+else
+    source venv/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    deactivate
+fi
+echo "✓ Dependencies installed"
 
 # Install LaunchAgents
 echo "Installing LaunchAgents..."
 mkdir -p ~/Library/LaunchAgents
 
-cp LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist ~/Library/LaunchAgents/
-cp LaunchAgents/{self.BUNDLE_ID}.mediahub.plist ~/Library/LaunchAgents/
+# Copy LaunchAgent plists from the DMG volume
+if [ -d "$SCRIPT_DIR/LaunchAgents" ]; then
+    cp "$SCRIPT_DIR/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist" ~/Library/LaunchAgents/
+    cp "$SCRIPT_DIR/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist" ~/Library/LaunchAgents/
+else
+    echo "❌ Error: LaunchAgents directory not found"
+    echo "Expected location: $SCRIPT_DIR/LaunchAgents"
+    exit 1
+fi
 
-launchctl load ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist
-launchctl load ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist
+# Get the user ID for launchctl commands
+USER_ID=$(id -u)
+
+# Unload any existing LaunchAgents first
+echo "Stopping any existing services..."
+launchctl bootout gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null || true
+launchctl bootout gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null || true
+launchctl unload ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null || true
+launchctl unload ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null || true
+
+# Load the LaunchAgents using bootstrap (modern method) or load (fallback)
+echo "Starting services..."
+if launchctl bootstrap gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null; then
+    echo "✓ WebDavHub service started (bootstrap)"
+else
+    launchctl load ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null || true
+    echo "✓ WebDavHub service started (load)"
+fi
+
+if launchctl bootstrap gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null; then
+    echo "✓ MediaHub service started (bootstrap)"
+else
+    launchctl load ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null || true
+    echo "✓ MediaHub service started (load)"
+fi
 
 echo "✓ Services started"
 
@@ -536,18 +634,37 @@ set -e
 
 echo "Uninstalling CineSync..."
 
-# Stop and unload LaunchAgents
+# Get the user ID for launchctl commands
+USER_ID=$(id -u)
+
+# Stop and unload LaunchAgents using bootout
+echo "Stopping services..."
+launchctl bootout gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null || true
+launchctl bootout gui/$USER_ID ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null || true
 launchctl unload ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist 2>/dev/null || true
 launchctl unload ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist 2>/dev/null || true
 
+# Kill any running processes
+pkill -f "CineSync.app/Contents/MacOS/cinesync" 2>/dev/null || true
+pkill -f "CineSync.app/Contents/MediaHub/main.py" 2>/dev/null || true
+
+echo "✓ Services stopped"
+
 # Remove LaunchAgents
+echo "Removing LaunchAgents..."
 rm -f ~/Library/LaunchAgents/{self.BUNDLE_ID}.webdavhub.plist
 rm -f ~/Library/LaunchAgents/{self.BUNDLE_ID}.mediahub.plist
+echo "✓ LaunchAgents removed"
 
 # Remove application
+echo "Removing application..."
 rm -rf "/Applications/CineSync.app"
+echo "✓ Application removed"
 
+echo ""
 echo "✅ CineSync uninstalled successfully!"
+echo ""
+echo "Note: If services are still running, log out and log back in."
 """)
         
         os.chmod(uninstall_script, 0o755)
