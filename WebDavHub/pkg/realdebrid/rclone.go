@@ -759,28 +759,12 @@ func (rm *RcloneManager) CleanupAllMounts() {
 
 // GetRcloneConfigPath returns the path to rclone config file
 func GetRcloneConfigPath() string {
-	rcloneCmd := getRcloneCommand()
-	cmd := exec.Command(rcloneCmd, "config", "file")
-	output, err := cmd.Output()
+	dbPath, err := filepath.Abs(filepath.Join("..", "db", "cinesync.conf"))
 	if err != nil {
-		logger.Error("Failed to get rclone config path: %v", err)
-		return ""
+		logger.Error("Failed to resolve db path for cinesync.conf: %v", err)
+		dbPath = filepath.Join("..", "db", "cinesync.conf")
 	}
-	
-	configFileOutput := strings.TrimSpace(string(output))
-	lines := strings.Split(configFileOutput, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "Configuration file") || filepath.Ext(line) == ".conf" {
-			parts := strings.Fields(line)
-			if len(parts) > 0 {
-				configPath := parts[len(parts)-1]
-				configDir := filepath.Dir(configPath)
-				return filepath.Join(configDir, "cinesync.conf")
-			}
-		}
-	}
-	logger.Error("Could not parse rclone config path from output: %s", configFileOutput)
-	return ""
+	return dbPath
 }
 
 // CreateRcloneConfig creates a basic rclone config for Real-Debrid
@@ -790,10 +774,10 @@ func CreateRcloneConfig(apiKey string) error {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
 
-	// Create config directory if it doesn't exist
+	// Ensure config directory exists
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %v", err)
+		logger.Warn("Failed to create config directory: %v", err)
 	}
 
 	// Check if config already exists
@@ -839,10 +823,10 @@ func UpdateRcloneConfig(apiKey string) error {
 	}
     // Enforce default remote name
     remoteName := "CineSync"
-	// Create config directory if it doesn't exist
+	// Ensure config directory exists
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %v", err)
+		logger.Warn("Failed to create config directory: %v", err)
 	}
 
 	// Create updated config for Real-Debrid Virtual Filesystem

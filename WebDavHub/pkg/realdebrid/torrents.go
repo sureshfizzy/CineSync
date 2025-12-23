@@ -265,9 +265,9 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	
 	// Load torrents with file lists FULLY cached in memory
 	loadedCount := 0
-	missingCount := 0
 	startTime := time.Now()
 	
+	missingInfoIDs := make([]string, 0)
 	for i := range items {
 		item := &items[i]
 		accessKey := GetDirectoryName(item.Filename)
@@ -278,19 +278,7 @@ func (tm *TorrentManager) loadCachedTorrents() {
 				item.Ended = cached.Ended
 				loadedCount++
 			} else {
-				info, apiErr := tm.client.GetTorrentInfo(item.ID)
-				if apiErr == nil && info != nil {
-					item.CachedFiles = info.Files
-					item.CachedLinks = info.Links
-					item.Ended = info.Ended
-					if tm.infoStore != nil {
-						_ = tm.infoStore.Upsert(info)
-					}
-					loadedCount++
-				} else {
-					missingCount++
-					logger.Warn("[LoadCache] Torrent %d: Failed to load files for %s: %v", i+1, item.ID, apiErr)
-				}
+				missingInfoIDs = append(missingInfoIDs, item.ID)
 			}
 		}
 		
@@ -299,8 +287,28 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 	
 	elapsed := time.Since(startTime)
-	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents: %d with files in RAM, %d missing", 
-		elapsed.Seconds(), len(items), loadedCount, missingCount)
+	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents loaded: %d with cached files, %d need fetching", 
+		elapsed.Seconds(), len(items), loadedCount, len(missingInfoIDs))
+
+	newState := &LibraryState{
+		TotalCount:       len(items),
+		FirstTorrentID:   "",
+		FirstTorrentName: "",
+		LastUpdated:      time.Now(),
+	}
+
+	if len(items) > 0 {
+		newState.FirstTorrentID = items[0].ID
+		newState.FirstTorrentName = items[0].Filename
+	}
+
+	tm.updateCurrentState(newState)
+	logger.Info("[LoadCache] Current state updated: %d total torrents", len(items))
+
+	if len(missingInfoIDs) > 0 {
+		logger.Info("[LoadCache] Starting background fetch for %d torrents without cached info", len(missingInfoIDs))
+		go tm.backgroundFetchMissingInfo(missingInfoIDs)
+	}
 }
 
 // loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
@@ -333,13 +341,73 @@ func (tm *TorrentManager) loadBrokenTorrentsFromDB() {
 	}
 }
 
+// backgroundFetchMissingInfo fetches torrent info for IDs that weren't cached
+func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
+	const maxWorkers = 10
+	const batchSize = 100
+	successCount := 0
+	failCount := 0
+	startTime := time.Now()
+
+	for batchStart := 0; batchStart < len(torrentIDs); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(torrentIDs) {
+			batchEnd = len(torrentIDs)
+		}
+
+		batch := torrentIDs[batchStart:batchEnd]
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, maxWorkers)
+
+		for _, torrentID := range batch {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				info, err := tm.client.GetTorrentInfo(id)
+				if err == nil && info != nil {
+					if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
+						item.CachedFiles = info.Files
+						item.CachedLinks = info.Links
+						item.Ended = info.Ended
+
+						if tm.infoStore != nil {
+							_ = tm.infoStore.Upsert(info)
+						}
+						if tm.store != nil {
+							_ = tm.store.UpsertInfo(info)
+						}
+						successCount++
+					}
+				} else {
+					failCount++
+				}
+			}(torrentID)
+		}
+
+		wg.Wait()
+
+		logger.Info("[BackgroundFetch] Progress: %d/%d processed (%d success, %d failed)", 
+			batchEnd, len(torrentIDs), successCount, failCount)
+
+		if batchEnd < len(torrentIDs) {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	logger.Info("[BackgroundFetch] Completed in %.1fs - %d success, %d failed out of %d total", 
+		elapsed.Seconds(), successCount, failCount, len(torrentIDs))
+}
+
 // SetPrefetchedTorrents seeds the torrent manager with prefetched data and caches files in memory
 func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	logger.Info("[SetPrefetch] Starting to prefetch %d torrents with ALL file lists into memory", len(torrents))
 	
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	
-	// FIRST: Add all torrents to the map immediately so they appear in the mount
 	logger.Info("[SetPrefetch] Adding all %d torrents to directory map...", len(torrents))
 	for i := range torrents {
 		item := &torrents[i]
@@ -347,13 +415,25 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 		allTorrents.Set(accessKey, item)
 		tm.idToItemMap.Set(item.ID, item)
 	}
-	logger.Info("[SetPrefetch] All torrents added to map, now enriching file lists...")
-	
-	// SECOND: Enrich file lists in background
-	loadedCount := 0
-	missingCount := 0
+	logger.Info("[SetPrefetch] All torrents added to map")
+
+	newState := &LibraryState{
+		TotalCount:       len(torrents),
+		FirstTorrentID:   "",
+		FirstTorrentName: "",
+		LastUpdated:      time.Now(),
+	}
+
+	if len(torrents) > 0 {
+		newState.FirstTorrentID = torrents[0].ID
+		newState.FirstTorrentName = torrents[0].Filename
+	}
+
+	tm.updateCurrentState(newState)
+	logger.Info("[SetPrefetch] Current state updated: %d total torrents", len(torrents))
+
+	missingInfoIDs := make([]string, 0)
 	alreadyCachedCount := 0
-	startTime := time.Now()
 	
 	for i := range torrents {
 		item := &torrents[i]
@@ -363,19 +443,8 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 					item.CachedFiles = cached.Files
 					item.CachedLinks = cached.Links
 					item.Ended = cached.Ended
-					loadedCount++
 				} else {
-					info, apiErr := tm.client.GetTorrentInfo(item.ID)
-					if apiErr == nil && info != nil {
-						item.CachedFiles = info.Files
-						item.CachedLinks = info.Links
-						item.Ended = info.Ended
-						_ = tm.infoStore.Upsert(info)
-						loadedCount++
-					} else {
-						missingCount++
-						logger.Warn("[SetPrefetch] Torrent %d: Failed to prefetch files for %s: %v", i+1, item.ID, apiErr)
-					}
+					missingInfoIDs = append(missingInfoIDs, item.ID)
 				}
 			}
 		} else {
@@ -383,26 +452,15 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 		}
 	}
 	
-	elapsed := time.Since(startTime)
-	logger.Info("[SetPrefetch] COMPLETED in %.1fs - %d torrents: %d loaded, %d already cached, %d missing", 
-		elapsed.Seconds(), len(torrents), loadedCount, alreadyCachedCount, missingCount)
+	logger.Info("[SetPrefetch] %d torrents already have file lists, %d need fetching", 
+		alreadyCachedCount, len(missingInfoIDs))
+	
+	if len(missingInfoIDs) > 0 {
+		logger.Info("[SetPrefetch] Starting background fetch for %d torrents", len(missingInfoIDs))
+		go tm.backgroundFetchMissingInfo(missingInfoIDs)
+	}
 	
 	tm.prefetchCompleted.Store(true)
-
-	// Update state after prefetch
-	newState := &LibraryState{
-		TotalCount:     len(torrents),
-		FirstTorrentID: "",
-		FirstTorrentName: "",
-		LastUpdated:    time.Now(),
-	}
-	
-	if len(torrents) > 0 {
-		newState.FirstTorrentID = torrents[0].ID
-		newState.FirstTorrentName = torrents[0].Filename
-	}
-	
-	tm.updateCurrentState(newState)
 	
 	// Trigger pending mount
 	triggerPendingMount()

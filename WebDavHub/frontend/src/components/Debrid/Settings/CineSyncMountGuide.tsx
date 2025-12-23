@@ -27,10 +27,6 @@ const CineSyncMountGuide: React.FC<CineSyncMountGuideProps> = ({
   const theme = useTheme();
   const isWindows = serverOS === 'windows';
 
-  const configFilePath = isWindows
-    ? '%APPDATA%\\rclone\\cinesync.conf'
-    : '~/.config/rclone/cinesync.conf';
-
   const configFileExample = `[CineSync]
 type = webdav
 url = http://localhost:8082/api/realdebrid/webdav/
@@ -387,7 +383,7 @@ vendor = other`;
             </Box>
             <Alert severity="warning" sx={{ mt: 1.5, borderRadius: 1.5 }} icon={<Science fontSize="small" />}>
               <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                <strong>Note:</strong> This creates the config in rclone's default location. To use a custom config file, add <code style={{ background: alpha(theme.palette.warning.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>--config "{configFilePath}"</code> flag. The backend automatically creates and manages the config at <code style={{ background: alpha(theme.palette.warning.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>{configFilePath}</code> - manual creation is optional.
+                <strong>Note:</strong> The backend automatically creates and manages the rclone config in the <code style={{ background: alpha(theme.palette.warning.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>db/cinesync.conf</code> file within the CineSync installation directory. Manual config creation is optional.
               </Typography>
             </Alert>
           </CardContent>
@@ -457,7 +453,6 @@ vendor = other`;
               >
                 {isWindows ? (
                   `rclone mount CineSync: ${exampleMountPath} \\
-  --config "${configFilePath}" \\
   --vfs-cache-mode ${config.vfsCacheMode || 'full'} \\
   --cache-dir "${exampleCachePath}" \\
   --vfs-cache-max-size ${config.vfsCacheMaxSize || '100G'} \\
@@ -466,7 +461,6 @@ vendor = other`;
   --log-file "${exampleLogPath}"`
                 ) : (
                   `rclone mount CineSync: ${exampleMountPath} \\
-  --config ${configFilePath} \\
   --vfs-cache-mode ${config.vfsCacheMode || 'full'} \\
   --cache-dir "${exampleCachePath}" \\
   --vfs-cache-max-size ${config.vfsCacheMaxSize || '100G'} \\
