@@ -437,8 +437,12 @@ def main():
     global mount_state
 
     # Set up signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        log_message("Signal handlers registered successfully", level="DEBUG")
+    except ValueError as e:
+        log_message("Signal handlers not registered (running in thread)", level="DEBUG")
 
     log_message("Starting MediaHub directory monitor service", level="INFO")
 
@@ -505,7 +509,7 @@ def main():
             break
         except Exception as e:
             log_message(f"Unexpected error in main loop: {str(e)}", level="ERROR")
-            set_shutdown()
+            # Don't shut down the entire service on error, just log and continue
             time.sleep(sleep_time)
 
 def add_file_to_source_database(file_path, source_directory):

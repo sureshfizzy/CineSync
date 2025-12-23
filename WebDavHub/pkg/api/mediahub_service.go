@@ -967,19 +967,19 @@ func HandleMediaHubMonitorStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scriptPath, _, _, err := getMediaHubPaths()
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		logger.Error("Failed to get MediaHub paths: %v", err)
-		http.Error(w, "Failed to get script paths", http.StatusInternalServerError)
+		logger.Error("Failed to get MediaHub executable: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to get MediaHub executable: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Start monitor-only process
-	pythonCmd := getPythonCommandForMediaHub()
-	monitorProcess := exec.Command(pythonCmd, scriptPath, "--monitor-only")
+	cmd, args := mediaHubExec.GetCommand("--monitor-only")
+	monitorProcess := exec.Command(cmd, args...)
 
 	// Set working directory to MediaHub directory
-	monitorProcess.Dir = filepath.Dir(scriptPath)
+	monitorProcess.Dir = mediaHubExec.WorkDir
 
 	// Create pipes to capture monitor output for logging
 	stdout, err := monitorProcess.StdoutPipe()
@@ -1001,6 +1001,16 @@ func HandleMediaHubMonitorStart(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Failed to start monitor process: %v", err)
 		http.Error(w, fmt.Sprintf("Failed to start monitor: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Write monitor PID file immediately so the status API / UI can detect the monitor quickly
+	if _, _, monitorPidFile, err := getMediaHubPaths(); err == nil {
+		pidStr := fmt.Sprintf("%d", monitorProcess.Process.Pid)
+		if err := os.WriteFile(monitorPidFile, []byte(pidStr), 0644); err != nil {
+			logger.Debug("Failed to write monitor PID file: %v", err)
+		}
+	} else {
+		logger.Debug("Failed to resolve monitor PID file path: %v", err)
 	}
 
 	// Start goroutines to stream monitor output

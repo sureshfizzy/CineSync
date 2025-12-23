@@ -335,6 +335,19 @@ def start_polling_monitor():
         if is_frozen():
             log_message("Running polling monitor in thread", level="DEBUG")
             from MediaHub.monitor.polling_monitor import main as monitor_main
+            # When running monitor in-process (frozen executable), write a PID file so
+            # the Web UI / API can detect that the monitor is running. This mirrors
+            # the behavior when the monitor is started as a subprocess.
+            try:
+                os.makedirs(os.path.dirname(MONITOR_PID_FILE), exist_ok=True)
+            except Exception:
+                pass
+            try:
+                with open(MONITOR_PID_FILE, 'w') as f:
+                    f.write(str(os.getpid()))
+            except Exception as e:
+                log_message(f"Failed to write monitor PID file: {e}", level="DEBUG")
+
             monitor_main()
         else:
             log_message("Running polling monitor as subprocess", level="DEBUG")
@@ -588,6 +601,8 @@ def main(dest_dir):
             return
         # Start only the polling monitor
         start_polling_monitor()
+        # Note: start_polling_monitor() blocks in frozen mode, so we only reach here if it exits
+        log_message("Monitor process has exited", level="INFO")
         return
 
     if not os.path.exists(LOCK_FILE):
