@@ -11,12 +11,16 @@ import time
 from typing import List, Optional, Tuple
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.processors.db_utils import normalize_file_path
+from MediaHub.utils.system_utils import get_db_directory
 
 
 def get_source_db_path():
-    """Get the path to the source files database."""
-    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    db_path = os.path.join(base_dir, "db", "source_files.db")
+    """Get the path to the source files database.
+    
+    Uses get_db_directory() to properly handle both development and installed environments.
+    """
+    db_dir = str(get_db_directory())
+    db_path = os.path.join(db_dir, "source_files.db")
     return db_path
 
 
