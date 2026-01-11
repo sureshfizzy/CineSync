@@ -16,12 +16,23 @@ interface BulkSelectionContextType {
 
 const BulkSelectionContext = createContext<BulkSelectionContextType | undefined>(undefined);
 
+// Default fallback when used outside provider
+const defaultContext: BulkSelectionContextType = {
+  selectedItems: new Set(),
+  isSelectionMode: false,
+  toggleSelection: () => {},
+  selectAll: () => {},
+  clearSelection: () => {},
+  toggleSelectionMode: () => {},
+  exitSelectionMode: () => {},
+  isSelected: () => false,
+  getSelectedItems: () => [],
+  selectedCount: 0,
+};
+
 export const useBulkSelection = () => {
   const context = useContext(BulkSelectionContext);
-  if (!context) {
-    throw new Error('useBulkSelection must be used within a BulkSelectionProvider');
-  }
-  return context;
+  return context ?? defaultContext;
 };
 
 interface BulkSelectionProviderProps {

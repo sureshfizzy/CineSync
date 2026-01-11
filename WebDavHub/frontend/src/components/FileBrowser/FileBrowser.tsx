@@ -12,8 +12,7 @@ import { fetchFiles as fetchFilesApi } from './fileApi';
 import { setPosterInCache } from './tmdbCache';
 import { useTmdb } from '../../contexts/TmdbContext';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
-import { BulkSelectionProvider } from '../../contexts/BulkSelectionContext';
-import { useBulkSelectionSafe } from '../../hooks/useBulkSelectionSafe';
+import { BulkSelectionProvider, useBulkSelection } from '../../contexts/BulkSelectionContext';
 import Header from './Header';
 import PosterView from './PosterView';
 import ListView from './ListView';
@@ -69,7 +68,7 @@ const FileBrowserContent: React.FC = () => {
   const { tmdbData, imgLoadedMap, updateTmdbData, setImageLoaded, getTmdbDataFromCache } = useTmdb();
   
   // Use bulk selection
-  const { isSelectionMode, toggleSelectionMode, exitSelectionMode } = useBulkSelectionSafe();
+  const { isSelectionMode, toggleSelectionMode, exitSelectionMode } = useBulkSelection();
 
   const urlPath = params['*'] || '';
   const currentPath = '/' + urlPath;
