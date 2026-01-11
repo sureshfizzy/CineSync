@@ -9,7 +9,7 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.processors.anime_processor import is_anime_file, process_anime_show
 from MediaHub.utils.file_utils import *
-from MediaHub.utils.mediainfo import *
+from MediaHub.utils.mediainfo_extractor import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data, select_title_by_origin, find_episode_by_air_date
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info

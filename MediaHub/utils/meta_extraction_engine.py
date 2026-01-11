@@ -5,7 +5,7 @@ import sys
 import platform
 from MediaHub.utils.ffprobe_parser import *
 from MediaHub.utils.logging_utils import log_message
-from MediaHub.utils.mediainfo import extract_media_info, keywords
+from MediaHub.utils.mediainfo_extractor import extract_media_info, keywords
 from MediaHub.api.api_utils import api_retry
 from MediaHub.utils.system_utils import is_frozen, get_application_path
 

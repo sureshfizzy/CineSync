@@ -38,8 +38,6 @@ def collect_mediahub_modules():
     
     for subdir in base.rglob('*'):
         if subdir.is_dir() and not subdir.name.startswith('__') and not subdir.name.startswith('.'):
-            if 'mediainfo' in str(subdir) and subdir.parent.name == 'utils':
-                continue
             rel_path = subdir.relative_to(base.parent)
             package_name = str(rel_path).replace(os.sep, '.')
             if package_name.startswith('MediaHub.'):
@@ -57,7 +55,6 @@ a = Analysis(
     datas=collect_data_files(mediahub_dir),
     hiddenimports=[
         *collect_mediahub_modules(),
-        'beautifulsoup4',
         'bs4',
         'dotenv',
         'requests',

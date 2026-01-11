@@ -10,7 +10,7 @@ sys.path.append(os.path.join(current_dir, '..', '..'))
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_mediainfo_radarr_tags, mediainfo_parser, is_jellyfin_id_format_enabled
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
-from MediaHub.utils.mediainfo import extract_media_info, keywords
+from MediaHub.utils.mediainfo_extractor import extract_media_info, keywords
 
 def get_radarr_movie_filename(movie_name, year, file_path, root_path, media_info=None):
     """

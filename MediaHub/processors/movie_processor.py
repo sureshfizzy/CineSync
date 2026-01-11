@@ -6,7 +6,7 @@ from MediaHub.utils.file_utils import *
 from MediaHub.api.tmdb_api import search_movie, determine_tmdb_media_type
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
-from MediaHub.utils.mediainfo import *
+from MediaHub.utils.mediainfo_extractor import *
 from MediaHub.api.tmdb_api_helpers import get_movie_data
 from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info

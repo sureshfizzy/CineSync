@@ -5,7 +5,7 @@ from MediaHub.utils.file_utils import *
 from MediaHub.api.sportsdb_api import search_sports_content
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
-from MediaHub.utils.mediainfo import extract_media_info, keywords
+from MediaHub.utils.mediainfo_extractor import extract_media_info, keywords
 from MediaHub.utils.file_utils import extract_resolution_from_filename, extract_resolution_from_folder
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info

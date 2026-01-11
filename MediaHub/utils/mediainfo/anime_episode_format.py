@@ -10,7 +10,7 @@ sys.path.append(os.path.join(current_dir, '..', '..'))
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import get_sonarr_anime_episode_format, mediainfo_parser
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
-from MediaHub.utils.mediainfo import extract_media_info, keywords
+from MediaHub.utils.mediainfo_extractor import extract_media_info, keywords
 from sonarr_utils import (
     BaseSonarrTokenParser, extract_show_data, map_ffprobe_to_sonarr_tokens,
     parse_sonarr_conditional_tokens, parse_sonarr_media_tokens, parse_series_tokens

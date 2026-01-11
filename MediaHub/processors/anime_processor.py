@@ -6,7 +6,7 @@ from MediaHub.utils.file_utils import fetch_json, extract_resolution_from_filena
 
 from MediaHub.api.tmdb_api import search_tv_show, determine_tmdb_media_type
 from MediaHub.config.config import *
-from MediaHub.utils.mediainfo import *
+from MediaHub.utils.mediainfo_extractor import *
 from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.file_utils import clean_query
