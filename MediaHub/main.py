@@ -457,7 +457,7 @@ def start_webdav_server():
         webdav_script = os.path.join(webdav_dir, 'cinesync.exe')
     else:
         webdav_script = os.path.join(webdav_dir, 'cinesync')
-    webdav_port = int(os.getenv('CINESYNC_PORT'))
+    webdav_port = int(os.getenv('CINESYNC_PORT', '8082'))
 
     # Check if the CineSync server is already running on the specified port
     if is_port_in_use(webdav_port):

@@ -391,7 +391,6 @@ func readEnvFile() (map[string]string, error) {
 
 	// Log DESTINATION_DIR for debugging
 	if destDir, ok := envVars["DESTINATION_DIR"]; ok {
-		logger.Debug("Read DESTINATION_DIR from .env: %s (length: %d)", destDir, len(destDir))
 	}
 
 	// Handle Kubernetes-compatible alternative: if _4K_SEPARATION is set but 4K_SEPARATION is not, use _4K_SEPARATION
@@ -433,6 +432,20 @@ func writeEnvFile(envVars map[string]string) error {
 	if err := os.MkdirAll(envDir, 0755); err != nil {
 		logger.Error("Failed to create directory %s: %v", envDir, err)
 		return fmt.Errorf("failed to create directory %s: %v", envDir, err)
+	}
+
+	// Ensure critical CineSync defaults are present
+	criticalDefaults := map[string]string{
+		"CINESYNC_IP":           "0.0.0.0",
+		"CINESYNC_PORT":         "8082",
+		"CINESYNC_AUTH_ENABLED": "true",
+		"CINESYNC_USERNAME":     "admin",
+		"CINESYNC_PASSWORD":     "admin",
+	}
+	for key, defaultValue := range criticalDefaults {
+		if _, exists := envVars[key]; !exists {
+			envVars[key] = defaultValue
+		}
 	}
 
 	if err := godotenv.Write(envVars, envPath); err != nil {
