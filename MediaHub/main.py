@@ -655,9 +655,11 @@ def main(dest_dir):
                     log_message(traceback.format_exc(), level="DEBUG")
 
             # Run missing files check in a separate thread
-            missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
-            missing_files_thread.daemon = True
-            missing_files_thread.start()
+            # DISABLED: This blocks activities by checking existence of all files
+            # missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
+            # missing_files_thread.daemon = True
+            # missing_files_thread.start()
+            log_message("Missing files check disabled at startup for better performance", level="INFO")
 
             #Symlink cleanup
             cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))

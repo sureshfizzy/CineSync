@@ -109,15 +109,19 @@ class ProcessingManager:
         """Smart parallel processing: pre-filter unprocessed files only"""
         log_message(f"Manager: Starting smart parallel processing with {self.max_workers} workers", level="INFO")
 
-        if not force:
+        # Skip database index loading in monitor mode - not needed for single file processing
+        if not force and mode != 'monitor':
             try:
                 from MediaHub.processors.db_utils import get_dest_index_from_processed_files
-                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
-                log_message(f"Loaded database: {len(dest_index)} destinations, {len(reverse_index)} symlinks, {len(processed_files_set)} processed files", level="INFO")
+                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files(skip_existence_check=True)
+                log_message(f"Loaded database: {len(dest_index)} destinations, files will be checked individually", level="INFO")
             except Exception as e:
                 log_message(f"Failed to load database: {e}", level="WARNING")
                 dest_index, reverse_index, processed_files_set = set(), {}, set()
         else:
+            # For monitor mode or force mode, skip database index loading
+            if mode == 'monitor':
+                log_message("Monitor mode: Skipping database index loading for faster processing", level="INFO")
             dest_index, reverse_index, processed_files_set = set(), {}, set()
 
         log_message("Pre-filtering: Finding unprocessed files only...", level="INFO")
@@ -1527,7 +1531,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 reverse_index = {}
                                 processed_files_set = set()
                             else:
-                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
+                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files(skip_existence_check=True)
 
                     args = (src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, dest_index, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, reverse_index, processed_files_set)
                     result = process_file(args, force, batch_apply)
@@ -1560,7 +1564,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                                 reverse_index = {}
                                 processed_files_set = set()
                             else:
-                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files()
+                                dest_index, reverse_index, processed_files_set = get_dest_index_from_processed_files(skip_existence_check=True)
 
                     for root, _, files in os.walk(src_dir):
                         for file in files:

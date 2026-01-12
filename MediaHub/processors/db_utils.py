@@ -950,8 +950,12 @@ def _check_path_exists_batch(paths_batch):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def get_dest_index_from_processed_files(conn):
-    """Get destination index from processed_files table, filtered by actual filesystem existence using parallel workers
+def get_dest_index_from_processed_files(conn, skip_existence_check=False):
+    """Get destination index from processed_files table, optionally checking filesystem existence
+    
+    Args:
+        skip_existence_check: If True, skip file existence checks for faster loading (default: False)
+    
     Returns destination paths set, reverse index for symlinks, and processed files set for skip checking"""
     start_time = time.time()
     try:
@@ -976,7 +980,18 @@ def get_dest_index_from_processed_files(conn):
             all_processed_files.update(normalize_file_path(row[0]) for row in batch if row[0])
 
         total_dest_count = len(all_dest_paths)
-        total_processed_count = len(all_processed_files)
+        
+        if skip_existence_check:
+            # Fast path: Just load from database without checking existence
+            # Return empty processed_files_set so files aren't skipped based on stale database entries
+            # Files will be checked individually using is_file_processed() which queries the database
+            dest_paths = set(all_dest_paths)
+            reverse_index = {}
+            elapsed_time = time.time() - start_time
+            log_message(f"Database index loaded (fast mode): {total_dest_count} destination paths, 0 processed files (will check individually) in {elapsed_time:.2f}s", level="INFO")
+            return dest_paths, reverse_index, set()  # Return empty set to avoid skipping files
+        
+        # Slow path: Check file existence (only when explicitly needed)
         log_message(f"Checking existence of {total_dest_count} destination paths using {get_db_max_workers()} workers...", level="INFO")
 
         # Use parallel workers to check file existence and build reverse index
