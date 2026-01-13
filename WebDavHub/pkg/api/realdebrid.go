@@ -521,7 +521,7 @@ func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
     // Parse pagination parameters
     query := r.URL.Query()
     page := 1
-    limit := 100
+    limit := -1
     if p := query.Get("page"); p != "" {
         if parsed, err := fmt.Sscanf(p, "%d", &page); err == nil && parsed == 1 && page > 0 {
             // page is valid
@@ -530,19 +530,27 @@ func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
         }
     }
     if l := query.Get("limit"); l != "" {
-        if parsed, err := fmt.Sscanf(l, "%d", &limit); err == nil && parsed == 1 && limit > 0 && limit <= 1000 {
-            // limit is valid
-        } else {
-            limit = 100
+        if parsed, err := fmt.Sscanf(l, "%d", &limit); err == nil && parsed == 1 && limit > 0 {
         }
     }
 
-    // Use cached torrents if available, otherwise fetch fresh
+    // Get live data from TorrentManager's idToItemMap
     var items []realdebrid.TorrentItem
-    if len(cachedTorrents) > 0 {
+    tm := realdebrid.GetTorrentManager(cfg.APIKey)
+    if tm != nil {
+        items = tm.GetAllTorrentsFromCache()
+        if len(items) > 0 {
+            sort.Slice(items, func(i, j int) bool {
+                return items[i].Added > items[j].Added
+            })
+        }
+    }
+
+    if len(items) == 0 && len(cachedTorrents) > 0 {
         items = cachedTorrents
-        logger.Debug("[RD] Serving page %d (limit %d) from cache of %d torrents", page, limit, len(items))
-    } else {
+    }
+
+    if len(items) == 0 {
         client := realdebrid.NewClient(cfg.APIKey)
         var err error
         items, err = client.GetAllTorrents(1000, nil)
@@ -550,61 +558,142 @@ func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
             http.Error(w, err.Error(), http.StatusBadGateway)
             return
         }
-        logger.Debug("[RD] Fetched %d torrents live", len(items))
+        logger.Debug("[RD] Fetched %d torrents live from API", len(items))
     }
 
     // Calculate pagination
     total := len(items)
-    offset := (page - 1) * limit
-    end := offset + limit
-    if offset >= total {
+    var offset, end int
+    if limit <= 0 {
         offset = 0
-        end = 0
-    }
-    if end > total {
         end = total
+    } else {
+        offset = (page - 1) * limit
+        end = offset + limit
+        if offset >= total {
+            offset = 0
+            end = 0
+        }
+        if end > total {
+            end = total
+        }
     }
 
-    // map to a simplified browser-like response
+    // map to a simplified browser-like response with all local data
     type FileItem struct {
-        Name   string `json:"name"`
-        Path   string `json:"path"`
-        Size   int64  `json:"size"`
-        IsDir  bool   `json:"isDir"`
-        ModTime string `json:"modTime"`
-        Link   string `json:"link"`
+        ID       string `json:"id"`
+        Name     string `json:"name"`
+        Path     string `json:"path"`
+        Size     int64  `json:"size"`
+        IsDir    bool   `json:"isDir"`
+        ModTime  string `json:"modTime"`
+        Added    string `json:"added"`
+        Ended    string `json:"ended,omitempty"`
+        Link     string `json:"link"`
         Download string `json:"download"`
-        Status string `json:"status"`
-        Files  int    `json:"files"`
+        Status   string `json:"status"`
+        Files    int    `json:"files"`
+        Hash     string `json:"hash,omitempty"`
     }
 
     // Slice the items for this page
     pageItems := items[offset:end]
     files := make([]FileItem, 0, len(pageItems))
     for _, it := range pageItems {
+        firstLink := ""
+        if len(it.CachedLinks) > 0 {
+            firstLink = it.CachedLinks[0]
+        } else if len(it.Links) > 0 {
+            firstLink = it.Links[0]
+        }
+        
         files = append(files, FileItem{
-            Name: it.Filename,
-            Path: "/torrents/" + it.ID,
-            Size: it.Bytes,
-            IsDir: false,
-            ModTime: it.Added,
-            Link: "",
-            Download: "",
-            Status: it.Status,
-            Files: it.Files,
+            ID:       it.ID,
+            Name:     it.Filename,
+            Path:     "/torrents/" + it.ID,
+            Size:     it.Bytes,
+            IsDir:    false,
+            ModTime:  it.Added,
+            Added:    it.Added,
+            Ended:    it.Ended,
+            Link:     firstLink,
+            Download: firstLink,
+            Status:   it.Status,
+            Files:    it.Files,
         })
     }
 
-    totalPages := (total + limit - 1) / limit
+    totalPages := 1
+    if limit > 0 {
+        totalPages = (total + limit - 1) / limit
+    }
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "path": "/torrents",
-        "files": files,
-        "total": total,
-        "page": page,
-        "limit": limit,
+        "path":       "/torrents",
+        "files":      files,
+        "total":      total,
+        "page":       page,
+        "limit":      limit,
         "totalPages": totalPages,
+        "source":     "local",
+    })
+}
+
+// HandleRealDebridTorrentFiles returns file links for a specific torrent
+func HandleRealDebridTorrentFiles(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+    if r.Method == "OPTIONS" {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+
+    cfg, err := validateRealDebridConfig()
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    torrentID := r.URL.Query().Get("id")
+    if torrentID == "" {
+        http.Error(w, "Missing torrent id", http.StatusBadRequest)
+        return
+    }
+
+    tm := realdebrid.GetTorrentManager(cfg.APIKey)
+    if tm == nil {
+        http.Error(w, "TorrentManager not available", http.StatusInternalServerError)
+        return
+    }
+
+    files, links, _ := tm.GetTorrentFileList(torrentID)
+    
+    type FileLink struct {
+        Name string `json:"name"`
+        Size int64  `json:"size"`
+        Link string `json:"link"`
+    }
+    
+    result := make([]FileLink, 0, len(files))
+    for i, f := range files {
+        link := ""
+        if i < len(links) {
+            link = links[i]
+        }
+        result = append(result, FileLink{
+            Name: f.Path,
+            Size: f.Bytes,
+            Link: link,
+        })
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "id":    torrentID,
+        "files": result,
     })
 }
 

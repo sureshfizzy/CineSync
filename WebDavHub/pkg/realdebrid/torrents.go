@@ -466,6 +466,24 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	triggerPendingMount()
 }
 
+// GetAllTorrentsFromCache returns all torrents from the idToItemMap
+func (tm *TorrentManager) GetAllTorrentsFromCache() []TorrentItem {
+	if tm == nil {
+		return nil
+	}
+	
+	keys := tm.idToItemMap.Keys()
+	items := make([]TorrentItem, 0, len(keys))
+	
+	for _, id := range keys {
+		if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
+			items = append(items, *item)
+		}
+	}
+	
+	return items
+}
+
 // GetTorrentFileList loads file list - first from in-memory cache, then DB, then API
 func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, []string, string) {
 	torrentID = resolveTorrentID(torrentID)

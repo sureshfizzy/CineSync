@@ -389,10 +389,6 @@ func readEnvFile() (map[string]string, error) {
 		return readFromEnvironment(), nil
 	}
 
-	// Log DESTINATION_DIR for debugging
-	if destDir, ok := envVars["DESTINATION_DIR"]; ok {
-	}
-
 	// Handle Kubernetes-compatible alternative: if _4K_SEPARATION is set but 4K_SEPARATION is not, use _4K_SEPARATION
 	if _, has4K := envVars["4K_SEPARATION"]; !has4K {
 		if value, hasAlt := envVars["_4K_SEPARATION"]; hasAlt {
