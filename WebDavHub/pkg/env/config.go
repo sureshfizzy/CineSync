@@ -118,3 +118,25 @@ func GetSpoofingBranch() string {
 func GetSpoofingAPIKey() string {
 	return GetString("SPOOFING_API_KEY", "1234567890abcdef1234567890abcdef")
 }
+
+// File Handling configuration functions
+
+func IsReplaceIllegalCharactersEnabled() bool {
+	return IsBool("REPLACE_ILLEGAL_CHARACTERS", true)
+}
+
+func GetColonReplacementMode() string {
+	mode := GetString("COLON_REPLACEMENT", "Smart Replace")
+	validModes := map[string]bool{
+		"Delete":                        true,
+		"Replace with Dash":             true,
+		"Replace with Space Dash":       true,
+		"Replace with Space Dash Space": true,
+		"Smart Replace":                 true,
+	}
+	if !validModes[mode] {
+		logger.Warn("Invalid COLON_REPLACEMENT mode '%s', defaulting to 'Smart Replace'", mode)
+		return "Smart Replace"
+	}
+	return mode
+}

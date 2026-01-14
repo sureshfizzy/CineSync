@@ -6,7 +6,7 @@ export interface FormFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: 'string' | 'boolean' | 'integer' | 'array' | 'password';
+  type?: 'string' | 'boolean' | 'integer' | 'array' | 'password' | 'select';
   required?: boolean;
   description?: string;
   error?: string;
@@ -151,6 +151,36 @@ export const FormField: React.FC<FormFieldProps> = ({
               ),
             }}
           />
+        );
+
+      case 'select':
+        return (
+          <Box>
+            <Select
+              fullWidth
+              value={value}
+              onChange={(e) => onChange(e.target.value as string)}
+              disabled={isFieldDisabled}
+              variant="outlined"
+              size="small"
+            >
+              {options && options.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                  {option === 'Smart Replace' && (
+                    <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                      Dash or Space Dash depending on name
+                    </Typography>
+                  )}
+                </MenuItem>
+              ))}
+            </Select>
+            {(error || description) && (
+              <Typography variant="caption" color={error ? 'error' : 'text.secondary'} sx={{ mt: 0.5, display: 'block' }}>
+                {error || description}
+              </Typography>
+            )}
+          </Box>
         );
 
       default:

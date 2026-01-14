@@ -14,13 +14,14 @@ interface ConfigValue {
   value: string;
   description: string;
   category: string;
-  type: 'string' | 'boolean' | 'integer' | 'array';
+  type: 'string' | 'boolean' | 'integer' | 'array' | 'select';
   required: boolean;
   beta?: boolean;
   disabled?: boolean;
   locked?: boolean;
   lockedBy?: string;
   hidden?: boolean;
+  options?: string[];
 }
 
 interface ConfigResponse {
@@ -171,6 +172,8 @@ const wizardSteps: Step[] = [
     accent: '#ef4444',
     icon: <WarningAmberRounded />,
     keys: [
+      'REPLACE_ILLEGAL_CHARACTERS',
+      'COLON_REPLACEMENT',
       'SKIP_EXTRAS_FOLDER',
       'SHOW_EXTRAS_SIZE_LIMIT',
       'MOVIE_EXTRAS_SIZE_LIMIT',
@@ -465,26 +468,30 @@ export default function SetupWizard() {
           }
           const disabled = controlledDisabled || item.disabled || item.locked;
 
+          const fieldType = item.key.includes('PASSWORD') || item.key.includes('TOKEN') || item.key.includes('KEY')
+            ? 'password'
+            : item.type === 'select'
+              ? 'select'
+              : item.type;
+          
+          const fieldOptions = item.options && item.options.length > 0
+            ? item.options
+            : item.type === 'boolean' || item.key.includes('_ENABLED')
+              ? ['true', 'false']
+              : undefined;
+
           return (
             <Box key={item.key} sx={{ minWidth: 0 }}>
               <FormField
                 label={item.key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
                 value={values[item.key] ?? ''}
                 onChange={(val) => handleChange(item.key, val)}
-                type={
-                  item.key.includes('PASSWORD') || item.key.includes('TOKEN') || item.key.includes('KEY')
-                    ? 'password'
-                    : item.type
-                }
+                type={fieldType}
                 required={item.required}
                 description={item.description}
                 error={validationErrors[item.key]}
                 locked={item.locked}
-                options={
-                  item.type === 'boolean' || item.key.includes('_ENABLED')
-                    ? ['true', 'false']
-                    : undefined
-                }
+                options={fieldOptions}
                 disabled={disabled}
               />
             </Box>
@@ -545,6 +552,7 @@ export default function SetupWizard() {
     SKIP_EXTRAS_FOLDER: 'Skip processing extras folders.',
     SKIP_ADULT_PATTERNS: 'Skip files matching adult patterns.',
     SKIP_VERSIONS: 'Skip extra versions of the same release group (avoid Version 2/3 when only the group differs).',
+    REPLACE_ILLEGAL_CHARACTERS: 'Replace illegal characters. If unchecked, MediaHub will remove them instead.',
     ENABLE_PLEX_UPDATE: 'Trigger Plex library updates after processing.',
     CINESYNC_AUTH_ENABLED: 'Require authentication for UI/API.',
     MEDIAHUB_AUTO_START: 'Auto-start MediaHub service when CineSync starts.',

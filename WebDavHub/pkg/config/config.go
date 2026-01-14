@@ -32,17 +32,18 @@ func SetUpdateRootDirCallback(callback func()) {
 
 // ConfigValue represents a configuration value with metadata
 type ConfigValue struct {
-	Key         string `json:"key"`
-	Value       string `json:"value"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	Type        string `json:"type"` // string, boolean, integer, array
-	Required    bool   `json:"required"`
-	Beta        bool   `json:"beta,omitempty"`
-	Disabled    bool   `json:"disabled,omitempty"`
-	Locked      bool   `json:"locked,omitempty"`
-	LockedBy    string `json:"lockedBy,omitempty"`
-	Hidden      bool   `json:"hidden,omitempty"`
+	Key         string   `json:"key"`
+	Value       string   `json:"value"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	Beta        bool     `json:"beta,omitempty"`
+	Disabled    bool     `json:"disabled,omitempty"`
+	Locked      bool     `json:"locked,omitempty"`
+	LockedBy    string   `json:"lockedBy,omitempty"`
+	Hidden      bool     `json:"hidden,omitempty"`
+	Options     []string `json:"options,omitempty"`
 }
 
 // ConfigResponse represents the response structure for configuration
@@ -284,6 +285,8 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "SKIP_ADULT_PATTERNS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable skipping of specific file patterns"},
 		{Key: "SKIP_VERSIONS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Skip creating extra versions for the same release (avoids Version 2/3 when the release group is the only difference)"},
 		{Key: "FILE_OPERATIONS_AUTO_MODE", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable auto-processing mode for file operations", Hidden: true},
+		{Key: "REPLACE_ILLEGAL_CHARACTERS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Replace illegal characters. If unchecked, MediaHub will remove them instead"},
+		{Key: "COLON_REPLACEMENT", Category: "File Handling Configuration", Type: "select", Required: false, Description: "Colon replacement format", Options: []string{"Delete", "Replace with Dash", "Replace with Space Dash", "Replace with Space Dash Space", "Smart Replace"}},
 
 		// Real-Time Monitoring Configuration
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
@@ -538,6 +541,7 @@ func HandleGetConfig(w http.ResponseWriter, r *http.Request) {
 			Locked:      locked,
 			LockedBy:    lockedBy,
 			Hidden:      def.Hidden,
+			Options:     def.Options,
 		})
 	}
 
@@ -727,8 +731,10 @@ func getConfigDefaults() map[string]string {
 		"4K_SHOW_EXTRAS_SIZE_LIMIT": "800",
 		"4K_MOVIE_EXTRAS_SIZE_LIMIT": "2048",
 		"ALLOWED_EXTENSIONS":        ".mp4,.mkv,.srt,.avi,.mov,.divx,.strm",
-		"SKIP_ADULT_PATTERNS":       "true",
-		"SKIP_VERSIONS":             "false",
+		"SKIP_ADULT_PATTERNS":         "true",
+		"SKIP_VERSIONS":               "false",
+		"REPLACE_ILLEGAL_CHARACTERS": "true",
+		"COLON_REPLACEMENT":          "Smart Replace",
 		// Monitoring
 		"SLEEP_TIME":               "60",
 		"SYMLINK_CLEANUP_INTERVAL": "600",

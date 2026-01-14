@@ -580,3 +580,16 @@ def get_dashboard_timeout():
 def get_dashboard_retry_count():
     """Get number of retries for dashboard requests"""
     return get_env_int('DASHBOARD_RETRY_COUNT', 1)
+
+def is_replace_illegal_characters_enabled():
+    """Check if illegal characters should be replaced (True) or removed (False)."""
+    return os.getenv('REPLACE_ILLEGAL_CHARACTERS', 'true').lower() in ['true', '1', 'yes']
+
+def get_colon_replacement_mode():
+    """Get the colon replacement mode for filenames."""
+    mode = os.getenv('COLON_REPLACEMENT', 'Smart Replace')
+    valid_modes = ['Delete', 'Replace with Dash', 'Replace with Space Dash', 'Replace with Space Dash Space', 'Smart Replace']
+    if mode not in valid_modes:
+        log_message(f"Invalid COLON_REPLACEMENT mode '{mode}'. Using 'Smart Replace'.", level="WARNING")
+        return 'Smart Replace'
+    return mode

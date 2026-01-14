@@ -16,12 +16,13 @@ interface ConfigValue {
   value: string;
   description: string;
   category: string;
-  type: 'string' | 'boolean' | 'integer' | 'array';
+  type: 'string' | 'boolean' | 'integer' | 'array' | 'select';
   required: boolean;
   beta?: boolean;
   disabled?: boolean;
   locked?: boolean;
   hidden?: boolean;
+  options?: string[];
 }
 
 interface ConfigResponse {
@@ -341,6 +342,9 @@ const Settings: React.FC = () => {
   };
 
   const getFieldOptions = (item: ConfigValue): string[] | undefined => {
+    if (item.options && item.options.length > 0) {
+      return item.options;
+    }
     if (item.key === 'SHOW_RESOLUTION_STRUCTURE' || item.key === 'MOVIE_RESOLUTION_STRUCTURE') {
       return ['none', 'year', 'resolution', 'year_resolution'];
     }
@@ -350,11 +354,14 @@ const Settings: React.FC = () => {
     return undefined;
   };
 
-  const getFieldType = (item: ConfigValue): 'string' | 'boolean' | 'integer' | 'array' | 'password' => {
+  const getFieldType = (item: ConfigValue): 'string' | 'boolean' | 'integer' | 'array' | 'password' | 'select' => {
     if (item.key.includes('PASSWORD') || item.key.includes('TOKEN') || item.key.includes('KEY')) {
       return 'password';
     }
-    return item.type;
+    if (item.type === 'select') {
+      return 'select';
+    }
+    return item.type as 'string' | 'boolean' | 'integer' | 'array';
   };
 
   const shouldShowTokenHelper = (item: ConfigValue): boolean => {

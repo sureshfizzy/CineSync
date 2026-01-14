@@ -613,33 +613,66 @@ def get_source_directory_from_symlink(file_path: str) -> str:
 # ============================================================================
 
 def sanitize_windows_filename(filename: str) -> str:
-    """
-    Sanitize a filename to be compatible with the current OS filesystem.
-
-    On Windows: Replaces colons with ' -' and other invalid characters.
-    On Unix/Linux/macOS: Keeps colons valid, only replaces truly invalid characters.
-    """
+    """Sanitize a filename to be compatible with the current OS filesystem."""
     if not isinstance(filename, str):
         return ""
 
     if not filename.strip():
         return "sanitized_filename"
 
-    # Base replacements for all OS
-    replacements = {
-        '/': '-', '\\': '-', '*': 'x', '?': '',
-        '"': "'", '<': '(', '>': ')', '|': '-'
-    }
-    invalid_chars_pattern = r'[\\/*?"<>|]'
+    from MediaHub.config.config import is_replace_illegal_characters_enabled, get_colon_replacement_mode
 
-    if IS_WINDOWS:
-        replacements[':'] = ' -'
-        invalid_chars_pattern = r'[\\/:*?"<>|]'
+    replace_enabled = is_replace_illegal_characters_enabled()
+    colon_mode = get_colon_replacement_mode()
+
+    if replace_enabled:
+        if colon_mode == 'Delete':
+            colon_replacement = ''
+        elif colon_mode == 'Replace with Dash':
+            colon_replacement = '-'
+        elif colon_mode == 'Replace with Space Dash':
+            colon_replacement = ' -'
+        elif colon_mode == 'Replace with Space Dash Space':
+            colon_replacement = ' - '
+        elif colon_mode == 'Smart Replace':
+            colon_replacement = None
+        else:
+            colon_replacement = ' - '
+    else:
+        colon_replacement = ''
+
+    if replace_enabled:
+        replacements = {
+            '/': '-', '\\': '-', '*': 'x', '?': '',
+            '"': "'", '<': '(', '>': ')', '|': '-'
+        }
+    else:
+        replacements = {
+            '/': '', '\\': '', '*': '', '?': '',
+            '"': '', '<': '', '>': '', '|': ''
+        }
+
+    invalid_chars_pattern = r'[\\/:*?"<>|]'
+
+    if colon_mode == 'Smart Replace' and replace_enabled:
+        def smart_colon_replace(match):
+            before = match.group(1) if match.group(1) else ''
+            after = match.group(2) if match.group(2) else ''
+            has_space_before = before.endswith(' ') if before else True
+            has_space_after = after.startswith(' ') if after else True
+            if has_space_before or has_space_after:
+                return before.rstrip() + ' - ' + after.lstrip()
+            else:
+                return before + '-' + after
+        filename = re.sub(r'(.?):(.)?' , smart_colon_replace, filename)
+    elif colon_replacement is not None:
+        replacements[':'] = colon_replacement
 
     for char, replacement in replacements.items():
         filename = filename.replace(char, replacement)
 
     filename = re.sub(invalid_chars_pattern, '', filename)
+    filename = re.sub(r'\s+', ' ', filename)
     filename = filename.strip(' .')
 
     if not filename:
