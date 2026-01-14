@@ -145,11 +145,18 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 		return
 	}
 
-	// Reset global client so it picks up new config on next request
+	_, hasAPIKey := updates["apiKey"]
+	_, hasAdditionalKeys := updates["additionalApiKeys"]
+	tokenChanged := hasAPIKey || hasAdditionalKeys
+
+	// Reset global client and torrent manager
 	realdebrid.ResetGlobalClient()
+	if tokenChanged {
+		realdebrid.ResetTorrentManager()
+	}
 
 	// If API key was updated and enabled, trigger torrent prefetch
-	if _, hasAPIKey := updates["apiKey"]; hasAPIKey {
+	if hasAPIKey {
 		config := configManager.GetConfig()
 		if config.Enabled && config.APIKey != "" {
 			logger.Info("API key updated, triggering torrent fetch...")
@@ -1429,58 +1436,118 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-	// Resolve download URL
-	downloadURL, _, err := tm.GetFileDownloadURL(torrentID, filePath)
-	if err != nil {
-		config := configManager.GetConfig()
-		if config.HttpDavSettings.Enabled && config.HttpDavSettings.UserID != "" {
-			if tryHttpDavFallback(w, r, config, torrentName, filePath) {
+	// Resolve download URL with token rotation retry
+	var downloadURL string
+	var usedToken string
+	var resp *http.Response
+	maxRetries := 3
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		var err error
+		downloadURL, _, err = tm.GetFileDownloadURL(torrentID, filePath)
+		if err != nil {
+			config := configManager.GetConfig()
+			if config.HttpDavSettings.Enabled && config.HttpDavSettings.UserID != "" {
+				if tryHttpDavFallback(w, r, config, torrentName, filePath) {
+					return
+				}
+			}
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+
+		if cached, ok := tm.GetCachedDownloadLink(torrentID, filePath); ok && cached.Token != "" {
+			usedToken = cached.Token
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), "GET", downloadURL, nil)
+		if err != nil {
+			http.Error(w, "Failed to create request", http.StatusInternalServerError)
+			return
+		}
+
+		if reqRange != "" {
+			req.Header.Set("Range", reqRange)
+		}
+
+		req.Header.Set("Connection", "keep-alive")
+
+		resp, err = streamClient.Do(req)
+		if err != nil {
+			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+				Error:     err,
+				Timestamp: time.Now(),
+			})
+
+			if isTimeoutError(err) {
+				if transport, ok := streamClient.Transport.(*http.Transport); ok {
+					transport.CloseIdleConnections()
+				}
+			}
+			
+			http.Error(w, "Failed to fetch file", http.StatusBadGateway)
+			return
+		}
+
+		if resp.StatusCode >= 400 {
+			if dlErr := realdebrid.CheckDownloadResponse(resp); dlErr != nil {
+				resp.Body.Close()
+				
+				if realdebrid.IsBytesLimitReached(dlErr) {
+					client := realdebrid.GetOrCreateClient()
+					if client != nil {
+						tokenMgr := client.GetTokenManager()
+
+						if usedToken != "" {
+							client.HandleBandwidthLimit(usedToken, dlErr)
+						} else {
+							if token, tokenErr := tokenMgr.GetCurrentToken(); tokenErr == nil {
+								client.HandleBandwidthLimit(token, dlErr)
+							}
+						}
+
+						tm.ClearDownloadLinkCache(torrentID, filePath)
+						client.ClearUnrestrictCache()
+
+						if tokenMgr.AreAllTokensExpired() {
+							logger.Error("[Bandwidth] All tokens exhausted - no more bandwidth available")
+							http.Error(w, "All Real-Debrid tokens have exceeded bandwidth limits", http.StatusServiceUnavailable)
+							return
+						}
+						
+						logger.Warn("[Bandwidth] Token bandwidth exceeded, rotating to next token (attempt %d/%d)", attempt+1, maxRetries)
+						continue
+					}
+				}
+				
+				// Non-bandwidth error, don't retry
+				tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+					Error:     dlErr,
+					Timestamp: time.Now(),
+				})
+				logger.Warn("RD download failed for %s: %v", torrentID, dlErr)
+				http.Error(w, fmt.Sprintf("File not available: %v", dlErr), resp.StatusCode)
 				return
 			}
+			
+			// Generic error without X-Error header
+			resp.Body.Close()
+			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+				Error:     fmt.Errorf("download failed with status %d", resp.StatusCode),
+				Timestamp: time.Now(),
+			})
+			logger.Warn("RD download failed for %s with status %d", torrentID, resp.StatusCode)
+			http.Error(w, fmt.Sprintf("File not available (status %d)", resp.StatusCode), resp.StatusCode)
+			return
 		}
-		http.Error(w, "File not found", http.StatusNotFound)
-		return
+		break
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), "GET", downloadURL, nil)
-	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
-		return
-	}
-
-	if reqRange != "" {
-		req.Header.Set("Range", reqRange)
-	}
-
-	req.Header.Set("Connection", "keep-alive")
-
-	resp, err := streamClient.Do(req)
-	if err != nil {
-		tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-			Error:     err,
-			Timestamp: time.Now(),
-		})
-
-		if isTimeoutError(err) {
-			if transport, ok := streamClient.Transport.(*http.Transport); ok {
-				transport.CloseIdleConnections()
-			}
-		}
-		
-		http.Error(w, "Failed to fetch file", http.StatusBadGateway)
+	if resp == nil {
+		http.Error(w, "All tokens exhausted or request failed", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-			Error:     fmt.Errorf("download failed with status %d", resp.StatusCode),
-			Timestamp: time.Now(),
-		})
-		logger.Warn("RD download failed for %s with status %d", torrentID, resp.StatusCode)
-		http.Error(w, fmt.Sprintf("File not available (status %d)", resp.StatusCode), resp.StatusCode)
-		return
-	}
 
 	for key, values := range resp.Header {
 		for _, value := range values {

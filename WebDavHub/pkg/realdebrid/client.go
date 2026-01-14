@@ -64,16 +64,17 @@ type UserInfo struct {
 
 // DownloadLink represents a download link response
 type DownloadLink struct {
-	ID      string `json:"id"`
+	ID       string `json:"id"`
 	Filename string `json:"filename"`
 	MimeType string `json:"mimeType"`
 	Filesize int64  `json:"filesize"`
-	Link    string `json:"link"`
-	Host    string `json:"host"`
-	Chunks  int    `json:"chunks"`
-	CRC     int    `json:"crc"`
+	Link     string `json:"link"`
+	Host     string `json:"host"`
+	Chunks   int    `json:"chunks"`
+	CRC      int    `json:"crc"`
 	Download string `json:"download"`
-	Stream  string `json:"stream"`
+	Stream   string `json:"stream"`
+	Token    string `json:"-"`
 }
 
 // DownloadItem represents a single item from RD downloads
@@ -712,6 +713,9 @@ func (c *Client) UnrestrictLink(link string, filename ...string) (*DownloadLink,
 	if err := json.NewDecoder(resp.Body).Decode(&downloadLink); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
+
+	// Store which token was used to generate this link (for bandwidth limit handling)
+	downloadLink.Token = token
 
 	c.unrestrictCache.Set(processedLink, &DownloadCacheEntry{
 		Download:  &downloadLink,

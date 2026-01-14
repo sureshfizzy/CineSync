@@ -160,10 +160,19 @@ var (
 	torrentManager atomic.Pointer[TorrentManager]
 	torrentOnce    sync.Once
 	torrentApiKey  atomic.Value
+	torrentMutex   sync.Mutex
 )
 
 // GetTorrentManager returns the singleton torrent manager
 func GetTorrentManager(apiKey string) *TorrentManager {
+	if tm := torrentManager.Load(); tm != nil {
+		if storedKey, ok := torrentApiKey.Load().(string); ok && storedKey == apiKey {
+			return tm
+		}
+	}
+
+	torrentMutex.Lock()
+	defer torrentMutex.Unlock()
 	if tm := torrentManager.Load(); tm != nil {
 		if storedKey, ok := torrentApiKey.Load().(string); ok && storedKey == apiKey {
 			return tm
@@ -183,43 +192,43 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 
 		tm.initializeDirectoryMaps()
 
-	initialState := &LibraryState{
-		TotalCount:       0,
-		FirstTorrentID:   "",
-		FirstTorrentName: "",
-		LastUpdated:      time.Now(),
-	}
+		initialState := &LibraryState{
+			TotalCount:       0,
+			FirstTorrentID:   "",
+			FirstTorrentName: "",
+			LastUpdated:      time.Now(),
+		}
 		tm.currentState.Store(initialState)
-	
-    // Open SQLite stores
-    dbPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents.db"))
-    if store, err := OpenTorrentStore(dbPath); err == nil {
-			tm.store = store
-    } else {
-        logger.Warn("[Torrents] Failed to open store at %s: %v", dbPath, err)
-    }
 
-    // Open detailed info store
-    infoDBPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents-info.db"))
-    if infoStore, err := OpenTorrentInfoStore(infoDBPath); err == nil {
+		// Open SQLite stores
+		dbPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents.db"))
+		if store, err := OpenTorrentStore(dbPath); err == nil {
+			tm.store = store
+		} else {
+			logger.Warn("[Torrents] Failed to open store at %s: %v", dbPath, err)
+		}
+
+		// Open detailed info store
+		infoDBPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents-info.db"))
+		if infoStore, err := OpenTorrentInfoStore(infoDBPath); err == nil {
 			tm.infoStore = infoStore
-    } else {
-        logger.Warn("[Torrents] Failed to open torrents-info.db at %s: %v", infoDBPath, err)
-    }
-    
-    // load cached data
+		} else {
+			logger.Warn("[Torrents] Failed to open torrents-info.db at %s: %v", infoDBPath, err)
+		}
+
+		// load cached data
 		tm.loadCachedCineSync()
-	
-    // Load broken torrents from database into cache
+
+		// Load broken torrents from database into cache
 		tm.loadBrokenTorrentsFromDB()
 
-    // Start background refresh job
+		// Start background refresh job
 		tm.startRefreshJob()
 
-    // Start background catalog sync
+		// Start background catalog sync
 		tm.StartCatalogSyncJob(60 * time.Second)
 
-    // Start repair worker to scan for broken torrents
+		// Start repair worker to scan for broken torrents
 		tm.StartRepairWorker()
 
 		// Store atomically
@@ -228,6 +237,32 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 	})
 
 	return torrentManager.Load()
+}
+
+// ResetTorrentManager resets the torrent manager singleton so it can be recreated with new tokens
+func ResetTorrentManager() {
+	torrentMutex.Lock()
+	defer torrentMutex.Unlock()
+
+	tm := torrentManager.Load()
+	if tm != nil {
+		if tm.refreshCancel != nil {
+			tm.refreshCancel()
+		}
+
+		if tm.store != nil {
+			tm.store.Close()
+		}
+		if tm.infoStore != nil {
+			tm.infoStore.Close()
+		}
+
+		logger.Info("[Torrents] TorrentManager reset for token update")
+	}
+
+	torrentManager.Store(nil)
+	torrentApiKey.Store("")
+	torrentOnce = sync.Once{}
 }
 
 // initializeDirectoryMaps creates the concurrent directory maps
@@ -1412,6 +1447,23 @@ func (tm *TorrentManager) DeleteFromRealDebrid(torrentID string) error {
 // GetDownloadLinkCacheCount returns the number of cached download links
 func (tm *TorrentManager) GetDownloadLinkCacheCount() int {
 	return tm.downloadLinkCache.Count()
+}
+
+// ClearDownloadLinkCache clears the cached download link for a specific file
+func (tm *TorrentManager) ClearDownloadLinkCache(torrentID, filePath string) {
+	cacheKey := MakeCacheKey(torrentID, filePath)
+	tm.downloadLinkCache.Remove(cacheKey)
+}
+
+// GetCachedDownloadLink returns the cached download link entry for a file
+func (tm *TorrentManager) GetCachedDownloadLink(torrentID, filePath string) (*DownloadLinkEntry, bool) {
+	cacheKey := MakeCacheKey(torrentID, filePath)
+	if cached, exists := tm.downloadLinkCache.Get(cacheKey); exists {
+		if time.Since(cached.GeneratedAt) < 24*time.Hour {
+			return cached, true
+		}
+	}
+	return nil, false
 }
 
 // GetFailedFileCacheCount returns the number of cached failed file entries

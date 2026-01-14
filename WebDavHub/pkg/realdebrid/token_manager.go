@@ -43,8 +43,8 @@ func NewTokenManager(tokenStrings []string) *TokenManager {
 
 // GetCurrentToken returns the current non-expired token
 func (tm *TokenManager) GetCurrentToken() (string, error) {
-	tm.mu.RLock()
-	defer tm.mu.RUnlock()
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 
 	if len(tm.tokens) == 0 {
 		return "", fmt.Errorf("no tokens available")
