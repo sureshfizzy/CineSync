@@ -61,16 +61,9 @@ func getMediaHubPaths() (string, string, string, error) {
 	// Go up one level to get to the CineSync root
 	rootDir := filepath.Dir(cwd)
 	mediaHubDir := filepath.Join(rootDir, "MediaHub")
-
-	// Use the same paths that the Python script uses
-	var lockFile, monitorPidFile string
-	if runtime.GOOS == "windows" {
-		lockFile = "C:\\temp\\polling_monitor.lock"
-		monitorPidFile = "C:\\temp\\monitor_pid.txt"
-	} else {
-		lockFile = "/tmp/polling_monitor.lock"
-		monitorPidFile = "/tmp/monitor_pid.txt"
-	}
+	dbDir := filepath.Join(rootDir, "db")
+	lockFile := filepath.Join(dbDir, "polling_monitor.lock")
+	monitorPidFile := filepath.Join(dbDir, "monitor_pid.txt")
 
 	return mediaHubDir, lockFile, monitorPidFile, nil
 }

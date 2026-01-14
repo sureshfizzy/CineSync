@@ -26,7 +26,7 @@ if getattr(sys, 'frozen', False):
 else:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from MediaHub.utils.system_utils import is_frozen, get_application_path
+from MediaHub.utils.system_utils import is_frozen, get_application_path, get_db_directory
 
 # Local imports from MediaHub
 from MediaHub.config.config import *
@@ -46,8 +46,9 @@ if is_frozen():
     POLLING_MONITOR_PATH = None
 else:
     POLLING_MONITOR_PATH = os.path.join(os.path.dirname(__file__), 'monitor', 'polling_monitor.py')
-LOCK_FILE = '/tmp/polling_monitor.lock' if platform.system() != 'Windows' else 'C:\\temp\\polling_monitor.lock'
-MONITOR_PID_FILE = '/tmp/monitor_pid.txt' if platform.system() != 'Windows' else 'C:\\temp\\monitor_pid.txt'
+DB_DIR = str(get_db_directory())
+LOCK_FILE = os.path.join(DB_DIR, 'polling_monitor.lock')
+MONITOR_PID_FILE = os.path.join(DB_DIR, 'monitor_pid.txt')
 LOCK_TIMEOUT = 3600
 
 # Set up global variables to track processes
@@ -138,6 +139,7 @@ def is_process_running(pid):
 
 def create_lock_file():
     """Create the lock file and write the process ID and timestamp."""
+    os.makedirs(DB_DIR, exist_ok=True)
     with open(LOCK_FILE, 'w') as lock_file:
         lock_file.write(f"{os.getpid()}\n")
         lock_file.write(f"{time.time()}\n")
