@@ -486,8 +486,6 @@ def start_webdav_server():
         except Exception as e:
             log_message(f"Failed to start CineSync server: {e}", level="ERROR")
     else:
-        log_message(f"CineSync executable not found at: {webdav_script}", level="ERROR")
-        # Check if dashboard is available anyway (might be running externally)
         check_dashboard_availability()
 
 def main(dest_dir):

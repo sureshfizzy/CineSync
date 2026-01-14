@@ -20,6 +20,7 @@ import (
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/mediahub"
+	"cinesync/pkg/realdebrid"
 )
 
 // MediaHub service management
@@ -139,13 +140,16 @@ func StartMediaHubService() error {
 		return fmt.Errorf("MediaHub service is already running")
 	}
 
+	// Block start if inbuilt mount is configured but not yet ready
+	if realdebrid.IsMountConfigured() && !realdebrid.IsMountReady() {
+		return fmt.Errorf("cannot start MediaHub: inbuilt mount is not ready yet")
+	}
+
 	// Get MediaHub executable configuration
 	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
 		return fmt.Errorf("failed to get MediaHub executable: %v", err)
 	}
-
-	logger.Info("Starting MediaHub using: %s", mediaHubExec.String())
 
 	// Get command and arguments
 	cmd, args := mediaHubExec.GetCommand("--auto-select")
@@ -215,15 +219,16 @@ func StartMediaHubMonitorService() error {
 		return fmt.Errorf("MediaHub monitor is already running")
 	}
 
-	scriptPath, _, _, err := getMediaHubPaths()
+	// Get MediaHub executable configuration
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		return fmt.Errorf("failed to get MediaHub paths: %v", err)
+		return fmt.Errorf("failed to get MediaHub executable: %v", err)
 	}
 
 	// Start monitor-only process
-	pythonCmd := getPythonCommandForMediaHub()
-	monitorProcess := exec.Command(pythonCmd, scriptPath, "--monitor-only")
-	monitorProcess.Dir = filepath.Dir(scriptPath)
+	cmd, args := mediaHubExec.GetCommand("--monitor-only")
+	monitorProcess := exec.Command(cmd, args...)
+	monitorProcess.Dir = mediaHubExec.WorkDir
 
 	// Create pipes to capture monitor output for auto-start
 	stdout, err := monitorProcess.StdoutPipe()
@@ -399,6 +404,17 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 			"success": false,
 			"message": "MediaHub service is already running",
 			"status":  status,
+		})
+		return
+	}
+
+	// Block start if inbuilt mount is configured but not yet ready
+	if realdebrid.IsMountConfigured() && !realdebrid.IsMountReady() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Cannot start MediaHub: Inbuilt mount is not ready yet. Please wait for the mount to complete.",
 		})
 		return
 	}

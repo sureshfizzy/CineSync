@@ -456,6 +456,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 		status := rcloneManager.GetStatus(rc.MountPath)
 		if status != nil && status.Mounted {
 			logger.Info("Rclone already mounted at startup on %s", rc.MountPath)
+			realdebrid.SetMountReady()
 			return
 		}
 
@@ -470,6 +471,16 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 		go func() {
 			// Wait longer for the server to fully initialize and startup summary to display
 			time.Sleep(10 * time.Second)
+
+			// If inbuilt mount is configured, wait for it to be ready before starting MediaHub
+			if realdebrid.IsMountConfigured() {
+				logger.Info("Inbuilt mount is configured, waiting for mount to be ready before starting MediaHub...")
+
+				for !realdebrid.IsMountReady() {
+					time.Sleep(1 * time.Second)
+				}
+				logger.Info("Mount is ready, proceeding with MediaHub auto-start")
+			}
 
 			logger.Info("Auto-starting MediaHub service (includes built-in RTM)...")
 
@@ -495,51 +506,25 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 
 	// Auto-start standalone RTM if enabled (only when MediaHub service is not running)
 	if env.IsBool("RTM_AUTO_START", false) {
-		// Check if MediaHub auto-start is also enabled
-		if env.IsBool("MEDIAHUB_AUTO_START", true) {
-			logger.Warn("Both MEDIAHUB_AUTO_START and RTM_AUTO_START are enabled. MediaHub service includes RTM, so standalone RTM auto-start will be skipped.")
-		}
-
 		go func() {
-			// Wait longer to ensure startup summary displays first
-			time.Sleep(12 * time.Second)
+			// Wait for server initialization
+			time.Sleep(10 * time.Second)
 
-			logger.Info("Auto-starting standalone Real-Time Monitor...")
-
-			// Check multiple times to ensure MediaHub has had time to start
-			for i := 0; i < 3; i++ {
-				status, err := api.GetMediaHubStatus()
-				if err != nil {
-					logger.Warn("Failed to check MediaHub status for standalone RTM auto-start (attempt %d): %v", i+1, err)
-					time.Sleep(2 * time.Second)
-					continue
+			// Wait for mount to be ready if configured
+			if realdebrid.IsMountConfigured() {
+				for !realdebrid.IsMountReady() {
+					time.Sleep(1 * time.Second)
 				}
-
-				// Only start standalone RTM if MediaHub service is not running
-				if status.IsRunning {
-					logger.Info("MediaHub service is running, skipping standalone RTM auto-start")
-					return
-				}
-
-				// If MediaHub auto-start is enabled, wait a bit more for it to start
-				if env.IsBool("MEDIAHUB_AUTO_START", true) && i < 2 {
-					logger.Debug("MediaHub auto-start is enabled but service not running yet, waiting...")
-					time.Sleep(3 * time.Second)
-					continue
-				}
-
-				break
 			}
 
-			// Final check and start RTM if needed
 			status, err := api.GetMediaHubStatus()
 			if err != nil {
-				logger.Error("Failed final MediaHub status check for RTM auto-start: %v", err)
+				logger.Error("Failed to check MediaHub status for RTM auto-start: %v", err)
 				return
 			}
 
+			// Skip if MediaHub is running (it includes RTM)
 			if status.IsRunning {
-				logger.Info("MediaHub service is running, standalone RTM auto-start cancelled")
 				return
 			}
 
@@ -547,11 +532,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 				logger.Info("Starting standalone RTM automatically...")
 				if err := api.StartMediaHubMonitorService(); err != nil {
 					logger.Error("Failed to auto-start standalone RTM: %v", err)
-				} else {
-					logger.Info("Standalone RTM auto-started successfully")
 				}
-			} else {
-				logger.Info("Standalone RTM is already running")
 			}
 		}()
 	}

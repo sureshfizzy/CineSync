@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	
-	"cinesync/pkg/logger"
 )
 
 // MediaHubExecutable
@@ -30,10 +28,8 @@ func GetMediaHubExecutable() (*MediaHubExecutable, error) {
 	if basename == "WebDavHub" {
 		parentDir := filepath.Dir(cwd)
 		mediaHubDir = filepath.Join(parentDir, "MediaHub")
-		logger.Debug("GetMediaHubExecutable: Running from WebDavHub, MediaHub dir: %s", mediaHubDir)
 	} else {
 		mediaHubDir = filepath.Join(cwd, "MediaHub")
-		logger.Debug("GetMediaHubExecutable: MediaHub dir: %s", mediaHubDir)
 	}
 
 	// Determine the executable name based on OS
@@ -47,7 +43,6 @@ func GetMediaHubExecutable() (*MediaHubExecutable, error) {
 	exePath := filepath.Join(mediaHubDir, exeName)
 	scriptPath := filepath.Join(mediaHubDir, "main.py")
 
-	logger.Debug("GetMediaHubExecutable: Checking for compiled exe at: %s", exePath)
 	if _, err := os.Stat(exePath); err == nil {
 		return &MediaHubExecutable{
 			Path:       exePath,
@@ -58,7 +53,6 @@ func GetMediaHubExecutable() (*MediaHubExecutable, error) {
 	}
 
 	if _, err := os.Stat(scriptPath); err == nil {
-		logger.Info("GetMediaHubExecutable: Found Python script at: %s", scriptPath)
 		return &MediaHubExecutable{
 			Path:       scriptPath,
 			Args:       []string{},

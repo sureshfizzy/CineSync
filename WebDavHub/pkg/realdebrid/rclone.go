@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cinesync/pkg/env"
@@ -40,6 +41,7 @@ type RcloneManager struct {
 var (
 	rcloneManager *RcloneManager
 	rcloneOnce    sync.Once
+	mountReady    atomic.Bool
 )
 
 // GetRcloneManager returns the singleton rclone manager
@@ -48,10 +50,30 @@ func GetRcloneManager() *RcloneManager {
 		rcloneManager = &RcloneManager{
 			mounts: make(map[string]*RcloneMount),
 		}
-		// Start background cleanup routine
 		go rcloneManager.startCleanupRoutine()
 	})
 	return rcloneManager
+}
+
+// IsMountReady returns true if the mount has been successfully completed
+func IsMountReady() bool {
+	return mountReady.Load()
+}
+
+// SetMountReady marks the mount as ready
+func SetMountReady() {
+	mountReady.Store(true)
+}
+
+// IsMountConfigured returns true if rclone mount is enabled and configured with auto-mount
+func IsMountConfigured() bool {
+	cfgMgr := GetConfigManager()
+	cfg := cfgMgr.GetConfig()
+	if !cfg.Enabled {
+		return false
+	}
+	rc := cfg.RcloneSettings
+	return rc.Enabled && rc.AutoMountOnStart && rc.MountPath != ""
 }
 
 // GetServerOS returns the server's operating system
@@ -151,6 +173,7 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	// Check if already mounted
 	if mount, exists := rm.mounts[config.MountPath]; exists {
 		if rm.isProcessRunning(mount.ProcessID) {
+			SetMountReady()
 			return &MountStatus{
 				Mounted:    true,
 				MountPath:  mount.MountPath,
@@ -305,6 +328,9 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	rm.mounts[config.MountPath] = mount
 
 	logger.Info("Rclone mount started successfully: PID=%d, Path=%s", actualPid, config.MountPath)
+
+	// Signal that mount is ready for other services waiting on it
+	SetMountReady()
 
 	return &MountStatus{
 		Mounted:   true,
