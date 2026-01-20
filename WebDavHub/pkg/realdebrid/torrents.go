@@ -539,7 +539,6 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 			missingInfoIDs = append(missingInfoIDs, newItem.ID)
 		}
 	}
-		preservedFromCache, alreadyCachedCount)
 
 	newState := &LibraryState{
 		TotalCount:       len(torrents),
@@ -1603,7 +1602,7 @@ func (tm *TorrentManager) restoreBrokenFileStates(infoMap map[string]*TorrentInf
 	}
 	
 	// Batch update files that needed state initialization
-	for torrentID, info := range needsUpdate {
+	for _, info := range needsUpdate {
 		if tm.store != nil {
 			_ = tm.store.SaveInfo(info)
 		}
