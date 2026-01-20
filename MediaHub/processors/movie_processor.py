@@ -271,7 +271,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             return None, None
 
     log_message(f"Found movie: {proper_movie_name}", level="INFO")
-    movie_folder = proper_movie_name.replace('/', '-')
+    movie_folder = sanitize_windows_filename(proper_movie_name)
 
     # Extract resolution from filename and parent folder
     file_resolution = extract_resolution_from_filename(file)
@@ -295,6 +295,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 collection_folder = f"{collection_name} [tmdbid-{collection_id}]"
             else:
                 collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
+            collection_folder = sanitize_windows_filename(collection_folder)
             dest_path = os.path.join(dest_dir, 'CineSync', resolution_folder ,collection_folder, movie_folder)
         else:
             if is_cinesync_layout_enabled():
@@ -350,6 +351,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 collection_folder = f"{collection_name} [tmdbid-{collection_id}]"
             else:
                 collection_folder = f"{collection_name} {{tmdb-{collection_id}}}"
+            collection_folder = sanitize_windows_filename(collection_folder)
             dest_path = os.path.join(dest_dir, 'CineSync', 'Movies', resolution_folder, collection_folder, movie_folder)
         else:
             movie_folder = proper_movie_name
@@ -370,7 +372,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 else:
                     movie_folder = re.sub(r' \{tmdb-[^}]+\}', '', movie_folder)
 
-            movie_folder = movie_folder.replace('/', '')
+            movie_folder = sanitize_windows_filename(movie_folder)
 
             # Set destination path for non-collection movies
             if is_cinesync_layout_enabled():
@@ -570,6 +572,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             details_str = ' '.join(details_parts)
             enhanced_movie_folder = f"{clean_movie_name} {details_str}".strip()
 
+        enhanced_movie_folder = sanitize_windows_filename(enhanced_movie_folder)
         new_name = f"{enhanced_movie_folder}{os.path.splitext(file)[1]}"
     else:
         new_name = file

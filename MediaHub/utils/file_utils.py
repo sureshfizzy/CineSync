@@ -639,6 +639,8 @@ def sanitize_windows_filename(filename: str) -> str:
         else:
             colon_replacement = ' - '
     else:
+        if not IS_WINDOWS:
+            return filename
         colon_replacement = ''
 
     if replace_enabled:
@@ -666,7 +668,16 @@ def sanitize_windows_filename(filename: str) -> str:
                 return before + '-' + after
         filename = re.sub(r'(.?):(.)?' , smart_colon_replace, filename)
     elif colon_replacement is not None:
-        replacements[':'] = colon_replacement
+        if colon_mode == 'Replace with Dash':
+            filename = re.sub(r'\s*:\s*', colon_replacement, filename)
+        elif colon_mode == 'Replace with Space Dash':
+            filename = re.sub(r'\s*:\s*', colon_replacement, filename)
+        elif colon_mode == 'Replace with Space Dash Space':
+            filename = re.sub(r'\s*:\s*', colon_replacement, filename)
+        elif colon_mode == 'Delete':
+            filename = re.sub(r'\s*:\s*', ' ', filename)
+        else:
+            replacements[':'] = colon_replacement
 
     for char, replacement in replacements.items():
         filename = filename.replace(char, replacement)

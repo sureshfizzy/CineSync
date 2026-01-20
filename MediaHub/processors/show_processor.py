@@ -421,7 +421,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     episode_identifier = air_date
                 create_season_folder = True
 
-    show_folder = show_folder.replace('/', '')
+    show_folder = sanitize_windows_filename(show_folder)
 
     # Only retrieve episode data if not already provided by anime processor
     if episode_identifier and not is_extra and not is_daily_show and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
@@ -663,6 +663,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         episode_number, episode_identifier, episode_name,
                         content_type=content_type, absolute_episode=absolute_episode, air_date=air_date
                     )
+                    new_name = sanitize_windows_filename(new_name)
                 elif is_daily_show:
                     content_type = "daily"
                     show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
@@ -671,6 +672,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         episode_number, episode_identifier, episode_name,
                         content_type=content_type, air_date=air_date
                     )
+                    new_name = sanitize_windows_filename(new_name)
                 else:
                     show_name_for_sonarr = locals().get('proper_show_name_with_ids', proper_show_name)
                     new_name = get_sonarr_episode_filename(
@@ -678,6 +680,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                         episode_number, episode_identifier, episode_name,
                         content_type=content_type
                     )
+                    new_name = sanitize_windows_filename(new_name)
 
                 # Check if Sonarr naming returned a basic legacy format
                 file_ext = os.path.splitext(file)[1]
@@ -750,6 +753,7 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
                     new_name = f"{base_name}{os.path.splitext(file)[1]}"
 
                 new_name = re.sub(r'-{2,}', '-', new_name).strip('-')
+                new_name = sanitize_windows_filename(new_name)
 
             dest_file = os.path.join(season_dest_path, new_name)
         else:
