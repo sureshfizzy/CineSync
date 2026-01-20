@@ -23,22 +23,11 @@ func DirectoryResponse(buf *bytes.Buffer, path, added string) {
 
 	escapedPath := pathEscape(path)
 	
-	buf.WriteString(`<d:response>
-	<d:href>`)
+	buf.WriteString(`<d:response><d:href>`)
 	buf.WriteString(escapedPath)
-	buf.WriteString(`</d:href>
-	<d:propstat>
-		<d:prop>
-			<d:resourcetype>
-				<d:collection/>
-			</d:resourcetype>
-			<d:getlastmodified>`)
+	buf.WriteString(`</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype><d:getlastmodified>`)
 	buf.WriteString(rfc1123Time)
-	buf.WriteString(`</d:getlastmodified>
-		</d:prop>
-		<d:status>HTTP/1.1 200 OK</d:status>
-	</d:propstat>
-</d:response>`)
+	buf.WriteString(`</d:getlastmodified></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`)
 }
 
 // FileResponse writes a file response to the provided buffer.
@@ -57,23 +46,13 @@ func FileResponse(buf *bytes.Buffer, path string, fileSize int64, added string) 
 	escapedPath := pathEscape(path)
 	sizeStr := strconv.FormatInt(fileSize, 10)
 	
-	buf.WriteString(`<d:response>
-	<d:href>`)
+	buf.WriteString(`<d:response><d:href>`)
 	buf.WriteString(escapedPath)
-	buf.WriteString(`</d:href>
-	<d:propstat>
-		<d:prop>
-			<d:getcontentlength>`)
+	buf.WriteString(`</d:href><d:propstat><d:prop><d:getcontentlength>`)
 	buf.WriteString(sizeStr)
-	buf.WriteString(`</d:getcontentlength>
-			<d:getlastmodified>`)
+	buf.WriteString(`</d:getcontentlength><d:getlastmodified>`)
 	buf.WriteString(rfc1123Time)
-	buf.WriteString(`</d:getlastmodified>
-			<d:resourcetype></d:resourcetype>
-		</d:prop>
-		<d:status>HTTP/1.1 200 OK</d:status>
-	</d:propstat>
-</d:response>`)
+	buf.WriteString(`</d:getlastmodified><d:resourcetype></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`)
 }
 
 func pathEscape(path string) string {

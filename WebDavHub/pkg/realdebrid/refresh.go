@@ -313,8 +313,8 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 					resultChan <- loadResult{index: idx, item: torrent}
 					return
 				}
-				if tm.infoStore != nil {
-					if cached, ok, err := tm.infoStore.Get(torrent.ID); err == nil && ok && cached != nil {
+				if tm.store != nil {
+				if cached, err := tm.store.LoadInfo(torrent.ID); err == nil && cached != nil {
 						torrent.CachedFiles = cached.Files
 						torrent.CachedLinks = cached.Links
 						torrent.Ended = cached.Ended
@@ -327,8 +327,9 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 					torrent.CachedFiles = info.Files
 					torrent.CachedLinks = info.Links
 					torrent.Ended = info.Ended
-					if tm.infoStore != nil {
-						_ = tm.infoStore.Upsert(info)
+					if tm.store != nil {
+						tm.initializeFileStates(info)
+						_ = tm.store.SaveInfo(info)
 					}
 					
 					logger.Debug("[Refresh] Loaded %d files for new torrent %s", len(info.Files), torrent.ID[:8])

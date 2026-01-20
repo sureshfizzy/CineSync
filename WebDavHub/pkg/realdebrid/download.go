@@ -128,9 +128,20 @@ func (tm *TorrentManager) fetchDownloadLink(torrentID, filePath string) (string,
 			return "", 0, fmt.Errorf("refreshed torrent info is nil")
 		}
 		
-		if tm.infoStore != nil {
-			_ = tm.infoStore.Upsert(refreshedInfo)
+		if tm.store != nil {
+			if existing, err := tm.store.LoadInfo(torrentID); err == nil && existing != nil {
+				tm.preserveFileStates(refreshedInfo, existing)
+			} else {
+				tm.initializeFileStates(refreshedInfo)
+			}
+			_ = tm.store.SaveInfo(refreshedInfo)
 		}
+		
+		if refreshedInfo.Progress == 100 {
+			tm.InfoMap.Set(torrentID, refreshedInfo)
+		}
+		
+		info = refreshedInfo
 		
 		if refreshedInfo.Progress == 100 {
 			tm.InfoMap.Set(torrentID, refreshedInfo)
@@ -270,8 +281,11 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 		return false, fmt.Errorf("refreshed torrent info is nil")
 	}
 	
-	if tm.infoStore != nil {
-		_ = tm.infoStore.Upsert(refreshedInfo)
+	if tm.store != nil {
+		if existing, err := tm.store.LoadInfo(torrentID); err == nil && existing != nil {
+			tm.preserveFileStates(refreshedInfo, existing)
+		}
+		_ = tm.store.SaveInfo(refreshedInfo)
 	}
 	
 	if refreshedInfo.Progress == 100 {
@@ -370,8 +384,7 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 		for _, file := range videoFiles {
 			cleanPath := strings.Trim(file.Path, "/")
 			fileName := path.Base(cleanPath)
-			cacheKey := MakeCacheKey(originalTorrentID, fileName)
-			tm.failedFileCache.Remove(cacheKey)
+			tm.markFileAsOk(originalTorrentID, fileName)
 		}
 		return true, nil
 	}
@@ -548,15 +561,8 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 		return nil, fmt.Errorf("failed to reinsert torrent: empty links")
 	}
 	
-	if tm.infoStore != nil {
-		_ = tm.infoStore.Upsert(newInfo)
-		if oldID != "" && oldID != newInfo.ID {
-			_ = tm.infoStore.Delete(oldID)
-		}
-	}
-	
 	if tm.store != nil {
-		_ = tm.store.UpsertInfo(newInfo)
+		_ = tm.store.SaveInfo(newInfo)
 		if oldID != "" && oldID != newInfo.ID {
 			_ = tm.store.DeleteByID(oldID)
 		}

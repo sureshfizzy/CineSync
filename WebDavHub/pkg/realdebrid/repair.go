@@ -595,8 +595,13 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
             continue
         }
 
-        if tm.infoStore != nil {
-            _ = tm.infoStore.Upsert(refreshedInfo)
+        if tm.store != nil {
+            if existing, err := tm.store.LoadInfo(item.ID); err == nil && existing != nil {
+                tm.preserveFileStates(refreshedInfo, existing)
+            } else {
+                tm.initializeFileStates(refreshedInfo)
+            }
+            _ = tm.store.SaveInfo(refreshedInfo)
         }
 
         if refreshedInfo.Progress == 100 {

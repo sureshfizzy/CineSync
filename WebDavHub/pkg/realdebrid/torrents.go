@@ -126,6 +126,7 @@ type TorrentManager struct {
 	downloadLinkCache cmap.ConcurrentMap[string, *DownloadLinkEntry]
 	failedFileCache   cmap.ConcurrentMap[string, *FailedFileEntry]
 	brokenTorrentCache cmap.ConcurrentMap[string, *FailedFileEntry]
+	davResponseCache cmap.ConcurrentMap[string, *DavCacheEntry]
 	downloadSG singleflight.Group
 	infoSG     singleflight.Group
 	currentState      atomic.Pointer[LibraryState]
@@ -141,8 +142,7 @@ type TorrentManager struct {
 	httpDavLinksCache    []HttpDavFileInfo
 	httpDavCacheMutex    sync.RWMutex
 	httpDavLastCacheTime time.Time
-    store     *TorrentStore
-    infoStore *TorrentInfoStore
+	store *CineSyncStore
 }
 
 // DownloadLinkEntry includes TTL tracking
@@ -154,6 +154,11 @@ type DownloadLinkEntry struct {
 type infoCacheEntry struct {
     info *TorrentInfo
     storedAt time.Time
+}
+
+type DavCacheEntry struct {
+	Key string
+	XML []byte
 }
 
 var (
@@ -186,6 +191,7 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 			failedFileCache:    cmap.New[*FailedFileEntry](),
 			brokenTorrentCache: cmap.New[*FailedFileEntry](),
 			idToItemMap:        cmap.New[*TorrentItem](),
+			davResponseCache:   cmap.New[*DavCacheEntry](),
 			refreshInterval:    DEFAULT_REFRESH_INTERVAL,
 			initialized:        make(chan struct{}),
 		}
@@ -199,24 +205,14 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 			LastUpdated:      time.Now(),
 		}
 		tm.currentState.Store(initialState)
-
-		// Open SQLite stores
-		dbPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents.db"))
-		if store, err := OpenTorrentStore(dbPath); err == nil {
+		storeDir, _ := filepath.Abs(filepath.Join("..", TorrentsDir))
+		if store, err := OpenCineSyncStore(storeDir); err == nil {
 			tm.store = store
 		} else {
-			logger.Warn("[Torrents] Failed to open store at %s: %v", dbPath, err)
+			logger.Warn("[Torrents] Failed to open CineSync store at %s: %v", storeDir, err)
 		}
 
-		// Open detailed info store
-		infoDBPath, _ := filepath.Abs(filepath.Join("..", "db", "torrents-info.db"))
-		if infoStore, err := OpenTorrentInfoStore(infoDBPath); err == nil {
-			tm.infoStore = infoStore
-		} else {
-			logger.Warn("[Torrents] Failed to open torrents-info.db at %s: %v", infoDBPath, err)
-		}
-
-		// load cached data
+		// load cached data from files
 		tm.loadCachedCineSync()
 
 		// Load broken torrents from database into cache
@@ -253,9 +249,6 @@ func ResetTorrentManager() {
 		if tm.store != nil {
 			tm.store.Close()
 		}
-		if tm.infoStore != nil {
-			tm.infoStore.Close()
-		}
 
 		logger.Info("[Torrents] TorrentManager reset for token update")
 	}
@@ -272,17 +265,29 @@ func (tm *TorrentManager) initializeDirectoryMaps() {
 	tm.DirectoryMap.Set(ALL_TORRENTS, cmap.New[*TorrentItem]())
 }
 
-// loadCachedTorrents loads from SQLite and AGGRESSIVELY populates ALL file lists in memory
+// loadCachedTorrents loads from file-based store and populates ALL file lists in memory
 func (tm *TorrentManager) loadCachedTorrents() {
-	logger.Info("[LoadCache] Starting to load cached torrents from SQLite")
+	logger.Info("[LoadCache] Starting to load cached torrents from CineSync files")
 	
 	if tm.store == nil {
 		logger.Warn("[LoadCache] Store not available for loading cached torrents")
 		return
 	}
 	
-	logger.Debug("[LoadCache] Fetching all items from SQLite...")
-	items, err := tm.store.GetAllItems()
+	startTime := time.Now()
+	infoMap, err := tm.store.LoadAllInfoParallel()
+	if err != nil {
+		logger.Warn("[LoadCache] Failed to batch load info: %v", err)
+		infoMap = make(map[string]*TorrentInfo)
+	}
+	infoLoadTime := time.Since(startTime)
+	logger.Info("[LoadCache] Loaded %d info files in %.1fs", len(infoMap), infoLoadTime.Seconds())
+	
+	brokenFileCount := tm.restoreBrokenFileStates(infoMap)
+	if brokenFileCount > 0 {
+	}
+
+	items, err := tm.store.LoadAllItems()
 	if err != nil {
 		logger.Error("[LoadCache] Failed to get items from store: %v", err)
 		return
@@ -293,28 +298,38 @@ func (tm *TorrentManager) loadCachedTorrents() {
 		return
 	}
 	
-	logger.Info("[LoadCache] Found %d torrents in SQLite, loading file lists into memory", len(items))
+	logger.Info("[LoadCache] Found %d torrents, populating memory maps...", len(items))
 	
 	// Get directory map
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	
 	// Load torrents with file lists FULLY cached in memory
 	loadedCount := 0
-	startTime := time.Now()
-	
 	missingInfoIDs := make([]string, 0)
+	
 	for i := range items {
-		item := &items[i]
+		csi := &items[i]
+		item := &TorrentItem{
+			ID:       csi.ID,
+			Filename: csi.Filename,
+			Bytes:    csi.Bytes,
+			Files:    csi.Files,
+			Status:   csi.Status,
+			Added:    csi.Added,
+			Ended:    csi.Ended,
+		}
+		
 		accessKey := GetDirectoryName(item.Filename)
-		if tm.infoStore != nil {
-			if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
-				item.CachedFiles = cached.Files
-				item.CachedLinks = cached.Links
-				item.Ended = cached.Ended
-				loadedCount++
-			} else {
-				missingInfoIDs = append(missingInfoIDs, item.ID)
+		if info, ok := infoMap[csi.ID]; ok && info != nil {
+			item.CachedFiles = info.Files
+			item.CachedLinks = info.Links
+			item.Ended = info.Ended
+			if info.Progress == 100 {
+				tm.InfoMap.Set(csi.ID, info)
 			}
+			loadedCount++
+		} else {
+			missingInfoIDs = append(missingInfoIDs, csi.ID)
 		}
 		
 		allTorrents.Set(accessKey, item)
@@ -322,7 +337,7 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 	
 	elapsed := time.Since(startTime)
-	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents loaded: %d with cached files, %d need fetching", 
+	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents: %d with files, %d need enrichment", 
 		elapsed.Seconds(), len(items), loadedCount, len(missingInfoIDs))
 
 	newState := &LibraryState{
@@ -338,11 +353,9 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 
 	tm.updateCurrentState(newState)
-	logger.Info("[LoadCache] Current state updated: %d total torrents", len(items))
 
 	if len(missingInfoIDs) > 0 {
-		logger.Info("[LoadCache] Starting background fetch for %d torrents without cached info", len(missingInfoIDs))
-		go tm.backgroundFetchMissingInfo(missingInfoIDs)
+		logger.Info("[LoadCache] %d torrents need info fetch", len(missingInfoIDs))
 	}
 }
 
@@ -351,13 +364,13 @@ func (tm *TorrentManager) loadCachedCineSync() {
 	tm.loadCachedTorrents()
 }
 
-// loadBrokenTorrentsFromDB loads broken torrent entries
+// loadBrokenTorrentsFromDB loads broken torrent entries from file-based store
 func (tm *TorrentManager) loadBrokenTorrentsFromDB() {
 	if tm.store == nil {
 		return
 	}
 
-	repairEntries, err := tm.store.GetAllRepairs()
+	repairEntries, err := tm.store.LoadAllRepairs()
 	if err != nil {
 		return
 	}
@@ -376,13 +389,26 @@ func (tm *TorrentManager) loadBrokenTorrentsFromDB() {
 	}
 }
 
+// backgroundFetchRunning prevents concurrent background fetch operations
+var backgroundFetchRunning atomic.Bool
+
 // backgroundFetchMissingInfo fetches torrent info for IDs that weren't cached
 func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
+	if !backgroundFetchRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer backgroundFetchRunning.Store(false)
+
 	const maxWorkers = 10
 	const batchSize = 100
 	successCount := 0
 	failCount := 0
 	startTime := time.Now()
+
+	// Initialize enrichment counters
+	EnrichTotal.Store(int64(len(torrentIDs)))
+	EnrichProcessed.Store(0)
+	EnrichSaved.Store(0)
 
 	for batchStart := 0; batchStart < len(torrentIDs); batchStart += batchSize {
 		batchEnd := batchStart + batchSize
@@ -401,6 +427,10 @@ func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
 				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
 
+				// Track API worker usage
+				CineSyncAPIInUse.Add(1)
+				defer CineSyncAPIInUse.Add(-1)
+
 				info, err := tm.client.GetTorrentInfo(id)
 				if err == nil && info != nil {
 					if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
@@ -408,17 +438,29 @@ func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
 						item.CachedLinks = info.Links
 						item.Ended = info.Ended
 
-						if tm.infoStore != nil {
-							_ = tm.infoStore.Upsert(info)
+						// Populate InfoMap for fast lookups
+						if info.Progress == 100 {
+							tm.InfoMap.Set(id, info)
 						}
+
+						CineSyncIOInUse.Add(1)
 						if tm.store != nil {
-							_ = tm.store.UpsertInfo(info)
+							if existing, err := tm.store.LoadInfo(id); err == nil && existing != nil {
+								tm.preserveFileStates(info, existing)
+							} else {
+								tm.initializeFileStates(info)
+							}
+							_ = tm.store.SaveInfo(info)
 						}
+						CineSyncIOInUse.Add(-1)
+
 						successCount++
+						EnrichSaved.Add(1)
 					}
 				} else {
 					failCount++
 				}
+				EnrichProcessed.Add(1)
 			}(torrentID)
 		}
 
@@ -439,18 +481,65 @@ func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
 
 // SetPrefetchedTorrents seeds the torrent manager with prefetched data and caches files in memory
 func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
-	logger.Info("[SetPrefetch] Starting to prefetch %d torrents with ALL file lists into memory", len(torrents))
+	logger.Info("[SetPrefetch] Starting to prefetch %d torrents into memory", len(torrents))
 	
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	
-	logger.Info("[SetPrefetch] Adding all %d torrents to directory map...", len(torrents))
+	missingInfoIDs := make([]string, 0)
+	alreadyCachedCount := 0
+	preservedFromCache := 0
+	
+	logger.Info("[SetPrefetch] Merging %d torrents into directory map...", len(torrents))
 	for i := range torrents {
-		item := &torrents[i]
-		accessKey := GetDirectoryName(item.Filename)
-		allTorrents.Set(accessKey, item)
-		tm.idToItemMap.Set(item.ID, item)
+		src := &torrents[i]
+		accessKey := GetDirectoryName(src.Filename)
+
+		newItem := &TorrentItem{
+			ID:       src.ID,
+			Filename: src.Filename,
+			Bytes:    src.Bytes,
+			Files:    src.Files,
+			Status:   src.Status,
+			Added:    src.Added,
+			Ended:    src.Ended,
+		}
+		if existingItem, exists := tm.idToItemMap.Get(newItem.ID); exists && existingItem != nil {
+			if len(existingItem.CachedFiles) > 0 {
+				newItem.CachedFiles = existingItem.CachedFiles
+				newItem.CachedLinks = existingItem.CachedLinks
+				if existingItem.Ended != "" {
+					newItem.Ended = existingItem.Ended
+				}
+				preservedFromCache++
+			}
+		}
+		if len(newItem.CachedFiles) == 0 {
+			if cached, ok := tm.InfoMap.Get(newItem.ID); ok && cached != nil {
+				newItem.CachedFiles = cached.Files
+				newItem.CachedLinks = cached.Links
+				newItem.Ended = cached.Ended
+				alreadyCachedCount++
+			}
+		}
+		if len(newItem.CachedFiles) == 0 && tm.store != nil {
+			if cached, err := tm.store.LoadInfo(newItem.ID); err == nil && cached != nil {
+				newItem.CachedFiles = cached.Files
+				newItem.CachedLinks = cached.Links
+				newItem.Ended = cached.Ended
+				if cached.Progress == 100 {
+					tm.InfoMap.Set(newItem.ID, cached)
+				}
+				alreadyCachedCount++
+			}
+		}
+		
+		allTorrents.Set(accessKey, newItem)
+		tm.idToItemMap.Set(newItem.ID, newItem)
+		if len(newItem.CachedFiles) == 0 {
+			missingInfoIDs = append(missingInfoIDs, newItem.ID)
+		}
 	}
-	logger.Info("[SetPrefetch] All torrents added to map")
+		preservedFromCache, alreadyCachedCount)
 
 	newState := &LibraryState{
 		TotalCount:       len(torrents),
@@ -465,31 +554,9 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	}
 
 	tm.updateCurrentState(newState)
-	logger.Info("[SetPrefetch] Current state updated: %d total torrents", len(torrents))
+	logger.Info("[SetPrefetch] State updated: %d torrents, %d need enrichment", 
+		len(torrents), len(missingInfoIDs))
 
-	missingInfoIDs := make([]string, 0)
-	alreadyCachedCount := 0
-	
-	for i := range torrents {
-		item := &torrents[i]
-		if len(item.CachedFiles) == 0 {
-			if tm.infoStore != nil {
-				if cached, ok, cerr := tm.infoStore.Get(item.ID); cerr == nil && ok && cached != nil {
-					item.CachedFiles = cached.Files
-					item.CachedLinks = cached.Links
-					item.Ended = cached.Ended
-				} else {
-					missingInfoIDs = append(missingInfoIDs, item.ID)
-				}
-			}
-		} else {
-			alreadyCachedCount++
-		}
-	}
-	
-	logger.Info("[SetPrefetch] %d torrents already have file lists, %d need fetching", 
-		alreadyCachedCount, len(missingInfoIDs))
-	
 	if len(missingInfoIDs) > 0 {
 		logger.Info("[SetPrefetch] Starting background fetch for %d torrents", len(missingInfoIDs))
 		go tm.backgroundFetchMissingInfo(missingInfoIDs)
@@ -531,17 +598,22 @@ func (tm *TorrentManager) GetTorrentFileList(torrentID string) ([]TorrentFile, [
 		var files []TorrentFile
 		var links []string
 		var ended string
-		
-		// Try DB first
-	if tm.infoStore != nil {
-			if cached, cacheOk, err := tm.infoStore.Get(torrentID); err == nil && cacheOk && cached != nil {
+		if cached, ok := tm.InfoMap.Get(torrentID); ok && cached != nil {
+			files = cached.Files
+			links = cached.Links
+			ended = cached.Ended
+		}
+
+		if len(files) == 0 && tm.store != nil {
+			if cached, err := tm.store.LoadInfo(torrentID); err == nil && cached != nil {
 				files = cached.Files
 				links = cached.Links
 				ended = cached.Ended
+				if cached.Progress == 100 {
+					tm.InfoMap.Set(torrentID, cached)
+				}
 			}
 		}
-		
-		// If DB miss, try API
 		if len(files) == 0 {
 			info, err := tm.GetTorrentInfo(torrentID)
 			if err != nil {
@@ -597,10 +669,16 @@ func (tm *TorrentManager) GetBrokenTorrentCache() cmap.ConcurrentMap[string, *Fa
 // GetTorrentInfo gets detailed torrent information
 func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error) {
 	torrentID = resolveTorrentID(torrentID)
+	if cached, ok := tm.InfoMap.Get(torrentID); ok && cached != nil {
+		return cached, nil
+	}
 	
 	v, err, shared := tm.infoSG.Do("info:"+torrentID, func() (interface{}, error) {
-		if tm.infoStore != nil {
-			if cached, ok, derr := tm.infoStore.Get(torrentID); derr == nil && ok && cached != nil {
+		if tm.store != nil {
+			if cached, cerr := tm.store.LoadInfo(torrentID); cerr == nil && cached != nil {
+				if cached.Progress == 100 {
+					tm.InfoMap.Set(torrentID, cached)
+				}
 				return cached, nil
 			}
 		}
@@ -613,14 +691,18 @@ func (tm *TorrentManager) GetTorrentInfo(torrentID string) (*TorrentInfo, error)
 			return nil, ferr
 		}
 		
-		// Save to both databases for future fast access
-		if tm.infoStore != nil {
-			_ = tm.infoStore.Upsert(fetched)
-		}
 		if tm.store != nil {
-			_ = tm.store.UpsertInfo(fetched)
+			if existing, err := tm.store.LoadInfo(torrentID); err == nil && existing != nil {
+				tm.preserveFileStates(fetched, existing)
+			} else {
+				tm.initializeFileStates(fetched)
+			}
+			_ = tm.store.SaveInfo(fetched)
 		}
 
+		if fetched.Progress == 100 {
+			tm.InfoMap.Set(torrentID, fetched)
+		}
 		return fetched, nil
 	})
 
@@ -884,7 +966,7 @@ func (tm *TorrentManager) verifyLinkIsActuallyBroken(link string) bool {
 func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string, int64, error) {
 	torrentID = resolveTorrentID(torrentID)
 	if tm.store != nil {
-		if repair, err := tm.store.GetRepair(torrentID); err == nil && repair != nil {
+		if repair, err := tm.store.LoadRepair(torrentID); err == nil && repair != nil {
 			tm.brokenTorrentCache.Set(torrentID, &FailedFileEntry{
 				Error:     fmt.Errorf("torrent marked broken: %s", repair.Reason),
 				Timestamp: time.Unix(repair.UpdatedAt, 0),
@@ -905,19 +987,21 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 	files, links, _ := tm.GetTorrentFileList(torrentID)
 	if len(links) > 0 && len(files) > 0 {
 		var targetFile *TorrentFile
+		targetIndex := -1
 		for i := range files {
 			if files[i].Selected == 1 {
 				baseName := path.Base(files[i].Path)
 				if baseName == filePath {
 					targetFile = &files[i]
+					targetIndex = i
 					break
 				}
 			}
 		}
 		
 		if targetFile != nil {
-			if targetFile.ID-1 < len(links) {
-				restrictedLink = links[targetFile.ID-1]
+			if targetIndex >= 0 && targetIndex < len(links) {
+				restrictedLink = links[targetIndex]
 			} else if len(links) > 0 {
 				restrictedLink = links[0]
 			}
@@ -946,10 +1030,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 	}
 
 	if failedEntry, exists := tm.failedFileCache.Get(cacheKey); exists {
-		if time.Since(failedEntry.Timestamp) < 24*time.Hour {
-			return "", 0, failedEntry.Error
-		}
-		tm.failedFileCache.Remove(cacheKey)
+		return "", 0, failedEntry.Error
 	}
 
 	if brokenEntry, exists := tm.brokenTorrentCache.Get(torrentID); exists {
@@ -1005,9 +1086,7 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 				if tm.store != nil {
 					reason := "no_links_available"
 					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
-						logger.Warn("[Torrents] Failed to save no links error to repair table for %s: %v", torrentID, saveErr)
-					} else {
-						logger.Info("[Torrents] Saved no links error to repair table for %s: %s", torrentID, reason)
+						logger.Warn("[Torrents] Failed to save no links error to repair file for %s: %v", torrentID, saveErr)
 					}
 				}
 				
@@ -1035,9 +1114,9 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 				if info != nil {
 					reason := "empty_download_link"
 					if saveErr := tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason); saveErr != nil {
-						logger.Warn("[Torrents] Failed to save empty link error to repair table for %s: %v", torrentID, saveErr)
+						logger.Warn("[Torrents] Failed to save empty link error to repair file for %s: %v", torrentID, saveErr)
 					} else {
-						logger.Info("[Torrents] Saved empty link error to repair table for %s: %s", torrentID, reason)
+						logger.Info("[Torrents] Saved empty link error to repair file for %s: %s", torrentID, reason)
 					}
 				}
 			}
@@ -1082,10 +1161,8 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 				}
 			}
 
-			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
-				Error:     wrappedErr,
-				Timestamp: time.Now(),
-			})
+			fileName := path.Base(strings.Trim(filePath, "/"))
+			tm.markFileAsBroken(torrentID, fileName, wrappedErr)
 			tm.downloadSG.Forget(cacheKey)
 			return nil, wrappedErr
 		}
@@ -1118,16 +1195,14 @@ func (tm *TorrentManager) GetFileDownloadURL(torrentID, filePath string) (string
 				})
 			}
 
-			tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
-				Error:     emptyErr,
-				Timestamp: time.Now(),
-			})
+			fileName := path.Base(strings.Trim(filePath, "/"))
+			tm.markFileAsBroken(torrentID, fileName, emptyErr)
 			tm.downloadSG.Forget(cacheKey)
 			return nil, emptyErr
 		}
 		
-		// Clear any cached failures for this file since it succeeded
-		tm.failedFileCache.Remove(cacheKey)
+		fileName := path.Base(strings.Trim(filePath, "/"))
+		tm.markFileAsOk(torrentID, fileName)
 
 		// Cache the result
 		tm.downloadLinkCache.Set(cacheKey, &DownloadLinkEntry{
@@ -1163,12 +1238,12 @@ func (tm *TorrentManager) RefreshTorrent(torrentID string) error {
 	logger.Debug("[Torrents] Refreshing torrent %s", torrentID)
 	
 	// Fetch fresh torrent info
-    info, err := tm.client.GetTorrentInfo(torrentID)
+	info, err := tm.client.GetTorrentInfo(torrentID)
 	if err != nil {
 		return fmt.Errorf("failed to refresh torrent %s: %w", torrentID, err)
 	}
 	
-    tm.saveCineSync(info)
+	tm.saveCineSync(info)
 	
 	logger.Debug("[Torrents] Successfully refreshed torrent %s", torrentID)
 	return nil
@@ -1419,15 +1494,31 @@ func (tm *TorrentManager) GetLastRefreshTime() time.Time {
 
 // GetModifiedUnix returns the stored modified unix timestamp.
 func (tm *TorrentManager) GetModifiedUnix(id string) int64 {
-    if tm == nil || tm.store == nil { return 0 }
-    if m, ok, err := tm.store.GetModifiedUnix(id); err == nil && ok { return m }
-    return 0
+	if tm == nil || tm.store == nil { return 0 }
+	if m, ok, err := tm.store.GetModifiedUnix(id); err == nil && ok { return m }
+	return 0
 }
 
-// GetStore returns the TorrentStore instance
-func (tm *TorrentManager) GetStore() *TorrentStore {
-    if tm == nil { return nil }
-    return tm.store
+// GetStore returns the CineSyncStore instance
+func (tm *TorrentManager) GetStore() *CineSyncStore {
+	if tm == nil { return nil }
+	return tm.store
+}
+
+// GetDavCacheEntry returns cached WebDAV response for a torrent ID.
+func (tm *TorrentManager) GetDavCacheEntry(id string) (*DavCacheEntry, bool) {
+	if tm == nil {
+		return nil, false
+	}
+	return tm.davResponseCache.Get(id)
+}
+
+// SetDavCacheEntry stores cached WebDAV response for a torrent ID.
+func (tm *TorrentManager) SetDavCacheEntry(id string, entry *DavCacheEntry) {
+	if tm == nil {
+		return
+	}
+	tm.davResponseCache.Set(id, entry)
 }
 
 // DeleteFromRealDebrid removes a torrent from Real-Debrid directly
@@ -1474,6 +1565,130 @@ func (tm *TorrentManager) GetFailedFileCacheCount() int {
 // GetFailedFileCache returns the failed file cache for filtering
 func (tm *TorrentManager) GetFailedFileCache() cmap.ConcurrentMap[string, *FailedFileEntry] {
 	return tm.failedFileCache
+}
+
+// restoreBrokenFileStates loads broken file states from persisted torrent info on startup
+func (tm *TorrentManager) restoreBrokenFileStates(infoMap map[string]*TorrentInfo) int {
+	count := 0
+	now := time.Now()
+	needsUpdate := make(map[string]*TorrentInfo, len(infoMap))
+	
+	for torrentID, info := range infoMap {
+		if info == nil {
+			continue
+		}
+		updated := false
+		for i := range info.Files {
+			file := &info.Files[i]
+			if file.Selected != 1 {
+				continue
+			}
+			
+			if file.State == "broken" {
+				fileName := path.Base(strings.Trim(file.Path, "/"))
+				cacheKey := MakeCacheKey(torrentID, fileName)
+				tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
+					Error:     fmt.Errorf("broken (restored from cache)"),
+					Timestamp: now,
+				})
+				count++
+			} else if file.State == "" {
+				file.State = "ok"
+				updated = true
+			}
+		}
+		if updated {
+			needsUpdate[torrentID] = info
+		}
+	}
+	
+	// Batch update files that needed state initialization
+	for torrentID, info := range needsUpdate {
+		if tm.store != nil {
+			_ = tm.store.SaveInfo(info)
+		}
+	}
+	
+	return count
+}
+
+// initializeFileStates sets default "ok" state for all selected files
+func (tm *TorrentManager) initializeFileStates(info *TorrentInfo) {
+	if info == nil {
+		return
+	}
+	for i := range info.Files {
+		if info.Files[i].Selected == 1 && info.Files[i].State == "" {
+			info.Files[i].State = "ok"
+		}
+	}
+}
+
+// preserveFileStates merges file states from existing saved data into fresh API data
+func (tm *TorrentManager) preserveFileStates(fresh *TorrentInfo, existing *TorrentInfo) {
+	if fresh == nil || existing == nil {
+		return
+	}
+
+	existingStates := make(map[string]string, len(existing.Files))
+	for _, file := range existing.Files {
+		if file.Selected == 1 && file.State != "" {
+			fileName := path.Base(strings.Trim(file.Path, "/"))
+			existingStates[fileName] = file.State
+		}
+	}
+
+	for i := range fresh.Files {
+		if fresh.Files[i].Selected == 1 {
+			fileName := path.Base(strings.Trim(fresh.Files[i].Path, "/"))
+			if state, exists := existingStates[fileName]; exists {
+				fresh.Files[i].State = state
+			} else {
+				fresh.Files[i].State = "ok"
+			}
+		}
+	}
+}
+
+// updateFileState updates file state in persistent storage
+func (tm *TorrentManager) updateFileState(torrentID, fileName, newState string) {
+	if tm.store == nil {
+		return
+	}
+	
+	info, err := tm.store.LoadInfo(torrentID)
+	if err != nil || info == nil {
+		return
+	}
+	
+	for i := range info.Files {
+		if info.Files[i].Selected != 1 {
+			continue
+		}
+		filePath := strings.Trim(info.Files[i].Path, "/")
+		if path.Base(filePath) == fileName {
+			if info.Files[i].State != newState {
+				info.Files[i].State = newState
+				_ = tm.store.SaveInfo(info)
+			}
+			return
+		}
+	}
+}
+
+func (tm *TorrentManager) markFileAsBroken(torrentID, fileName string, err error) {
+	cacheKey := MakeCacheKey(torrentID, fileName)
+	tm.failedFileCache.Set(cacheKey, &FailedFileEntry{
+		Error:     err,
+		Timestamp: time.Now(),
+	})
+	tm.updateFileState(torrentID, fileName, "broken")
+}
+
+func (tm *TorrentManager) markFileAsOk(torrentID, fileName string) {
+	cacheKey := MakeCacheKey(torrentID, fileName)
+	tm.failedFileCache.Remove(cacheKey)
+	tm.updateFileState(torrentID, fileName, "ok")
 }
 
 // GetRefreshInterval returns the current refresh interval

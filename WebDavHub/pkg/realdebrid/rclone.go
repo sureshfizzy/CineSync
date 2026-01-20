@@ -1,7 +1,6 @@
 package realdebrid
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -265,26 +264,10 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	// Start rclone process
 	cmd := exec.Command(rcloneCmd, args...)
 	rm.setProcessAttributes(cmd)
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		logger.Error("Failed to create stderr pipe: %v", err)
-	}
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("Failed to start rclone command: %v", err)
 		return &MountStatus{Error: fmt.Sprintf("failed to start rclone: %v", err)}, err
-	}
-
-	if stderrPipe != nil {
-		go func() {
-			scanner := bufio.NewScanner(stderrPipe)
-			for scanner.Scan() {
-				line := scanner.Text()
-				if len(line) > 0 {
-					logger.Warn("Rclone stderr: %s", line)
-				}
-			}
-		}()
 	}
 
 	// Wait a moment for mount to initialize

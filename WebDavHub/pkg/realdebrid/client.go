@@ -987,6 +987,7 @@ type TorrentFile struct {
 	Path     string `json:"path"`
 	Bytes    int64  `json:"bytes"`
 	Selected int    `json:"selected"`
+	State    string `json:"state,omitempty"`
 }
 
 // TorrentInfo represents detailed information about a torrent

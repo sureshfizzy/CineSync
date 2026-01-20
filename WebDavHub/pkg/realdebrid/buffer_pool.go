@@ -25,7 +25,7 @@ func PutResponseBuffer(buf *bytes.Buffer) {
 
 var largeBufferPool = sync.Pool{
 	New: func() interface{} {
-		return bytes.NewBuffer(make([]byte, 0, 256*1024))
+		return bytes.NewBuffer(make([]byte, 0, 32*1024*1024))
 	},
 }
 
