@@ -88,6 +88,10 @@ func SetRootDir(dir string) {
 		logger.Warn("Failed to initialize debrid DB: %v", err)
 	}
 
+	if err := InitLibraryTable(); err != nil {
+		logger.Warn("Failed to initialize library table: %v", err)
+	}
+
 	// Initialize folder cache for fast navigation
 	if !isPlaceholderConfig {
 		go func() {
