@@ -6,6 +6,7 @@ import json
 from dotenv import load_dotenv
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.file_utils import normalize_country_code
+from MediaHub.utils.env_loader import get_env
 
 # Beta features that are currently disabled (HARDCODED)
 BETA_DISABLED_FEATURES = {
@@ -280,15 +281,13 @@ def get_rename_tags():
     return tags
 
 def plex_update():
-    return os.getenv('ENABLE_PLEX_UPDATE', 'false').lower() == 'true'
+    return get_env('ENABLE_PLEX_UPDATE', 'false', force_reload=True).lower() == 'true'
 
 def plex_token():
-    token = os.getenv('PLEX_TOKEN', None)
-    return token
+    return get_env('PLEX_TOKEN', None, force_reload=True)
 
 def plex_url():
-    token = os.getenv('PLEX_URL', None)
-    return token
+    return get_env('PLEX_URL', None, force_reload=True)
 
 def get_known_types(filename=None):
     known_types = set(ext.strip().lower() for ext in os.getenv('ALLOWED_EXTENSIONS', '.mkv,.mp4,.srt,.strm').split(','))

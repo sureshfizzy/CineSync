@@ -13,24 +13,59 @@ from MediaHub.config.config import *
 def get_plex_library_sections() -> List[dict]:
     """Fetch Plex library sections."""
     try:
-        headers = {'X-Plex-Token': plex_token()}
-        response = requests.get(f"{plex_url()}/library/sections", headers=headers)
+        token = plex_token()
+        url = plex_url()
+        
+        if not token or not url:
+            log_message("Plex token or URL not configured", "WARNING")
+            return []
+            
+        headers = {'X-Plex-Token': token}
+        response = requests.get(f"{url}/library/sections", headers=headers, timeout=10)
         response.raise_for_status()
         root = ET.fromstring(response.content)
         return [{'key': d.get('key'), 'type': d.get('type')} for d in root.findall('.//Directory')]
+    except requests.exceptions.Timeout:
+        log_message("Plex request timed out after 10 seconds", "ERROR")
+        return []
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 401:
+            log_message("Plex authentication failed (401 Unauthorized). Check PLEX_TOKEN in settings.", "ERROR")
+        else:
+            log_message(f"Plex HTTP error: {e}", "ERROR")
+        return []
     except Exception as e:
         log_message(f"Error fetching sections: {e}", "ERROR")
         return []
 
-def refresh_section(section_id: str, path: str, headers: dict) -> bool:
+def refresh_section(section_id: str, path: str, headers: dict = None) -> bool:
     """Attempt a section refresh for a given path."""
-    refresh_url = f"{plex_url()}/library/sections/{section_id}/refresh?path={quote(path)}"
+    if headers is None:
+        token = plex_token()
+        if not token:
+            return False
+        headers = {'X-Plex-Token': token}
+    
+    url = plex_url()
+    if not url:
+        return False
+        
+    refresh_url = f"{url}/library/sections/{section_id}/refresh?path={quote(path)}"
     try:
-        response = requests.get(refresh_url, headers=headers)
+        response = requests.get(refresh_url, headers=headers, timeout=10)
         response.raise_for_status()
         return True
+    except requests.exceptions.Timeout:
+        log_message(f"Plex refresh timeout for section {section_id}", "DEBUG")
+        return False
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code == 401:
+            log_message(f"Plex refresh unauthorized (401) for section {section_id}. Token may be invalid.", "WARNING")
+        else:
+            log_message(f"Plex refresh HTTP error for section {section_id}: {e}", "DEBUG")
+        return False
     except Exception as e:
-        log_message(f"Refresh failed: {e}", "DEBUG")
+        log_message(f"Refresh failed for section {section_id}: {e}", "DEBUG")
         return False
 
 def refresh_plex_for_file(file_path: str) -> None:
@@ -38,7 +73,6 @@ def refresh_plex_for_file(file_path: str) -> None:
     if not plex_update() or not plex_token():
         return
 
-    headers = {'X-Plex-Token': plex_token()}
     sections = get_plex_library_sections()
     relevant_sections = [s for s in sections if s['type'] in ['movie', 'show']]
 
@@ -48,8 +82,8 @@ def refresh_plex_for_file(file_path: str) -> None:
     max_workers = get_max_processes()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for section in relevant_sections:
-            tasks.append(executor.submit(refresh_section, section['key'], file_path, headers))
-            tasks.append(executor.submit(refresh_section, section['key'], file_dir, headers))
+            tasks.append(executor.submit(refresh_section, section['key'], file_path, None))
+            tasks.append(executor.submit(refresh_section, section['key'], file_dir, None))
 
     results = [task.result() for task in tasks]
     if any(results):
