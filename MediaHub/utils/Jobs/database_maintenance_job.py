@@ -7,54 +7,32 @@ when source files no longer exist
 import os
 import sys
 import argparse
-import importlib.util
 
-# Calculate paths correctly (now in utils/Jobs subfolder)
-script_path = os.path.abspath(__file__)
-jobs_dir = os.path.dirname(script_path)
-utils_dir = os.path.dirname(jobs_dir)
-mediahub_dir = os.path.dirname(utils_dir)
-cinesync_dir = os.path.dirname(mediahub_dir)
+# Setup sys.path for both frozen and non-frozen execution
+if getattr(sys, 'frozen', False):
+    executable_dir = os.path.dirname(sys.executable)
+    sys.path.insert(0, executable_dir)
+else:
+    script_path = os.path.abspath(__file__)
+    jobs_dir = os.path.dirname(script_path)
+    utils_dir = os.path.dirname(jobs_dir)
+    mediahub_dir = os.path.dirname(utils_dir)
+    cinesync_dir = os.path.dirname(mediahub_dir)
+    if cinesync_dir not in sys.path:
+        sys.path.insert(0, cinesync_dir)
 
-# Add the parent directory to the system path (same as main.py does)
-if cinesync_dir not in sys.path:
-    sys.path.insert(0, cinesync_dir)
-
-# Load config module
-try:
-    config_path = os.path.join(mediahub_dir, "config", "config.py")
-    spec = importlib.util.spec_from_file_location("config", config_path)
-    config_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(config_module)
-    get_directories = config_module.get_directories
-except Exception:
-    def get_directories():
-        src_dir = os.getenv('SOURCE_DIR', '')
-        if src_dir:
-            src_dirs = [d.strip() for d in src_dir.split(',') if d.strip()]
-        else:
-            src_dirs_env = os.getenv('SOURCE_DIRS', '')
-            src_dirs = [d.strip() for d in src_dirs_env.split(',') if d.strip()] if src_dirs_env else []
-        dest_dir = os.getenv('DESTINATION_DIR', '')
-        return src_dirs, dest_dir
-
-# Load database utilities module
-try:
-    db_utils_path = os.path.join(mediahub_dir, "processors", "db_utils.py")
-    spec = importlib.util.spec_from_file_location("db_utils", db_utils_path)
-    db_utils_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(db_utils_module)
-
-    initialize_db = db_utils_module.initialize_db
-    reset_database = db_utils_module.reset_database
-    vacuum_database = db_utils_module.vacuum_database
-    verify_database_integrity = db_utils_module.verify_database_integrity
-    optimize_database = db_utils_module.optimize_database
-    get_database_stats = db_utils_module.get_database_stats
-    display_missing_files = db_utils_module.display_missing_files
-    cleanup_missing_destinations = db_utils_module.cleanup_missing_destinations
-except Exception as e:
-    sys.exit(1)
+# Standard imports
+from MediaHub.config.config import get_directories
+from MediaHub.processors.db_utils import (
+    initialize_db,
+    reset_database,
+    vacuum_database,
+    verify_database_integrity,
+    optimize_database,
+    get_database_stats,
+    display_missing_files,
+    cleanup_missing_destinations
+)
 
 def run_initialize():
     """Initialize database"""

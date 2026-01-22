@@ -528,6 +528,15 @@ def main(dest_dir):
                          help="Optimize database indexes and analyze tables")
     db_group.add_argument("--update-database", action="store_true",
                          help="Update database entries using TMDB API calls")
+    
+    # Job-specific commands
+    job_group = parser.add_argument_group('Job Management')
+    job_group.add_argument("--missing-files", action="store_true",
+                         help="Check for missing source files and cleanup broken symlinks")
+    job_group.add_argument("--cleanup-missing-destinations", action="store_true",
+                         help="Remove database entries where destination files are missing")
+    job_group.add_argument("--source-scan", action="store_true",
+                         help="Scan source directories and update source files database")
 
     args = parser.parse_args()
 
@@ -588,6 +597,24 @@ def main(dest_dir):
             log_message(f"Archived Records: {stats['archived_records']}", level="INFO")
             log_message(f"Main DB Size: {stats['main_db_size']:.2f} MB", level="INFO")
             log_message(f"Archive DB Size: {stats['archive_db_size']:.2f} MB", level="INFO")
+        return
+
+    # Handle job-specific commands
+    if args.missing_files:
+        from MediaHub.utils.Jobs import database_maintenance_job
+        sys.argv = ['', 'missing-files']
+        database_maintenance_job.main()
+        return
+
+    if args.cleanup_missing_destinations:
+        from MediaHub.utils.Jobs import database_maintenance_job
+        sys.argv = ['', 'cleanup-missing-destinations']
+        database_maintenance_job.main()
+        return
+
+    if args.source_scan:
+        from MediaHub.utils.Jobs import source_scan_job
+        source_scan_job.main()
         return
 
     # Handle monitor-only mode

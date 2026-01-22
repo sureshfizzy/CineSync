@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +31,38 @@ func getPythonCommand() string {
 		return "python"
 	}
 	return "python3"
+}
+
+// getMediaHubCommand returns the appropriate command and arguments for MediaHub operations
+func getMediaHubCommand(mediaHubDir string, pythonCmd string, jobType string, action string) (string, []string) {
+	exeName := "MediaHub.exe"
+	if runtime.GOOS != "windows" {
+		exeName = "MediaHub"
+	}
+	mediaHubExe := filepath.Join(mediaHubDir, exeName)
+
+	if fileExists(mediaHubExe) {
+		flagMap := map[string]string{
+			"missing-files":                 "--missing-files",
+			"cleanup-missing-destinations":  "--cleanup-missing-destinations",
+			"optimize":                      "--optimize",
+			"verify":                        "--verify",
+			"vacuum":                        "--vacuum",
+			"status":                        "--status",
+			"source-scan":                   "--source-scan",
+		}
+		if flag, ok := flagMap[jobType]; ok {
+			return mediaHubExe, []string{flag}
+		}
+	}
+
+	// Fallback to Python scripts
+	scriptName := "source_scan_job.py"
+	if jobType != "source-scan" {
+		scriptName = "database_maintenance_job.py"
+		return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName), action}
+	}
+	return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName)}
 }
 
 // JobStatusUpdate represents a job status change event
@@ -66,9 +97,17 @@ func NewManager() *Manager {
 	// Determine Python command based on OS and MediaHub directory
 	pythonCmd := getPythonCommand()
 
-	// Get MediaHub directory
+	// Detect MediaHub directory
 	currentDir, _ := os.Getwd()
-	mediaHubDir := filepath.Join(filepath.Dir(currentDir), "MediaHub")
+	siblingPath := filepath.Join(currentDir, "MediaHub")
+	parentPath := filepath.Join(filepath.Dir(currentDir), "MediaHub")
+	
+	mediaHubDir := parentPath
+	if fileExists(siblingPath) {
+		mediaHubDir = siblingPath
+	} else if !fileExists(parentPath) {
+		logger.Warn("MediaHub directory not found, using default: %s", parentPath)
+	}
 
 	manager := &Manager{
 		jobs:          make(map[string]*Job),
@@ -83,7 +122,6 @@ func NewManager() *Manager {
 		subscribers:   make(map[chan JobStatusUpdate]bool),
 	}
 
-	// Initialize database table
 	if err := initJobsTable(); err != nil {
 		logger.Error("Failed to initialize jobs table: %v", err)
 	}
@@ -123,6 +161,12 @@ func (m *Manager) initializeDefaultJobs() {
 	symlinkCleanupInterval := env.GetInt("SYMLINK_CLEANUP_INTERVAL", 600) // Default to 10 minutes if not set
 	logger.Info("Symlink cleanup interval set to %d seconds", symlinkCleanupInterval)
 
+	// Get commands for each job type
+	missingFilesCmd, missingFilesArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "missing-files", "missing-files")
+	cleanupCmd, cleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "cleanup-missing-destinations", "cleanup-missing-destinations")
+	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
+	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
+
 	defaultJobs := []*Job{
 		{
 			ID:           "missing-files-check",
@@ -132,8 +176,8 @@ func (m *Manager) initializeDefaultJobs() {
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeInterval,
 			IntervalSeconds: symlinkCleanupInterval,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "missing-files"},
+			Command:      missingFilesCmd,
+			Arguments:    missingFilesArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Maintenance",
@@ -150,8 +194,8 @@ func (m *Manager) initializeDefaultJobs() {
 			Type:         JobTypeProcess,
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeManual,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "cleanup-missing-destinations"},
+			Command:      cleanupCmd,
+			Arguments:    cleanupArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Maintenance",
@@ -168,8 +212,8 @@ func (m *Manager) initializeDefaultJobs() {
 			Type:         JobTypeProcess,
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeManual,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "optimize"},
+			Command:      optimizeCmd,
+			Arguments:    optimizeArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Database",
@@ -188,8 +232,8 @@ func (m *Manager) initializeDefaultJobs() {
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeInterval,
 			IntervalSeconds: 24 * 60 * 60, // 24 hours
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "source_scan_job.py")},
+			Command:      sourceScanCmd,
+			Arguments:    sourceScanArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Files",
@@ -217,6 +261,12 @@ func (m *Manager) addMissingDefaultJobs() {
 	// Get symlink cleanup interval from environment variable
 	symlinkCleanupInterval := env.GetInt("SYMLINK_CLEANUP_INTERVAL", 600) // Default to 10 minutes if not set
 
+	// Get commands for each job type
+	missingFilesCmd, missingFilesArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "missing-files", "missing-files")
+	cleanupCmd, cleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "cleanup-missing-destinations", "cleanup-missing-destinations")
+	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
+	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
+
 	// Define all default jobs that should exist
 	defaultJobsToCheck := map[string]*Job{
 		"missing-files-check": {
@@ -227,8 +277,8 @@ func (m *Manager) addMissingDefaultJobs() {
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeInterval,
 			IntervalSeconds: symlinkCleanupInterval,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "missing-files"},
+			Command:      missingFilesCmd,
+			Arguments:    missingFilesArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Maintenance",
@@ -245,8 +295,8 @@ func (m *Manager) addMissingDefaultJobs() {
 			Type:         JobTypeProcess,
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeManual,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "cleanup-missing-destinations"},
+			Command:      cleanupCmd,
+			Arguments:    cleanupArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Maintenance",
@@ -263,8 +313,8 @@ func (m *Manager) addMissingDefaultJobs() {
 			Type:         JobTypeProcess,
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeManual,
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "database_maintenance_job.py"), "optimize"},
+			Command:      optimizeCmd,
+			Arguments:    optimizeArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Database",
@@ -282,8 +332,8 @@ func (m *Manager) addMissingDefaultJobs() {
 			Status:       JobStatusIdle,
 			ScheduleType: ScheduleTypeInterval,
 			IntervalSeconds: 24 * 60 * 60, // 24 hours
-			Command:      m.pythonCmd,
-			Arguments:    []string{filepath.Join(m.mediaHubDir, "utils", "Jobs", "source_scan_job.py")},
+			Command:      sourceScanCmd,
+			Arguments:    sourceScanArgs,
 			WorkingDir:   m.mediaHubDir,
 			Enabled:      true,
 			Category:     "Files",
@@ -295,10 +345,12 @@ func (m *Manager) addMissingDefaultJobs() {
 		},
 	}
 
-	// Check which jobs are missing and add them
+	// Check which jobs are missing
 	addedCount := 0
+	updatedCount := 0
 	for jobID, defaultJob := range defaultJobsToCheck {
-		if _, exists := m.jobs[jobID]; !exists {
+		existingJob, exists := m.jobs[jobID]
+		if !exists {
 			m.jobs[jobID] = defaultJob
 			// Save to database
 			if err := saveJobToDB(defaultJob); err != nil {
@@ -307,11 +359,38 @@ func (m *Manager) addMissingDefaultJobs() {
 				logger.Info("Added missing default job: %s", defaultJob.Name)
 				addedCount++
 			}
+		} else {
+			needsUpdate := existingJob.Command != defaultJob.Command
+			
+			if !needsUpdate && len(existingJob.Arguments) == len(defaultJob.Arguments) {
+				for i, arg := range existingJob.Arguments {
+					if arg != defaultJob.Arguments[i] {
+						needsUpdate = true
+						break
+					}
+				}
+			} else if !needsUpdate {
+				needsUpdate = true
+			}
+			
+			if needsUpdate {
+				existingJob.Command = defaultJob.Command
+				existingJob.Arguments = defaultJob.Arguments
+				existingJob.UpdatedAt = time.Now()
+				if err := saveJobToDB(existingJob); err != nil {
+					logger.Error("Failed to update job %s: %v", jobID, err)
+				} else {
+					updatedCount++
+				}
+			}
 		}
 	}
 
 	if addedCount > 0 {
 		logger.Info("Added %d missing default jobs", addedCount)
+	}
+	if updatedCount > 0 {
+		logger.Info("Updated %d job commands", updatedCount)
 	}
 }
 

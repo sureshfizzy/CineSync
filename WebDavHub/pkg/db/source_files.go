@@ -934,13 +934,9 @@ func HandleSourceScans(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Check if requesting latest scan via query parameter
 		if r.URL.Query().Get("latest") == "true" {
-			logger.Debug("HandleSourceScans: Routing to handleGetLatestScan via query parameter")
 			handleGetLatestScan(w, r)
 			return
 		}
-
-		// Handle base path (list scans)
-		logger.Debug("HandleSourceScans: Routing to handleGetSourceScans")
 		handleGetSourceScans(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1044,8 +1040,6 @@ func handleGetSourceScans(w http.ResponseWriter, r *http.Request) {
 
 // handleGetLatestScan retrieves the most recent scan
 func handleGetLatestScan(w http.ResponseWriter, r *http.Request) {
-	logger.Debug("handleGetLatestScan: Called for URL: %s", r.URL.Path)
-
 	var scan SourceScan
 	var completedAt sql.NullInt64
 	var errorMessage sql.NullString

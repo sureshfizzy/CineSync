@@ -12,8 +12,13 @@ import json
 import requests
 from pathlib import Path
 
-# Add MediaHub to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+# Setup sys.path for both frozen and non-frozen execution
+if getattr(sys, 'frozen', False):
+    executable_dir = os.path.dirname(sys.executable)
+    sys.path.insert(0, executable_dir)
+else:
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
 from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
 from MediaHub.utils.logging_utils import log_message
 
