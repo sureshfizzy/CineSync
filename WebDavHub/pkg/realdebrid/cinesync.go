@@ -68,20 +68,14 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 	}
 
 	missingTotal := len(list)
-	var last int
 	if missingTotal > 0 {
 		if err := tm.store.BulkSaveItems(list, func(n int) {
-			last = n
 		}); err != nil {
 			logger.Warn("[CineSync] Bulk save failed, falling back to per-item: %v", err)
-			var written int64
 			for i := range list {
 				tm.saveCineSyncItem(list[i])
-				atomic.AddInt64(&written, 1)
 			}
-			last = int(written)
 		}
-		logger.Info("[CineSync] Directory update complete: %d items", last)
 	}
 
 	go func(items []TorrentItem) {

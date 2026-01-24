@@ -143,6 +143,7 @@ type TorrentManager struct {
 	httpDavCacheMutex    sync.RWMutex
 	httpDavLastCacheTime time.Time
 	store *CineSyncStore
+	cacheLoadComplete atomic.Bool
 }
 
 // DownloadLinkEntry includes TTL tracking
@@ -212,11 +213,10 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 			logger.Warn("[Torrents] Failed to open CineSync store at %s: %v", storeDir, err)
 		}
 
-		// load cached data from files
-		tm.loadCachedCineSync()
-
-		// Load broken torrents from database into cache
-		tm.loadBrokenTorrentsFromDB()
+		go func() {
+			tm.loadCachedCineSync()
+			tm.loadBrokenTorrentsFromDB()
+		}()
 
 		// Start background refresh job
 		tm.startRefreshJob()
@@ -294,51 +294,66 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 	
 	if len(items) == 0 {
-		logger.Info("[LoadCache] No items found in store")
 		return
 	}
 	
 	logger.Info("[LoadCache] Found %d torrents, populating memory maps...", len(items))
 	
-	// Get directory map
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
 	
-	// Load torrents with file lists FULLY cached in memory
-	loadedCount := 0
+	var loadedCount atomic.Int32
 	missingInfoIDs := make([]string, 0)
+	var missingMu sync.Mutex
+	numWorkers := 8
+	
+	var wg sync.WaitGroup
+	itemsChan := make(chan *CineSyncItem, numWorkers*2)
+	
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for csi := range itemsChan {
+				item := &TorrentItem{
+					ID:       csi.ID,
+					Filename: csi.Filename,
+					Bytes:    csi.Bytes,
+					Files:    csi.Files,
+					Status:   csi.Status,
+					Added:    csi.Added,
+					Ended:    csi.Ended,
+				}
+				
+				accessKey := GetDirectoryName(item.Filename)
+				if info, ok := infoMap[csi.ID]; ok && info != nil {
+					item.CachedFiles = info.Files
+					item.CachedLinks = info.Links
+					item.Ended = info.Ended
+					if info.Progress == 100 {
+						tm.InfoMap.Set(csi.ID, info)
+					}
+					loadedCount.Add(1)
+				} else {
+					missingMu.Lock()
+					missingInfoIDs = append(missingInfoIDs, csi.ID)
+					missingMu.Unlock()
+				}
+				
+				allTorrents.Set(accessKey, item)
+				tm.idToItemMap.Set(item.ID, item)
+			}
+		}()
+	}
 	
 	for i := range items {
-		csi := &items[i]
-		item := &TorrentItem{
-			ID:       csi.ID,
-			Filename: csi.Filename,
-			Bytes:    csi.Bytes,
-			Files:    csi.Files,
-			Status:   csi.Status,
-			Added:    csi.Added,
-			Ended:    csi.Ended,
-		}
-		
-		accessKey := GetDirectoryName(item.Filename)
-		if info, ok := infoMap[csi.ID]; ok && info != nil {
-			item.CachedFiles = info.Files
-			item.CachedLinks = info.Links
-			item.Ended = info.Ended
-			if info.Progress == 100 {
-				tm.InfoMap.Set(csi.ID, info)
-			}
-			loadedCount++
-		} else {
-			missingInfoIDs = append(missingInfoIDs, csi.ID)
-		}
-		
-		allTorrents.Set(accessKey, item)
-		tm.idToItemMap.Set(item.ID, item)
+		itemsChan <- &items[i]
 	}
+	close(itemsChan)
+	wg.Wait()
 	
 	elapsed := time.Since(startTime)
 	logger.Info("[LoadCache] COMPLETED in %.1fs - %d torrents: %d with files, %d need enrichment", 
-		elapsed.Seconds(), len(items), loadedCount, len(missingInfoIDs))
+		elapsed.Seconds(), len(items), loadedCount.Load(), len(missingInfoIDs))
 
 	newState := &LibraryState{
 		TotalCount:       len(items),
@@ -359,9 +374,10 @@ func (tm *TorrentManager) loadCachedTorrents() {
 	}
 }
 
-// loadCachedCineSync loads cached torrent infos from db/data/*.cinesync and seeds in-memory caches
+// loadCachedCineSync loads cached torrent infos from CineSync files and seeds in-memory caches
 func (tm *TorrentManager) loadCachedCineSync() {
 	tm.loadCachedTorrents()
+	tm.cacheLoadComplete.Store(true)
 }
 
 // loadBrokenTorrentsFromDB loads broken torrent entries from file-based store
@@ -1502,6 +1518,12 @@ func (tm *TorrentManager) GetModifiedUnix(id string) int64 {
 func (tm *TorrentManager) GetStore() *CineSyncStore {
 	if tm == nil { return nil }
 	return tm.store
+}
+
+// IsCacheLoaded returns true if the torrent cache has finished loading
+func (tm *TorrentManager) IsCacheLoaded() bool {
+	if tm == nil { return false }
+	return tm.cacheLoadComplete.Load()
 }
 
 // GetDavCacheEntry returns cached WebDAV response for a torrent ID.

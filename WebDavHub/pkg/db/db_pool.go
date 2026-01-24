@@ -27,9 +27,6 @@ func GetDatabaseConnection() (*sql.DB, error) {
 	dbPoolOnce.Do(func() {
 		mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
 
-		absPath, _ := filepath.Abs(mediaHubDBPath)
-		logger.Info("Connecting to MediaHub database at: %s", absPath)
-
 		db, err := OpenAndConfigureDatabase(mediaHubDBPath)
 		if err != nil {
 			logger.Error("Failed to open MediaHub database pool: %v", err)
@@ -47,8 +44,6 @@ func GetDatabaseConnection() (*sql.DB, error) {
 		for _, pragma := range additionalPragmas {
 			if _, err := db.Exec(pragma); err != nil {
 				logger.Warn("Failed to set additional pragma %s: %v", pragma, err)
-			} else {
-				logger.Debug("Successfully executed pragma: %s", pragma)
 			}
 		}
 
@@ -316,6 +311,33 @@ func initializeMediaHubTables(db *sql.DB) error {
 		}
 	}
 
+	ensureTableColumns(db, "deleted_files", []struct {
+		name     string
+		dataType string
+	}{
+		{"season_number", "TEXT"},
+		{"media_type", "TEXT"},
+		{"proper_name", "TEXT"},
+		{"year", "TEXT"},
+		{"episode_number", "TEXT"},
+		{"imdb_id", "TEXT"},
+		{"is_anime_genre", "INTEGER"},
+		{"language", "TEXT"},
+		{"quality", "TEXT"},
+		{"tvdb_id", "TEXT"},
+		{"league_id", "TEXT"},
+		{"sportsdb_event_id", "TEXT"},
+		{"sport_name", "TEXT"},
+		{"sport_round", "INTEGER"},
+		{"sport_location", "TEXT"},
+		{"sport_session", "TEXT"},
+		{"sport_venue", "TEXT"},
+		{"sport_date", "TEXT"},
+		{"file_size", "INTEGER"},
+		{"processed_at", "TEXT"},
+		{"deletion_reason", "TEXT"},
+	})
+
 	for _, index := range indexes {
 		if _, err := db.Exec(index); err != nil {
 			logger.Warn("Failed to create index: %v", err)
@@ -324,4 +346,39 @@ func initializeMediaHubTables(db *sql.DB) error {
 
 	logger.Info("MediaHub database tables initialized successfully")
 	return nil
+}
+
+// ensureTableColumns automatically adds missing columns to a table
+func ensureTableColumns(db *sql.DB, tableName string, columns []struct {
+	name     string
+	dataType string
+}) {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		logger.Warn("Failed to get table info for %s: %v", tableName, err)
+		return
+	}
+	defer rows.Close()
+
+	existingColumns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, dataType string
+		var notNull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &dfltValue, &pk); err != nil {
+			continue
+		}
+		existingColumns[name] = true
+	}
+
+	// Add missing columns
+	for _, col := range columns {
+		if !existingColumns[col.name] {
+			query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", tableName, col.name, col.dataType)
+			if _, err := db.Exec(query); err != nil {
+				logger.Warn("Failed to add column %s to %s: %v", col.name, tableName, err)
+			}
+		}
+	}
 }
