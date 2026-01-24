@@ -225,6 +225,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
         if (response.data.status) {
           setStatus(response.data.status);
         }
+        window.dispatchEvent(new CustomEvent('rclone-mount-change'));
       } else {
         showMessage(`Failed to mount: ${response.data.error}`, 'error');
         setIsPolling(false);
@@ -246,10 +247,10 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
       });
       if (response.data.success) {
         showMessage('Rclone unmounted successfully', 'success');
-        // Update status directly instead of reloading entire config
         if (response.data.status) {
           setStatus(response.data.status);
         }
+        window.dispatchEvent(new CustomEvent('rclone-mount-change'));
       } else {
         showMessage(`Failed to unmount: ${response.data.error}`, 'error');
       }

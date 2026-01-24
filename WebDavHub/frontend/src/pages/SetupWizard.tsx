@@ -47,14 +47,6 @@ type Step = {
 
 const wizardSteps: Step[] = [
   {
-    id: 'paths',
-    title: 'Directories',
-    description: 'Source & destination roots',
-    accent: '#22c55e',
-    icon: <FolderSpecialRounded />,
-    keys: ['SOURCE_DIR', 'DESTINATION_DIR', 'USE_SOURCE_STRUCTURE'],
-  },
-  {
     id: 'realdebrid',
     title: 'Real-Debrid',
     description: 'API keys and HTTP DAV access',
@@ -69,6 +61,14 @@ const wizardSteps: Step[] = [
     accent: '#0ea5e9',
     icon: <CloudRounded />,
     keys: [],
+  },
+  {
+    id: 'paths',
+    title: 'Directories',
+    description: 'Source & destination roots',
+    accent: '#22c55e',
+    icon: <FolderSpecialRounded />,
+    keys: ['SOURCE_DIR', 'DESTINATION_DIR', 'USE_SOURCE_STRUCTURE'],
   },
   {
     id: 'organization',
@@ -261,6 +261,95 @@ export default function SetupWizard() {
     serveFromRclone: false,
   });
 
+  useEffect(() => {
+    if (rcloneSummary.enabled && rcloneSummary.mountPath) {
+      setValues((prev) => {
+        if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
+          const mountPath = rcloneSummary.mountPath!;
+          const separator = mountPath.includes('\\') ? '\\' : '/';
+          const normalizedPath = mountPath.endsWith('\\') || mountPath.endsWith('/') 
+            ? mountPath 
+            : mountPath + separator;
+          return { ...prev, SOURCE_DIR: normalizedPath + '__all__' };
+        }
+        return prev;
+      });
+    }
+  }, [rcloneSummary.enabled, rcloneSummary.mountPath]);
+
+  useEffect(() => {
+    const handleRcloneMountChange = async () => {
+      try {
+        const rdConfigResp = await axios.get('/api/realdebrid/config');
+        const cfg = rdConfigResp?.data?.config?.rcloneSettings || {};
+        setRcloneSummary({
+          enabled: !!cfg.enabled,
+          mountPath: cfg.mountPath || '',
+          autoMountOnStart: !!cfg.autoMountOnStart,
+          serveFromRclone: !!cfg.serveFromRclone,
+        });
+
+        if (cfg.enabled && cfg.mountPath) {
+          setValues((prev) => {
+            if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
+              const mountPath = cfg.mountPath!;
+              const separator = mountPath.includes('\\') ? '\\' : '/';
+              const normalizedPath = mountPath.endsWith('\\') || mountPath.endsWith('/') 
+                ? mountPath 
+                : mountPath + separator;
+              return { ...prev, SOURCE_DIR: normalizedPath + '__all__' };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to refresh rclone summary:', err);
+      }
+    };
+
+    window.addEventListener('rclone-mount-change', handleRcloneMountChange);
+    return () => {
+      window.removeEventListener('rclone-mount-change', handleRcloneMountChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentStep = wizardSteps[activeStep];
+    if (currentStep?.id === 'paths') {
+      const refreshRcloneSummary = async () => {
+        try {
+          const rdConfigResp = await axios.get('/api/realdebrid/config');
+          const cfg = rdConfigResp?.data?.config?.rcloneSettings || {};
+          setRcloneSummary({
+            enabled: !!cfg.enabled,
+            mountPath: cfg.mountPath || '',
+            autoMountOnStart: !!cfg.autoMountOnStart,
+            serveFromRclone: !!cfg.serveFromRclone,
+          });
+
+          if (cfg.enabled && cfg.mountPath) {
+            setValues((prev) => {
+              if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
+                const mountPath = cfg.mountPath!;
+                const separator = mountPath.includes('\\') ? '\\' : '/';
+                const normalizedPath = mountPath.endsWith('\\') || mountPath.endsWith('/') 
+                  ? mountPath 
+                  : mountPath + separator;
+                return { ...prev, SOURCE_DIR: normalizedPath + '__all__' };
+              }
+              return prev;
+            });
+          }
+        } catch (err) {
+          console.error('Failed to refresh rclone summary:', err);
+        }
+      };
+      
+      refreshRcloneSummary();
+    }
+  }, [activeStep]);
+
+
   const fetchDefaults = async () => {
     try {
       const resp = await axios.get('/api/config/defaults', { headers: { 'Cache-Control': 'no-cache' } });
@@ -303,6 +392,16 @@ export default function SetupWizard() {
       });
 
       const prefilled = { ...defaults, ...initial };
+      
+      if (cfg.enabled && cfg.mountPath && !prefilled['SOURCE_DIR']) {
+        const mountPath = cfg.mountPath!;
+        const separator = mountPath.includes('\\') ? '\\' : '/';
+        const normalizedPath = mountPath.endsWith('\\') || mountPath.endsWith('/') 
+          ? mountPath 
+          : mountPath + separator;
+        prefilled['SOURCE_DIR'] = normalizedPath + '__all__';
+      }
+      
       setConfigValues(filteredConfig);
       setValues(prefilled);
       setInitialValues(prefilled);
