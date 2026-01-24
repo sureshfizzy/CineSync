@@ -521,6 +521,28 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         log_message(f"Destination path exists but is not a symlink: {possible_dest_path}", level="INFO")
                                 else:
                                     log_message(f"Destination file does not exist: {possible_dest_path}", level="INFO")
+                                    log_message(f"Cleaning up orphaned database entry (both source and destination missing)", level="INFO")
+
+                                    cursor1.execute("SELECT file_path, tmdb_id, season_number FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
+                                    result = cursor1.fetchone()
+                                    if result:
+                                        source_path, tmdb_id, season_number = result
+                                        try:
+                                            track_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, reason="Both source and destination files missing")
+                                        except Exception as deletion_error:
+                                            log_message(f"Error tracking deletion: {deletion_error}", level="DEBUG")
+
+                                        if tmdb_id:
+                                            try:
+                                                cleanup_tmdb_covers(int(tmdb_id))
+                                            except Exception as e:
+                                                log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+
+                                        send_file_deletion(source_path, possible_dest_path, tmdb_id, season_number, "Both source and destination files missing")
+
+                                    cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
+                                    cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
+                                    log_message(f"Removed orphaned entry from databases for: {possible_dest_path}", level="INFO")
                             except Exception as e:
                                 log_message(f"Error checking destination path: {e}", level="ERROR")
                         else:
