@@ -69,7 +69,7 @@ Source: "build\nssm.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\WebDavHub\frontend\src\assets\logo.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\frontend\dist\*"; DestDir: "{app}\WebDavHub\frontend\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "build\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
-Source: "build\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\BUILD_INFO.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
@@ -115,11 +115,24 @@ Type: files; Name: "{app}\*.log"
 
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
+  if CurStep = ssInstall then
+  begin
+    // Stop the service before installation
+    Exec(ExpandConstant('{app}\nssm.exe'), 'stop CineSync', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
 end;
 
-[Messages]
-WelcomeLabel2=This will install [name/ver] on your computer.%n%nIt is recommended that you close all other applications before continuing.
-FinishedHeadingLabel=Installation Complete!
-FinishedLabelNoIcons=CineSync Media Server has been installed successfully.%n%nThe service is now running. Access the web interface at:%nhttp://localhost:8082
-FinishedLabel=CineSync Media Server has been installed successfully.%n%nThe service is now running and will start automatically on system boot.%n%nClick "Launch CineSync Web Interface" below to open the application.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Stop and remove the service during uninstallation
+    Exec(ExpandConstant('{app}\nssm.exe'), 'stop CineSync', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{app}\nssm.exe'), 'remove CineSync confirm', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
