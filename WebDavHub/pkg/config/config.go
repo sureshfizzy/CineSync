@@ -732,7 +732,7 @@ func getConfigDefaults() map[string]string {
 		"4K_MOVIE_EXTRAS_SIZE_LIMIT": "2048",
 		"ALLOWED_EXTENSIONS":        ".mp4,.mkv,.srt,.avi,.mov,.divx,.strm",
 		"SKIP_ADULT_PATTERNS":         "true",
-		"SKIP_VERSIONS":               "false",
+		"SKIP_VERSIONS":               "true",
 		"REPLACE_ILLEGAL_CHARACTERS": "true",
 		"COLON_REPLACEMENT":          "Smart Replace",
 		// Monitoring

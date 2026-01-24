@@ -90,14 +90,8 @@ type loggingFileSystem struct {
 func (fs *loggingFileSystem) Open(name string) (http.File, error) {
 	path := filepath.Join(fs.root, name)
 
-	// Get file info for better logging
 	info, err := os.Stat(path)
 	if err != nil {
-		log.Printf("[%s] Error accessing path: %s - %v",
-			time.Now().Format("2006-01-02 15:04:05"),
-			path,
-			err,
-		)
 		return nil, err
 	}
 

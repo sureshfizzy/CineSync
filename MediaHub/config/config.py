@@ -174,7 +174,7 @@ def is_skip_patterns_enabled():
     return os.getenv('SKIP_ADULT_PATTERNS', 'false').lower() == 'true'
 
 def is_skip_versions_enabled():
-    return os.getenv('SKIP_VERSIONS', 'false').lower() in ['true', '1', 'yes']
+    return os.getenv('SKIP_VERSIONS', 'true').lower() in ['true', '1', 'yes']
 
 def is_rclone_mount_enabled():
     return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
