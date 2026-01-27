@@ -57,40 +57,88 @@ class LinuxInstallerBuilder:
         
         is_windows = platform.system() == "Windows"
         python_cmd = "python" if is_windows else "python3"
+        pnpm_cmd = ["pnpm", "--version"] if is_windows else ["pnpm", "-v"]
         
         required_tools = {
             "Python": [python_cmd, "--version"],
             "Go": ["go", "version"],
             "Node.js": ["node", "--version"],
-            "pnpm": ["pnpm", "--version"],
+            "pnpm": pnpm_cmd,
         }
         
         missing = []
         
         for tool, command in required_tools.items():
             try:
-                result = subprocess.run(command, capture_output=True, text=True, check=True, shell=is_windows)
+                if tool == "pnpm" and not is_windows:
+                    which_result = subprocess.run(
+                        ["which", "pnpm"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if which_result.returncode == 0:
+                        pnpm_path = which_result.stdout.strip()
+                        print(f"   ✓ {tool}: Found at {pnpm_path}")
+                        continue
+                    else:
+                        missing.append(tool)
+                        print(f"   ✗ {tool}: Not found")
+                        continue
+
+                result = subprocess.run(
+                    command, 
+                    capture_output=True, 
+                    text=True, 
+                    check=True, 
+                    shell=is_windows,
+                    timeout=10
+                )
                 version = result.stdout.strip().split('\n')[0]
                 print(f"   ✓ {tool}: {version}")
+            except subprocess.TimeoutExpired:
+                missing.append(tool)
+                print(f"   ✗ {tool}: Timeout (command hung)")
             except (subprocess.CalledProcessError, FileNotFoundError):
                 missing.append(tool)
                 print(f"   ✗ {tool}: Not found")
         
         if missing:
             self.print_error("Missing required tools!")
-            print("\nPlease install missing tools:")
-            if "Python" in missing:
-                if is_windows:
-                    print("  - Python 3: https://www.python.org/downloads/")
-                else:
-                    print("  - Python 3: sudo apt install python3 python3-pip")
-            if "Go" in missing:
-                print("  - Go: https://go.dev/dl/")
-            if "Node.js" in missing:
-                print("  - Node.js: https://nodejs.org/")
-            if "pnpm" in missing:
-                print("  - pnpm: npm install -g pnpm")
-            sys.exit(1)
+
+            # Auto-install pnpm on Linux if it's the only missing tool
+            if "pnpm" in missing and not is_windows:
+                self.print_step("Attempting to install pnpm automatically...")
+                try:
+                    subprocess.run(
+                        ["npm", "install", "-g", "pnpm"],
+                        check=True,
+                        timeout=120
+                    )
+                    self.print_success("pnpm installed successfully!")
+                    missing.remove("pnpm")
+                except subprocess.CalledProcessError:
+                    self.print_error("Failed to install pnpm via npm")
+                except subprocess.TimeoutExpired:
+                    self.print_error("pnpm installation timed out")
+                except FileNotFoundError:
+                    self.print_error("npm not found - cannot auto-install pnpm")
+
+            # If there are still missing tools, show instructions and exit
+            if missing:
+                print("\nPlease install missing tools:")
+                if "Python" in missing:
+                    if is_windows:
+                        print("  - Python 3: https://www.python.org/downloads/")
+                    else:
+                        print("  - Python 3: sudo apt install python3 python3-pip")
+                if "Go" in missing:
+                    print("  - Go: https://go.dev/dl/")
+                if "Node.js" in missing:
+                    print("  - Node.js: https://nodejs.org/")
+                if "pnpm" in missing:
+                    print("  - pnpm: npm install -g pnpm")
+                sys.exit(1)
         
         if self.package_type in ["deb", "both"]:
             if is_windows:
@@ -149,13 +197,16 @@ class LinuxInstallerBuilder:
         
         self.print_step("Building frontend...")
         try:
+            print(f"   Running: pnpm install (this may take a few minutes)...")
             subprocess.run(
                 ["pnpm", "install"],
                 cwd=self.webdavhub_dir / "frontend",
                 check=True,
                 shell=is_windows
             )
+            print(f"   ✓ Dependencies installed")
             
+            print(f"   Running: pnpm run build...")
             subprocess.run(
                 ["pnpm", "run", "build"],
                 cwd=self.webdavhub_dir / "frontend",
@@ -176,6 +227,7 @@ class LinuxInstallerBuilder:
             
             output_binary = self.webdavhub_dir / f"cinesync-{arch}"
             
+            print(f"   Compiling for GOOS=linux GOARCH={go_arch}...")
             subprocess.run(
                 ["go", "build", "-ldflags", "-s -w", "-o", str(output_binary), "."],
                 cwd=self.webdavhub_dir,
