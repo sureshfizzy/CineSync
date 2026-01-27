@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,7 +26,12 @@ var (
 
 func GetDatabaseConnection() (*sql.DB, error) {
 	dbPoolOnce.Do(func() {
-		mediaHubDBPath := filepath.Join("..", "db", "processed_files.db")
+		dbDir := filepath.Join("../db")
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			logger.Error("Failed to create db directory: %v", err)
+			return
+		}
+		mediaHubDBPath := filepath.Join(dbDir, "processed_files.db")
 
 		db, err := OpenAndConfigureDatabase(mediaHubDBPath)
 		if err != nil {

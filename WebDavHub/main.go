@@ -136,11 +136,21 @@ func createFrontendHandler() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		file, err := distFS.Open(strings.TrimPrefix(path, "/"))
+		lookupPath := strings.TrimPrefix(path, "/")
+		file, err := distFS.Open(lookupPath)
 		if err == nil {
 			stat, err := file.Stat()
 			file.Close()
 			if err == nil && !stat.IsDir() {
+				if strings.HasSuffix(lookupPath, ".html") || lookupPath == "index.html" || path == "/" {
+					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+					w.Header().Set("Pragma", "no-cache")
+					w.Header().Set("Expires", "0")
+				} else if strings.HasPrefix(lookupPath, "assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					w.Header().Set("Cache-Control", "public, max-age=86400")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
@@ -152,8 +162,10 @@ func createFrontendHandler() http.Handler {
 			return
 		}
 
-		// For all other paths (SPA routes), serve index.html
 		r.URL.Path = "/"
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		fileServer.ServeHTTP(w, r)
 	})
 }

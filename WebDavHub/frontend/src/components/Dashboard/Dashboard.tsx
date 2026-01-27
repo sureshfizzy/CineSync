@@ -1,28 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  Typography,
-  CircularProgress,
-  useTheme,
-  IconButton,
-  Button,
-} from '@mui/material';
-import {
-  Storage as StorageIcon,
-  Folder as FolderIcon,
-  Description as DescriptionIcon,
-  CloudDone as CloudDoneIcon,
-  Refresh as RefreshIcon,
-  Dashboard as DashboardIcon,
-  Movie as MovieIcon,
-  Tv as TvIcon,
-} from '@mui/icons-material';
+import { Box, Card, CardContent, Grid, Typography, CircularProgress, useTheme, IconButton, Button, Tabs, Tab } from '@mui/material';
+import { Storage as StorageIcon, Folder as FolderIcon, Description as DescriptionIcon, CloudDone as CloudDoneIcon, Refresh as RefreshIcon, Dashboard as DashboardIcon, Movie as MovieIcon, Tv as TvIcon, Link as LinkIcon, History as HistoryIcon } from '@mui/icons-material';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import RecentlyAddedMedia from './RecentlyAddedMedia';
+import SymlinkQueueTab from './SymlinkQueueTab';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 
@@ -63,8 +45,13 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentTab, setCurrentTab] = useState(0);
 
   const theme = useTheme();
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+  };
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
     setLoading(true);
@@ -329,12 +316,25 @@ export default function Dashboard() {
         ))}
       </Grid>
 
-      {/* Recently Added Media Section */}
-      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: { xs: 1, sm: 2 } }}>
-        <Grid size={12}>
-          <RecentlyAddedMedia />
-        </Grid>
-      </Grid>
+      {/* Recent Activity Tabs */}
+      <Box sx={{ mt: { xs: 2, sm: 3 } }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs value={currentTab} onChange={handleTabChange} sx={{ '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, fontSize: { xs: '0.875rem', sm: '1rem' }, minHeight: 48 } }}>
+            <Tab icon={<HistoryIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Recently Added" />
+            <Tab icon={<LinkIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Symlink Queue" />
+          </Tabs>
+        </Box>
+
+        {currentTab === 0 && (
+          <Grid container spacing={{ xs: 2, sm: 3 }}>
+            <Grid size={12}>
+              <RecentlyAddedMedia />
+            </Grid>
+          </Grid>
+        )}
+
+        {currentTab === 1 && <SymlinkQueueTab />}
+      </Box>
     </Box>
     </ConfigurationWrapper>
   );

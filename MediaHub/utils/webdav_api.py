@@ -5,7 +5,6 @@ import socket
 import requests
 from .logging_utils import log_message
 from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
-from MediaHub.utils.dashboard_utils import is_dashboard_available, send_dashboard_notification
 
 class ConnectionManager:
     """Simple connection manager with retry capability."""
@@ -100,8 +99,6 @@ def send_structured_message_http(message_type, data, max_retries=2):
 def send_structured_message(message_type, data, max_retries=2):
     """Send structured message to WebDavHub API with retry logic."""
     try:
-        if not is_dashboard_available():
-            return False
         return send_structured_message_http(message_type, data, max_retries)
     except Exception as e:
         log_message(f"Error sending structured message: {e}", level="DEBUG")

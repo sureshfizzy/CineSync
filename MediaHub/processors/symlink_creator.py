@@ -131,7 +131,17 @@ class ProcessingManager:
             log_message("Smart filtering complete: No unprocessed files found. All files are already processed!", level="INFO")
             return []
 
-        log_message(f"Smart filtering complete: Found {len(unprocessed_files)} unprocessed files (skipped {len(processed_files_set)} already processed)", level="INFO")
+        total_to_process = len(unprocessed_files)
+        log_message(f"Smart filtering complete: Found {total_to_process} unprocessed files (skipped {len(processed_files_set)} already processed)", level="INFO")
+
+        try:
+            send_structured_message("scan_started", {
+                "total_files": total_to_process,
+                "max_workers": self.max_workers,
+                "timestamp": time.time()
+            })
+        except Exception as e:
+            log_message(f"Error sending scan_started event: {e}", level="DEBUG")
 
         results = []
         active_futures = {}
@@ -211,6 +221,17 @@ class ProcessingManager:
                 retry_results = self._process_missed_files_sequentially(missed_files, dest_dir, tmdb_folder_id_enabled, rename_enabled, auto_select, tmdb_id, imdb_id, tvdb_id, force_show, force_movie, season_number, episode_number, force_extra, skip, manual_search, mode, force, batch_apply, is_single_file, dest_index, reverse_index)
                 results.extend(retry_results)
                 log_message(f"Retry processing complete. Additional {len(retry_results)} files processed", level="DEBUG")
+
+        # Send scan_completed event with final stats
+        try:
+            send_structured_message("scan_completed", {
+                "total_files": total_to_process,
+                "completed": completed_count,
+                "results_count": len(results),
+                "timestamp": time.time()
+            })
+        except Exception as e:
+            log_message(f"Error sending scan_completed event: {e}", level="DEBUG")
 
         return results
 

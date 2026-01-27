@@ -3197,21 +3197,30 @@ func HandleMediaHubMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if message.Type == "symlink_created" {
-		handleSymlinkCreated(message.Data)
-	} else if message.Type == "source_file_update" {
-		handleSourceFileUpdate(message.Data)
-	} else if message.Type == "file_deleted" {
-		handleFileDeleted(message.Data)
+	// Respond immediately to prevent client timeout, process async
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"success":true}`))
+
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
 	}
 
-	forwardToPythonBridge(message)
+	// Process message handlers asynchronously to avoid blocking the HTTP response
+	go func() {
+		if message.Type == "symlink_created" {
+			handleSymlinkCreated(message.Data)
+		} else if message.Type == "source_file_update" {
+			handleSourceFileUpdate(message.Data)
+		} else if message.Type == "file_deleted" {
+			handleFileDeleted(message.Data)
+		}
 
-	// Broadcast real-time update to all connected SSE clients
-	broadcastMediaHubUpdate(message)
+		forwardToPythonBridge(message)
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+		// Broadcast real-time update to all connected SSE clients
+		broadcastMediaHubUpdate(message)
+	}()
 }
 
 func forwardToPythonBridge(message struct {
