@@ -745,13 +745,13 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
 
     for i, part in enumerate(parsed.parts):
         if part.lower() in ['season', 's'] and i + 1 < len(parsed.parts):
-            next_part = parsed.parts[i + 1].strip().rstrip('.')
+            next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
             if re.match(r'^\d{1,2}$', next_part):
                 return True
 
         # Check for "Episode NNNN" pattern across parts
         if part.lower() == 'episode' and i + 1 < len(parsed.parts):
-            next_part = parsed.parts[i + 1].strip().rstrip('.')
+            next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
             if re.match(r'^\d{1,4}$', next_part):
                 return True
 
@@ -987,12 +987,12 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
             # Special handling for dashes: don't add if followed by episode number (anime-style)
             if clean_part == '-' and i + 1 < len(parts):
-                next_part = parts[i + 1].strip().rstrip('.')
+                next_part = parts[i + 1].strip().rstrip('.,;:')
                 if re.match(r'^\d{1,4}$', next_part):
                     break
 
             if clean_part.lower() in ['season', 's'] and i + 1 < len(parts):
-                next_part = parts[i + 1].strip().rstrip('.')
+                next_part = parts[i + 1].strip().rstrip('.,;:')
                 if re.match(r'^\d{1,2}$', next_part):
                     break
 
@@ -1248,7 +1248,7 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
 
         # Check for "Episode" followed by number in next part
         if is_tv and clean_part.lower() == 'episode' and i + 1 < len(parts):
-            next_part = parts[i + 1].strip().rstrip('.')
+            next_part = parts[i + 1].strip().rstrip('.,;:')
             if re.match(r'^\d{1,4}$', next_part):
                 break
 
@@ -1325,13 +1325,13 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 break
 
             if clean_part.lower() == 'season' and i + 1 < len(parts):
-                next_part = parts[i + 1].strip().rstrip('.')
+                next_part = parts[i + 1].strip().rstrip('.,;:')
                 if re.match(r'^\d{1,2}$', next_part):
                     break
 
             # Handle anime-style episode patterns
             if clean_part == '-' and i + 1 < len(parts):
-                next_part = parts[i + 1].strip().rstrip('.')
+                next_part = parts[i + 1].strip().rstrip('.,;:')
                 if re.match(r'^\d{1,4}$', next_part):
                     episode_num = int(next_part)
                     if 1 <= episode_num <= 4999:
@@ -1868,16 +1868,17 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     for i, part in enumerate(parts):
         # Check for "Season X - NN" pattern
         if part.lower() == 'season' and i + 2 < len(parts):
-            if (parts[i + 2] == '-' and i + 3 < len(parts) and
-                re.match(r'^\d{1,2}$', parts[i + 1]) and
-                re.match(r'^\d{1,4}$', parts[i + 3])):
-                episode_num = int(parts[i + 3])
-                if 1 <= episode_num <= 4999:
-                    return episode_num
+            season_part = parts[i + 1].strip().rstrip('.,;:')
+            if parts[i + 2] == '-' and i + 3 < len(parts):
+                episode_part = parts[i + 3].strip().rstrip('.,;:')
+                if re.match(r'^\d{1,2}$', season_part) and re.match(r'^\d{1,4}$', episode_part):
+                    episode_num = int(episode_part)
+                    if 1 <= episode_num <= 4999:
+                        return episode_num
 
         # Check for "Episode NNNN" pattern across parts
         if part.lower() == 'episode' and i + 1 < len(parts):
-            next_part = parts[i + 1]
+            next_part = parts[i + 1].strip().rstrip('.,;:')
             if re.match(r'^\d{1,4}$', next_part):
                 episode_num = int(next_part)
                 if 1 <= episode_num <= 4999:
