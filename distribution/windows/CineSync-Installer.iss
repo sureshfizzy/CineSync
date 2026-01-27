@@ -33,7 +33,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
 DisableWelcomePage=no
 SetupIconFile=..\..\WebDavHub\frontend\src\assets\logo.ico
-UninstallDisplayIcon={app}\WebDavHub\{#MyAppExeName}
+UninstallDisplayIcon={app}\logo.ico
 
 LicenseFile=..\..\LICENSE
 

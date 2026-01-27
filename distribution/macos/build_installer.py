@@ -413,6 +413,20 @@ class MacOSInstallerBuilder:
                 shutil.copy2(src, contents_dir / "Resources" / doc)
                 print(f"   ✓ Copied: {doc}")
         
+        # Copy icon file
+        icon_src_icns = self.webdavhub_dir / "frontend" / "src" / "assets" / "logo.icns"
+        icon_src_png = self.webdavhub_dir / "frontend" / "src" / "assets" / "logo.png"
+
+        if icon_src_icns.exists():
+            shutil.copy2(icon_src_icns, contents_dir / "Resources" / "logo.icns")
+            print(f"   ✓ Copied: logo.icns")
+        elif icon_src_png.exists():
+            shutil.copy2(icon_src_png, contents_dir / "Resources" / "logo.icns")
+            print(f"   ✓ Copied: logo.png as logo.icns")
+            self.print_warning("Using PNG icon. For best results, create a .icns file using 'iconutil' or 'sips'")
+        else:
+            self.print_warning("No icon file found. App will use default icon.")
+
         self.print_success("Files copied to app bundle")
     
     def create_info_plist(self):
@@ -432,6 +446,7 @@ class MacOSInstallerBuilder:
             'CFBundlePackageType': 'APPL',
             'CFBundleShortVersionString': self.VERSION,
             'CFBundleVersion': self.VERSION,
+            'CFBundleIconFile': 'logo.icns',
             'LSMinimumSystemVersion': '10.15',
             'NSHighResolutionCapable': True,
             'NSRequiresAquaSystemAppearance': False,
