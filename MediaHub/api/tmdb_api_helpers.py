@@ -752,7 +752,13 @@ def calculate_score(result, query, year=None):
         normalized = re.sub(r'\s+', ' ', normalized).strip()
         return normalized
 
+    def normalize_and_ampersand(text):
+        """Normalize 'and' and '&' for better matching"""
+        normalized = re.sub(r'\s+&\s+', ' and ', text)
+        return normalized
+
     query_normalized = normalize_for_matching(query)
+    query_normalized_with_and = normalize_and_ampersand(query_normalized)
 
     # Check if we're dealing with a movie or TV show result
     if 'title' in result:
@@ -768,14 +774,22 @@ def calculate_score(result, query, year=None):
 
     # Normalize titles for matching
     title_normalized = normalize_for_matching(title)
+    title_normalized_with_and = normalize_and_ampersand(title_normalized)
     original_title_normalized = normalize_for_matching(original_title)
+    original_title_normalized_with_and = normalize_and_ampersand(original_title_normalized)
 
-    # Title matching
+    # Title matching with improved "and" vs "&" handling
     exact_match_bonus = 0
     if query_normalized == title_normalized:
         score += 60
         exact_match_bonus = 25
     elif query_normalized == original_title_normalized:
+        score += 45
+        exact_match_bonus = 15
+    elif query_normalized_with_and == title_normalized_with_and:
+        score += 60
+        exact_match_bonus = 25
+    elif query_normalized_with_and == original_title_normalized_with_and:
         score += 45
         exact_match_bonus = 15
     elif query_normalized in title_normalized or title_normalized in query_normalized:
@@ -784,8 +798,8 @@ def calculate_score(result, query, year=None):
         score += 30
 
     # Title similarity calculation (20 points)
-    title_similarity = difflib.SequenceMatcher(None, query_normalized, title_normalized).ratio() * 20
-    original_title_similarity = difflib.SequenceMatcher(None, query_normalized, original_title_normalized).ratio() * 20
+    title_similarity = difflib.SequenceMatcher(None, query_normalized_with_and, title_normalized_with_and).ratio() * 20
+    original_title_similarity = difflib.SequenceMatcher(None, query_normalized_with_and, original_title_normalized_with_and).ratio() * 20
     score += max(title_similarity, original_title_similarity)
 
     # Year match scoring (20 points)
@@ -794,6 +808,38 @@ def calculate_score(result, query, year=None):
             score += 20
         elif abs(int(result_year) - int(year)) <= 1:
             score += 10
+
+    # Country/region bonus - Check if query contains country suffix that matches origin_country
+    country_code_map = {
+        'us': 'US', 'usa': 'US', 'united states': 'US',
+        'uk': 'GB', 'britain': 'GB', 'great britain': 'GB', 'england': 'GB',
+        'au': 'AU', 'australia': 'AU', 'aussie': 'AU',
+        'ca': 'CA', 'canada': 'CA',
+        'nz': 'NZ', 'new zealand': 'NZ',
+        'de': 'DE', 'germany': 'DE',
+        'fr': 'FR', 'france': 'FR',
+        'it': 'IT', 'italy': 'IT',
+        'es': 'ES', 'spain': 'ES',
+        'jp': 'JP', 'japan': 'JP',
+        'kr': 'KR', 'korea': 'KR', 'south korea': 'KR',
+        'dk': 'DK', 'denmark': 'DK',
+        'nl': 'NL', 'netherlands': 'NL', 'holland': 'NL',
+        'be': 'BE', 'belgium': 'BE',
+        'no': 'NO', 'norway': 'NO',
+        'se': 'SE', 'sweden': 'SE',
+        'fi': 'FI', 'finland': 'FI',
+        'ie': 'IE', 'ireland': 'IE',
+    }
+
+    query_words = query_normalized.split()
+    origin_countries = result.get('origin_country', [])
+
+    if query_words and origin_countries:
+        last_word = query_words[-1].lower()
+        if last_word in country_code_map:
+            expected_country = country_code_map[last_word]
+            if expected_country in origin_countries:
+                score += 30
 
     # Language and country bonus
     popular_languages = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'hi', 'pt', 'it', 'ru']
