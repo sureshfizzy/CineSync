@@ -434,7 +434,6 @@ def check_dashboard_availability():
         force_dashboard_recheck()
 
         if is_dashboard_available():
-            log_message("Dashboard is available for notifications", level="INFO")
             return True
         else:
             log_message("Dashboard is not available - notifications will be cached to avoid delays", level="WARNING")
@@ -721,7 +720,16 @@ def main(dest_dir):
             monitor_thread.daemon = True
             monitor_thread.start()
             time.sleep(2)
-            create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search, use_source_db=args.use_source_db)
+            def run_initial_scan():
+                try:
+                    create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search, use_source_db=args.use_source_db)
+                except Exception as e:
+                    log_message(f"Initial scan error: {e}", level="ERROR")
+
+            initial_scan_thread = threading.Thread(target=run_initial_scan, name="InitialScanThread")
+            initial_scan_thread.daemon = True
+            initial_scan_thread.start()
+            log_message("Initial scan started in background - monitor will continue running", level="INFO")
 
             while monitor_thread.is_alive() and not terminate_flag.is_set():
                 time.sleep(0.1)

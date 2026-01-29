@@ -1004,14 +1004,12 @@ def get_dest_index_from_processed_files(conn, skip_existence_check=False):
         total_dest_count = len(all_dest_paths)
         
         if skip_existence_check:
-            # Fast path: Just load from database without checking existence
-            # Return empty processed_files_set so files aren't skipped based on stale database entries
-            # Files will be checked individually using is_file_processed() which queries the database
             dest_paths = set(all_dest_paths)
             reverse_index = {}
             elapsed_time = time.time() - start_time
-            log_message(f"Database index loaded (fast mode): {total_dest_count} destination paths, 0 processed files (will check individually) in {elapsed_time:.2f}s", level="INFO")
-            return dest_paths, reverse_index, set()  # Return empty set to avoid skipping files
+            processed_count = len(all_processed_files)
+            log_message(f"Database index loaded: {total_dest_count} destination paths, {processed_count} processed files in {elapsed_time:.2f}s", level="INFO")
+            return dest_paths, reverse_index, all_processed_files
         
         # Slow path: Check file existence (only when explicitly needed)
         log_message(f"Checking existence of {total_dest_count} destination paths using {get_db_max_workers()} workers...", level="INFO")

@@ -187,7 +187,6 @@ class ProcessingManager:
                             del active_futures[future]
 
                     # Short sleep to allow signal handling
-                    import time
                     time.sleep(0.1)
 
                 except KeyboardInterrupt:
@@ -351,6 +350,8 @@ class ProcessingManager:
 
             else:
                 for root, _, files in os.walk(src_dir):
+                    if is_shutdown_requested():
+                        break
                     for file in files:
                         if is_shutdown_requested():
                             break
@@ -370,8 +371,10 @@ class ProcessingManager:
 
                         unprocessed_files.append(src_file)
 
-                        if total_scanned % BATCH_SIZE == 0:
-                            log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="DEBUG")
+                    if total_scanned > 0 and total_scanned % 100 == 0:
+                        time.sleep(0.01)
+                    if total_scanned > 0 and total_scanned % BATCH_SIZE == 0:
+                        log_message(f"Smart scan progress: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="DEBUG")
 
         log_message(f"Filesystem scan complete: {total_scanned} files scanned, {len(unprocessed_files)} need processing, {total_skipped} already processed", level="INFO")
         return unprocessed_files

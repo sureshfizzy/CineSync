@@ -54,7 +54,6 @@ def reload_env_if_changed() -> bool:
                     value = value[1:-1]
                 _env_cache[key] = value
                 os.environ[key] = value
-        log_message("Environment variables reloaded from .env file", "DEBUG")
         return True
     except Exception as e:
         log_message(f"Failed to reload environment variables: {e}", "WARNING")

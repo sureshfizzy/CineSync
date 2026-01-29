@@ -144,6 +144,7 @@ def check_rclone_mount():
 def scan_directories(dirs_to_watch, current_files, last_mod_times=None):
     """
     Scans directories for new or removed files and tracks directory modifications.
+    Optimized to minimize filesystem calls for better performance on network drives.
     Args:
         dirs_to_watch (list): Directories to monitor
         current_files (dict): Current known files in directories
@@ -165,31 +166,28 @@ def scan_directories(dirs_to_watch, current_files, last_mod_times=None):
             continue
 
         try:
-            dir_entries = os.listdir(directory)
+            dir_entries = []
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    dir_entries.append(entry.name)
+                    if entry.is_dir(follow_symlinks=False):
+                        try:
+                            current_mod_time = entry.stat(follow_symlinks=False).st_mtime
+                            mod_key = entry.path
+
+                            if mod_key in last_mod_times:
+                                if current_mod_time > last_mod_times[mod_key]:
+                                    log_message(f"Top-level Subdirectory Modified: {entry.path}", level="DEBUG")
+                                    modified_dirs[entry.path] = {
+                                        'old_mod_time': last_mod_times[mod_key],
+                                        'new_mod_time': current_mod_time
+                                    }
+
+                            last_mod_times[mod_key] = current_mod_time
+
+                        except Exception as e:
+                            log_message(f"Error checking subdirectory {entry.path}: {str(e)}", level="ERROR")
             new_files[directory] = set(dir_entries)
-
-            for entry in dir_entries:
-                full_path = os.path.join(directory, entry)
-
-                if os.path.isdir(full_path):
-                    try:
-                        dir_stat = os.stat(full_path)
-                        current_mod_time = dir_stat.st_mtime
-
-                        mod_key = full_path
-
-                        if mod_key in last_mod_times:
-                            if current_mod_time > last_mod_times[mod_key]:
-                                log_message(f"Top-level Subdirectory Modified: {full_path}", level="DEBUG")
-                                modified_dirs[full_path] = {
-                                    'old_mod_time': last_mod_times[mod_key],
-                                    'new_mod_time': current_mod_time
-                                }
-
-                        last_mod_times[mod_key] = current_mod_time
-
-                    except Exception as e:
-                        log_message(f"Error checking subdirectory {full_path}: {str(e)}", level="ERROR")
 
         except Exception as e:
             log_message(f"Failed to scan directory {directory}: {str(e)}", level="ERROR")
@@ -351,9 +349,22 @@ def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_bat
         raise
 
 def _process_single_file(full_path):
-    """Helper function to process a single file."""
-    log_message(f"Processing new file: {full_path}", level="INFO")
-    process_file(full_path)
+    """Helper function to process a single file or directory."""
+    if os.path.isdir(full_path):
+        log_message(f"Processing new directory: {full_path}", level="INFO")
+        try:
+            for root, _, files in os.walk(full_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if not get_known_types(file):
+                        continue
+                    log_message(f"Processing file from new directory: {file_path}", level="INFO")
+                    process_file(file_path)
+        except Exception as e:
+            log_message(f"Error processing directory {full_path}: {str(e)}", level="ERROR")
+    else:
+        log_message(f"Processing new file: {full_path}", level="INFO")
+        process_file(full_path)
 
 def _process_removed_files_batch(dest_dir, removed_file_paths, db_batch_size=None):
     """Helper function to process a batch of removed files efficiently using database configurations and parallel processing."""
@@ -421,7 +432,10 @@ def initial_scan(dirs_to_watch):
 
         if os.path.exists(directory):
             try:
-                files = set(os.listdir(directory))
+                files = set()
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        files.add(entry.name)
                 current_files[directory] = files
                 log_message(f"Initial scan found {len(files)} files in {directory}", level="INFO")
             except Exception as e:
