@@ -280,7 +280,6 @@ func getMediaHubStatus() (*MediaHubStatus, error) {
 	// Check if lock file exists (created by Python script)
 	if _, err := os.Stat(lockFile); err == nil {
 		status.LockFileExists = true
-		logger.Debug("MediaHub lock file found at: %s", lockFile)
 	}
 
 	// Check monitor process (created by Python script)

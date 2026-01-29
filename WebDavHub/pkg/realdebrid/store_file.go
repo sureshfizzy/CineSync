@@ -3,10 +3,12 @@ package realdebrid
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -502,6 +504,16 @@ func (s *CineSyncStore) Count() int {
 	return len(files)
 }
 
+// isWindowsFileLockError checks if the error is a Windows file locking error
+func isWindowsFileLockError(err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	return err != nil && (errors.Is(err, os.ErrPermission) || 
+		strings.Contains(err.Error(), "being used by another process") ||
+		strings.Contains(err.Error(), "Access is denied"))
+}
+
 // writeJSON writes data to a file as JSON
 func (s *CineSyncStore) writeJSON(filePath string, data interface{}) error {
 	buf := bufferPool.Get().(*bytes.Buffer)
@@ -512,9 +524,17 @@ func (s *CineSyncStore) writeJSON(filePath string, data interface{}) error {
 		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
 
-	// Write to temp file first, then rename (atomic)
+	content := buf.Bytes()
+
+	if runtime.GOOS == "windows" {
+		if err := os.WriteFile(filePath, content, 0644); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+		return nil
+	}
+
 	tmpPath := filePath + ".tmp"
-	if err := os.WriteFile(tmpPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 

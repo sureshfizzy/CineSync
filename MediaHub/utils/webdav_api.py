@@ -70,7 +70,6 @@ def send_structured_message_http(message_type, data, max_retries=2):
             return False
 
         except requests.exceptions.Timeout as e:
-            log_message(f"Timeout sending {message_type}, attempt {attempt + 1}: {e}", level="DEBUG")
             if attempt < max_retries:
                 _connection_manager.mark_failure()
                 time.sleep(2)
