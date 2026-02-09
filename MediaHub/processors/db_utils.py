@@ -656,7 +656,7 @@ def check_file_in_db(conn, file_path):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT COUNT(*) FROM processed_files
-            WHERE file_path = ? OR destination_path = ?
+            WHERE lower(file_path) = lower(?) OR lower(destination_path) = lower(?)
         """, (file_path, file_path))
         count = cursor.fetchone()[0]
         if count > 0:

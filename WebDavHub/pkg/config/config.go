@@ -291,6 +291,7 @@ func getConfigDefinitions() []ConfigValue {
 		// Real-Time Monitoring Configuration
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
 		{Key: "SYMLINK_CLEANUP_INTERVAL", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Cleanup interval for deleting broken symbolic links"},
+		{Key: "SYMLINK_DELETE_BEHAVIOUR", Category: "Real-Time Monitoring Configuration", Type: "string", Required: false, Description: "Symlink deletion behavior: trash or permanent"},
 
 		// Plex Integration Configuration
 		{Key: "ENABLE_PLEX_UPDATE", Category: "Plex Integration Configuration", Type: "boolean", Required: false, Description: "Enable or disable Plex library updates"},
@@ -738,6 +739,7 @@ func getConfigDefaults() map[string]string {
 		// Monitoring
 		"SLEEP_TIME":               "60",
 		"SYMLINK_CLEANUP_INTERVAL": "600",
+		"SYMLINK_DELETE_BEHAVIOUR": "permanent",
 		// Plex
 		"ENABLE_PLEX_UPDATE": "false",
 		"PLEX_URL":           "",

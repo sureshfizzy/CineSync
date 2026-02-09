@@ -72,6 +72,12 @@ def generate_unique_filename(dest_file, src_file=None):
 			return versioned_path
 		counter += 1
 
+def _get_symlink_delete_behaviour():
+	value = os.getenv('SYMLINK_DELETE_BEHAVIOUR', '').strip().lower()
+	if value in ('trash', 'permanent'):
+		return value
+	return 'permanent'
+
 def _move_symlink_to_trash(symlink_path):
 	"""Move a symlink to central db/trash (next to DB files), preserving link target."""
 	try:
@@ -100,7 +106,8 @@ def _safe_delete_symlink(path):
 		if not os.path.lexists(path):
 			return True
 		if os.path.islink(path):
-			if (os.getenv('TRASH_ENABLED', 'true').lower() in ['true','1','yes']) and _move_symlink_to_trash(path):
+			behaviour = _get_symlink_delete_behaviour()
+			if behaviour == 'trash' and _move_symlink_to_trash(path):
 				return True
 		os.remove(path)
 		return True
@@ -189,6 +196,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
     if removed_path:
         # Normalize the removed path and handle spaces
         removed_path = os.path.normpath(removed_path)
+        removed_path = normalize_file_path(removed_path)
         log_message(f"Processing removed path: {removed_path}", level="DEBUG")
 
         try:
@@ -341,7 +349,13 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         # Trigger Plex refresh for deletion
                                         update_plex_after_deletion(safe_path)
 
-                                        _cleanup_empty_dirs(os.path.dirname(safe_path))
+                                        if tmdb_id:
+                                            try:
+                                                cleanup_tmdb_covers(int(tmdb_id))
+                                            except Exception as e:
+                                                log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+
+                                        _cleanup_empty_dirs(os.path.dirname(safe_path), stop_at=dest_dir)
                                     except OSError as e:
                                         log_message(f"Error handling symlink {safe_path}: {e}", level="ERROR")
                                 else:
@@ -386,7 +400,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                             # Clean up empty directories
                                             try:
-                                                _cleanup_empty_dirs(os.path.dirname(safe_path))
+                                                _cleanup_empty_dirs(os.path.dirname(safe_path), stop_at=dest_dir)
                                             except Exception as e:
                                                 log_message(f"Error cleaning up directories: {e}", level="WARNING")
                                         else:
@@ -514,7 +528,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                             update_plex_after_deletion(possible_dest_path)
                                             cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (possible_dest_path,))
                                             cursor2.execute("DELETE FROM file_index WHERE path = ?", (possible_dest_path,))
-                                            _cleanup_empty_dirs(os.path.dirname(possible_dest_path))
+                                            _cleanup_empty_dirs(os.path.dirname(possible_dest_path), stop_at=dest_dir)
                                         else:
                                             log_message(f"Symlink exists but target still exists: {target}", level="INFO")
                                     else:
@@ -579,7 +593,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     update_plex_after_deletion(file_path)
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (file_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (file_path,))
-                                                    _cleanup_empty_dirs(os.path.dirname(file_path))
+                                                    _cleanup_empty_dirs(os.path.dirname(file_path), stop_at=dest_dir)
                                             except OSError as e:
                                                 log_message(f"Error reading symlink {file_path}: {e}", level="ERROR")
 
@@ -623,7 +637,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                                     update_plex_after_deletion(dest_path)
                                                     cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
                                                     cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
-                                                    _cleanup_empty_dirs(os.path.dirname(dest_path))
+                                                    _cleanup_empty_dirs(os.path.dirname(dest_path), stop_at=dest_dir)
 
                     # Process database-tracked symlinks
                     for item in all_paths:
@@ -666,7 +680,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
                                         cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (symlink_path,))
                                         cursor2.execute("DELETE FROM file_index WHERE path = ?", (symlink_path,))
 
-                                        _cleanup_empty_dirs(os.path.dirname(safe_path))
+                                        _cleanup_empty_dirs(os.path.dirname(safe_path), stop_at=dest_dir)
                                     except OSError as e:
                                         log_message(f"Error handling symlink {safe_path}: {e}", level="ERROR")
                                 else:
@@ -710,7 +724,7 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
                                             # Clean up empty directories
                                             try:
-                                                _cleanup_empty_dirs(os.path.dirname(safe_path))
+                                                _cleanup_empty_dirs(os.path.dirname(safe_path), stop_at=dest_dir)
                                             except Exception as e:
                                                 log_message(f"Error cleaning up directories: {e}", level="WARNING")
                                         else:
@@ -761,10 +775,14 @@ def delete_broken_symlinks(dest_dir, removed_path=None):
 
     return symlinks_deleted
 
-def _cleanup_empty_dirs(dir_path):
+def _cleanup_empty_dirs(dir_path, stop_at=None):
     """Helper function to clean up empty directories."""
+    stop_at = os.path.normpath(stop_at) if stop_at else None
     while dir_path and os.path.isdir(dir_path):
         try:
+            normalized_dir = os.path.normpath(dir_path)
+            if stop_at and normalized_dir == stop_at:
+                break
             # Get directory contents
             dir_contents = os.listdir(dir_path)
 
@@ -822,7 +840,7 @@ def _check_all_symlinks(dest_dir):
                 # Trigger Plex refresh for deletion
                 update_plex_after_deletion(file_path)
 
-                _cleanup_empty_dirs(os.path.dirname(file_path))
+                _cleanup_empty_dirs(os.path.dirname(file_path), stop_at=dest_dir)
 
 def normalize_path(path):
     """

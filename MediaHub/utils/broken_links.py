@@ -87,7 +87,7 @@ def main():
                 for symlink in broken_symlinks:
                     os.remove(symlink)
             else:
-                logging.info(f"No broken symlinks found in {directory}.")
+                pass
         else:
             logging.error(f"Failed to change directory to {directory}")
 

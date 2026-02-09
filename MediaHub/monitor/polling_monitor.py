@@ -3,6 +3,7 @@ import time
 import subprocess
 import sys
 import signal
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event
 
@@ -15,6 +16,7 @@ from MediaHub.processors.db_utils import *
 from MediaHub.config.config import *
 from MediaHub.processors.symlink_creator import *
 from MediaHub.processors.symlink_utils import delete_broken_symlinks, delete_broken_symlinks_batch
+from MediaHub.monitor.symlink_cleanup import run_symlink_cleanup
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_event, set_shutdown, is_shutdown_requested
 from MediaHub.utils.webdav_api import send_source_file_update
@@ -22,6 +24,16 @@ import requests
 
 # Add state variables for mount status tracking
 mount_state = None
+
+def _should_defer_symlink_deletion():
+    """Defer symlink deletion to the cleanup thread when SYMLINK_CLEANUP_INTERVAL is set."""
+    raw = os.getenv('SYMLINK_CLEANUP_INTERVAL')
+    if raw is None or raw.strip() == '':
+        return False
+    try:
+        return int(raw) > 0
+    except (ValueError, TypeError):
+        return False
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
@@ -342,7 +354,7 @@ def _process_modified_directory(mod_dir, mod_details, src_dirs, dest_dir, db_bat
         if removed_files:
             removed_file_paths = [os.path.join(mod_dir, removed_file) for removed_file in removed_files]
             log_message(f"Processing {len(removed_file_paths)} removed files from modified directory using batch processing", level="INFO")
-            delete_broken_symlinks_batch(dest_dir, removed_file_paths)
+            _process_removed_files_batch(dest_dir, removed_file_paths, db_batch_size)
 
     except Exception as e:
         log_message(f"Error processing modified directory {mod_dir}: {str(e)}", level="ERROR")
@@ -369,6 +381,10 @@ def _process_single_file(full_path):
 def _process_removed_files_batch(dest_dir, removed_file_paths, db_batch_size=None):
     """Helper function to process a batch of removed files efficiently using database configurations and parallel processing."""
     log_message(f"Processing batch of {len(removed_file_paths)} removed files using optimized batch processing", level="INFO")
+
+    if _should_defer_symlink_deletion():
+        log_message("Deferring symlink deletion to scheduled cleanup interval", level="INFO")
+        return
 
     delete_broken_symlinks_batch(dest_dir, removed_file_paths)
 
@@ -476,6 +492,14 @@ def main():
     if not src_dirs or not dest_dir:
         log_message("Source or destination directory not set in environment variables", level="ERROR")
         exit(1)
+
+    # Start symlink cleanup in monitor process
+    if os.path.exists(dest_dir):
+        cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
+        cleanup_thread.daemon = True
+        cleanup_thread.start()
+    else:
+        log_message(f"Destination directory {dest_dir} does not exist; skipping symlink cleanup", level="WARNING")
 
     # Get configuration from environment
     sleep_time = get_env_int('SLEEP_TIME', 60)

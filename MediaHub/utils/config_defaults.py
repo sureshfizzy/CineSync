@@ -97,6 +97,7 @@ def collect_defaults():
         # Monitoring
         "SLEEP_TIME": "60",
         "SYMLINK_CLEANUP_INTERVAL": "600",
+        "SYMLINK_DELETE_BEHAVIOUR": "permanent",
         # Plex
         "ENABLE_PLEX_UPDATE": "false",
         "PLEX_URL": "",

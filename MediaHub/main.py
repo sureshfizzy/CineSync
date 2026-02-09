@@ -687,10 +687,6 @@ def main(dest_dir):
             # missing_files_thread.start()
             log_message("Missing files check disabled at startup for better performance", level="INFO")
 
-            #Symlink cleanup
-            cleanup_thread = threading.Thread(target=run_symlink_cleanup, args=(dest_dir,))
-            cleanup_thread.daemon = True
-            cleanup_thread.start()
         elif is_single_file_operation:
             log_message("Single file operation detected - skipping background processes and dashboard checks for faster startup", level="INFO")
         else:
