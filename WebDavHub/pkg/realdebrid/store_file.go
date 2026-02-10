@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"cinesync/pkg/logger"
@@ -514,6 +515,10 @@ func isWindowsFileLockError(err error) bool {
 		strings.Contains(err.Error(), "Access is denied"))
 }
 
+func isNameTooLongError(err error) bool {
+	return err != nil && errors.Is(err, syscall.ENAMETOOLONG)
+}
+
 // writeJSON writes data to a file as JSON
 func (s *CineSyncStore) writeJSON(filePath string, data interface{}) error {
 	buf := bufferPool.Get().(*bytes.Buffer)
@@ -535,11 +540,23 @@ func (s *CineSyncStore) writeJSON(filePath string, data interface{}) error {
 
 	tmpPath := filePath + ".tmp"
 	if err := os.WriteFile(tmpPath, content, 0644); err != nil {
+		if isNameTooLongError(err) {
+			if err := os.WriteFile(filePath, content, 0644); err != nil {
+				return fmt.Errorf("failed to write file (direct): %w", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, filePath); err != nil {
 		os.Remove(tmpPath)
+		if isNameTooLongError(err) {
+			if err := os.WriteFile(filePath, content, 0644); err != nil {
+				return fmt.Errorf("failed to write file (direct): %w", err)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to rename file: %w", err)
 	}
 
