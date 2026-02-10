@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,10 +34,14 @@ func validateRealDebridConfig() (*realdebrid.Config, error) {
 func effectiveModTime(tm *realdebrid.TorrentManager, torrentID string, info *realdebrid.TorrentInfo) time.Time {
 	if info != nil {
 		if info.Ended != "" {
-			if t, err := time.Parse(time.RFC3339, info.Ended); err == nil { return t }
+			if t, err := time.Parse(time.RFC3339, info.Ended); err == nil {
+				return t
+			}
 		}
 		if info.Added != "" {
-			if t, err := time.Parse(time.RFC3339, info.Added); err == nil { return t }
+			if t, err := time.Parse(time.RFC3339, info.Added); err == nil {
+				return t
+			}
 		}
 	}
 	if tm != nil {
@@ -52,9 +56,9 @@ func effectiveModTime(tm *realdebrid.TorrentManager, torrentID string, info *rea
 // Shared streaming client for file downloads (optimized for maximum throughput)
 var streamClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConns:          200,         // Maximum idle connections for better reuse
-		MaxIdleConnsPerHost:   50,          // More connections per host for parallel streams
-		MaxConnsPerHost:       0,           // Unlimited - let OS handle connection limits
+		MaxIdleConns:          200,              // Maximum idle connections for better reuse
+		MaxIdleConnsPerHost:   50,               // More connections per host for parallel streams
+		MaxConnsPerHost:       0,                // Unlimited - let OS handle connection limits
 		IdleConnTimeout:       45 * time.Second, // Reduced from 90s to prevent stale connections
 		DisableKeepAlives:     false,
 		ForceAttemptHTTP2:     true,
@@ -62,8 +66,8 @@ var streamClient = &http.Client{
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		DisableCompression:    true,
-		ReadBufferSize:        128 * 1024,  // 128KB read buffer for faster transfers
-		WriteBufferSize:       128 * 1024,  // 128KB write buffer
+		ReadBufferSize:        128 * 1024, // 128KB read buffer for faster transfers
+		WriteBufferSize:       128 * 1024, // 128KB write buffer
 	},
 	Timeout: 0,
 }
@@ -235,26 +239,26 @@ func HandleRealDebridTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // Test REST API connection using API key as Bearer token
-    // Reference: Real-Debrid API docs - GET /user
-    // https://api.real-debrid.com/rest/1.0/
-    client := realdebrid.NewClient(request.APIKey)
-    userInfo, err := client.GetUserInfo()
-    if err != nil {
-        response := map[string]interface{}{
-            "success": false,
-            "error":   err.Error(),
-        }
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(response)
-        return
-    }
+	// Test REST API connection using API key as Bearer token
+	// Reference: Real-Debrid API docs - GET /user
+	// https://api.real-debrid.com/rest/1.0/
+	client := realdebrid.NewClient(request.APIKey)
+	userInfo, err := client.GetUserInfo()
+	if err != nil {
+		response := map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-    response := map[string]interface{}{
-        "success": true,
-        "userInfo": userInfo,
-        "message": "API connection successful",
-    }
+	response := map[string]interface{}{
+		"success":  true,
+		"userInfo": userInfo,
+		"message":  "API connection successful",
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -297,7 +301,7 @@ func HandleRealDebridHttpDavTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpDavClient := realdebrid.NewHttpDavClient(request.UserID, request.Password, "https://dav.real-debrid.com/")
-	
+
 	if err := httpDavClient.TestConnection(); err != nil {
 		response := map[string]interface{}{
 			"success": false,
@@ -321,10 +325,10 @@ func HandleRealDebridHttpDavTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"success":     true,
-		"message":     "HTTP DAV connection successful",
-		"fileCount":   len(files),
-		"baseUrl":     "https://dav.real-debrid.com/",
+		"success":   true,
+		"message":   "HTTP DAV connection successful",
+		"fileCount": len(files),
+		"baseUrl":   "https://dav.real-debrid.com/",
 		"directoryInfo": map[string]interface{}{
 			"accessible": true,
 			"fileCount":  len(files),
@@ -423,22 +427,22 @@ func getHttpDavDirectoryWithPagination(httpDavClient *realdebrid.HttpDavClient, 
 	case "/torrents", "/torrents/":
 		configManager := realdebrid.GetConfigManager()
 		config := configManager.GetConfig()
-		
+
 		if !config.HttpDavSettings.Enabled {
 			return nil, fmt.Errorf("HTTP DAV not enabled")
 		}
-		
+
 		tm := realdebrid.GetTorrentManager(config.APIKey)
 		return tm.GetHttpDavTorrents(), nil
-		
+
 	case "/links", "/links/":
 		configManager := realdebrid.GetConfigManager()
 		config := configManager.GetConfig()
-		
+
 		if !config.HttpDavSettings.Enabled {
 			return nil, fmt.Errorf("HTTP DAV not enabled")
 		}
-		
+
 		tm := realdebrid.GetTorrentManager(config.APIKey)
 		return tm.GetHttpDavLinks(), nil
 	}
@@ -461,7 +465,7 @@ func getHttpDavDirectoryWithPagination(httpDavClient *realdebrid.HttpDavClient, 
 			filteredFiles = append(filteredFiles, file)
 		}
 	}
-	
+
 	return filteredFiles, nil
 }
 
@@ -469,7 +473,7 @@ func getHttpDavDirectoryWithPagination(httpDavClient *realdebrid.HttpDavClient, 
 func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 	// Set CORS and WebDAV headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, PROPFIND, DELETE, MOVE, COPY")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS, PROPFIND, DELETE, MOVE, COPY")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Depth")
 	w.Header().Set("DAV", "1, 2")
 
@@ -490,219 +494,300 @@ func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 		reqPath = "/"
 	}
 
-    switch r.Method {
+	switch r.Method {
 	case "PROPFIND":
 		handleTorrentPropfind(w, r, config.APIKey, reqPath)
 	case "GET", "HEAD":
 		handleTorrentGet(w, r, config.APIKey, reqPath)
-    case "DELETE":
-        handleTorrentDelete(w, r, config.APIKey, reqPath)
-    case "MOVE", "COPY":
-        http.Error(w, "Not Implemented", http.StatusNotImplemented)
+	case "DELETE":
+		handleTorrentDelete(w, r, config.APIKey, reqPath)
+	case "MOVE", "COPY":
+		http.Error(w, "Not Implemented", http.StatusNotImplemented)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-
 // HandleRealDebridDownloads lists user's torrents from cache via REST API with pagination
 func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-    if r.Method == "OPTIONS" {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
-    if r.Method != http.MethodGet {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    cfg, err := validateRealDebridConfig()
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    // Parse pagination parameters
-    query := r.URL.Query()
-    page := 1
-    limit := -1
-    if p := query.Get("page"); p != "" {
-        if parsed, err := fmt.Sscanf(p, "%d", &page); err == nil && parsed == 1 && page > 0 {
-            // page is valid
-        } else {
-            page = 1
-        }
-    }
-    if l := query.Get("limit"); l != "" {
-        if parsed, err := fmt.Sscanf(l, "%d", &limit); err == nil && parsed == 1 && limit > 0 {
-        }
-    }
+	// Parse pagination parameters
+	query := r.URL.Query()
+	page := 1
+	limit := -1
+	if p := query.Get("page"); p != "" {
+		if parsed, err := fmt.Sscanf(p, "%d", &page); err == nil && parsed == 1 && page > 0 {
+			// page is valid
+		} else {
+			page = 1
+		}
+	}
+	if l := query.Get("limit"); l != "" {
+		if parsed, err := fmt.Sscanf(l, "%d", &limit); err == nil && parsed == 1 && limit > 0 {
+		}
+	}
 
-    // Get live data from TorrentManager's idToItemMap
-    var items []realdebrid.TorrentItem
-    tm := realdebrid.GetTorrentManager(cfg.APIKey)
-    if tm != nil {
-        items = tm.GetAllTorrentsFromCache()
-        if len(items) > 0 {
-            sort.Slice(items, func(i, j int) bool {
-                return items[i].Added > items[j].Added
-            })
-        }
-    }
+	// Get live data from TorrentManager's idToItemMap
+	var items []realdebrid.TorrentItem
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm != nil {
+		items = tm.GetAllTorrentsFromCache()
+		if len(items) > 0 {
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].Added > items[j].Added
+			})
+		}
+	}
 
-    if len(items) == 0 && len(cachedTorrents) > 0 {
-        items = cachedTorrents
-    }
+	if len(items) == 0 && len(cachedTorrents) > 0 {
+		items = cachedTorrents
+	}
 
-    if len(items) == 0 {
-        client := realdebrid.NewClient(cfg.APIKey)
-        var err error
-        items, err = client.GetAllTorrents(1000, nil)
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusBadGateway)
-            return
-        }
-        logger.Debug("[RD] Fetched %d torrents live from API", len(items))
-    }
+	if len(items) == 0 {
+		client := realdebrid.NewClient(cfg.APIKey)
+		var err error
+		items, err = client.GetAllTorrents(1000, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		logger.Debug("[RD] Fetched %d torrents live from API", len(items))
+	}
 
-    // Calculate pagination
-    total := len(items)
-    var offset, end int
-    if limit <= 0 {
-        offset = 0
-        end = total
-    } else {
-        offset = (page - 1) * limit
-        end = offset + limit
-        if offset >= total {
-            offset = 0
-            end = 0
-        }
-        if end > total {
-            end = total
-        }
-    }
+	// Calculate pagination
+	total := len(items)
+	var offset, end int
+	if limit <= 0 {
+		offset = 0
+		end = total
+	} else {
+		offset = (page - 1) * limit
+		end = offset + limit
+		if offset >= total {
+			offset = 0
+			end = 0
+		}
+		if end > total {
+			end = total
+		}
+	}
 
-    // map to a simplified browser-like response with all local data
-    type FileItem struct {
-        ID       string `json:"id"`
-        Name     string `json:"name"`
-        Path     string `json:"path"`
-        Size     int64  `json:"size"`
-        IsDir    bool   `json:"isDir"`
-        ModTime  string `json:"modTime"`
-        Added    string `json:"added"`
-        Ended    string `json:"ended,omitempty"`
-        Link     string `json:"link"`
-        Download string `json:"download"`
-        Status   string `json:"status"`
-        Files    int    `json:"files"`
-        Hash     string `json:"hash,omitempty"`
-    }
+	// map to a simplified browser-like response with all local data
+	type FileItem struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Path     string `json:"path"`
+		Size     int64  `json:"size"`
+		IsDir    bool   `json:"isDir"`
+		ModTime  string `json:"modTime"`
+		Added    string `json:"added"`
+		Ended    string `json:"ended,omitempty"`
+		Link     string `json:"link"`
+		Download string `json:"download"`
+		Status   string `json:"status"`
+		Files    int    `json:"files"`
+		Hash     string `json:"hash,omitempty"`
+	}
 
-    // Slice the items for this page
-    pageItems := items[offset:end]
-    files := make([]FileItem, 0, len(pageItems))
-    for _, it := range pageItems {
-        firstLink := ""
-        if len(it.CachedLinks) > 0 {
-            firstLink = it.CachedLinks[0]
-        } else if len(it.Links) > 0 {
-            firstLink = it.Links[0]
-        }
-        
-        files = append(files, FileItem{
-            ID:       it.ID,
-            Name:     it.Filename,
-            Path:     "/torrents/" + it.ID,
-            Size:     it.Bytes,
-            IsDir:    false,
-            ModTime:  it.Added,
-            Added:    it.Added,
-            Ended:    it.Ended,
-            Link:     firstLink,
-            Download: firstLink,
-            Status:   it.Status,
-            Files:    it.Files,
-        })
-    }
+	// Slice the items for this page
+	pageItems := items[offset:end]
+	files := make([]FileItem, 0, len(pageItems))
+	for _, it := range pageItems {
+		firstLink := ""
+		if len(it.CachedLinks) > 0 {
+			firstLink = it.CachedLinks[0]
+		} else if len(it.Links) > 0 {
+			firstLink = it.Links[0]
+		}
 
-    totalPages := 1
-    if limit > 0 {
-        totalPages = (total + limit - 1) / limit
-    }
+		files = append(files, FileItem{
+			ID:       it.ID,
+			Name:     it.Filename,
+			Path:     "/torrents/" + it.ID,
+			Size:     it.Bytes,
+			IsDir:    false,
+			ModTime:  it.Added,
+			Added:    it.Added,
+			Ended:    it.Ended,
+			Link:     firstLink,
+			Download: firstLink,
+			Status:   it.Status,
+			Files:    it.Files,
+		})
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "path":       "/torrents",
-        "files":      files,
-        "total":      total,
-        "page":       page,
-        "limit":      limit,
-        "totalPages": totalPages,
-        "source":     "local",
-    })
+	totalPages := 1
+	if limit > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"path":       "/torrents",
+		"files":      files,
+		"total":      total,
+		"page":       page,
+		"limit":      limit,
+		"totalPages": totalPages,
+		"source":     "local",
+	})
 }
 
 // HandleRealDebridTorrentFiles returns file links for a specific torrent
 func HandleRealDebridTorrentFiles(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-    if r.Method == "OPTIONS" {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
-    cfg, err := validateRealDebridConfig()
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		logger.Warn("[RD] Torrent files config error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    torrentID := r.URL.Query().Get("id")
-    if torrentID == "" {
-        http.Error(w, "Missing torrent id", http.StatusBadRequest)
-        return
-    }
+	torrentID := r.URL.Query().Get("id")
+	if torrentID == "" {
+		logger.Warn("[RD] Torrent files request missing id")
+		http.Error(w, "Missing torrent id", http.StatusBadRequest)
+		return
+	}
 
-    tm := realdebrid.GetTorrentManager(cfg.APIKey)
-    if tm == nil {
-        http.Error(w, "TorrentManager not available", http.StatusInternalServerError)
-        return
-    }
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		logger.Warn("[RD] Torrent files: TorrentManager not available")
+		http.Error(w, "TorrentManager not available", http.StatusInternalServerError)
+		return
+	}
 
-    files, links, _ := tm.GetTorrentFileList(torrentID)
-    
-    type FileLink struct {
-        Name string `json:"name"`
-        Size int64  `json:"size"`
-        Link string `json:"link"`
-    }
-    
-    result := make([]FileLink, 0, len(files))
-    for i, f := range files {
-        link := ""
-        if i < len(links) {
-            link = links[i]
-        }
-        result = append(result, FileLink{
-            Name: f.Path,
-            Size: f.Bytes,
-            Link: link,
-        })
-    }
+	files, links, _ := tm.GetTorrentFileList(torrentID)
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "id":    torrentID,
-        "files": result,
-    })
+	type FileLink struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+		Link string `json:"link"`
+	}
+
+	result := make([]FileLink, 0, len(files))
+	for i, f := range files {
+		link := ""
+		if i < len(links) {
+			link = links[i]
+		}
+		result = append(result, FileLink{
+			Name: f.Path,
+			Size: f.Bytes,
+			Link: link,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":    torrentID,
+		"files": result,
+	})
+}
+
+// HandleRealDebridUnrestrictFile returns an unrestricted download link for a specific torrent file
+func HandleRealDebridUnrestrictFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		logger.Warn("[RD] Unrestrict config error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	torrentID := r.URL.Query().Get("id")
+	if torrentID == "" {
+		logger.Warn("[RD] Unrestrict request missing id")
+		http.Error(w, "Missing torrent id", http.StatusBadRequest)
+		return
+	}
+
+	fileParam := r.URL.Query().Get("file")
+	if fileParam == "" {
+		logger.Warn("[RD] Unrestrict request missing file name for torrent %s", torrentID)
+		http.Error(w, "Missing file name", http.StatusBadRequest)
+		return
+	}
+
+	fileParam = strings.TrimSpace(fileParam)
+	if fileParam == "" {
+		logger.Warn("[RD] Unrestrict invalid file name: empty (torrent %s)", torrentID)
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	if strings.Contains(fileParam, "..") {
+		logger.Warn("[RD] Unrestrict invalid file name (path traversal): %s (torrent %s)", fileParam, torrentID)
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	cleanPath := path.Clean("/" + fileParam)
+	fileName := strings.TrimPrefix(cleanPath, "/")
+	if fileName == "" || fileName == "." || fileName == "/" {
+		logger.Warn("[RD] Unrestrict invalid file name: %s (torrent %s)", fileParam, torrentID)
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+
+	tm := realdebrid.GetTorrentManager(cfg.APIKey)
+	if tm == nil {
+		logger.Warn("[RD] Unrestrict: TorrentManager not available")
+		http.Error(w, "TorrentManager not available", http.StatusInternalServerError)
+		return
+	}
+
+	downloadURL, size, err := tm.GetFileDownloadURL(torrentID, fileName)
+	if err != nil {
+		logger.Warn("[RD] Unrestrict failed for torrent %s file %s: %v", torrentID, fileName, err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":   torrentID,
+		"file": fileName,
+		"url":  downloadURL,
+		"size": size,
+	})
 }
 
 // HandleRealDebridRefresh handles torrent refresh requests
@@ -813,7 +898,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	configManager := realdebrid.GetConfigManager()
 	defaultConfig := configManager.GetConfig().RcloneSettings
 	rcloneConfig := defaultConfig
-	
+
 	// Apply only non-empty values from the request
 	if enabled, ok := rcloneConfigMap["enabled"].(bool); ok {
 		rcloneConfig.Enabled = enabled
@@ -859,13 +944,13 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		rcloneConfig.LogFile = logFile
 	}
 
-    rcloneConfig.RemoteName = "CineSync"
+	rcloneConfig.RemoteName = "CineSync"
 
-    cfg, err := validateRealDebridConfig()
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Start mount
 	rcloneManager := realdebrid.GetRcloneManager()
@@ -880,7 +965,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	// Check if mount is waiting
 	if status.Waiting {
 		logger.Info("%s", status.WaitingReason)
@@ -892,7 +977,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	// Check if mount actually succeeded
 	if status.Error != "" {
 		logger.Error("Mount status indicates error: %s", status.Error)
@@ -904,7 +989,7 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	logger.Info("Mount completed successfully")
 
 	response := map[string]interface{}{
@@ -1009,50 +1094,52 @@ var cachedTorrents []realdebrid.TorrentItem
 
 // PrefetchRealDebridData fetches counts and batches logs
 func PrefetchRealDebridData() {
-    if rdPrefetchOnce {
-        return
-    }
-    rdPrefetchOnce = true
+	if rdPrefetchOnce {
+		return
+	}
+	rdPrefetchOnce = true
 
-    cfg := realdebrid.GetConfigManager().GetConfig()
-    if !cfg.Enabled || cfg.APIKey == "" {
-        logger.Info("[RD] Prefetch skipped: disabled or missing API key")
-        return
-    }
+	cfg := realdebrid.GetConfigManager().GetConfig()
+	if !cfg.Enabled || cfg.APIKey == "" {
+		logger.Info("[RD] Prefetch skipped: disabled or missing API key")
+		return
+	}
 
-    fetchAndLoadTorrents(cfg.APIKey)
+	fetchAndLoadTorrents(cfg.APIKey)
 }
 
 // fetchAndLoadTorrents is the internal function that actually fetches and loads torrents
 func fetchAndLoadTorrents(apiKey string) {
-    go func() {
-        logger.Info("[RD] Prefetch started")
-        client := realdebrid.NewClient(apiKey)
-        tm := realdebrid.GetTorrentManager(apiKey)
+	go func() {
+		logger.Info("[RD] Prefetch started")
+		client := realdebrid.NewClient(apiKey)
+		tm := realdebrid.GetTorrentManager(apiKey)
 
-        // Fetch all torrents in batches
-        torrents, err := client.GetAllTorrents(1000, func(current, total int) {
-            if current%1000 == 0 || current == total {
-                logger.Info("[RD] Progress: %d torrents fetched", current)
-            }
-        })
-        if err != nil {
-            logger.Warn("[RD] Failed to fetch torrents: %v", err)
-        } else {
-            cachedTorrents = torrents
-            logger.Info("[RD] Torrents fetched: %d", len(torrents))
-            tm.SetPrefetchedTorrents(torrents)
-            if err := tm.PrefetchHttpDavData(); err != nil {
-                logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
-            }
-            rdIDs := make([]string, 0, len(torrents))
-            for i := range torrents { rdIDs = append(rdIDs, torrents[i].ID) }
-            tm.ReconcileDBWithRD(rdIDs)
-            go tm.SaveAllTorrents()
-        }
+		// Fetch all torrents in batches
+		torrents, err := client.GetAllTorrents(1000, func(current, total int) {
+			if current%1000 == 0 || current == total {
+				logger.Info("[RD] Progress: %d torrents fetched", current)
+			}
+		})
+		if err != nil {
+			logger.Warn("[RD] Failed to fetch torrents: %v", err)
+		} else {
+			cachedTorrents = torrents
+			logger.Info("[RD] Torrents fetched: %d", len(torrents))
+			tm.SetPrefetchedTorrents(torrents)
+			if err := tm.PrefetchHttpDavData(); err != nil {
+				logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
+			}
+			rdIDs := make([]string, 0, len(torrents))
+			for i := range torrents {
+				rdIDs = append(rdIDs, torrents[i].ID)
+			}
+			tm.ReconcileDBWithRD(rdIDs)
+			go tm.SaveAllTorrents()
+		}
 
-        logger.Info("[RD] Prefetch completed")
-    }()
+		logger.Info("[RD] Prefetch completed")
+	}()
 }
 
 // WebDAV XML structures for VFS PROPFIND responses
@@ -1122,8 +1209,8 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
-	
-    if reqPath == "" {
+
+	if reqPath == "" {
 		buf := realdebrid.GetResponseBuffer()
 		defer realdebrid.PutResponseBuffer(buf)
 		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
@@ -1133,7 +1220,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			realdebrid.DirectoryResponse(buf, basePath+realdebrid.ALL_TORRENTS+"/", "")
 		}
 		buf.WriteString("</d:multistatus>")
-		
+
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 		w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 		w.WriteHeader(http.StatusMultiStatus)
@@ -1156,7 +1243,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 		}
 		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
 		realdebrid.DirectoryResponse(buf, basePath, "")
-		
+
 		if includeChildren && tm != nil {
 			if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
 				defaultModTime := time.Now().Format(time.RFC3339)
@@ -1177,13 +1264,13 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			}
 		}
 		buf.WriteString("</d:multistatus>")
-		
+
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 		w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 		w.WriteHeader(http.StatusMultiStatus)
 		w.Write(buf.Bytes())
-    } else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
-        torrentName := parts[1]
+	} else if parts[0] == realdebrid.ALL_TORRENTS && len(parts) >= 2 {
+		torrentName := parts[1]
 
 		allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS)
 		if !ok {
@@ -1191,7 +1278,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
-		
+
 		item, found := allTorrents.Get(torrentName)
 		if !found {
 			logger.Error("Torrent not found in DirectoryMap: %s", torrentName)
@@ -1218,7 +1305,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				}
 			}
 		}
-		
+
 		fileModTime := item.Ended
 		if fileModTime == "" {
 			fileModTime = item.Added
@@ -1241,7 +1328,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 
 		buf := realdebrid.GetResponseBuffer()
 		defer realdebrid.PutResponseBuffer(buf)
-		
+
 		buf.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\">")
 		realdebrid.DirectoryResponse(buf, basePath, dirModTime)
 
@@ -1249,7 +1336,7 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 
 		if includeChildren && !isTorrentBroken && len(fileList) > 0 {
 			failedFileCache := tm.GetFailedFileCache()
-			
+
 			for _, file := range fileList {
 				if file.Selected != 1 {
 					continue
@@ -1260,13 +1347,13 @@ func handleTorrentPropfind(w http.ResponseWriter, r *http.Request, apiKey string
 				if _, isFileBroken := failedFileCache.Get(cacheKey); isFileBroken {
 					continue
 				}
-				
+
 				realdebrid.FileResponse(buf, basePath+baseName, file.Bytes, fileModTime)
 			}
 		}
-		
+
 		buf.WriteString("</d:multistatus>")
-		
+
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 		w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 		w.WriteHeader(http.StatusMultiStatus)
@@ -1345,7 +1432,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 	reqPath = strings.Trim(reqPath, "/")
 	parts := strings.Split(reqPath, "/")
-	
+
 	if len(parts) < 3 || parts[0] != realdebrid.ALL_TORRENTS {
 		http.Error(w, "Invalid file path", http.StatusBadRequest)
 		return
@@ -1354,7 +1441,6 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	torrentName := parts[1]
 	filePath := strings.Join(parts[2:], "/")
 	baseName := path.Base(filePath)
-	
 
 	torrentID, err := tm.FindTorrentByName(torrentName)
 	if err != nil {
@@ -1362,18 +1448,18 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		return
 	}
 
-    if r.Method == "HEAD" {
+	if r.Method == "HEAD" {
 		if _, broken := tm.GetBrokenTorrentCache().Get(torrentID); broken {
 			http.Error(w, "File is not available (being repaired)", http.StatusNotFound)
 			return
 		}
-		
+
 		cacheKey := realdebrid.MakeCacheKey(torrentID, baseName)
 		if _, fileBroken := tm.GetFailedFileCache().Get(cacheKey); fileBroken {
 			http.Error(w, "File is not available", http.StatusNotFound)
 			return
 		}
-		
+
 		if allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS); ok {
 			if item, found := allTorrents.Get(torrentName); found {
 				fileList, _, _ := tm.GetTorrentFileList(item.ID)
@@ -1387,7 +1473,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 							}
 						}
 					}
-					
+
 					if target != nil {
 						modTime := time.Now()
 						if item.Ended != "" {
@@ -1399,7 +1485,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 								modTime = t
 							}
 						}
-						
+
 						etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
 						if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
 							w.WriteHeader(http.StatusNotModified)
@@ -1415,8 +1501,8 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 				}
 			}
 		}
-		
-        info, infoErr := tm.GetTorrentInfo(torrentID)
+
+		info, infoErr := tm.GetTorrentInfo(torrentID)
 		if infoErr != nil {
 			http.Error(w, "Failed to resolve file", http.StatusNotFound)
 			return
@@ -1435,7 +1521,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 			http.Error(w, "File not found", http.StatusNotFound)
 			return
 		}
-        modTime := effectiveModTime(tm, torrentID, info)
+		modTime := effectiveModTime(tm, torrentID, info)
 		etag := fmt.Sprintf("\"%s-%d-%d-%d\"", torrentID, target.ID, target.Bytes, modTime.Unix())
 		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
 			w.WriteHeader(http.StatusNotModified)
@@ -1460,7 +1546,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	var usedToken string
 	var resp *http.Response
 	maxRetries := 3
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		var err error
 		downloadURL, _, err = tm.GetFileDownloadURL(torrentID, filePath)
@@ -1503,7 +1589,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 					transport.CloseIdleConnections()
 				}
 			}
-			
+
 			http.Error(w, "Failed to fetch file", http.StatusBadGateway)
 			return
 		}
@@ -1511,7 +1597,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 		if resp.StatusCode >= 400 {
 			if dlErr := realdebrid.CheckDownloadResponse(resp); dlErr != nil {
 				resp.Body.Close()
-				
+
 				if realdebrid.IsBytesLimitReached(dlErr) {
 					client := realdebrid.GetOrCreateClient()
 					if client != nil {
@@ -1533,12 +1619,12 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 							http.Error(w, "All Real-Debrid tokens have exceeded bandwidth limits", http.StatusServiceUnavailable)
 							return
 						}
-						
+
 						logger.Warn("[Bandwidth] Token bandwidth exceeded, rotating to next token (attempt %d/%d)", attempt+1, maxRetries)
 						continue
 					}
 				}
-				
+
 				// Non-bandwidth error, don't retry
 				tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
 					Error:     dlErr,
@@ -1548,7 +1634,7 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 				http.Error(w, fmt.Sprintf("File not available: %v", dlErr), resp.StatusCode)
 				return
 			}
-			
+
 			// Generic error without X-Error header
 			resp.Body.Close()
 			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
@@ -1592,33 +1678,33 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 }
 
 func handleTorrentDelete(w http.ResponseWriter, r *http.Request, apiKey string, reqPath string) {
-    tm := realdebrid.GetTorrentManager(apiKey)
+	tm := realdebrid.GetTorrentManager(apiKey)
 
-    if decoded, err := url.PathUnescape(reqPath); err == nil {
-        reqPath = decoded
-    }
+	if decoded, err := url.PathUnescape(reqPath); err == nil {
+		reqPath = decoded
+	}
 
-    reqPath = strings.Trim(reqPath, "/")
-    parts := strings.Split(reqPath, "/")
-    if len(parts) < 2 || parts[0] != realdebrid.ALL_TORRENTS {
-        http.Error(w, "Invalid path", http.StatusBadRequest)
-        return
-    }
+	reqPath = strings.Trim(reqPath, "/")
+	parts := strings.Split(reqPath, "/")
+	if len(parts) < 2 || parts[0] != realdebrid.ALL_TORRENTS {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
 
-    torrentName := parts[1]
-    torrentID, err := tm.FindTorrentByName(torrentName)
-    if err != nil || torrentID == "" {
-        w.WriteHeader(http.StatusNoContent)
-        return
-    }
+	torrentName := parts[1]
+	torrentID, err := tm.FindTorrentByName(torrentName)
+	if err != nil || torrentID == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
-    if len(parts) == 2 {
-        tm.DeleteFromDBByID(torrentID)
-        w.WriteHeader(http.StatusNoContent)
-        return
-    }
+	if len(parts) == 2 {
+		tm.DeleteFromDBByID(torrentID)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
-    w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // formatBytes formats byte count into human readable format
@@ -1640,7 +1726,7 @@ func isClientDisconnection(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "broken pipe") ||
 		strings.Contains(errStr, "connection reset by peer") ||
@@ -1657,7 +1743,7 @@ func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "timeout") ||
 		strings.Contains(errStr, "deadline exceeded") ||
@@ -1669,12 +1755,12 @@ func parseChunkSize(sizeStr string) int64 {
 	if sizeStr == "" {
 		return 0
 	}
-	
+
 	sizeStr = strings.ToUpper(strings.TrimSpace(sizeStr))
-	
+
 	var multiplier int64 = 1
 	var size int64
-	
+
 	if strings.HasSuffix(sizeStr, "K") {
 		multiplier = 1024
 		sizeStr = strings.TrimSuffix(sizeStr, "K")
@@ -1685,11 +1771,11 @@ func parseChunkSize(sizeStr string) int64 {
 		multiplier = 1024 * 1024 * 1024
 		sizeStr = strings.TrimSuffix(sizeStr, "G")
 	}
-	
+
 	if parsedSize, err := fmt.Sscanf(sizeStr, "%d", &size); err != nil || parsedSize != 1 {
 		return 0
 	}
-	
+
 	return size * multiplier
 }
 
@@ -1703,7 +1789,7 @@ var (
 func shouldLogError(key string, interval time.Duration) bool {
 	errorLogMutex.Lock()
 	defer errorLogMutex.Unlock()
-	
+
 	lastTime, exists := lastErrorLog[key]
 	if !exists || time.Since(lastTime) > interval {
 		lastErrorLog[key] = time.Now()
@@ -1756,7 +1842,7 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-    // Prepare response
+	// Prepare response
 	response := map[string]interface{}{
 		"account": map[string]interface{}{
 			"username":   userInfo.Username,
@@ -1771,26 +1857,26 @@ func HandleDebridDashboardStats(w http.ResponseWriter, r *http.Request) {
 			"statusCounts": statusCounts,
 			"lastUpdated":  currentState.LastUpdated.Format(time.RFC3339),
 		},
-        "workers": map[string]interface{}{
-            "io":        realdebrid.CineSyncIOWorkers,
-            "api":       realdebrid.CineSyncAPIWorkers,
-            "ioInUse":   realdebrid.CineSyncIOInUse.Load(),
-            "apiInUse":  realdebrid.CineSyncAPIInUse.Load(),
-        },
-        "enrich": func() map[string]interface{} {
-            total := realdebrid.EnrichTotal.Load()
-            processed := realdebrid.EnrichProcessed.Load()
-            remaining := total - processed
-            if remaining < 0 {
-                remaining = 0
-            }
-            return map[string]interface{}{
-                "total":     total,
-                "processed": processed,
-                "saved":     realdebrid.EnrichSaved.Load(),
-                "remaining": remaining,
-            }
-        }(),
+		"workers": map[string]interface{}{
+			"io":       realdebrid.CineSyncIOWorkers,
+			"api":      realdebrid.CineSyncAPIWorkers,
+			"ioInUse":  realdebrid.CineSyncIOInUse.Load(),
+			"apiInUse": realdebrid.CineSyncAPIInUse.Load(),
+		},
+		"enrich": func() map[string]interface{} {
+			total := realdebrid.EnrichTotal.Load()
+			processed := realdebrid.EnrichProcessed.Load()
+			remaining := total - processed
+			if remaining < 0 {
+				remaining = 0
+			}
+			return map[string]interface{}{
+				"total":     total,
+				"processed": processed,
+				"saved":     realdebrid.EnrichSaved.Load(),
+				"remaining": remaining,
+			}
+		}(),
 		"traffic": map[string]interface{}{
 			"today": trafficInfo.TodayBytes,
 		},
@@ -1829,35 +1915,35 @@ func HandleTorrentManagerStats(w http.ResponseWriter, r *http.Request) {
 
 	tm := realdebrid.GetTorrentManager(cfg.APIKey)
 	currentState := tm.GetCurrentState()
-	
+
 	// Get concurrent map statistics
 	allTorrents, ok := tm.DirectoryMap.Get(realdebrid.ALL_TORRENTS)
 	torrentCount := 0
 	if ok {
 		torrentCount = allTorrents.Count()
 	}
-	
+
 	infoMapCount := tm.InfoMap.Count()
 	downloadCacheCount := tm.GetDownloadLinkCacheCount()
 	failedCacheCount := tm.GetFailedFileCacheCount()
-	
+
 	// Calculate approximate memory usage
 	const (
-		torrentItemSize = 200   // bytes per TorrentItem
-		torrentInfoSize = 7700  // bytes per TorrentInfo (with ~50 files)
+		torrentItemSize  = 200  // bytes per TorrentItem
+		torrentInfoSize  = 7700 // bytes per TorrentInfo (with ~50 files)
 		downloadLinkSize = 272  // bytes per cached download link
-		failedEntrySize = 150   // bytes per failed entry
+		failedEntrySize  = 150  // bytes per failed entry
 	)
-	
+
 	torrentMapMemory := int64(torrentCount * torrentItemSize)
 	infoMapMemory := int64(infoMapCount * torrentInfoSize)
 	downloadCacheMemory := int64(downloadCacheCount * downloadLinkSize)
 	failedCacheMemory := int64(failedCacheCount * failedEntrySize)
 	totalMemory := torrentMapMemory + infoMapMemory + downloadCacheMemory + failedCacheMemory
-	
+
 	// Get refresh statistics
 	lastRefresh := tm.GetLastRefreshTime()
-	
+
 	response := map[string]interface{}{
 		"directoryMap": map[string]interface{}{
 			"totalTorrents": torrentCount,
@@ -1934,7 +2020,7 @@ func HandleRealDebridRefreshControl(w http.ResponseWriter, r *http.Request) {
 			"firstTorrentId": currentState.FirstTorrentID,
 			"lastUpdated":    currentState.LastUpdated.Format(time.RFC3339),
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 
@@ -1953,7 +2039,7 @@ func HandleRealDebridRefreshControl(w http.ResponseWriter, r *http.Request) {
 		switch request.Action {
 		case "force_refresh":
 			tm.ForceRefresh()
-			
+
 			response := map[string]interface{}{
 				"success": true,
 				"message": "Force refresh initiated",
@@ -1967,11 +2053,11 @@ func HandleRealDebridRefreshControl(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Minimum refresh interval is 10 seconds", http.StatusBadRequest)
 				return
 			}
-			
+
 			interval := time.Duration(request.Interval) * time.Second
 			tm.SetRefreshInterval(interval)
 			logger.Info("[API] Refresh interval updated to %v via API", interval)
-			
+
 			response := map[string]interface{}{
 				"success":  true,
 				"message":  fmt.Sprintf("Refresh interval set to %v", interval),
@@ -2122,7 +2208,7 @@ func HandleRepairQueue(w http.ResponseWriter, r *http.Request) {
 		"count":     total,
 		"page":      page,
 		"page_size": pageSize,
-		"queue": entries,
+		"queue":     entries,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2467,11 +2553,11 @@ func HandleRepairStart(w http.ResponseWriter, r *http.Request) {
 
 	// Get current stats
 	stats := realdebrid.GetRepairStatus()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Repair scan started successfully",
+		"success":       true,
+		"message":       "Repair scan started successfully",
 		"totalTorrents": stats.TotalTorrents,
 	})
 }
@@ -2578,8 +2664,8 @@ func HandleRepairTorrent(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Repair initiated for %d torrent(s)", repaired),
+		"success":  true,
+		"message":  fmt.Sprintf("Repair initiated for %d torrent(s)", repaired),
 		"repaired": repaired,
 		"failed":   failed,
 	}

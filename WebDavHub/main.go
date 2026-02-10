@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"cinesync/pkg/api"
-	"cinesync/pkg/config"
 	"cinesync/pkg/auth"
+	"cinesync/pkg/config"
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
@@ -178,7 +178,7 @@ func main() {
 	// Initialize logger early so we can use it for warnings
 	logger.Init()
 	defer logger.Close()
-	
+
 	if err := env.LoadEnv(); err != nil {
 	}
 
@@ -206,8 +206,8 @@ func main() {
 	// Ensure the directory exists and is accessible
 	if *dir != "" {
 		if _, err := os.Stat(*dir); os.IsNotExist(err) {
-		// Check if this is a placeholder path
-		if *dir == "/path/to/destination" || *dir == "\\path\\to\\destination" {
+			// Check if this is a placeholder path
+			if *dir == "/path/to/destination" || *dir == "\\path\\to\\destination" {
 				logger.Warn("DESTINATION_DIR is set to placeholder value: %s", *dir)
 				configMissing = true
 			} else {
@@ -314,11 +314,11 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	
+
 	// Root folders management endpoints
 	apiMux.HandleFunc("/api/root-folders", api.HandleRootFolders)
 	apiMux.HandleFunc("/api/root-folders/", api.HandleRootFolders)
-	
+
 	// Indexer management endpoints
 	apiMux.HandleFunc("/api/indexers", api.HandleIndexers)
 	apiMux.HandleFunc("/api/indexers/", func(w http.ResponseWriter, r *http.Request) {
@@ -334,9 +334,9 @@ func main() {
 		}
 	})
 
-apiMux.HandleFunc("/api/indexers/test-config", api.HandleIndexerTestConfig)
-apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
-	
+	apiMux.HandleFunc("/api/indexers/test-config", api.HandleIndexerTestConfig)
+	apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
+
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
@@ -390,6 +390,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)
 	apiMux.HandleFunc("/api/realdebrid/downloads", api.HandleRealDebridDownloads)
 	apiMux.HandleFunc("/api/realdebrid/torrent-files", api.HandleRealDebridTorrentFiles)
+	apiMux.HandleFunc("/api/realdebrid/unrestrict-file", api.HandleRealDebridUnrestrictFile)
 	apiMux.HandleFunc("/api/realdebrid/rclone/mount", api.HandleRcloneMount)
 	apiMux.HandleFunc("/api/realdebrid/rclone/unmount", api.HandleRcloneUnmount)
 	apiMux.HandleFunc("/api/realdebrid/rclone/status", api.HandleRcloneStatus)
@@ -439,13 +440,13 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 
 	// Serve embedded frontend files
 	frontendHandler := createFrontendHandler()
-	
+
 	// Root path handler
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || 
-		   strings.HasPrefix(r.URL.Path, "/webdav/") || 
-		   strings.HasPrefix(r.URL.Path, "/MediaCover/") ||
-		   strings.HasPrefix(r.URL.Path, "/signalr/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") ||
+			strings.HasPrefix(r.URL.Path, "/webdav/") ||
+			strings.HasPrefix(r.URL.Path, "/MediaCover/") ||
+			strings.HasPrefix(r.URL.Path, "/signalr/") {
 			http.NotFound(w, r)
 			return
 		}
@@ -582,7 +583,7 @@ apiMux.HandleFunc("/api/indexers/caps", api.HandleIndexerCaps)
 	addr := fmt.Sprintf("%s:%d", *ip, *port)
 
 	logger.Info("CineSync server started on %s", addr)
-	
+
 	// Authentication status
 	if env.IsBool("CINESYNC_AUTH_ENABLED", true) {
 		credentials := auth.GetCredentials()

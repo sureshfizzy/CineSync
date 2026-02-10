@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Box, Typography, IconButton, InputBase, Tooltip, Chip, CircularProgress, Pagination, Skeleton, alpha, useTheme, Menu, MenuItem, ListItemIcon, ListItemText, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, Snackbar, Alert } from '@mui/material';
 import { motion } from 'framer-motion';
-import { Search as SearchIcon, Refresh as RefreshIcon, CloudDownload, PlayArrow, Delete as DeleteIcon, RestartAlt, MoreVert, Schedule, Storage as StorageIcon, CheckCircle, Error as ErrorIcon, HourglassEmpty, CloudSync, Pending, Warning, ContentCopy, OpenInNew, ArrowUpward, ArrowDownward, Folder, Movie, Tv } from '@mui/icons-material';
+import { Search as SearchIcon, Refresh as RefreshIcon, CloudDownload, PlayArrow, Download, Delete as DeleteIcon, RestartAlt, MoreVert, Schedule, Storage as StorageIcon, CheckCircle, Error as ErrorIcon, HourglassEmpty, CloudSync, Pending, Warning, ContentCopy, ArrowUpward, ArrowDownward, Folder, Movie, Tv } from '@mui/icons-material';
 import axios from 'axios';
 import './RealDebridBrowser.css';
+
+const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
 interface TorrentFile {
   name: string;
@@ -107,6 +109,38 @@ const getQualityTag = (name: string): string | null => {
   return match ? match[1].toUpperCase() : null;
 };
 
+const getMimeType = (ext: string): string => {
+  const mimeTypes: { [key: string]: string } = {
+    mp4: 'video/mp4',
+    mkv: 'video/x-matroska',
+    avi: 'video/x-msvideo',
+    mov: 'video/quicktime',
+    wmv: 'video/x-ms-wmv',
+    flv: 'video/x-flv',
+    webm: 'video/webm',
+  };
+  return mimeTypes[ext] || '';
+};
+
+const getBaseName = (name: string): string => {
+  const norm = name.replace(/\\/g, '/');
+  const parts = norm.split('/');
+  return parts[parts.length - 1] || name;
+};
+
+const getDisplayTitle = (name: string): string => {
+  const base = getBaseName(name);
+  const withoutExt = base.replace(/\.[^.]+$/, '');
+  const cleaned = withoutExt.replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || base;
+};
+
+const isVideoFile = (name: string): boolean => {
+  const ext = getBaseName(name).split('.').pop()?.toLowerCase() || '';
+  return ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpg', 'mpeg', 'm2ts', 'ts'].includes(ext);
+};
+
+
 // Format bytes helper
 const formatBytes = (bytes: number): string => {
   if (!bytes || bytes === 0) return '0 B';
@@ -156,8 +190,9 @@ const TorrentRow: React.FC<{
   onPlay: (torrent: TorrentFile) => void;
   onDelete: (torrent: TorrentFile) => void;
   onReinsert: (torrent: TorrentFile) => void;
-  onCopyLink: (link: string) => void;
-}> = ({ torrent, index, onPlay, onDelete, onReinsert, onCopyLink }) => {
+  onCopyLink: (torrent: TorrentFile) => void;
+  onDownload: (torrent: TorrentFile) => void;
+}> = ({ torrent, index, onPlay, onDelete, onReinsert, onCopyLink, onDownload }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
   
@@ -195,6 +230,7 @@ const TorrentRow: React.FC<{
   };
   
   const canPlay = torrent.status?.toLowerCase() === 'downloaded' || torrent.link;
+  const canLinkActions = torrent.files > 0 || !!torrent.link;
   const canReinsert = ['error', 'dead', 'magnet_error', 'virus'].includes(torrent.status?.toLowerCase() || '');
   
   return (
@@ -329,16 +365,16 @@ const TorrentRow: React.FC<{
               <ListItemText>Play / Stream</ListItemText>
             </MenuItem>
           )}
-          {torrent.link && (
-            <MenuItem onClick={() => handleAction(() => onCopyLink(torrent.link!))}>
+          {canLinkActions && (
+            <MenuItem onClick={() => handleAction(() => onCopyLink(torrent))}>
               <ListItemIcon><ContentCopy fontSize="small" /></ListItemIcon>
               <ListItemText>Copy Link</ListItemText>
             </MenuItem>
           )}
-          {torrent.link && (
-            <MenuItem onClick={() => handleAction(() => window.open(torrent.link, '_blank'))}>
-              <ListItemIcon><OpenInNew fontSize="small" /></ListItemIcon>
-              <ListItemText>Open in Browser</ListItemText>
+          {canLinkActions && (
+            <MenuItem onClick={() => handleAction(() => onDownload(torrent))}>
+              <ListItemIcon><Download fontSize="small" /></ListItemIcon>
+              <ListItemText>Download</ListItemText>
             </MenuItem>
           )}
           <MenuItem onClick={() => handleAction(() => onReinsert(torrent))}>
@@ -407,11 +443,15 @@ export default function RealDebridBrowser() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [sortOption, setSortOption] = useState<SortOption>({ key: 'modified', direction: 'desc' });
+  const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [videoMimeType, setVideoMimeType] = useState<string | undefined>(undefined);
   
   // Action states
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; torrent: TorrentFile | null }>({ open: false, torrent: null });
   const [reinsertDialog, setReinsertDialog] = useState<{ open: boolean; torrent: TorrentFile | null }>({ open: false, torrent: null });
-  const [filePickerDialog, setFilePickerDialog] = useState<{ open: boolean; torrent: TorrentFile | null; files: StreamableFile[]; loading: boolean }>({ open: false, torrent: null, files: [], loading: false });
+  const [filePickerDialog, setFilePickerDialog] = useState<{ open: boolean; torrent: TorrentFile | null; files: StreamableFile[]; loading: boolean; mode: 'play' | 'copy' | 'download' }>({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
   
@@ -514,37 +554,66 @@ export default function RealDebridBrowser() {
   }, [filteredTotal, page]);
   
   // Action handlers
-  const handlePlay = useCallback(async (torrent: TorrentFile) => {
-    // Single file torrent - open directly if link available
-    if (torrent.files <= 1 && torrent.link) {
-      window.open(torrent.link, '_blank');
-      return;
-    }
-    
-    // Multi-file torrent or no link - fetch file list
-    setFilePickerDialog({ open: true, torrent, files: [], loading: true });
-    
+  const openVideoPlayer = useCallback((url: string, fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    setVideoUrl(url);
+    setVideoTitle(getDisplayTitle(fileName));
+    setVideoMimeType(getMimeType(ext));
+    setVideoPlayerOpen(true);
+  }, []);
+
+  const fetchTorrentFiles = useCallback(async (torrentId: string): Promise<StreamableFile[]> => {
     try {
-      const res = await axios.get('/api/realdebrid/torrent-files', { params: { id: torrent.id } });
+      const res = await axios.get('/api/realdebrid/torrent-files', { params: { id: torrentId } });
       const files: StreamableFile[] = (res.data?.files || []).filter((f: StreamableFile) => f.link);
-      
-      if (files.length === 0) {
-        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false });
-        setSnackbar({ open: true, message: 'No playable links available for this torrent', severity: 'error' });
-      } else if (files.length === 1) {
-        // Only one playable file - open directly
-        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false });
-        window.open(files[0].link, '_blank');
-      } else {
-        // Multiple files - show picker
-        setFilePickerDialog({ open: true, torrent, files, loading: false });
-      }
-    } catch (e: any) {
-      setFilePickerDialog({ open: false, torrent: null, files: [], loading: false });
-      setSnackbar({ open: true, message: 'Failed to fetch file links', severity: 'error' });
+      const videoFiles = files.filter((f) => isVideoFile(f.name));
+      return videoFiles.length > 0 ? videoFiles : files;
+    } catch (err) {
+      console.error('[Debrid] Failed to fetch torrent files', err);
+      throw err;
     }
   }, []);
-  
+
+  const unrestrictFile = useCallback(async (torrentId: string, fileName: string): Promise<string> => {
+    try {
+      const res = await axios.get('/api/realdebrid/unrestrict-file', { params: { id: torrentId, file: fileName } });
+      return res.data?.url || '';
+    } catch (err) {
+      console.error('[Debrid] Failed to unrestrict file', err);
+      throw err;
+    }
+  }, []);
+
+  const handlePlay = useCallback(async (torrent: TorrentFile) => {
+    setFilePickerDialog({ open: true, torrent, files: [], loading: true, mode: 'play' });
+
+    try {
+      const files = await fetchTorrentFiles(torrent.id);
+
+      if (files.length === 0) {
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        setSnackbar({ open: true, message: 'No playable links available for this torrent', severity: 'error' });
+        return;
+      }
+
+      if (files.length === 1) {
+        const fileName = files[0].name;
+        const url = await unrestrictFile(torrent.id, fileName);
+        if (!url) {
+          throw new Error('No unrestricted link returned');
+        }
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        openVideoPlayer(url, getBaseName(fileName));
+        return;
+      }
+
+      setFilePickerDialog({ open: true, torrent, files, loading: false, mode: 'play' });
+    } catch (e: any) {
+      setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+      setSnackbar({ open: true, message: axios.isAxiosError(e) ? e.response?.data || e.message || 'Failed to fetch file links' : 'Failed to fetch file links', severity: 'error' });
+    }
+  }, [fetchTorrentFiles, unrestrictFile, openVideoPlayer]);
+
   const handleDelete = useCallback(async () => {
     if (!deleteDialog.torrent) return;
     
@@ -585,11 +654,109 @@ export default function RealDebridBrowser() {
     }
   }, [reinsertDialog.torrent, loadTorrents]);
   
-  const handleCopyLink = useCallback((link: string) => {
-    navigator.clipboard.writeText(link);
-    setSnackbar({ open: true, message: 'Link copied to clipboard', severity: 'info' });
-  }, []);
-  
+  const handleCopyLink = useCallback(async (torrent: TorrentFile) => {
+    setFilePickerDialog({ open: true, torrent, files: [], loading: true, mode: 'copy' });
+
+    try {
+      const files = await fetchTorrentFiles(torrent.id);
+
+      if (files.length === 0) {
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        setSnackbar({ open: true, message: 'No playable links available for this torrent', severity: 'error' });
+        return;
+      }
+
+      if (files.length === 1) {
+        const fileName = files[0].name;
+        const url = await unrestrictFile(torrent.id, fileName);
+        if (!url) {
+          throw new Error('No unrestricted link returned');
+        }
+        await navigator.clipboard.writeText(url);
+        setSnackbar({ open: true, message: 'Unrestricted link copied to clipboard', severity: 'success' });
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        return;
+      }
+
+      setFilePickerDialog({ open: true, torrent, files, loading: false, mode: 'copy' });
+    } catch (e: any) {
+      setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+      setSnackbar({ open: true, message: axios.isAxiosError(e) ? e.response?.data || e.message || 'Failed to unrestrict file link' : 'Failed to unrestrict file link', severity: 'error' });
+    }
+  }, [fetchTorrentFiles, unrestrictFile]);
+
+  const handleDownloadFromMenu = useCallback(async (torrent: TorrentFile) => {
+    setFilePickerDialog({ open: true, torrent, files: [], loading: true, mode: 'download' });
+
+    try {
+      const files = await fetchTorrentFiles(torrent.id);
+
+      if (files.length === 0) {
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        setSnackbar({ open: true, message: 'No playable links available for this torrent', severity: 'error' });
+        return;
+      }
+
+      if (files.length === 1) {
+        const fileName = files[0].name;
+        const url = await unrestrictFile(torrent.id, fileName);
+        if (!url) {
+          throw new Error('No unrestricted link returned');
+        }
+        setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', getBaseName(fileName));
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
+
+      setFilePickerDialog({ open: true, torrent, files, loading: false, mode: 'download' });
+    } catch (e: any) {
+      setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+      setSnackbar({ open: true, message: axios.isAxiosError(e) ? e.response?.data || e.message || 'Failed to unrestrict file link' : 'Failed to unrestrict file link', severity: 'error' });
+    }
+  }, [fetchTorrentFiles, unrestrictFile]);
+
+
+  const handleFileAction = async (file: StreamableFile) => {
+    if (!filePickerDialog.torrent) return;
+
+    const torrent = filePickerDialog.torrent;
+    const mode = filePickerDialog.mode;
+    const fileName = file.name;
+
+    try {
+      setFilePickerDialog((prev) => ({ ...prev, loading: true }));
+      const url = await unrestrictFile(torrent.id, fileName);
+      if (!url) {
+        throw new Error('No unrestricted link returned');
+      }
+
+      if (mode === 'play') {
+        openVideoPlayer(url, getBaseName(fileName));
+      } else if (mode === 'copy') {
+        await navigator.clipboard.writeText(url);
+        setSnackbar({ open: true, message: 'Unrestricted link copied to clipboard', severity: 'success' });
+      } else if (mode === 'download') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', getBaseName(fileName));
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        window.open(url, '_blank');
+      }
+    } catch (e: any) {
+      setSnackbar({ open: true, message: axios.isAxiosError(e) ? e.response?.data || e.message || 'Failed to unrestrict file link' : 'Failed to unrestrict file link', severity: 'error' });
+    } finally {
+      setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
+    }
+  };
+
   const handleRefresh = useCallback(async () => {
     setSyncing(true);
     setError('');
@@ -735,6 +902,7 @@ export default function RealDebridBrowser() {
                   onDelete={(t) => setDeleteDialog({ open: true, torrent: t })}
                   onReinsert={(t) => setReinsertDialog({ open: true, torrent: t })}
                   onCopyLink={handleCopyLink}
+                  onDownload={handleDownloadFromMenu}
                 />
               ))}
             </div>
@@ -834,15 +1002,17 @@ export default function RealDebridBrowser() {
       {/* File Picker Dialog */}
       <Dialog
         open={filePickerDialog.open}
-        onClose={() => !filePickerDialog.loading && setFilePickerDialog({ open: false, torrent: null, files: [], loading: false })}
-        PaperProps={{ className: 'rd-dialog', sx: { minWidth: 500, maxWidth: 700 } }}
-        maxWidth="md"
+        onClose={() => !filePickerDialog.loading && setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' })}
+        PaperProps={{ className: 'rd-dialog', sx: { width: '100%', maxWidth: 760 } }}
+        BackdropProps={{ className: 'rd-dialog-backdrop' }}
+        fullWidth
+        maxWidth="sm"
       >
-        <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <DialogTitle className="rd-dialog-title" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
           <PlayArrow sx={{ color: '#10b981' }} />
-          Select File to Stream
+          {filePickerDialog.mode === 'copy' ? 'Select File to Copy Link' : filePickerDialog.mode === 'download' ? 'Select File to Download' : 'Select File to Stream'}
         </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
+        <DialogContent className="rd-dialog-content" sx={{ p: 0 }}>
           {filePickerDialog.loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
               <CircularProgress />
@@ -854,9 +1024,9 @@ export default function RealDebridBrowser() {
                 <Box
                   key={idx}
                   onClick={() => {
-                    window.open(file.link, '_blank');
-                    setFilePickerDialog({ open: false, torrent: null, files: [], loading: false });
+                    handleFileAction(file);
                   }}
+                  className="rd-file-item"
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -869,18 +1039,52 @@ export default function RealDebridBrowser() {
                     '&:last-child': { borderBottom: 'none' },
                   }}
                 >
-                  <Movie sx={{ color: '#22d3ee', mr: 2, fontSize: 20 }} />
+                  <Movie className="rd-file-icon" sx={{ color: '#22d3ee', mr: 2, fontSize: 20 }} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Typography className="rd-file-name" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {file.name.split('/').pop()}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography className="rd-file-size" variant="caption" sx={{ color: 'text.secondary' }}>
                       {formatBytes(file.size)}
                     </Typography>
                   </Box>
-                  <IconButton size="small" sx={{ color: '#10b981' }}>
-                    <OpenInNew fontSize="small" />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <IconButton
+                      className="rd-file-action"
+                      size="small"
+                      sx={{ color: '#10b981' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFileAction(file);
+                      }}
+                    >
+                      <PlayArrow fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      className="rd-file-action"
+                      size="small"
+                      sx={{ color: '#10b981' }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!filePickerDialog.torrent) return;
+                        try {
+                          const fileName = file.name;
+                          const url = await unrestrictFile(filePickerDialog.torrent.id, fileName);
+                          if (!url) throw new Error('No unrestricted link returned');
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.setAttribute('download', getBaseName(fileName));
+                          document.body.appendChild(link);
+                          link.click();
+                          link.remove();
+                        } catch (e) {
+                          setSnackbar({ open: true, message: axios.isAxiosError(e) ? e.response?.data || e.message || 'Failed to unrestrict file link' : 'Failed to unrestrict file link', severity: 'error' });
+                        }
+                      }}
+                    >
+                      <Download fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </Box>
               ))}
             </Box>
@@ -888,7 +1092,7 @@ export default function RealDebridBrowser() {
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button 
-            onClick={() => setFilePickerDialog({ open: false, torrent: null, files: [], loading: false })}
+            onClick={() => setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' })}
             disabled={filePickerDialog.loading}
           >
             Cancel
@@ -896,6 +1100,18 @@ export default function RealDebridBrowser() {
         </DialogActions>
       </Dialog>
       
+      {videoPlayerOpen && (
+        <Suspense fallback={null}>
+          <VideoPlayerDialog
+            open={videoPlayerOpen}
+            onClose={() => setVideoPlayerOpen(false)}
+            url={videoUrl}
+            title={videoTitle}
+            mimeType={videoMimeType}
+          />
+        </Suspense>
+      )}
+
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}

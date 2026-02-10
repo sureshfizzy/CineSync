@@ -959,3 +959,197 @@
 .rd-browser::-webkit-scrollbar-thumb:hover {
   background: var(--rd-text-secondary);
 }
+
+
+/* File Picker Dialog */
+.rd-dialog-title {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.02));
+  border-bottom: 1px solid var(--rd-border);
+}
+
+.rd-dialog-content {
+  background: var(--rd-bg-secondary);
+}
+
+.rd-file-list {
+  padding: 6px 6px 10px 6px;
+}
+
+.rd-file-item {
+  background: var(--rd-bg-card);
+  border: 1px solid var(--rd-border) !important;
+  border-radius: 12px;
+  margin: 8px 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.rd-file-item:hover {
+  background: var(--rd-bg-hover) !important;
+  border-color: var(--rd-border-hover) !important;
+  transform: translateY(-1px);
+}
+
+.rd-file-icon {
+  background: rgba(34, 211, 238, 0.12);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.rd-file-name {
+  font-size: 0.95rem !important;
+  color: var(--rd-text-primary) !important;
+}
+
+.rd-file-size {
+  color: var(--rd-text-muted) !important;
+  font-weight: 600 !important;
+}
+
+.rd-file-action {
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+}
+
+.rd-file-action:hover {
+  background: rgba(16, 185, 129, 0.24) !important;
+  border-color: rgba(16, 185, 129, 0.7) !important;
+}
+
+
+.rd-dialog-backdrop {
+  background: rgba(2, 6, 10, 0.72) !important;
+  backdrop-filter: blur(8px);
+}
+
+.rd-dialog {
+  background: var(--rd-bg-secondary) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55) !important;
+}
+
+.rd-dialog-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 14px 20px !important;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.04)) !important;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.25) !important;
+}
+
+.rd-file-list {
+  padding: 10px 8px 14px 8px;
+}
+
+.rd-file-item {
+  background: linear-gradient(180deg, rgba(20, 24, 28, 0.9), rgba(12, 14, 18, 0.9)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.rd-file-item:hover {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.rd-file-name {
+  letter-spacing: 0.2px;
+}
+
+.rd-file-size {
+  font-size: 0.75rem !important;
+}
+
+.rd-file-action {
+  border-radius: 10px !important;
+}
+
+
+@media (max-width: 600px) {
+  .rd-dialog {
+    width: calc(100% - 16px) !important;
+    margin: 8px !important;
+    border-radius: 12px !important;
+  }
+
+  .rd-dialog-title {
+    padding: 10px 12px !important;
+    font-size: 0.95rem !important;
+  }
+
+  .rd-dialog-content {
+    padding: 0 !important;
+  }
+
+  .rd-file-list {
+    padding: 6px 4px 10px 4px;
+  }
+
+  .rd-file-item {
+    padding: 10px 12px !important;
+    margin: 6px 4px;
+    gap: 10px;
+  }
+
+  .rd-file-name {
+    font-size: 0.82rem !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+  }
+
+  .rd-file-size {
+    font-size: 0.7rem !important;
+  }
+
+  .rd-file-action {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .rd-file-action svg {
+    font-size: 16px !important;
+  }
+}
+
+
+@media (max-width: 480px) {
+  .rd-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .rd-dialog-title {
+    padding: 8px 10px !important;
+    font-size: 0.85rem !important;
+  }
+
+  .rd-file-list {
+    padding: 4px 2px 8px 2px;
+  }
+
+  .rd-file-item {
+    padding: 8px 10px !important;
+    margin: 4px 2px;
+  }
+
+  .rd-file-name {
+    font-size: 0.76rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .rd-file-size {
+    font-size: 0.68rem !important;
+  }
+
+  .rd-file-action {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .rd-file-action svg {
+    font-size: 14px !important;
+  }
+}
