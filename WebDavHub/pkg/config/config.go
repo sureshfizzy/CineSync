@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -240,7 +241,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "LOG_LEVEL", Category: "Logging Configuration", Type: "string", Required: false, Description: "Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"},
 
 		// Rclone Mount Configuration
-		{Key: "RCLONE_MOUNT", Category: "Rclone Mount Configuration", Type: "boolean", Required: false, Description: "Enable or disable rclone mount verification"},
+		{Key: "RCLONE_MOUNT", Category: "Rclone Mount Configuration", Type: "boolean", Required: false, Disabled: runtime.GOOS == "windows", Description: "Fail-safe for external rclone mounts only. Not needed for the built-in/internal mount."},
 		{Key: "MOUNT_CHECK_INTERVAL", Category: "Rclone Mount Configuration", Type: "integer", Required: false, Description: "Interval (in seconds) for checking rclone mount availability"},
 
 		// MediaHub Service Configuration
@@ -291,7 +292,7 @@ func getConfigDefinitions() []ConfigValue {
 		// Real-Time Monitoring Configuration
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
 		{Key: "SYMLINK_CLEANUP_INTERVAL", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Cleanup interval for deleting broken symbolic links"},
-		{Key: "SYMLINK_DELETE_BEHAVIOUR", Category: "Real-Time Monitoring Configuration", Type: "string", Required: false, Description: "Symlink deletion behavior: trash or permanent"},
+		{Key: "SYMLINK_DELETE_BEHAVIOUR", Category: "Real-Time Monitoring Configuration", Type: "select", Required: false, Description: "Symlink deletion behavior", Options: []string{"trash", "permanent"}},
 
 		// Plex Integration Configuration
 		{Key: "ENABLE_PLEX_UPDATE", Category: "Plex Integration Configuration", Type: "boolean", Required: false, Description: "Enable or disable Plex library updates"},

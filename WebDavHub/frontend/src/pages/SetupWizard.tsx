@@ -646,7 +646,7 @@ export default function SetupWizard() {
     TVDB_FOLDER_ID: 'Name folders using TVDb IDs.',
     RENAME_ENABLED: 'Enable metadata-based file renaming.',
     MEDIAINFO_PARSER: 'Use MediaInfo to enrich rename metadata.',
-    RCLONE_MOUNT: 'Verify rclone mount availability before proceeding.',
+    RCLONE_MOUNT: 'External mounts only: pause MediaHub if an external rclone mount is down (not needed for the built-in mount).',
     RELATIVE_SYMLINK: 'Create relative symlinks instead of absolute paths.',
     SKIP_EXTRAS_FOLDER: 'Skip processing extras folders.',
     SKIP_ADULT_PATTERNS: 'Skip files matching adult patterns.',
