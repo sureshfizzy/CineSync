@@ -149,6 +149,25 @@ func (m *Manager) loadOrInitializeJobs() {
 		}
 		logger.Info("Loaded %d jobs from database", len(savedJobs))
 
+		// Remove legacy missing-files job if present (disabled by design)
+		if _, exists := m.jobs["missing-files-check"]; exists {
+			delete(m.jobs, "missing-files-check")
+			if err := deleteJobFromDB("missing-files-check"); err != nil {
+				logger.Error("Failed to delete legacy missing-files job: %v", err)
+			} else {
+				logger.Info("Removed legacy missing-files-check job")
+			}
+		}
+		// Remove legacy remove-missing-database-entries job if present
+		if _, exists := m.jobs["remove-missing-database-entries"]; exists {
+			delete(m.jobs, "remove-missing-database-entries")
+			if err := deleteJobFromDB("remove-missing-database-entries"); err != nil {
+				logger.Error("Failed to delete legacy remove-missing-database-entries job: %v", err)
+			} else {
+				logger.Info("Removed legacy remove-missing-database-entries job")
+			}
+		}
+
 		// Check for missing default jobs and add them
 		m.addMissingDefaultJobs()
 	} else {
@@ -158,54 +177,11 @@ func (m *Manager) loadOrInitializeJobs() {
 
 // initializeDefaultJobs creates the default CineSync jobs
 func (m *Manager) initializeDefaultJobs() {
-	// Get symlink cleanup interval from environment variable
-	symlinkCleanupInterval := env.GetInt("SYMLINK_CLEANUP_INTERVAL", 600) // Default to 10 minutes if not set
-	logger.Info("Symlink cleanup interval set to %d seconds", symlinkCleanupInterval)
-
 	// Get commands for each job type
-	missingFilesCmd, missingFilesArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "missing-files", "missing-files")
-	cleanupCmd, cleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "cleanup-missing-destinations", "cleanup-missing-destinations")
 	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
 	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
 
 	defaultJobs := []*Job{
-		{
-			ID:           "missing-files-check",
-			Name:         "Missing Files Check",
-			Description:  "Scan for missing source files and automatically trigger broken symlinks cleanup when source files no longer exist",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeInterval,
-			IntervalSeconds: symlinkCleanupInterval,
-			Command:      missingFilesCmd,
-			Arguments:    missingFilesArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Maintenance",
-			Tags:         []string{"files", "validation", "database", "symlinks"},
-			MaxRetries:   3,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		},
-		{
-			ID:           "remove-missing-database-entries",
-			Name:         "Remove Missing Database Entries",
-			Description:  "Remove database entries where destination files are missing but source files still exist (manually deleted destinations)",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeManual,
-			Command:      cleanupCmd,
-			Arguments:    cleanupArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Maintenance",
-			Tags:         []string{"database", "cleanup", "orphaned", "entries"},
-			MaxRetries:   2,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		},
 		{
 			ID:           "database-optimize",
 			Name:         "Database Optimize",
@@ -259,54 +235,12 @@ func (m *Manager) initializeDefaultJobs() {
 
 // addMissingDefaultJobs checks for missing default jobs and adds them
 func (m *Manager) addMissingDefaultJobs() {
-	// Get symlink cleanup interval from environment variable
-	symlinkCleanupInterval := env.GetInt("SYMLINK_CLEANUP_INTERVAL", 600) // Default to 10 minutes if not set
-
 	// Get commands for each job type
-	missingFilesCmd, missingFilesArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "missing-files", "missing-files")
-	cleanupCmd, cleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "cleanup-missing-destinations", "cleanup-missing-destinations")
 	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
 	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
 
 	// Define all default jobs that should exist
 	defaultJobsToCheck := map[string]*Job{
-		"missing-files-check": {
-			ID:           "missing-files-check",
-			Name:         "Missing Files Check",
-			Description:  "Scan for missing source files and automatically trigger broken symlinks cleanup when source files no longer exist",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeInterval,
-			IntervalSeconds: symlinkCleanupInterval,
-			Command:      missingFilesCmd,
-			Arguments:    missingFilesArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Maintenance",
-			Tags:         []string{"files", "validation", "database", "symlinks"},
-			MaxRetries:   3,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		},
-		"remove-missing-database-entries": {
-			ID:           "remove-missing-database-entries",
-			Name:         "Remove Missing Database Entries",
-			Description:  "Remove database entries where destination files are missing but source files still exist (manually deleted destinations)",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeManual,
-			Command:      cleanupCmd,
-			Arguments:    cleanupArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Maintenance",
-			Tags:         []string{"database", "cleanup", "orphaned", "entries"},
-			MaxRetries:   2,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		},
 		"database-optimize": {
 			ID:           "database-optimize",
 			Name:         "Database Optimize",

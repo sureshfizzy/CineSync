@@ -952,6 +952,76 @@ def get_destination_path(conn, source_path):
         conn.rollback()
         return None
 
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_source_path_for_destination(conn, dest_path):
+    dest_path = normalize_file_path(dest_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path FROM processed_files WHERE destination_path = ?", (dest_path,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_source_path_for_destination: {e}", level="ERROR")
+        conn.rollback()
+        return None
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def get_processed_file_size(conn, file_path):
+    file_path = normalize_file_path(file_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_size FROM processed_files WHERE file_path = ?", (file_path,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error in get_processed_file_size: {e}", level="ERROR")
+        conn.rollback()
+        return None
+
+
+@throttle
+@retry_on_db_lock
+@with_connection(main_pool)
+def update_source_path_for_destination(conn, dest_path, new_source_path):
+    dest_path = normalize_file_path(dest_path)
+    new_source_path = normalize_file_path(new_source_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path, tmdb_id, season_number FROM processed_files WHERE destination_path = ?", (dest_path,))
+        result = cursor.fetchone()
+        if not result:
+            log_message(f"No matching record found for destination path: {dest_path}", level="WARNING")
+            return False
+
+        old_source_path, tmdb_id, season_number = result
+        file_size = None
+        try:
+            if os.path.exists(new_source_path):
+                file_size = os.path.getsize(new_source_path)
+        except OSError:
+            pass
+
+        if file_size is not None:
+            cursor.execute("UPDATE processed_files SET file_path = ?, file_size = ? WHERE destination_path = ?", (new_source_path, file_size, dest_path))
+        else:
+            cursor.execute("UPDATE processed_files SET file_path = ? WHERE destination_path = ?", (new_source_path, dest_path))
+
+        conn.commit()
+        log_message(f"Updated source path for destination: {dest_path} -> {new_source_path} (was: {old_source_path})", level="INFO")
+        try:
+            track_file_addition(new_source_path, dest_path, tmdb_id, season_number)
+        except Exception:
+            pass
+        return True
+    except (sqlite3.Error, DatabaseError) as e:
+        log_message(f"Error updating source path for destination: {e}", level="ERROR")
+        conn.rollback()
+        return False
+
 def _check_path_exists_batch(paths_batch):
     """Check existence of a batch of paths and build reverse index - used for parallel processing"""
     existing_paths = []

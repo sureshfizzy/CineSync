@@ -27,7 +27,7 @@ def _should_cleanup_orphans():
     value = os.getenv('SYMLINK_CLEANUP_ORPHANS', 'true')
     return value.lower() in ['true', '1', 'yes']
 
-def _cleanup_orphaned_db_entries():
+def _cleanup_orphaned_db_entries(dest_dir, symlink_target_index=None):
     removed = 0
     try:
         with sqlite3.connect(DB_FILE) as conn1, sqlite3.connect(PROCESS_DB) as conn2:
@@ -40,6 +40,19 @@ def _cleanup_orphaned_db_entries():
                     continue
                 if os.path.lexists(dest_path):
                     continue
+
+                # If the source still exists and we can find a moved symlink, update DB instead of deleting.
+                if file_path and os.path.exists(file_path) and symlink_target_index:
+                    normalized_src = normalize_file_path(file_path)
+                    moved_path = symlink_target_index.get(normalized_src)
+                    if moved_path and os.path.lexists(moved_path):
+                        log_message(f"Orphan cleanup: detected moved symlink {dest_path} -> {moved_path}", level="INFO")
+                        try:
+                            update_renamed_file(dest_path, moved_path)
+                            continue
+                        except Exception as e:
+                            log_message(f"Failed to update moved symlink in DB: {e}", level="WARNING")
+
                 log_message(f"Orphan cleanup: removing DB entry: {dest_path}", level="DEBUG")
                 try:
                     send_file_deletion(file_path, dest_path, tmdb_id, season_number, "Destination missing during cleanup")
@@ -69,12 +82,17 @@ def run_symlink_cleanup(dest_dir):
     while not shutdown_event.is_set():
         symlinks_deleted = False
         trash_mode = _get_symlink_delete_behaviour() == 'trash'
+        symlink_target_index = {}
         for root, _, files in os.walk(dest_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 if os.path.islink(file_path):
                     try:
                         target = get_symlink_target_path(file_path)
+                        if target:
+                            normalized_target = normalize_file_path(target)
+                            if normalized_target not in symlink_target_index:
+                                symlink_target_index[normalized_target] = file_path
 
                         # Check if the symlink target exists
                         if not os.path.exists(target):
@@ -119,7 +137,7 @@ def run_symlink_cleanup(dest_dir):
                         print(f"Exception details: {traceback.format_exc()}")
 
         if (not trash_mode) and _should_cleanup_orphans():
-            orphaned_removed = _cleanup_orphaned_db_entries()
+            orphaned_removed = _cleanup_orphaned_db_entries(dest_dir, symlink_target_index)
             if orphaned_removed:
                 log_message(f"Removed {orphaned_removed} orphaned DB entries.", level="INFO")
         # Retrieve the cleanup interval

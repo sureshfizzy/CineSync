@@ -30,8 +30,6 @@ from MediaHub.processors.db_utils import (
     verify_database_integrity,
     optimize_database,
     get_database_stats,
-    display_missing_files,
-    cleanup_missing_destinations
 )
 
 def run_initialize():
@@ -58,26 +56,10 @@ def run_status():
     """Show database status"""
     get_database_stats()
 
-def run_missing_files():
-    """Check for missing files and automatically trigger broken symlinks cleanup"""
-    # Get destination directory
-    _, dest_dir = get_directories()
-    if not dest_dir:
-        sys.exit(1)
-
-    if not os.path.exists(dest_dir):
-        sys.exit(1)
-
-    display_missing_files(dest_dir)
-
-def run_cleanup_missing_destinations():
-    """Clean up database entries where destination files are missing but source files still exist"""
-    cleanup_missing_destinations()
-
 def main():
     """Main function to run database maintenance using existing MediaHub logic"""
     parser = argparse.ArgumentParser(description='Database maintenance jobs')
-    parser.add_argument('action', choices=['initialize', 'reset', 'vacuum', 'verify', 'optimize', 'status', 'missing-files', 'cleanup-missing-destinations'],
+    parser.add_argument('action', choices=['initialize', 'reset', 'vacuum', 'verify', 'optimize', 'status'],
                        help='Database maintenance action to perform')
 
     args = parser.parse_args()
@@ -95,10 +77,6 @@ def main():
             run_optimize()
         elif args.action == 'status':
             run_status()
-        elif args.action == 'missing-files':
-            run_missing_files()
-        elif args.action == 'cleanup-missing-destinations':
-            run_cleanup_missing_destinations()
         else:
             sys.exit(1)
 

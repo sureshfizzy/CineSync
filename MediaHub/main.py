@@ -79,6 +79,7 @@ def check_mount_points():
         log_message(f"Error checking mount points: {e}", level="ERROR")
         return False
 
+
 def initialize_db_with_mount_check():
     """Initialize database with mount point verification."""
     try:
@@ -94,29 +95,6 @@ def initialize_db_with_mount_check():
         log_message(f"Error during database initialization: {e}", level="ERROR")
         return False
 
-def display_missing_files_with_mount_check(dest_dir):
-    """Display missing files after ensuring mount is available."""
-    try:
-        if not dest_dir:
-            log_message("Destination directory not provided", level="ERROR")
-            return []
-
-        if is_rclone_mount_enabled():
-            try:
-                wait_for_mount()
-            except Exception as e:
-                log_message(f"Error waiting for mount: {str(e)}", level="ERROR")
-                return []
-
-        if not os.path.exists(dest_dir):
-            log_message(f"Destination directory does not exist: {dest_dir}", level="ERROR")
-            return []
-
-        return display_missing_files(dest_dir)
-    except Exception as e:
-        log_message(f"Error in display_missing_files_with_mount_check: {str(e)}", level="ERROR")
-        log_message(traceback.format_exc(), level="DEBUG")
-        return []
 
 def ensure_windows_temp_directory():
     """Create a temp directory if it does not exist on Windows."""
@@ -530,10 +508,6 @@ def main(dest_dir):
     
     # Job-specific commands
     job_group = parser.add_argument_group('Job Management')
-    job_group.add_argument("--missing-files", action="store_true",
-                         help="Check for missing source files and cleanup broken symlinks")
-    job_group.add_argument("--cleanup-missing-destinations", action="store_true",
-                         help="Remove database entries where destination files are missing")
     job_group.add_argument("--source-scan", action="store_true",
                          help="Scan source directories and update source files database")
 
@@ -599,17 +573,6 @@ def main(dest_dir):
         return
 
     # Handle job-specific commands
-    if args.missing_files:
-        from MediaHub.utils.Jobs import database_maintenance_job
-        sys.argv = ['', 'missing-files']
-        database_maintenance_job.main()
-        return
-
-    if args.cleanup_missing_destinations:
-        from MediaHub.utils.Jobs import database_maintenance_job
-        sys.argv = ['', 'cleanup-missing-destinations']
-        database_maintenance_job.main()
-        return
 
     if args.source_scan:
         from MediaHub.utils.Jobs import source_scan_job
@@ -644,47 +607,6 @@ def main(dest_dir):
             log_message("Starting background processes...", level="INFO")
             log_message("RealTime-Monitoring is enabled", level="INFO")
 
-            # Define the callback function to be called once the background task finishes
-            def on_missing_files_check_done():
-                log_message("Database import completed.", level="INFO")
-
-            # Function to run the missing files check and call the callback when done
-            def display_missing_files_with_callback(dest_dir, callback):
-                try:
-                    if not dest_dir or not os.path.exists(dest_dir):
-                        log_message(f"Invalid or non-existent destination directory: {dest_dir}", level="ERROR")
-                        return
-                    missing_files_list = display_missing_files_with_mount_check(dest_dir)
-
-                    if missing_files_list:
-                        log_message(f"Found {len(missing_files_list)} missing files. Attempting to recreate symlinks.", level="INFO")
-                        # Get source directories for create_symlinks
-                        src_dirs_str = get_setting_with_client_lock('SOURCE_DIR', '', 'string')
-                        if not src_dirs_str:
-                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
-                            return
-                        src_dirs = src_dirs_str.split(',')
-                        if not src_dirs:
-                            log_message("Source directories not configured. Cannot recreate symlinks.", level="ERROR")
-                            return
-
-                        for source_file_path, expected_dest_path in missing_files_list:
-                            log_message(f"Attempting to recreate symlink for missing file: {source_file_path}", level="INFO")
-                            create_symlinks(src_dirs=src_dirs, dest_dir=dest_dir, single_path=source_file_path, force=True, mode='create', auto_select=True, use_source_db=args.use_source_db
-                            )
-                    else:
-                        log_message("No missing files found.", level="INFO")
-
-                    callback()
-                except Exception as e:
-                    log_message(f"Error in display_missing_files_with_callback: {str(e)}", level="ERROR")
-                    log_message(traceback.format_exc(), level="DEBUG")
-
-            # Run missing files check in a separate thread
-            # DISABLED: This blocks activities by checking existence of all files
-            # missing_files_thread = threading.Thread(name="missing_files_check", target=display_missing_files_with_callback, args=(dest_dir, on_missing_files_check_done))
-            # missing_files_thread.daemon = True
-            # missing_files_thread.start()
             log_message("Missing files check disabled at startup for better performance", level="INFO")
 
         elif is_single_file_operation:

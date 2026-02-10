@@ -42,6 +42,8 @@ from MediaHub.processors.sports_processor import is_sports_file
 log_imported_db = False
 db_initialized = False
 
+single_file_mode = False
+
 class ProcessingManager:
     """Streaming manager that coordinates file processing with real-time analysis and dispatch"""
 
@@ -343,8 +345,45 @@ class ProcessingManager:
                 if mode == 'create' and not force:
                     normalized_src = normalize_file_path(src_dir)
                     if processed_files_set and normalized_src in processed_files_set:
-                        total_skipped += 1
-                        continue
+                        if is_single_file:
+                            try:
+                                existing_dest = get_destination_path(src_dir)
+                                if existing_dest:
+                                    existing_dest = normalize_file_path(existing_dest)
+                                    if not os.path.exists(existing_dest):
+                                        log_message(f"Destination missing for processed file. Reprocessing: {src_dir}", level="INFO")
+                                    else:
+                                        if os.path.islink(existing_dest):
+                                            target = get_symlink_target_path(existing_dest)
+                                            if target:
+                                                target = normalize_file_path(target)
+                                            if target and target != normalized_src:
+                                                log_message(f"Destination symlink points to different source. Reprocessing: {src_dir}", level="INFO")
+                                            else:
+                                                db_size = get_processed_file_size(src_dir)
+                                                current_size = os.path.getsize(src_dir)
+                                                if db_size is not None and current_size != db_size:
+                                                    log_message(f"Single file updated on disk (size {db_size} -> {current_size}). Reprocessing: {src_dir}", level="INFO")
+                                                else:
+                                                    total_skipped += 1
+                                                    continue
+                                        else:
+                                            db_size = get_processed_file_size(src_dir)
+                                            current_size = os.path.getsize(src_dir)
+                                            if db_size is not None and current_size != db_size:
+                                                log_message(f"Single file updated on disk (size {db_size} -> {current_size}). Reprocessing: {src_dir}", level="INFO")
+                                            else:
+                                                total_skipped += 1
+                                                continue
+                                else:
+                                    # No destination recorded; allow reprocessing
+                                    log_message(f"No destination recorded for processed file. Reprocessing: {src_dir}", level="INFO")
+                            except OSError:
+                                total_skipped += 1
+                                continue
+                        else:
+                            total_skipped += 1
+                            continue
 
                 unprocessed_files.append(src_dir)
 
@@ -683,6 +722,12 @@ def process_file(args, force=False, batch_apply=False):
                             update_renamed_file(existing_dest_path, potential_new_path)
                             return
 
+            if single_file_mode:
+                found_symlink = find_symlink_for_source(dest_dir, src_file)
+                if found_symlink:
+                    log_message(f"Detected destination move: {existing_dest_path} -> {found_symlink}", level="INFO")
+                    update_renamed_file(existing_dest_path, found_symlink)
+                    return
             log_message(f"Destination file missing. Re-processing: {src_file}", level="INFO")
         else:
             log_message(f"File already processed and exists. Source: {src_file}, Existing destination: {existing_dest_path}", level="INFO")
@@ -1393,9 +1438,24 @@ def process_file(args, force=False, batch_apply=False):
         return (dest_file, True, src_file)
 
     except FileExistsError:
-        log_message(f"File already exists: {dest_file}. Skipping symlink creation.", level="DEBUG")
+        log_message(f"File already exists: {dest_file}. Checking for rename/update.", level="DEBUG")
 
+        try:
+            if os.path.islink(dest_file):
+                existing_target = get_symlink_target_path(dest_file)
+                if existing_target:
+                    existing_target = normalize_file_path(existing_target)
+                normalized_src = normalize_file_path(src_file)
 
+                if existing_target and existing_target != normalized_src:
+                    log_message(f"Detected source rename for existing symlink: {dest_file} -> {existing_target} (new: {normalized_src})", level="INFO")
+                    if _safe_delete_symlink(dest_file):
+                        os.symlink(src_file, dest_file)
+                        update_source_path_for_destination(dest_file, src_file)
+                        log_message(f"Updated symlink target and database for renamed source: {dest_file}", level="INFO")
+                        return (dest_file, True, src_file)
+        except Exception as e:
+            log_message(f"Error handling existing destination for {dest_file}: {e}", level="WARNING")
 
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info, dest_file)
@@ -1412,6 +1472,29 @@ def process_file(args, force=False, batch_apply=False):
             _cleanup_old_symlink(old_symlink_info, dest_file)
 
     return None
+
+def find_symlink_for_source(dest_dir, src_file):
+    """Find a symlink in destination tree that points to src_file."""
+    try:
+        normalized_src = normalize_file_path(src_file)
+        for root, _, files in os.walk(dest_dir):
+            for name in files:
+                path = os.path.join(root, name)
+                if not os.path.islink(path):
+                    continue
+                try:
+                    target = get_symlink_target_path(path)
+                    if not target:
+                        continue
+                    target = normalize_file_path(target)
+                    if target == normalized_src:
+                        return path
+                except (OSError, IOError):
+                    continue
+    except Exception as e:
+        log_message(f"Error searching for symlink in destination: {e}", level="WARNING")
+    return None
+
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
@@ -1479,6 +1562,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
     # Fast path for single file processing
     is_single_file = single_path and os.path.isfile(single_path)
+    global single_file_mode
+    single_file_mode = bool(is_single_file)
 
     if auto_select:
         # Use manager-coordinated parallel processing when auto-select is enabled
