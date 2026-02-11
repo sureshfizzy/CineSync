@@ -1124,6 +1124,18 @@ func fetchAndLoadTorrents(apiKey string) {
 		if err != nil {
 			logger.Warn("[RD] Failed to fetch torrents: %v", err)
 		} else {
+			// Guard against transient empty responses that would wipe local cache.
+			if len(torrents) == 0 {
+				existing := 0
+				if tm != nil {
+					existing = len(tm.GetAllTorrentsFromCache())
+				}
+				if existing > 0 || len(cachedTorrents) > 0 {
+					logger.Warn("[RD] Torrents fetched: 0 (transient) - skipping cache reconcile to avoid purge")
+					logger.Info("[RD] Prefetch completed")
+					return
+				}
+			}
 			cachedTorrents = torrents
 			logger.Info("[RD] Torrents fetched: %d", len(torrents))
 			tm.SetPrefetchedTorrents(torrents)

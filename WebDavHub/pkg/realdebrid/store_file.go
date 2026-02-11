@@ -210,7 +210,6 @@ func (s *CineSyncStore) LoadAllItems() ([]CineSyncItem, error) {
 	for _, filePath := range files {
 		var item CineSyncItem
 		if err := s.readJSON(filePath, &item); err != nil {
-			logger.Warn("[CineSyncStore] Failed to load item from %s: %v", filePath, err)
 			continue
 		}
 		items = append(items, item)
