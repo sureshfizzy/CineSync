@@ -1060,8 +1060,8 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
         title = underscore_pattern2.group(1).replace('_', ' ')
         return clean_title_string(title)
 
-    # Pattern 1c: "Title (Year) [technical]" for space-separated files
-    space_pattern = re.match(r'^(.+?)\s+\((\d{4})\)\s+.*', parsed.filename_no_ext)
+    # Pattern 1c: "Title (Year ...)" for space-separated files
+    space_pattern = re.match(r'^(.+?)\s+\((\d{4})\b[^)]*\)\s*.*', parsed.filename_no_ext)
     if space_pattern:
         title = space_pattern.group(1)
         return clean_title_string(title)
@@ -1851,9 +1851,9 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     # Check for anime-style episode patterns in the original filename
     # Pattern: "Title - Additional Info - 01 - Episode Title"
     anime_episode_patterns = [
-        r'\s-\s(\d{1,4})\s-\s',  # " - 01 - ", " - 1024 - "
-        r'\s-\s(\d{1,4})\.mkv$', # " - 01.mkv", " - 1024.mkv"
-        r'\s-\s(\d{1,4})$',      # " - 01" at end, " - 1024" at end
+        r'\s-\s(\d{1,4})(?:v\d+)?\s-\s',  # " - 01 - ", " - 1024 - ", " - 01v2 - "
+        r'\s-\s(\d{1,4})(?:v\d+)?\.mkv$', # " - 01.mkv", " - 1024.mkv", " - 01v2.mkv"
+        r'\s-\s(\d{1,4})(?:v\d+)?$',      # " - 01" at end, " - 1024" at end
     ]
 
     for pattern in anime_episode_patterns:
@@ -1940,17 +1940,17 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
 
     anime_episode_patterns = [
         # Standard anime patterns with dashes
-        r'\s-\s(\d{1,4})\s',
-        r'\s-\s(\d{1,4})\[',
-        r'\s-\s(\d{1,4})$',
-        r'\s-(\d{1,4})\.mkv$',
-        r'\s-(\d{1,4})$',
-        r'S\d{1,2}\s*-\s*(\d{1,4})',
+        r'\s-\s(\d{1,4})(?:v\d+)?\s',
+        r'\s-\s(\d{1,4})(?:v\d+)?\[',
+        r'\s-\s(\d{1,4})(?:v\d+)?$',
+        r'\s-(\d{1,4})(?:v\d+)?\.mkv$',
+        r'\s-(\d{1,4})(?:v\d+)?$',
+        r'S\d{1,2}\s*-\s*(\d{1,4})(?:v\d+)?',
 
         # Season X - Episode pattern (common in anime)
-        r'Season\s+\d+\s*-\s*(\d{1,4})\s*\[',  # "Season 2 - 01 [quality]"
-        r'Season\s+\d+\s*-\s*(\d{1,4})\s*$',   # "Season 2 - 01" at end
-        r'Season\s+\d+\s*-\s*(\d{1,4})\s',     # "Season 2 - 01 " with space after
+        r'Season\s+\d+\s*-\s*(\d{1,4})(?:v\d+)?\s*\[',  # "Season 2 - 01 [quality]"
+        r'Season\s+\d+\s*-\s*(\d{1,4})(?:v\d+)?\s*$',   # "Season 2 - 01" at end
+        r'Season\s+\d+\s*-\s*(\d{1,4})(?:v\d+)?\s',     # "Season 2 - 01 " with space after
 
         # Space-separated episode numbers (common in anime)
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+[-\[]',  # "[Group] Title 16 - NCED" pattern

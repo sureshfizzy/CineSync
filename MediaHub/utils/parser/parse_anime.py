@@ -237,7 +237,7 @@ def _extract_title_from_content(content: str) -> str:
     # Include both "Season X", ordinal patterns like "3rd Season", and word ordinals like "Second Season"
     ordinal_words = r'(?:First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth)'
 
-    season_match = re.match(rf'^(.+?)(?:\s*\(\d{{4}}\))?\s+(?:S\d+(?:E\d+)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
+    season_match = re.match(rf'^(.+?)(?:\s*\(\d{{4}}\))?\s+(?:S\d+(?:E\d+(?:v\d+)?)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
     if season_match:
         title = season_match.group(1).strip()
         return clean_title_string(title)
@@ -275,7 +275,7 @@ def _extract_title_from_content(content: str) -> str:
         return clean_title_string(title)
 
     # Then try standard episode/season patterns
-    dash_match = re.match(r'^(.+?)\s+-\s+(?:S\d+E\d+|S\d+|\d+|EP?\d+)(?:\s|$|\[)', content, re.IGNORECASE)
+    dash_match = re.match(r'^(.+?)\s+-\s+(?:S\d+E\d+(?:v\d+)?|S\d+|\d+(?:v\d+)?|EP?\d+(?:v\d+)?)(?:\s|$|\[)', content, re.IGNORECASE)
     if dash_match:
         title = dash_match.group(1).strip()
         return clean_title_string(title)

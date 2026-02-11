@@ -290,13 +290,13 @@ ANIME_PATTERNS = {
     ],
 
     # Anime-specific episode numbering patterns
-    'episode_number': re.compile(r'\s-?\s?(\d{2,4})(?:\s|\.mkv|\.mp4|\.avi|$)', re.IGNORECASE),
+    'episode_number': re.compile(r'\s-?\s?(\d{2,4})(?:v\d+)?(?:\s|\.mkv|\.mp4|\.avi|$)', re.IGNORECASE),
 
     # Anime episode indicators that suggest anime content
     'anime_episode_indicators': [
-        re.compile(r'\s+\d{1,4}\s*\[', re.IGNORECASE),  # Episode number followed by bracket
-        re.compile(r'\s+\d{1,4}\s*$', re.IGNORECASE),   # Episode number at end
-        re.compile(r'\s+\d{1,4}\s*\(', re.IGNORECASE),  # Episode number followed by parenthesis
+        re.compile(r'\s+\d{1,4}(?:v\d+)?\s*\[', re.IGNORECASE),  # Episode number followed by bracket
+        re.compile(r'\s+\d{1,4}(?:v\d+)?\s*$', re.IGNORECASE),   # Episode number at end
+        re.compile(r'\s+\d{1,4}(?:v\d+)?\s*\(', re.IGNORECASE),  # Episode number followed by parenthesis
         re.compile(r'\s+S\d{1,2}\s*\[', re.IGNORECASE), # Season followed by bracket
         re.compile(r'\s+OVA\s*\[', re.IGNORECASE),      # OVA indicator
         re.compile(r'\s+SP\s*\[', re.IGNORECASE),       # Special episode indicator

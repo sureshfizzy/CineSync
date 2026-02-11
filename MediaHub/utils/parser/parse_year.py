@@ -1,8 +1,49 @@
 import re
 import datetime
+import json
+import os
 from typing import Optional, List, Dict, Any
 
 from MediaHub.utils.parser.patterns import YEAR_PATTERNS, FILE_EXTENSION_PATTERNS
+
+
+# Cache for technical terms to avoid repeated JSON loads
+_tech_terms_cache = None
+
+def _load_technical_terms():
+    """Load technical terms from keywords.json and mediainfo.json for year context checks."""
+    global _tech_terms_cache
+    if _tech_terms_cache is not None:
+        return _tech_terms_cache
+
+    terms = set()
+
+    keywords_path = os.path.join(os.path.dirname(__file__), '..', 'keywords.json')
+    try:
+        with open(keywords_path, 'r', encoding='utf-8') as f:
+            kw = json.load(f)
+            for key in ('quality_sources', 'keywords', 'editions'):
+                vals = kw.get(key, [])
+                for v in vals:
+                    if isinstance(v, str) and v:
+                        terms.add(v.lower())
+    except Exception:
+        pass
+
+    mediainfo_path = os.path.join(os.path.dirname(__file__), '..', 'mediainfo.json')
+    try:
+        with open(mediainfo_path, 'r', encoding='utf-8') as f:
+            mi = json.load(f)
+            for key in ('VideoCodecs', 'AudioCodecs', 'Sources', 'Resolutions', 'StreamingServices', 'DynamicRange'):
+                vals = mi.get(key, [])
+                for v in vals:
+                    if isinstance(v, str) and v:
+                        terms.add(v.lower())
+    except Exception:
+        pass
+
+    _tech_terms_cache = terms
+    return terms
 
 
 def is_valid_year(year: int) -> bool:
@@ -188,6 +229,33 @@ def find_all_years_in_filename(filename: str) -> List[Dict[str, Any]]:
                     'context': context,
                     'part': clean_part
                 })
+
+        # Year prefixed to technical tags (e.g., 1987-BDRmux)
+        elif re.match(r'^(\d{4})[-_.].+', clean_part):
+            year_match = re.match(r'^(\d{4})', clean_part)
+            if year_match:
+                year = int(year_match.group(1))
+                if is_valid_year(year):
+                    suffix = clean_part[len(year_match.group(1)):].lower()
+                    remaining_parts = parts[i+1:i+4] if i+1 < len(parts) else []
+                    tech_terms = _load_technical_terms()
+
+                    def _part_has_tech(part: str) -> bool:
+                        clean = part.strip().rstrip('.').lower()
+                        if re.match(r'^\d{3,4}p$', clean):
+                            return True
+                        tokens = [t for t in re.split(r'[^a-z0-9]+', clean) if t]
+                        return any(t in tech_terms for t in tokens)
+
+                    has_tech_after = any(_part_has_tech(p) for p in remaining_parts)
+                    suffix_has_tech = _part_has_tech(suffix)
+                    context = 'technical' if (has_tech_after or suffix_has_tech) else 'title'
+                    years_found.append({
+                        'value': year,
+                        'position': i,
+                        'context': context,
+                        'part': clean_part
+                    })
 
         # Bracketed year (parentheses or square brackets)
         elif re.match(r'^[\[\(](\d{4})(?:-\d{4})?[\]\)]', clean_part):
