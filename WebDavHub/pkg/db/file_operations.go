@@ -4,6 +4,7 @@ import (
 	"cinesync/pkg/logger"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -103,16 +104,16 @@ func handleGetFileOperations(w http.ResponseWriter, r *http.Request) {
 // handleTrackFileOperation tracks file additions and deletions
 func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Operation       string `json:"operation"`       // "add", "delete", "failed", or "force_recreate"
-		SourcePath      string `json:"sourcePath"`
-		DestinationPath string `json:"destinationPath"`
-		TmdbID          string `json:"tmdbId"`
-		SeasonNumber    string `json:"seasonNumber"`
-		Reason          string `json:"reason"`
-		Error           string `json:"error"`
-		ProperName      string `json:"properName"`
-		Year            string `json:"year"`
-		MediaType       string `json:"mediaType"`
+		Operation          string `json:"operation"` // "add", "delete", "failed", or "force_recreate"
+		SourcePath         string `json:"sourcePath"`
+		DestinationPath    string `json:"destinationPath"`
+		TmdbID             string `json:"tmdbId"`
+		SeasonNumber       string `json:"seasonNumber"`
+		Reason             string `json:"reason"`
+		Error              string `json:"error"`
+		ProperName         string `json:"properName"`
+		Year               string `json:"year"`
+		MediaType          string `json:"mediaType"`
 		OldDestinationPath string `json:"oldDestinationPath"`
 		OldProperName      string `json:"oldProperName"`
 		OldYear            string `json:"oldYear"`
@@ -141,7 +142,7 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 		if req.DestinationPath != "" {
 			trashDir := filepath.Join("..", "db", "trash")
 			baseName := filepath.Base(req.DestinationPath)
-			
+
 			if entries, err := os.ReadDir(trashDir); err == nil {
 				name, ext, _ := strings.Cut(baseName, ".")
 				if ext != "" {
@@ -152,7 +153,7 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 				if parentDir := filepath.Dir(req.DestinationPath); parentDir != "." && parentDir != "" {
 					parentDirName = filepath.Base(parentDir)
 				}
-				
+
 				for _, entry := range entries {
 					entryName := entry.Name()
 
@@ -184,7 +185,7 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			
+
 			// Remove from MediaHub's deleted_files table
 			if mediaHubDB, err := GetDatabaseConnection(); err == nil {
 				mediaHubDB.Exec(`DELETE FROM deleted_files WHERE destination_path = ? OR file_path = ?`, req.DestinationPath, req.SourcePath)
@@ -300,8 +301,8 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 	if skippedCount == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"message": "No skipped files found to delete",
+			"success":      true,
+			"message":      "No skipped files found to delete",
 			"deletedCount": 0,
 		})
 		return
@@ -377,10 +378,182 @@ func handleBulkDeleteSkippedFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Successfully deleted %d skipped files from database", rowsAffected),
+		"success":      true,
+		"message":      fmt.Sprintf("Successfully deleted %d skipped files from database", rowsAffected),
 		"deletedCount": rowsAffected,
 	})
+}
+
+func HandleFailedFileOperations(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodDelete:
+		handleClearFailedFiles(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func HandleFailedFileOperationsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	handleExportFailedFiles(w)
+}
+
+const failedReasonClause = `
+	reason IS NOT NULL AND reason != '' AND
+	NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
+	     LOWER(reason) LIKE '%special content%' OR LOWER(reason) LIKE '%unsupported%' OR
+	     LOWER(reason) LIKE '%adult content%')
+`
+
+func handleClearFailedFiles(w http.ResponseWriter, r *http.Request) {
+	if !checkReasonColumnExists() {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":      true,
+			"message":      "No failed files found to delete",
+			"deletedCount": 0,
+		})
+		return
+	}
+
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection: %v", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Collect paths for recent media cleanup before deletion
+	selectQuery := fmt.Sprintf(`
+		SELECT COALESCE(file_path, ''), COALESCE(destination_path, '')
+		FROM processed_files
+		WHERE %s
+	`, failedReasonClause)
+
+	rows, err := mediaHubDB.Query(selectQuery)
+	if err != nil {
+		logger.Warn("Failed to query failed files for cleanup: %v", err)
+		http.Error(w, "Failed to query failed files", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var pathsToCleanup []string
+	for rows.Next() {
+		var filePath, destPath string
+		if err := rows.Scan(&filePath, &destPath); err != nil {
+			logger.Warn("Failed to scan failed file paths: %v", err)
+			continue
+		}
+		if filePath != "" {
+			pathsToCleanup = append(pathsToCleanup, filePath)
+		}
+		if destPath != "" && destPath != filePath {
+			pathsToCleanup = append(pathsToCleanup, destPath)
+		}
+	}
+
+	deleteQuery := fmt.Sprintf(`
+		DELETE FROM processed_files
+		WHERE %s
+	`, failedReasonClause)
+
+	result, err := mediaHubDB.Exec(deleteQuery)
+	if err != nil {
+		logger.Warn("Failed to delete failed files: %v", err)
+		http.Error(w, "Failed to delete failed files", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.Warn("Failed to get rows affected for failed files: %v", err)
+		rowsAffected = 0
+	}
+
+	logger.Info("Bulk deleted %d failed files from database", rowsAffected)
+
+	for _, path := range pathsToCleanup {
+		if removeErr := RemoveRecentMediaByPath(path); removeErr != nil {
+			logger.Warn("Failed to remove recent media for path %s: %v", path, removeErr)
+		}
+	}
+
+	NotifyDashboardStatsChanged()
+	NotifyFileOperationChanged()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":      true,
+		"message":      fmt.Sprintf("Successfully deleted %d failed files from database", rowsAffected),
+		"deletedCount": rowsAffected,
+	})
+}
+
+func handleExportFailedFiles(w http.ResponseWriter) {
+	if !checkReasonColumnExists() {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename=failed_files_export.csv")
+		csvWriter := csv.NewWriter(w)
+		defer csvWriter.Flush()
+		csvWriter.Write([]string{"File Path", "Reason", "Error"})
+		return
+	}
+
+	mediaHubDB, err := GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get database connection: %v", err)
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			file_path,
+			COALESCE(reason, '') as reason,
+			COALESCE(error_message, '') as error_message
+		FROM processed_files
+		WHERE %s
+		ORDER BY processed_at DESC
+	`, failedReasonClause)
+
+	rows, err := mediaHubDB.Query(query)
+	if err != nil {
+		logger.Error("Failed to execute failed export query: %v", err)
+		http.Error(w, "Failed to export failed files", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=failed_files_export.csv")
+
+	csvWriter := csv.NewWriter(w)
+	defer csvWriter.Flush()
+
+	csvWriter.Write([]string{
+		"File Path",
+		"Reason",
+		"Error",
+	})
+
+	for rows.Next() {
+		var filePath, reason, errorMessage string
+		if err := rows.Scan(&filePath, &reason, &errorMessage); err != nil {
+			logger.Warn("Failed to scan failed export record: %v", err)
+			continue
+		}
+
+		csvWriter.Write([]string{
+			filePath,
+			reason,
+			errorMessage,
+		})
+	}
 }
 
 // BulkActionRequest represents a bulk action request
@@ -441,7 +614,7 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 			SELECT COALESCE(destination_path, ''), COALESCE(trash_file_name, '') 
 			FROM deleted_files WHERE id = ?
 		`, fileID).Scan(&destinationPath, &trashFileName)
-		
+
 		if err != nil {
 			logger.Warn("File ID %d not found in deleted files: %v", fileID, err)
 			errors = append(errors, fmt.Sprintf("File ID %d not found in deleted files", fileID))
@@ -514,15 +687,15 @@ func handleBulkDeleteSelectedFiles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Permanently deleted %d file(s) from trash", deletedFromTrash),
+		"success":      true,
+		"message":      fmt.Sprintf("Permanently deleted %d file(s) from trash", deletedFromTrash),
 		"deletedCount": deletedFromTrash,
 	}
-	
+
 	if len(errors) > 0 {
 		response["errors"] = errors
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -752,10 +925,10 @@ func getFileOperationsFromMediaHub(limit, offset int, statusFilter, searchQuery 
 		if op.Reason != "" && op.Reason != "NULL" {
 			reasonLower := strings.ToLower(op.Reason)
 			if strings.Contains(reasonLower, "skipped") ||
-			   strings.Contains(reasonLower, "extra") ||
-			   strings.Contains(reasonLower, "special content") ||
-			   strings.Contains(reasonLower, "unsupported file type") ||
-			   strings.Contains(reasonLower, "adult content") {
+				strings.Contains(reasonLower, "extra") ||
+				strings.Contains(reasonLower, "special content") ||
+				strings.Contains(reasonLower, "unsupported file type") ||
+				strings.Contains(reasonLower, "adult content") {
 				op.Status = "skipped"
 			} else {
 				op.Status = "failed"
@@ -880,10 +1053,10 @@ func getStatusCounts(operations []FileOperation, total int) (map[string]int, err
 	}
 
 	counts := map[string]int{
-		"created":  0,
-		"failed":   0,
-		"skipped":  0,
-		"deleted":  0,
+		"created": 0,
+		"failed":  0,
+		"skipped": 0,
+		"deleted": 0,
 	}
 
 	// Check if reason column exists
@@ -1325,20 +1498,20 @@ func getDeletedEntriesWithPagination(db *sql.DB, limit, offset int, searchQuery 
 				if ext != "" {
 					ext = "." + ext
 				}
-				
+
 				found := false
 				if entries, err := os.ReadDir(trashDir); err == nil {
 					for _, entry := range entries {
 						entryName := entry.Name()
-						if entryName == baseName || 
-						   (strings.HasPrefix(entryName, name+" (") && strings.HasSuffix(entryName, ")"+ext)) ||
-						   strings.HasPrefix(entryName, baseName+".") {
+						if entryName == baseName ||
+							(strings.HasPrefix(entryName, name+" (") && strings.HasSuffix(entryName, ")"+ext)) ||
+							strings.HasPrefix(entryName, baseName+".") {
 							found = true
 							break
 						}
 					}
 				}
-				
+
 				if !found {
 					continue
 				}
@@ -1596,8 +1769,6 @@ func TrackFileFailure(sourcePath, tmdbID, seasonNumber, reason, errorMessage str
 	})
 }
 
-
-
 // Global variables to track dashboard notification subscribers
 var dashboardNotificationChannels = make(map[chan bool]bool)
 var dashboardChannelMutex = make(chan bool, 1)
@@ -1682,18 +1853,18 @@ func getDeletedFilesFromMediaHub(db *sql.DB, limit, offset int, searchQuery stri
 		FROM deleted_files
 	`
 	var args []interface{}
-	
+
 	// Add search filter if provided
 	if searchQuery != "" {
 		searchPattern := "%" + searchQuery + "%"
 		query += " WHERE (proper_name LIKE ? OR file_path LIKE ? OR destination_path LIKE ?)"
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
-	
+
 	// Add ordering and pagination
 	query += " ORDER BY deleted_at DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
-	
+
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such table: deleted_files") {
@@ -1703,9 +1874,9 @@ func getDeletedFilesFromMediaHub(db *sql.DB, limit, offset int, searchQuery stri
 		return nil, fmt.Errorf("failed to query deleted_files: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var operations []FileOperation
-	
+
 	for rows.Next() {
 		var op FileOperation
 		var id int
@@ -1714,7 +1885,7 @@ func getDeletedFilesFromMediaHub(db *sql.DB, limit, offset int, searchQuery stri
 		var properName, year, mediaType, tmdbID, episodeNumber, quality, trashFileName sql.NullString
 
 		err := rows.Scan(
-			&id, &filePath, &destinationPath, &properName, &year, &mediaType, 
+			&id, &filePath, &destinationPath, &properName, &year, &mediaType,
 			&tmdbID, &seasonNumber, &episodeNumber, &quality, &timestamp, &reason, &trashFileName,
 		)
 		if err != nil {
@@ -1756,10 +1927,10 @@ func getDeletedFilesFromMediaHub(db *sql.DB, limit, offset int, searchQuery stri
 		if seasonNumber.Valid && seasonNumber.Int64 > 0 {
 			op.SeasonNumber = int(seasonNumber.Int64)
 		}
-		
+
 		operations = append(operations, op)
 	}
-	
+
 	return operations, nil
 }
 
@@ -1767,14 +1938,14 @@ func getDeletedFilesFromMediaHub(db *sql.DB, limit, offset int, searchQuery stri
 func getDeletedFilesCountFromMediaHub(db *sql.DB, searchQuery string) (int, error) {
 	query := "SELECT COUNT(*) FROM deleted_files"
 	var args []interface{}
-	
+
 	// Add search filter if provided
 	if searchQuery != "" {
 		searchPattern := "%" + searchQuery + "%"
 		query += " WHERE (proper_name LIKE ? OR file_path LIKE ? OR destination_path LIKE ?)"
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
-	
+
 	var count int
 	err := db.QueryRow(query, args...).Scan(&count)
 	if err != nil {
@@ -1787,5 +1958,3 @@ func getDeletedFilesCountFromMediaHub(db *sql.DB, searchQuery string) (int, erro
 
 	return count, nil
 }
-
-

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch, Avatar } from '@mui/material';
-import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon, PlayArrow as PlayArrowIcon, Restore as RestoreIcon } from '@mui/icons-material';
+import { Box, Typography, Tabs, Tab, Card, CardContent, Chip, IconButton, CircularProgress, Alert, LinearProgress, useTheme, alpha, Stack, Tooltip, Badge, useMediaQuery, Fab, Divider, Pagination, TextField, InputAdornment, Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Checkbox, Collapse, Switch, Avatar } from '@mui/material';
+import { CheckCircle, Warning as WarningIcon, Delete as DeleteIcon, Refresh as RefreshIcon, GetApp as ExportIcon, Assignment as AssignmentIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Schedule as ScheduleIcon, SkipNext as SkipIcon, Storage as DatabaseIcon, Timeline as OperationsIcon, Source as SourceIcon, Folder as FolderIcon, Movie as MovieIcon, Tv as TvIcon, InsertDriveFile as FileIcon, PlayCircle as PlayCircleIcon, FolderOpen as FolderOpenIcon, Info as InfoIcon, CheckCircle as ProcessedIcon, RadioButtonUnchecked as UnprocessedIcon, Link as LinkIcon, Warning as WarningIcon2, Settings as SettingsIcon, Search as SearchIcon, DeleteSweep as DeleteSweepIcon, FlashAuto as AutoModeIcon, PlayArrow as PlayArrowIcon, Restore as RestoreIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import DatabaseSearch from './DatabaseSearch';
@@ -162,6 +162,9 @@ function FileOperations() {
   const [bulkModifyDialogOpen, setBulkModifyDialogOpen] = useState(false);
   const [bulkModifyFilePaths, setBulkModifyFilePaths] = useState<string[]>([]);
   const [bulkProcessingInProgress, setBulkProcessingInProgress] = useState(false);
+  const [failedActionLoading, setFailedActionLoading] = useState(false);
+  const [clearFailedDialogOpen, setClearFailedDialogOpen] = useState(false);
+  const [retryAllProgress, setRetryAllProgress] = useState({ current: 0, total: 0 });
 
 
   // Bulk selection state for source files
@@ -205,6 +208,8 @@ function FileOperations() {
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
   const ITEMS_PER_PAGE = 50;
+
+  const failedActionCount = tabValue === 2 ? totalOperations : statusCounts.failed;
 
   const filteredSourceFiles = sourceFiles;
 
@@ -380,6 +385,213 @@ function FileOperations() {
     }
   }, [tabValue, currentPage, recordsPerPage]);
 
+
+  const fetchAllFailedOperations = useCallback(async () => {
+    const limit = 500;
+    let offset = 0;
+    let allOperations: FileOperation[] = [];
+    const currentSearch = searchQueryRef.current;
+
+    while (true) {
+      const params: Record<string, any> = {
+        limit,
+        offset,
+        status: 'failed',
+      };
+
+      if (currentSearch && currentSearch.trim()) {
+        params.search = currentSearch.trim();
+      }
+
+      const response = await axios.get('/api/file-operations', { params });
+      const data = response.data || {};
+      const batch: FileOperation[] = data.operations || [];
+      allOperations = allOperations.concat(batch);
+
+      const total = typeof data.total === 'number' ? data.total : allOperations.length;
+      if (batch.length === 0 || allOperations.length >= total) {
+        break;
+      }
+
+      offset += limit;
+    }
+
+    return allOperations;
+  }, []);
+
+  const handleExportFailedFiles = async () => {
+    if (failedActionLoading) return;
+    setFailedActionLoading(true);
+    try {
+      const response = await axios.get('/api/file-operations/failed/export', {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStamp = new Date().toISOString().split('T')[0];
+      link.href = url;
+      link.setAttribute('download', `failed_files_${dateStamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Failed to export failed files:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to export failed files');
+    } finally {
+      setFailedActionLoading(false);
+    }
+  };
+
+  const runForceAutoSelectProcessing = async (filePath: string) => {
+    const requestPayload = {
+      sourcePath: filePath,
+      disableMonitor: true,
+      selectedOption: 'force',
+      autoSelect: true,
+      batchApply: true,
+      manualSearch: false
+    };
+
+    const response = await fetch('/api/python-bridge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+      },
+      body: JSON.stringify(requestPayload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Request failed with status ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('No response body from server');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let done = false;
+    let hadError = false;
+    let sawDone = false;
+    let buffer = '';
+
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const data = JSON.parse(trimmed);
+            if (data.type === 'error') {
+              hadError = true;
+            }
+            if (data.type === 'done') {
+              sawDone = true;
+            }
+          } catch {
+            // Ignore non-JSON output
+          }
+        }
+      }
+    }
+
+    if (hadError || !sawDone) {
+      throw new Error('Processing failed');
+    }
+  };
+
+  const handleRetryAllFailed = async () => {
+    if (failedActionLoading || bulkProcessingInProgress) return;
+    setFailedActionLoading(true);
+    setBulkProcessingInProgress(true);
+    try {
+      const failedOperations = await fetchAllFailedOperations();
+      const filePaths = failedOperations.map(op => op.filePath).filter(Boolean);
+
+      if (filePaths.length === 0) {
+        setError('No failed files found to retry');
+        return;
+      }
+
+      setSelectedFiles(new Set());
+      setRetryAllProgress({ current: 0, total: filePaths.length });
+      let errorCount = 0;
+
+      for (let i = 0; i < filePaths.length; i++) {
+        const filePath = filePaths[i];
+        setRetryAllProgress({ current: i + 1, total: filePaths.length });
+        try {
+          await runForceAutoSelectProcessing(filePath);
+        } catch (err) {
+          errorCount += 1;
+          console.error(`Failed to retry ${filePath}:`, err);
+        }
+      }
+
+      const successCount = filePaths.length - errorCount;
+      if (errorCount > 0) {
+        setError(`Retried ${successCount} files, ${errorCount} failed. Check logs for details.`);
+      }
+
+      setSuccessMessage(`Retried ${successCount} file${successCount === 1 ? '' : 's'}${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+      setSuccessDialogOpen(true);
+
+      fetchFileOperations(false);
+    } catch (error: any) {
+      console.error('Failed to load failed files for retry:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to load failed files');
+    } finally {
+      setBulkProcessingInProgress(false);
+      setFailedActionLoading(false);
+      setRetryAllProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleClearAllFailed = async () => {
+    if (failedActionLoading) return;
+    setFailedActionLoading(true);
+    try {
+      const response = await axios.delete('/api/file-operations/failed');
+      if (response.data?.success) {
+        const deletedCount = response.data.deletedCount ?? 0;
+        setStatusCounts(prev => ({
+          ...prev,
+          failed: 0
+        }));
+
+        if (tabValue === 2) {
+          setOperations([]);
+          setTotalOperations(0);
+        }
+
+        setSelectedFiles(new Set());
+        setClearFailedDialogOpen(false);
+
+        if (deletedCount > 0) {
+          setSuccessMessage(`Cleared ${deletedCount} failed file${deletedCount === 1 ? '' : 's'}`);
+          setSuccessDialogOpen(true);
+        }
+
+        fetchFileOperations(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to clear failed files:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to clear failed files');
+    } finally {
+      setFailedActionLoading(false);
+    }
+  };
 
 
   // Initial load effect
@@ -2045,6 +2257,117 @@ function FileOperations() {
                 </Button>
               </Tooltip>
             )}
+            {!isMobile && tabValue === 2 && (
+              <Stack direction="row" spacing={1} sx={{ ml: 2 }}>
+                <Tooltip title={`Export ${failedActionCount.toLocaleString()} failed files`}>
+                  <span>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<ExportIcon />}
+                      onClick={handleExportFailedFiles}
+                      disabled={failedActionLoading || failedActionCount === 0}
+                      sx={{
+                        borderRadius: 2,
+                        px: 2,
+                        py: 0.5,
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        fontSize: '0.75rem',
+                        minWidth: 'auto',
+                        border: '1px solid',
+                        borderColor: 'primary.main',
+                        color: 'primary.main',
+                        bgcolor: alpha(theme.palette.primary.main, 0.05),
+                        '&:hover': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          borderColor: 'primary.dark',
+                          transform: 'translateY(-1px)',
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.25)}`,
+                        },
+                        '&:disabled': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.02),
+                          borderColor: alpha(theme.palette.primary.main, 0.3),
+                          color: alpha(theme.palette.primary.main, 0.5),
+                        },
+                      }}
+                    >
+                      Export Failed
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title={`Retry ${failedActionCount.toLocaleString()} failed files`}>
+                  <span>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={handleRetryAllFailed}
+                      disabled={failedActionLoading || bulkProcessingInProgress || failedActionCount === 0}
+                      sx={{
+                        borderRadius: 2,
+                        px: 2,
+                        py: 0.5,
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        fontSize: '0.75rem',
+                        minWidth: 'auto',
+                        boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.25)}`,
+                        '&:hover': {
+                          bgcolor: theme.palette.primary.dark,
+                          transform: 'translateY(-1px)',
+                          boxShadow: `0 6px 16px ${alpha(theme.palette.primary.main, 0.35)}`,
+                        },
+                        '&:disabled': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.3),
+                          color: alpha('#fff', 0.6),
+                          boxShadow: 'none',
+                        },
+                      }}
+                    >
+                      Retry All
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title={`Clear ${failedActionCount.toLocaleString()} failed files`}>
+                  <span>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<DeleteSweepIcon />}
+                      onClick={() => setClearFailedDialogOpen(true)}
+                      disabled={failedActionLoading || failedActionCount === 0}
+                      sx={{
+                        borderRadius: 2,
+                        px: 2,
+                        py: 0.5,
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        fontSize: '0.75rem',
+                        minWidth: 'auto',
+                        border: '1px solid',
+                        borderColor: 'error.main',
+                        color: 'error.main',
+                        bgcolor: alpha(theme.palette.error.main, 0.05),
+                        '&:hover': {
+                          bgcolor: alpha(theme.palette.error.main, 0.1),
+                          borderColor: 'error.dark',
+                          transform: 'translateY(-1px)',
+                          boxShadow: `0 2px 8px ${alpha(theme.palette.error.main, 0.25)}`,
+                        },
+                        '&:disabled': {
+                          bgcolor: alpha(theme.palette.error.main, 0.02),
+                          borderColor: alpha(theme.palette.error.main, 0.3),
+                          color: alpha(theme.palette.error.main, 0.5),
+                        },
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Stack>
+            )}
           </Box>
 
           {/* Bulk Selection Toolbar */}
@@ -2351,6 +2674,14 @@ function FileOperations() {
             </Collapse>
           )}
 
+          {tabValue === 2 && bulkProcessingInProgress && retryAllProgress.total > 0 && (
+            <Alert severity="info" sx={{ mb: { xs: 2, sm: 3 } }}
+              icon={<RefreshIcon fontSize="inherit" />}>
+              Retrying failed files... {retryAllProgress.current}/{retryAllProgress.total}
+              <Box sx={{ mt: 1 }}><LinearProgress /></Box>
+            </Alert>
+          )}
+
           {/* Search Input for each tab */}
           <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
             {tabValue === 0 ? (
@@ -2564,6 +2895,57 @@ function FileOperations() {
                   },
                 }}
               />)
+            )}
+
+            {isMobile && tabValue === 2 && (
+              <Stack direction="column" spacing={1.5} sx={{ mb: 2 }}>
+                <Button
+                  variant="outlined"
+                  size="medium"
+                  startIcon={<ExportIcon />}
+                  onClick={handleExportFailedFiles}
+                  disabled={failedActionLoading || failedActionCount === 0}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    borderColor: 'primary.main',
+                    color: 'primary.main',
+                  }}
+                >
+                  Export Failed Files
+                </Button>
+                <Button
+                  variant="contained"
+                  size="medium"
+                  startIcon={<PlayArrowIcon />}
+                  onClick={handleRetryAllFailed}
+                  disabled={failedActionLoading || bulkProcessingInProgress || failedActionCount === 0}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                  }}
+                >
+                  Retry All Failed
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="medium"
+                  startIcon={<DeleteSweepIcon />}
+                  onClick={() => setClearFailedDialogOpen(true)}
+                  disabled={failedActionLoading || failedActionCount === 0}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    borderColor: 'error.main',
+                    color: 'error.main',
+                  }}
+                >
+                  Clear All Failed
+                </Button>
+              </Stack>
             )}
 
             {/* Search results count for mobile */}
@@ -3445,6 +3827,125 @@ function FileOperations() {
             }}
           >
             {bulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Clear All Failed Confirmation Dialog */}
+      <Dialog
+        open={clearFailedDialogOpen}
+        onClose={() => setClearFailedDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            backgroundColor: theme.palette.background.paper,
+            background: theme.palette.mode === 'dark'
+              ? `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${alpha(theme.palette.error.main, 0.08)} 100%)`
+              : `linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)`,
+            border: theme.palette.mode === 'dark'
+              ? `2px solid ${theme.palette.error.main}40`
+              : `2px solid #fecaca`,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+              : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
+            backdropFilter: 'blur(10px)',
+          }
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: theme.palette.mode === 'dark'
+                ? 'rgba(0, 0, 0, 0.7)'
+                : 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+            }
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: 'error.main',
+          fontWeight: 600,
+          backgroundColor: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.error.main, 0.15)
+            : '#fef2f2',
+          borderBottom: theme.palette.mode === 'dark'
+            ? `2px solid ${theme.palette.error.main}60`
+            : `2px solid #fecaca`,
+        }}>
+          <DeleteSweepIcon />
+          Clear All Failed Files
+        </DialogTitle>
+        <DialogContent sx={{ background: 'transparent' }}>
+          <DialogContentText sx={{ mb: 2, color: 'text.primary' }}>
+            Are you sure you want to clear <strong>{statusCounts.failed}</strong> failed file records?
+          </DialogContentText>
+          <DialogContentText sx={{
+            color: 'text.primary',
+            fontSize: '0.875rem',
+            bgcolor: theme.palette.mode === 'dark'
+              ? alpha(theme.palette.background.default, 0.5)
+              : '#f9fafb',
+            p: 2,
+            borderRadius: 2,
+            borderLeft: theme.palette.mode === 'dark'
+              ? `4px solid ${theme.palette.error.main}`
+              : `4px solid #f87171`,
+            backdropFilter: 'blur(10px)',
+          }}>
+            This removes failed records from the database only. Source files are not deleted.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{
+          p: 3,
+          pt: 1,
+          gap: 1,
+          background: theme.palette.mode === 'dark'
+            ? alpha(theme.palette.background.default, 0.3)
+            : '#f9fafb',
+          backdropFilter: 'blur(10px)',
+        }}>
+          <Button
+            onClick={() => setClearFailedDialogOpen(false)}
+            disabled={failedActionLoading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleClearAllFailed}
+            color="error"
+            variant="contained"
+            disabled={failedActionLoading}
+            startIcon={failedActionLoading ? <CircularProgress size={16} /> : <DeleteSweepIcon />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2,
+              ...(theme.palette.mode === 'light' && {
+                bgcolor: '#ef4444',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: 'none',
+                '&:hover': {
+                  bgcolor: '#dc2626',
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+                '&:disabled': {
+                  bgcolor: alpha('#ef4444', 0.3),
+                  color: alpha('#ffffff', 0.7),
+                  border: 'none',
+                  boxShadow: 'none',
+                },
+              })
+            }}
+          >
+            {failedActionLoading ? 'Clearing...' : 'Clear All'}
           </Button>
         </DialogActions>
       </Dialog>

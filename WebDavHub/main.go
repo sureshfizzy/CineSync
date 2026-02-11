@@ -293,6 +293,8 @@ func main() {
 	apiMux.HandleFunc("/api/recent-media", api.HandleRecentMedia)
 	apiMux.HandleFunc("/api/file-operations", db.HandleFileOperations)
 	apiMux.HandleFunc("/api/file-operations/bulk", db.HandleFileOperations)
+	apiMux.HandleFunc("/api/file-operations/failed", db.HandleFailedFileOperations)
+	apiMux.HandleFunc("/api/file-operations/failed/export", db.HandleFailedFileOperationsExport)
 	apiMux.HandleFunc("/api/file-operations/events", db.HandleFileOperationEvents)
 	apiMux.HandleFunc("/api/database/source-files", db.HandleSourceFiles)
 	apiMux.HandleFunc("/api/database/source-scans", db.HandleSourceScans)
