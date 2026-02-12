@@ -11,6 +11,18 @@ from MediaHub.api.tmdb_api_helpers import get_episode_name, get_show_data
 from MediaHub.processors.db_utils import track_file_failure
 from MediaHub.utils.file_utils import clean_query
 
+def _strip_split_cour_suffix(show_name):
+    """Strip trailing split-cour markers like Part/Cour/Vol/Volume + number."""
+    if not show_name:
+        return ""
+    cleaned = re.sub(
+        r'\s*(?:[-:]\s*)?(?:[\(\[\{]\s*)?(?:part|pt|cour|volume|vol)\.?\s*(?:\d{1,2}|[ivxlcdm]+)\s*(?:[\)\]\}])?\s*$',
+        '',
+        show_name,
+        flags=re.IGNORECASE
+    )
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
 def is_anime_file_legacy(filename):
     """
     Legacy anime detection function - kept for backward compatibility.
@@ -70,6 +82,7 @@ def extract_anime_episode_info(filename, file_metadata=None):
     # Clean up show name if available
     if result['show_name']:
         result['show_name'] = re.sub(r'[._-]', ' ', result['show_name']).strip()
+        result['show_name'] = _strip_split_cour_suffix(result['show_name'])
 
     print(f"DEBUG: Anime extraction result: {result}")
     log_message(f"Anime episode info extracted: {result['show_name']} S{result['season_number']}E{result['episode_number']}", level="DEBUG")
@@ -120,6 +133,7 @@ def _extract_anime_fallback(filename):
             episode_title = match.group(3) if len(match.groups()) > 2 else None
 
             show_name = re.sub(r'[._-]', ' ', show_name).strip()
+            show_name = _strip_split_cour_suffix(show_name)
 
             return {
                 'show_name': show_name,

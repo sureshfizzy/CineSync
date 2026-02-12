@@ -425,9 +425,15 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
 
     # Only retrieve episode data if not already provided by anime processor
     if episode_identifier and not is_extra and not is_daily_show and not (anime_result and anime_result.get('episode_title') and anime_result.get('total_episodes') is not None):
-        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', proper_show_name) or re.search(r'\{tmdb-(\d+)\}', proper_show_name)
+        show_id = None
+        show_name_for_id_lookup = locals().get('proper_show_name_with_ids', proper_show_name)
+        tmdb_id_match = re.search(r'\[tmdb(?:id)?-(\d+)\]', show_name_for_id_lookup) or re.search(r'\{tmdb-(\d+)\}', show_name_for_id_lookup)
         if tmdb_id_match:
             show_id = tmdb_id_match.group(1)
+        elif tmdb_id:
+            show_id = str(tmdb_id)
+
+        if show_id:
             episode_number_match = re.search(r'E(\d+)', episode_identifier, re.IGNORECASE)
             if episode_number_match:
                 episode_num = episode_number_match.group(1)

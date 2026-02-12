@@ -5,6 +5,49 @@ from MediaHub.utils.parser.patterns import ANIME_PATTERNS, FILE_EXTENSION_PATTER
 from MediaHub.utils.parser.utils import clean_title_string
 from MediaHub.utils.parser.parse_year import is_valid_year
 
+def _strip_split_cour_suffix(title: str) -> str:
+    """Strip trailing split-cour markers like Part/Cour/Vol/Volume + number."""
+    if not title:
+        return ""
+
+    cleaned = re.sub(
+        r'\s*(?:[-:]\s*)?(?:[\(\[\{]\s*)?(?:part|pt|cour|volume|vol)\.?\s*(?:\d{1,2}|[ivxlcdm]+)\s*(?:[\)\]\}])?\s*$',
+        '',
+        title,
+        flags=re.IGNORECASE
+    )
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def _strip_second_title_suffix(title: str) -> str:
+    """
+    Strip a secondary anime subtitle in the form "Main Title - Second Title".
+    Keeps only the main title for metadata lookup consistency.
+    """
+    if not title:
+        return ""
+
+    match = re.match(r'^(?P<main>.+?)\s+[-–]\s+(?P<secondary>.+)$', title.strip())
+    if not match:
+        return title
+
+    secondary = match.group('secondary').strip()
+
+    # Preserve numeric/episode-like tails for normal episode parsing flows.
+    if re.search(r'^(?:S\d+E\d+|S\d+|E\d+|EP?\d+|\d+)(?:\s|$)', secondary, re.IGNORECASE):
+        return title
+
+    return match.group('main').strip()
+
+
+def _finalize_anime_title(title: str) -> str:
+    """Normalize extracted anime title for API lookup."""
+    if not title:
+        return ""
+    normalized = _strip_split_cour_suffix(title)
+    normalized = _strip_second_title_suffix(normalized)
+    return clean_title_string(normalized)
+
 
 def is_anime_filename(filename: str) -> bool:
     """Determine if filename appears to be anime content."""
@@ -217,21 +260,21 @@ def _extract_title_from_content(content: str) -> str:
 
         if title_parts:
             title = ' '.join(title_parts)
-            return clean_title_string(title)
+            return _finalize_anime_title(title)
 
     underscore_episode_match = re.match(r'^([^_]+)_(\d+)[_.].*', content)
     if underscore_episode_match:
         title = underscore_episode_match.group(1)
         episode = underscore_episode_match.group(2)
         title = re.sub(r'_', ' ', title)
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern 1b: Handle underscore-separated without dot separator: "Title_Episode_Quality"
     underscore_compact_match = re.match(r'^([^_]+(?:_[^_]+)*)_\d+_\d+', content)
     if underscore_compact_match:
         title = underscore_compact_match.group(1)
         title = re.sub(r'_', ' ', title)
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern 2: Handle season patterns FIRST (before dash and space patterns)
     # Include both "Season X", ordinal patterns like "3rd Season", and word ordinals like "Second Season"
@@ -240,19 +283,19 @@ def _extract_title_from_content(content: str) -> str:
     season_match = re.match(rf'^(.+?)(?:\s*\(\d{{4}}\))?\s+(?:S\d+(?:E\d+(?:v\d+)?)?(?:-S\d+)?(?:\s+S\d+)*|Season\s+\d+|\d+(?:st|nd|rd|th)\s+Season)(?:\s|$|\[)', content, re.IGNORECASE)
     if season_match:
         title = season_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Separate pattern for ordinal seasons with clear separators
     ordinal_season_match = re.match(rf'^(.+?)\s*[-–]\s*{ordinal_words}\s+Season(?:\s|$|\[)', content, re.IGNORECASE)
     if ordinal_season_match:
         title = ordinal_season_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern for ordinal seasons without dash separator
     ordinal_no_dash_match = re.match(rf'^(.+?)\s+{ordinal_words}\s+Season\s*[-–]\s*\d+(?:\s|$|\[)', content, re.IGNORECASE)
     if ordinal_no_dash_match:
         title = ordinal_no_dash_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern 3: Handle standard anime naming with dash: "Title - Episode/Season [Quality]"
     # Example: "Black Clover - S01E157 [1080p]"
@@ -260,25 +303,25 @@ def _extract_title_from_content(content: str) -> str:
     season_dash_match = re.match(r'^(.+?)\s+-\s+(?:The\s+)?(?:Final\s+)?Season(?:\s+\d+)?\s+-\s+(?:\d+|EP?\d+)(?:\s|$|\[)', content, re.IGNORECASE)
     if season_dash_match:
         title = season_dash_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern for anime extras: "Title - NCED 01v2" or "Title - NCOP 01" etc.
     # Common anime extra types: NCED, NCOP, PV, CM, SP, OVA, OAD
     anime_extra_match = re.match(r'^(.+?)\s+-\s+(?:NCED|NCOP|NCBD|PV|CM|SP|OVA|OAD|SPECIAL|EXTRA)\s+\d+', content, re.IGNORECASE)
     if anime_extra_match:
         title = anime_extra_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     dot_season_match = re.match(r'^(.+?)\.S\d+(?:\.|$)', content, re.IGNORECASE)
     if dot_season_match:
         title = dot_season_match.group(1).replace('.', ' ')
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Then try standard episode/season patterns
     dash_match = re.match(r'^(.+?)\s+-\s+(?:S\d+E\d+(?:v\d+)?|S\d+|\d+(?:v\d+)?|EP?\d+(?:v\d+)?)(?:\s|$|\[)', content, re.IGNORECASE)
     if dash_match:
         title = dash_match.group(1).strip()
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Pattern 4: Handle space-separated episode numbers: "Title Episode [Quality]"
     # Example: "Attack on Titan 25 [1080p]"
@@ -287,7 +330,7 @@ def _extract_title_from_content(content: str) -> str:
         title = space_episode_match.group(1).strip()
         episode_num = space_episode_match.group(2)
         if not is_valid_year(int(episode_num)):
-            return clean_title_string(title)
+            return _finalize_anime_title(title)
 
     # Pattern 5: Handle titles with quality indicators
     # Remove common quality/technical terms from the end
@@ -329,7 +372,7 @@ def _extract_title_from_content(content: str) -> str:
     title = re.sub(r'\s+', ' ', title).strip()  # Normalize whitespace
 
     if title:
-        return clean_title_string(title)
+        return _finalize_anime_title(title)
 
     # Last resort: return the original content cleaned
-    return clean_title_string(content)
+    return _finalize_anime_title(content)
