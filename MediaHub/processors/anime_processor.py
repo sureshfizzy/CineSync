@@ -307,27 +307,30 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
     else:
         log_message(f"Skipping episode data retrieval - show_id: {show_id}, season_number: {season_number}, actual_episode: {actual_episode}, is_extra: {is_extra}", level="DEBUG")
 
-    if rename_enabled and show_id:
+    if rename_enabled and show_id and not is_extra:
         try:
             try:
-                # Get the episode name and the mapped season/episode numbers
-                episode_result = get_episode_name(show_id, int(season_number), int(actual_episode))
+                if season_number and actual_episode and not is_extra:
+                    # Get the episode name and the mapped season/episode numbers
+                    episode_result = get_episode_name(show_id, int(season_number), int(actual_episode))
 
-                if isinstance(episode_result, tuple) and len(episode_result) >= 5:
-                    episode_name, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
-                    # Update season_number with the mapped season number
-                    if mapped_season is not None:
-                        season_number = str(mapped_season).zfill(2)
-                    # Update actual_episode with the mapped episode number
-                    if mapped_episode is not None:
-                        actual_episode = str(mapped_episode).zfill(2)
+                    if isinstance(episode_result, tuple) and len(episode_result) >= 5:
+                        episode_name, mapped_season, mapped_episode, episode_title, total_episodes = episode_result
+                        # Update season_number with the mapped season number
+                        if mapped_season is not None:
+                            season_number = str(mapped_season).zfill(2)
+                        # Update actual_episode with the mapped episode number
+                        if mapped_episode is not None:
+                            actual_episode = str(mapped_episode).zfill(2)
+                    else:
+                        episode_name = episode_result
+
+                    if episode_name and episode_name != episode_title:
+                        new_name += f" - {episode_name}"
+                    elif episode_title:
+                        new_name += f" - {episode_title}"
                 else:
-                    episode_name = episode_result
-
-                if episode_name and episode_name != episode_title:
-                    new_name += f" - {episode_name}"
-                elif episode_title:
-                    new_name += f" - {episode_title}"
+                    episode_name = None
             except Exception as e:
                 log_message(f"Failed to fetch episode name: {e}", level="WARNING")
 
@@ -383,6 +386,8 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         except Exception as e:
             log_message(f"Error processing anime filename: {e}", level="ERROR")
             new_name = file
+    elif is_extra and rename_enabled:
+        episode_name = None
 
     # Get TMDB language as fallback if not available from file metadata
     if not language and tmdb_id:

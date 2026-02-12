@@ -1164,7 +1164,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Invalid episode number provided: {episode_number}", level="ERROR")
             new_episode_number = None
 
-    if new_season_number is None and original_query and not is_daily_context:
+    if new_season_number is None and original_query and not is_daily_context and not is_extra:
         seasons = tv_data.get('seasons', [])
         if seasons:
             original_query_lower = original_query.lower()
@@ -1241,7 +1241,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
             log_message(f"Note: Episode {new_episode_number} will be treated as absolute episode number", level="INFO")
 
     # Handle episode selection if we have a season but no episode
-    if new_season_number is not None and new_episode_number is None and not is_daily_context:
+    if new_season_number is not None and new_episode_number is None and not is_daily_context and not is_extra:
         log_message(f"Season {new_season_number} selected", level="INFO")
         new_episode_number = handle_episode_selection(
             tmdb_id,
