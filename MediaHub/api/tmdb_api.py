@@ -366,6 +366,15 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             if cleaned_dir_query:
                 results = fetch_results(cleaned_dir_query, year or dir_year)
 
+    # If still no results, retry once with one trailing token removed
+    if not results and isinstance(query, str):
+        query_parts = query.split()
+        if len(query_parts) > 1:
+            broader_query = ' '.join(query_parts[:-1]).strip()
+            if broader_query:
+                log_message(f"Primary search failed. Attempting broader search query: '{broader_query}'", "DEBUG", "stdout")
+                results = fetch_results(broader_query, year)
+
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
 
