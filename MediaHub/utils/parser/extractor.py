@@ -1951,7 +1951,37 @@ def _extract_episode_title_from_parsed(parsed: ParsedFilename) -> Optional[str]:
 
 def _extract_anime_flag_from_parsed(parsed: ParsedFilename) -> bool:
     """Check if this appears to be anime content."""
-    return is_anime_filename(parsed.original)
+    if is_anime_filename(parsed.original):
+        return True
+
+    # Fallback for absolute-episode anime naming like "Yu Yu Hakusho 97.mkv".
+    # Keep this conservative to avoid movie sequel false-positives.
+    anime_title = extract_anime_title(parsed.original)
+    if not anime_title:
+        return False
+
+    clean_filename = FILE_EXTENSION_PATTERNS['video'].sub('', parsed.original)
+    clean_filename = re.sub(r'^\[(.*?)\]\s*', '', clean_filename)
+    clean_filename = re.sub(r'^\((.*?)\)\s*', '', clean_filename)
+    clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
+    clean_filename = re.sub(r'\(.*?\)', '', clean_filename)
+    clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
+
+    title_pattern = re.escape(anime_title).replace(r'\ ', r'[\s._-]+')
+    trailing_episode_match = re.match(
+        rf'^{title_pattern}[\s._-]+(?:EP?\s*)?(\d{{2,4}})(?:v\d+)?$',
+        clean_filename,
+        re.IGNORECASE
+    )
+    if not trailing_episode_match:
+        return False
+
+    candidate_episode = int(trailing_episode_match.group(1))
+    if 1900 <= candidate_episode <= 2099 and len(str(candidate_episode)) == 4:
+        return False
+    if candidate_episode < 10:
+        return False
+    return True
 
 
 def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
@@ -2000,6 +2030,28 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
             episode_num = int(groups[-1])
             if 1 <= episode_num <= 4999:
                 return episode_num
+
+    # Absolute-episode fallback: "Title 97", "Title EP97"
+    anime_title = extract_anime_title(parsed.original)
+    if anime_title:
+        clean_filename = FILE_EXTENSION_PATTERNS['video'].sub('', parsed.original)
+        clean_filename = re.sub(r'^\[(.*?)\]\s*', '', clean_filename)
+        clean_filename = re.sub(r'^\((.*?)\)\s*', '', clean_filename)
+        clean_filename = re.sub(r'\[.*?\]', '', clean_filename)
+        clean_filename = re.sub(r'\(.*?\)', '', clean_filename)
+        clean_filename = re.sub(r'\s+', ' ', clean_filename).strip()
+
+        title_pattern = re.escape(anime_title).replace(r'\ ', r'[\s._-]+')
+        trailing_episode_match = re.match(
+            rf'^{title_pattern}[\s._-]+(?:EP?\s*)?(\d{{2,4}})(?:v\d+)?$',
+            clean_filename,
+            re.IGNORECASE
+        )
+        if trailing_episode_match:
+            episode_num = int(trailing_episode_match.group(1))
+            if not (1900 <= episode_num <= 2099 and len(str(episode_num)) == 4):
+                if 1 <= episode_num <= 4999:
+                    return episode_num
 
     # Additional fallback: check for simple numeric episode after "Season X -" in parts
     parts = parsed.parts

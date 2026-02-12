@@ -185,9 +185,17 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
         episode_identifier = f"S{season_number}E{episode_number}"
         create_season_folder = True
 
+    def _run_anime_parser():
+        return process_anime_show(
+            src_file, root, file, dest_dir, actual_dir,
+            tmdb_folder_id_enabled, rename_enabled,
+            tmdb_id=tmdb_id, tvdb_id=tvdb_id, imdb_id=imdb_id,
+            auto_select=auto_select, season_number=season_number, episode_number=episode_number,
+            file_metadata=file_metadata, manual_search=manual_search
+        )
+
     if is_anime_show or is_anime_scan() and is_anime_file(file):
-        anime_result = process_anime_show(src_file, root, file, dest_dir, actual_dir,
-                                        tmdb_folder_id_enabled, rename_enabled, tmdb_id, imdb_id, tvdb_id, auto_select, season_number, episode_number, file_metadata, manual_search)
+        anime_result = _run_anime_parser()
 
         if anime_result is None:
             log_message(f"API returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
@@ -330,6 +338,51 @@ def process_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_enab
             return None
         elif isinstance(result, tuple) and len(result) >= 18:
             proper_show_name, show_name, is_anime_genre, season_number, episode_number, tmdb_id, is_kids_content, imdb_id, tvdb_id, original_language, overview, runtime, original_title, status, first_air_date, last_air_date, genres, certification = result
+
+            if is_anime_genre and not anime_result:
+                log_message(f"TMDB marked show as anime. Routing to anime parser: {file}", level="INFO")
+                anime_result = _run_anime_parser()
+
+                if anime_result is None:
+                    log_message(f"Anime parser returned None for show: {show_name} ({year}). Skipping show processing.", level="WARNING")
+                    return None
+
+                if anime_result:
+                    show_name = anime_result.get('show_name', show_name)
+                    season_number = anime_result.get('season_number', season_number)
+                    new_name = anime_result.get('new_name', file)
+                    year = anime_result.get('year', year)
+                    show_id = anime_result.get('show_id')
+                    episode_title = anime_result.get('episode_title')
+                    episode_number = anime_result.get('episode_number', episode_number)
+                    resolution = anime_result.get('resolution')
+                    is_anime_genre = anime_result.get('is_anime_genre', is_anime_genre)
+                    is_extra = anime_result.get('is_extra', is_extra)
+                    tmdb_id = anime_result.get('tmdb_id', tmdb_id)
+                    original_language = anime_result.get('original_language', original_language)
+                    overview = anime_result.get('overview', overview)
+                    runtime = anime_result.get('runtime', runtime)
+                    original_title = anime_result.get('original_title', original_title)
+                    status = anime_result.get('status', status)
+                    first_air_date = anime_result.get('first_air_date', first_air_date)
+                    last_air_date = anime_result.get('last_air_date', last_air_date)
+                    genres = anime_result.get('genres', genres)
+                    certification = anime_result.get('certification', certification)
+                    total_episodes = anime_result.get('total_episodes', total_episodes)
+
+                    anime_language = anime_result.get('language')
+                    anime_quality = anime_result.get('quality')
+                    if anime_language:
+                        language = anime_language
+                    if anime_quality:
+                        quality = anime_quality
+
+                    episode_match = re.search(r'S(\d+)E(\d+)', new_name, re.IGNORECASE)
+                    if episode_match:
+                        season_number = episode_match.group(1)
+                        episode_identifier = f"S{season_number}E{episode_match.group(2)}"
+                        episode_number = episode_match.group(2)
+                        create_season_folder = True
 
             if season_number is not None:
                 season_number = str(season_number).zfill(2)

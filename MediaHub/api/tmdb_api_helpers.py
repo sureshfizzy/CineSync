@@ -1103,6 +1103,7 @@ def process_chosen_show(chosen_show, auto_select, tmdb_id=None, season_number=No
     tv_data = get_show_data(tmdb_id)
     external_ids = tv_data.get('external_ids', {})
     is_anime_genre = tv_data.get('is_anime_genre', False)
+    chosen_show['is_anime_genre'] = is_anime_genre
     is_kids_content = tv_data.get('is_kids_content', False)
     original_language = tv_data.get('original_language')
     original_language_code = tv_data.get('original_language_code')
