@@ -727,7 +727,7 @@ def map_absolute_episode(show_id, absolute_episode, api_key, max_length=60, tota
 
 
 
-def calculate_score(result, query, year=None):
+def calculate_score(result, query, year=None, anime_priority=False):
     """
     Calculate a match score between a search result and the query.
     Higher scores indicate better matches.
@@ -738,7 +738,7 @@ def calculate_score(result, query, year=None):
     year (str): Optional year to match against
 
     Returns:
-    float: Match score between 0 and 150 (increased to accommodate better exact match bonuses)
+    float: Match score between 0 and 150+ depending on bonuses
     """
     score = 0
 
@@ -867,6 +867,25 @@ def calculate_score(result, query, year=None):
     vote_count = result.get('vote_count', 0)
     if vote_count == 0:
         score -= 5
+
+    # Anime-specific scoring adjustments, enabled only when anime processing requests it.
+    if anime_priority:
+        genre_ids = result.get('genre_ids', []) or []
+        is_animation = 16 in genre_ids
+        is_japanese = result.get('original_language') == 'ja'
+        origin_countries = result.get('origin_country', []) or []
+        has_japan_origin = 'JP' in origin_countries
+
+        if is_animation:
+            score += 15
+        else:
+            score -= 8
+
+        if is_japanese:
+            score += 20
+
+        if has_japan_origin:
+            score += 8
 
     # Apply exact match bonus
     score += exact_match_bonus

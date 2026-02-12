@@ -114,7 +114,7 @@ def remove_country_suffix(query):
 
 @lru_cache(maxsize=None)
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
-def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None, manual_search=False):
+def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=None, root=None, episode_match=None, tmdb_id=None, imdb_id=None, tvdb_id=None, season=None, is_extra=None, season_number=None, episode_number=None, force_extra=None, manual_search=False, anime_priority=False):
     global api_key
     if not check_api_key():
         log_message("API key is missing or invalid. Cannot proceed with search.", level="ERROR")
@@ -210,12 +210,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
         full_url = f"{url}?{urllib.parse.urlencode(params)}"
         search_type = "with year" if year else "without year"
         log_message(f"Primary search URL ({search_type}): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
-        response = perform_search(params, url)
+        response = perform_search(params, url, anime_priority=anime_priority)
 
         if response:
             scored_results = []
             for result in response:
-                score = calculate_score(result, query, year)
+                score = calculate_score(result, query, year, anime_priority=anime_priority)
                 if score >= 40:
                     scored_results.append((score, result))
 
@@ -225,12 +225,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                 best_score = scored_results[0][0]
                 if best_score < 75:
                     params_no_year = {'api_key': api_key, 'query': query, 'language': language_iso}
-                    response_no_year = perform_search(params_no_year, url)
+                    response_no_year = perform_search(params_no_year, url, anime_priority=anime_priority)
 
                     if response_no_year:
                         scored_results_no_year = []
                         for result in response_no_year:
-                            score = calculate_score(result, query, year)
+                            score = calculate_score(result, query, year, anime_priority=anime_priority)
                             if score >= 40:
                                 scored_results_no_year.append((score, result))
 
@@ -250,11 +250,11 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
                         if year:
                             params_fallback['first_air_date_year'] = year
 
-                        response_fallback = perform_search(params_fallback, url)
+                        response_fallback = perform_search(params_fallback, url, anime_priority=anime_priority)
                         if response_fallback:
                             scored_results_fallback = []
                             for result in response_fallback:
-                                score = calculate_score(result, fallback_query, year)
+                                score = calculate_score(result, fallback_query, year, anime_priority=anime_priority)
                                 if score >= 40:
                                     scored_results_fallback.append((score, result))
 
@@ -271,12 +271,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
             params = {'api_key': api_key, 'query': query, 'language': language_iso}
             full_url = f"{url}?{urllib.parse.urlencode(params)}"
             log_message(f"Fallback search URL (no year): {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
-            response = perform_search(params, url)
+            response = perform_search(params, url, anime_priority=anime_priority)
 
             if response:
                 scored_results = []
                 for result in response:
-                    score = calculate_score(result, query, year)
+                    score = calculate_score(result, query, year, anime_priority=anime_priority)
                     if score >= 40:
                         scored_results.append((score, result))
 
@@ -295,12 +295,12 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
 
             full_url = f"{url}?{urllib.parse.urlencode(params)}"
             log_message(f"Fallback search URL: {sanitize_url_for_logging(full_url)}", "DEBUG", "stdout")
-            response = perform_search(params, url)
+            response = perform_search(params, url, anime_priority=anime_priority)
 
             if response:
                 scored_results = []
                 for result in response:
-                    score = calculate_score(result, fallback_query, year)
+                    score = calculate_score(result, fallback_query, year, anime_priority=anime_priority)
                     if score >= 40:
                         scored_results.append((score, result))
 
@@ -426,7 +426,7 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     set_cached_result(cache_key, f"{query}")
     return f"{query}"
 
-def perform_search(params, url):
+def perform_search(params, url, anime_priority=False):
     try:
         query = params['query']
         year = params.get('first_air_date_year') or params.get('primary_release_year')
@@ -451,7 +451,7 @@ def perform_search(params, url):
         scored_results = []
 
         for result in results:
-            score = calculate_score(result, query, year)
+            score = calculate_score(result, query, year, anime_priority=anime_priority)
             if score >= MIN_SCORE_THRESHOLD:
                 scored_results.append((score, result))
 
@@ -462,7 +462,7 @@ def perform_search(params, url):
             return [r[1] for r in scored_results]
 
         # If no results meet threshold, return top 3 results
-        all_scored = [(calculate_score(result, query, year), result) for result in results[:3]]
+        all_scored = [(calculate_score(result, query, year, anime_priority=anime_priority), result) for result in results[:3]]
         all_scored.sort(reverse=True, key=lambda x: x[0])
         return [r[1] for r in all_scored]
 

@@ -204,7 +204,7 @@ def process_anime_show(src_file, root, file, dest_dir, actual_dir, tmdb_folder_i
         retry_count += 1
         log_message(f"TMDb anime search attempt {retry_count}/{max_retries} for: {show_name} ({year})", level="DEBUG")
 
-        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, is_extra=is_extra, file=file, manual_search=manual_search)
+        search_result = search_tv_show(show_name, auto_select=auto_select, season_number=season_number, episode_number=episode_number, tmdb_id=tmdb_id, imdb_id=imdb_id, tvdb_id=tvdb_id, is_extra=is_extra, file=file, manual_search=manual_search, anime_priority=True)
 
         if search_result is None and retry_count < max_retries:
             import time
