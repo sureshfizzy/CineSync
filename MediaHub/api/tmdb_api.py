@@ -10,13 +10,14 @@ from bs4 import BeautifulSoup
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import is_imdb_folder_id_enabled, is_tvdb_folder_id_enabled, is_tmdb_folder_id_enabled, is_jellyfin_id_format_enabled, tmdb_api_language
-from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename
+from MediaHub.utils.file_utils import clean_query, normalize_query, standardize_title, remove_genre_names, extract_title, sanitize_windows_filename, _is_source_dir_query
 from MediaHub.api.tmdb_api_helpers import *
 from MediaHub.api.api_utils import api_retry
 from MediaHub.api.api_key_manager import get_api_key, check_api_key
 from MediaHub.api.language_iso_codes import get_iso_code
 from MediaHub.api.media_cover import process_tmdb_covers
 from MediaHub.utils.file_utils import normalize_unicode_characters
+from MediaHub.utils.parser.parse_anime import extract_anime_title
 
 # Thread-safe caches
 _api_cache = {}
@@ -355,11 +356,15 @@ def search_tv_show(query, year=None, auto_select=False, actual_dir=None, file=No
     # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        cleaned_dir_result = clean_query(dir_based_query)
-        cleaned_dir_query = cleaned_dir_result.get('title', '')
-        dir_year = cleaned_dir_result.get('year')
-        log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
-        results = fetch_results(cleaned_dir_query, year or dir_year)
+        if not (_is_source_dir_query(root) or _is_source_dir_query(dir_based_query)):
+            cleaned_dir_result = clean_query(dir_based_query)
+            cleaned_dir_query = cleaned_dir_result.get('title', '')
+            dir_year = cleaned_dir_result.get('year')
+            if not cleaned_dir_query:
+                cleaned_dir_query = extract_anime_title(dir_based_query)
+            log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
+            if cleaned_dir_query:
+                results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", level="WARNING")
@@ -706,11 +711,15 @@ def search_movie(query, year=None, auto_select=False, actual_dir=None, file=None
     # Directory-based fallback
     if not results and actual_dir and root:
         dir_based_query = os.path.basename(root)
-        cleaned_dir_result = clean_query(dir_based_query)
-        cleaned_dir_query = cleaned_dir_result.get('title', '')
-        dir_year = cleaned_dir_result.get('year')
-        log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
-        results = fetch_results(cleaned_dir_query, year or dir_year)
+        if not (_is_source_dir_query(root) or _is_source_dir_query(dir_based_query)):
+            cleaned_dir_result = clean_query(dir_based_query)
+            cleaned_dir_query = cleaned_dir_result.get('title', '')
+            dir_year = cleaned_dir_result.get('year')
+            if not cleaned_dir_query:
+                cleaned_dir_query = extract_anime_title(dir_based_query)
+            log_message(f"Directory fallback: searching with cleaned directory name: '{cleaned_dir_query}' (raw: '{dir_based_query}')", "DEBUG", "stdout")
+            if cleaned_dir_query:
+                results = fetch_results(cleaned_dir_query, year or dir_year)
 
     if not results:
         log_message(f"No results found for query '{query}' with year '{year}'.", "WARNING", "stdout")

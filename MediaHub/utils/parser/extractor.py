@@ -703,6 +703,17 @@ def _extract_air_date_from_parsed(parsed: ParsedFilename) -> Optional[str]:
 
     return None
 
+def _is_season_bundle_token(token: str) -> bool:
+    """Detect packed season bundle tokens like S02+SP or S01-S04+OVA+Movies."""
+    if not token:
+        return False
+    clean = token.strip().rstrip('.,;:')
+    return bool(re.match(
+        r'^S\d{1,2}(?:\s*-\s*S\d{1,2})?(?:\s*(?:\+|/|&)\s*(?:SP|SPECIALS?|OVA|OAD|ONA|MOVIES?|MOVIE|JUNIOR(?:\s*HIGH)?))*$',
+        clean,
+        re.IGNORECASE
+    ))
+
 
 def _is_tv_show(parsed: ParsedFilename) -> bool:
     """Detect if this appears to be a TV show."""
@@ -732,6 +743,8 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
 
     for part in parsed.parts:
         clean_part = part.strip()
+        if _is_season_bundle_token(clean_part):
+            return True
         for pattern in episode_patterns:
             # For patterns that start with ^ and end with $, only use re.match (full string match)
             if pattern.startswith('^') and pattern.endswith('$'):
@@ -976,7 +989,8 @@ def _extract_general_title_from_parsed(parsed: ParsedFilename) -> str:
                 re.match(r'^Episode\d{1,4}$', clean_part, re.IGNORECASE) or
                 re.match(r'^Season\s+\d{1,2}$', clean_part, re.IGNORECASE) or
                 re.match(r'^[Ss]eason\d{1,2}$', clean_part, re.IGNORECASE) or  # Handle "season09", "Season09"
-                re.match(r'^\d{1,2}x\d{1,4}(?:-\d{1,4})?$', clean_part, re.IGNORECASE)):
+                re.match(r'^\d{1,2}x\d{1,4}(?:-\d{1,4})?$', clean_part, re.IGNORECASE) or
+                _is_season_bundle_token(clean_part)):
                 break
 
             # Stop at "Episode" followed by number in next part
@@ -1683,6 +1697,13 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     """Extract season number from parsed filename data."""
     for part in parsed.parts:
         clean_part = part.strip().rstrip('.')
+        bundle_match = re.match(
+            r'^S(\d{1,2})(?:\s*-\s*S\d{1,2})?(?:\s*(?:\+|/|&)\s*(?:SP|SPECIALS?|OVA|OAD|ONA|MOVIES?|MOVIE|JUNIOR(?:\s*HIGH)?))*$',
+            clean_part,
+            re.IGNORECASE
+        )
+        if bundle_match:
+            return int(bundle_match.group(1))
 
         # Handle season ranges like S01-S02, S01-S03, etc. (return first season)
         match = re.match(r'S(\d{1,2})-S\d{1,2}', clean_part, re.IGNORECASE)

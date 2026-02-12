@@ -8,7 +8,7 @@ from typing import Tuple, Optional, Dict, List, Set, Union, Any
 from functools import lru_cache
 from MediaHub.utils.logging_utils import log_message
 from MediaHub.utils.parser.extractor import extract_all_metadata
-from MediaHub.utils.parser.parse_anime import is_anime_filename
+from MediaHub.utils.parser.parse_anime import is_anime_filename, extract_anime_title
 
 # ============================================================================
 # OS Detection
@@ -261,6 +261,29 @@ def _is_clean_title(query: str) -> bool:
     # If none of the filename indicators are found, it's likely a clean title
     return True
 
+def _is_source_dir_query(query: str) -> bool:
+    """Return True when query matches a configured SOURCE_DIR path or basename."""
+    if not query or not isinstance(query, str):
+        return False
+
+    source_dirs = [s.strip() for s in os.getenv('SOURCE_DIR', '').split(',') if s.strip()]
+    if not source_dirs:
+        return False
+
+    normalized_query = os.path.normcase(os.path.normpath(query.strip()))
+    query_basename = os.path.normcase(os.path.basename(normalized_query))
+
+    for source_dir in source_dirs:
+        normalized_source = os.path.normcase(os.path.normpath(source_dir))
+        source_basename = os.path.normcase(os.path.basename(normalized_source))
+
+        if normalized_query == normalized_source:
+            return True
+        if query_basename and query_basename == source_basename:
+            return True
+
+    return False
+
 def clean_query(query: str) -> Dict[str, Any]:
     """
     Parse media filename and return comprehensive structured information.
@@ -292,7 +315,8 @@ def clean_query(query: str) -> Dict[str, Any]:
     # Check if the query is already a clean title (no file extensions, technical terms, or complex patterns)
     # If it looks like a clean title, return it as-is to avoid unnecessary parsing
     if _is_clean_title(query):
-        log_message(f"Query appears to be already clean, returning as-is: '{query}'", level="DEBUG")
+        if not _is_source_dir_query(query):
+            log_message(f"Query appears to be already clean, returning as-is: '{query}'", level="DEBUG")
         result = {"title": query, "episodes": [], "seasons": [], "episode_identifier": None}
         _metadata_cache[query] = result
         return result

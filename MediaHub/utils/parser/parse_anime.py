@@ -18,6 +18,26 @@ def _strip_split_cour_suffix(title: str) -> str:
     )
     return re.sub(r'\s+', ' ', cleaned).strip()
 
+def _strip_anime_season_suffix(title: str) -> str:
+    """Strip trailing season-label suffixes from anime titles."""
+    if not title:
+        return ""
+
+    ordinal_words = r'(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)'
+    patterns = [
+        r'\s*(?:[-:]\s*)?(?:the\s+)?final\s+season\s*$',
+        r'\s*(?:[-:]\s*)?final\s*$',
+        rf'\s*(?:[-:]\s*)?{ordinal_words}\s+season\s*$',
+        r'\s*(?:[-:]\s*)?season\s*\d+\s*$',
+        r'\s*[\(\[\{]\s*(?:the\s+)?final\s+season\s*[\)\]\}]\s*$',
+        rf'\s*[\(\[\{{]\s*{ordinal_words}\s+season\s*[\)\]\}}]\s*$',
+    ]
+
+    normalized = title
+    for pattern in patterns:
+        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE).strip()
+    return re.sub(r'\s+', ' ', normalized).strip()
+
 
 def _strip_second_title_suffix(title: str) -> str:
     """
@@ -45,6 +65,7 @@ def _finalize_anime_title(title: str) -> str:
     if not title:
         return ""
     normalized = _strip_split_cour_suffix(title)
+    normalized = _strip_anime_season_suffix(normalized)
     normalized = _strip_second_title_suffix(normalized)
     return clean_title_string(normalized)
 
