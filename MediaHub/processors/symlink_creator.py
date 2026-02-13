@@ -1565,8 +1565,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
     global single_file_mode
     single_file_mode = bool(is_single_file)
 
-    if auto_select:
-        # Use manager-coordinated parallel processing when auto-select is enabled
+    use_smart_manager = auto_select and mode == 'create' and not single_path
+
+    if use_smart_manager:
+        # Use manager-coordinated parallel processing for broad create scans
         max_workers = get_max_processes()
 
         # Initialize processing manager
@@ -1603,6 +1605,8 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
             return
 
     else:
+        if auto_select and not use_smart_manager:
+            log_message("Auto-select enabled with targeted/monitor processing - skipping smart scan manager for faster handling", level="INFO")
         dest_index = None
 
         for src_dir in src_dirs:
