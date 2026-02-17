@@ -545,21 +545,18 @@ func (tm *TorrentManager) scanForBrokenTorrents(torrentID string) {
         uncheckedIDs, err := tm.store.GetUncheckedTorrents(3600)
         if err != nil {
             logger.Warn("[RepairWorker] Failed to get unchecked torrents: %v", err)
-            items, err = tm.store.GetAllItems()
-            if err != nil {
-                logger.Warn("[RepairWorker] Failed to get all items: %v", err)
-                return
-            }
-        } else if len(uncheckedIDs) > 0 {
-            logger.Info("[RepairWorker] Found %d unchecked/stale torrents to validate", len(uncheckedIDs))
-            for _, id := range uncheckedIDs {
-                item, getErr := tm.store.GetItemByID(id)
-                if getErr == nil {
-                    items = append(items, item)
-                }
-            }
-        } else {
             return
+        }
+
+        if len(uncheckedIDs) == 0 {
+            return
+        }
+
+        for _, id := range uncheckedIDs {
+            item, getErr := tm.store.GetItemByID(id)
+            if getErr == nil {
+                items = append(items, item)
+            }
         }
     }
 

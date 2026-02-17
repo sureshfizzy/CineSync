@@ -150,6 +150,10 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			return
 		}
 		
+		if len(allTorrents) < oldTotalCount/2 && oldTotalCount > 100 {
+			return
+		}
+
 		currentTorrentsMap := make(map[string]bool, len(allTorrents))
 		for i := range allTorrents {
 			currentTorrentsMap[allTorrents[i].ID] = true
@@ -395,6 +399,27 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		
 		logger.Debug("[Refresh] Cleanup complete for removed torrents")
 	}
+
+	freshIDs := make(map[string]struct{}, len(allTorrents))
+	for i := range allTorrents {
+		freshIDs[allTorrents[i].ID] = struct{}{}
+	}
+
+	go func() {
+		if tm.store == nil {
+			return
+		}
+		dbIDs, err := tm.store.GetAllIDs()
+		if err != nil {
+			return
+		}
+		for _, id := range dbIDs {
+			if _, ok := freshIDs[id]; !ok {
+				_ = tm.store.DeleteByID(id)
+				tm.InfoMap.Remove(id)
+			}
+		}
+	}()
 
 	triggerPendingMount()
 	

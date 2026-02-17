@@ -1124,29 +1124,29 @@ func fetchAndLoadTorrents(apiKey string) {
 		if err != nil {
 			logger.Warn("[RD] Failed to fetch torrents: %v", err)
 		} else {
-			// Guard against transient empty responses that would wipe local cache.
+			existing := 0
+			if tm != nil {
+				existing = len(tm.GetAllTorrentsFromCache())
+			}
+
 			if len(torrents) == 0 {
-				existing := 0
-				if tm != nil {
-					existing = len(tm.GetAllTorrentsFromCache())
-				}
 				if existing > 0 || len(cachedTorrents) > 0 {
 					logger.Warn("[RD] Torrents fetched: 0 (transient) - skipping cache reconcile to avoid purge")
 					logger.Info("[RD] Prefetch completed")
 					return
 				}
 			}
+
+			if len(torrents) < existing/2 && existing > 100 {
+				return
+			}
+
 			cachedTorrents = torrents
 			logger.Info("[RD] Torrents fetched: %d", len(torrents))
 			tm.SetPrefetchedTorrents(torrents)
 			if err := tm.PrefetchHttpDavData(); err != nil {
 				logger.Warn("[RD] Failed to prefetch HTTP DAV data: %v", err)
 			}
-			rdIDs := make([]string, 0, len(torrents))
-			for i := range torrents {
-				rdIDs = append(rdIDs, torrents[i].ID)
-			}
-			tm.ReconcileDBWithRD(rdIDs)
 			go tm.SaveAllTorrents()
 		}
 

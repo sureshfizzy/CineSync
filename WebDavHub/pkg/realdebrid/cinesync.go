@@ -234,20 +234,6 @@ func (tm *TorrentManager) GetDirs(readyOnly bool) []DirEntry {
 	return dirs
 }
 
-// ReconcileDBWithRD removes file entries that are no longer present in RD list
-func (tm *TorrentManager) ReconcileDBWithRD(rdIDs []string) {
-	if tm == nil || tm.store == nil { return }
-	dbIDs, err := tm.store.GetAllIDs()
-	if err != nil { return }
-	present := make(map[string]struct{}, len(rdIDs))
-	for _, id := range rdIDs { present[id] = struct{}{} }
-	for _, id := range dbIDs {
-		if _, ok := present[id]; !ok {
-			_ = tm.store.DeleteByID(id)
-			tm.InfoMap.Remove(id)
-		}
-	}
-}
 
 // DeleteFromDBByID removes a torrent by ID from file-based store
 func (tm *TorrentManager) DeleteFromDBByID(id string) {

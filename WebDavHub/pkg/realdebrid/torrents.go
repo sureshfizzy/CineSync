@@ -1798,19 +1798,6 @@ func (tm *TorrentManager) StartCatalogSyncJob(interval time.Duration) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for range ticker.C {
-			allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-			if !ok {
-				continue
-			}
-
-			keys := allTorrentsMap.Keys()
-			rdIDs := make([]string, 0, len(keys))
-			for _, key := range keys {
-				if item, ok := allTorrentsMap.Get(key); ok && item != nil {
-					rdIDs = append(rdIDs, item.ID)
-				}
-			}
-			tm.ReconcileDBWithRD(rdIDs)
 			tm.SaveAllTorrents()
 		}
 	}()
