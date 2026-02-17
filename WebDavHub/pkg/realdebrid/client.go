@@ -192,17 +192,35 @@ func NewClient(apiKey string) *Client {
 		failedUnrestrictCache: cmap.New[*FailedUnrestrictEntry](),
 	}
 	client.httpClient = &http.Client{
-		Timeout: 120 * time.Second,
-	}
-	client.repairHTTPClient = &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout: 60 * time.Second,
 		Transport: &http.Transport{
-			ForceAttemptHTTP2: false,
-			DisableKeepAlives: true,
-			MaxConnsPerHost:   1,
-			MaxIdleConns:      1,
-			MaxIdleConnsPerHost: 1,
-			IdleConnTimeout:   30 * time.Second,
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   100,
+			MaxConnsPerHost:       0,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			DisableKeepAlives:     false,
+			DisableCompression:    false,
+			ForceAttemptHTTP2:     true,
+		},
+	}
+
+	// Repair HTTP client - more conservative settings
+	client.repairHTTPClient = &http.Client{
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          10,
+			MaxIdleConnsPerHost:   5,
+			MaxConnsPerHost:       10,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			DisableKeepAlives:     false,
+			DisableCompression:    false,
+			ForceAttemptHTTP2:     true,
 		},
 	}
 	client.limiter = newRateLimiterFromConfig()
@@ -382,14 +400,18 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
 		limiter = c.repairLimiter
 		if c.repairHTTPClient == nil {
 			c.repairHTTPClient = &http.Client{
-				Timeout: 120 * time.Second,
+				Timeout: 60 * time.Second,
 				Transport: &http.Transport{
-					ForceAttemptHTTP2: false,
-					DisableKeepAlives: true,
-					MaxConnsPerHost:   1,
-					MaxIdleConns:      1,
-					MaxIdleConnsPerHost: 1,
-					IdleConnTimeout:   30 * time.Second,
+					Proxy:                 http.ProxyFromEnvironment,
+					MaxIdleConns:          10,
+					MaxIdleConnsPerHost:   5,
+					MaxConnsPerHost:       10,
+					IdleConnTimeout:       30 * time.Second,
+					TLSHandshakeTimeout:   10 * time.Second,
+					ExpectContinueTimeout: 1 * time.Second,
+					DisableKeepAlives:     false,
+					DisableCompression:    false,
+					ForceAttemptHTTP2:     true,
 				},
 			}
 		}
@@ -401,7 +423,19 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
 		limiter = c.limiter
 		if c.httpClient == nil {
 			c.httpClient = &http.Client{
-				Timeout: 120 * time.Second,
+				Timeout: 60 * time.Second,
+				Transport: &http.Transport{
+					Proxy:                 http.ProxyFromEnvironment,
+					MaxIdleConns:          100,
+					MaxIdleConnsPerHost:   100,
+					MaxConnsPerHost:       0,
+					IdleConnTimeout:       90 * time.Second,
+					TLSHandshakeTimeout:   10 * time.Second,
+					ExpectContinueTimeout: 1 * time.Second,
+					DisableKeepAlives:     false,
+					DisableCompression:    false,
+					ForceAttemptHTTP2:     true,
+				},
 			}
 		}
 		httpClient = c.httpClient
@@ -421,11 +455,6 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
 
         resp, err := httpClient.Do(req)
         if err != nil {
-            if isTimeoutError(err) {
-                if transport, ok := httpClient.Transport.(*http.Transport); ok {
-                    transport.CloseIdleConnections()
-                }
-            }
             return nil, err
         }
 
@@ -768,6 +797,21 @@ func isTimeoutError(err error) bool {
 	return strings.Contains(errStr, "timeout") ||
 		strings.Contains(errStr, "deadline exceeded") ||
 		strings.Contains(errStr, "i/o timeout")
+}
+
+// isNetworkError checks for various network-related errors that should trigger retries
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "connection reset by peer") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "context canceled") ||
+		strings.Contains(errStr, "context deadline exceeded")
 }
 
 // GetDownloads retrieves the user's downloads list
