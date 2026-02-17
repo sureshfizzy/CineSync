@@ -527,16 +527,24 @@ function FileOperations() {
       setSelectedFiles(new Set());
       setRetryAllProgress({ current: 0, total: filePaths.length });
       let errorCount = 0;
+      let completedCount = 0;
 
-      for (let i = 0; i < filePaths.length; i++) {
-        const filePath = filePaths[i];
-        setRetryAllProgress({ current: i + 1, total: filePaths.length });
+      const concurrencyLimit = 10;
+      const processFile = async (filePath: string) => {
         try {
           await runForceAutoSelectProcessing(filePath);
         } catch (err) {
           errorCount += 1;
           console.error(`Failed to retry ${filePath}:`, err);
+        } finally {
+          completedCount += 1;
+          setRetryAllProgress({ current: completedCount, total: filePaths.length });
         }
+      };
+
+      for (let i = 0; i < filePaths.length; i += concurrencyLimit) {
+        const batch = filePaths.slice(i, i + concurrencyLimit);
+        await Promise.all(batch.map(processFile));
       }
 
       const successCount = filePaths.length - errorCount;
