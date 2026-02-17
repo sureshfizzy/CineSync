@@ -11,7 +11,7 @@ import (
 // CineSync worker configuration (exported for API/metrics)
 var (
     CineSyncIOWorkers  = 32
-    CineSyncAPIWorkers = 8
+    CineSyncAPIWorkers = 50
     CineSyncIOInUse    atomic.Int64
     CineSyncAPIInUse   atomic.Int64
     EnrichTotal        atomic.Int64

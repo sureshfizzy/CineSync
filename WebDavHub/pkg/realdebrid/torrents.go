@@ -415,7 +415,7 @@ func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
 	}
 	defer backgroundFetchRunning.Store(false)
 
-	const maxWorkers = 10
+	const maxWorkers = 50
 	const batchSize = 100
 	successCount := 0
 	failCount := 0
@@ -486,7 +486,7 @@ func (tm *TorrentManager) backgroundFetchMissingInfo(torrentIDs []string) {
 			batchEnd, len(torrentIDs), successCount, failCount)
 
 		if batchEnd < len(torrentIDs) {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
