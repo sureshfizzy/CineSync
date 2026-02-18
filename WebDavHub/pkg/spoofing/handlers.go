@@ -991,9 +991,15 @@ var upgrader = websocket.Upgrader{
 	HandshakeTimeout:  10 * time.Second,
 }
 
+// safeWebSocketConn wraps a WebSocket connection with a mutex to prevent concurrent writes
+type safeWebSocketConn struct {
+	conn  *websocket.Conn
+	mutex sync.Mutex
+}
+
 // Global variables to track SignalR connections
 var (
-	signalRConnections = make(map[*websocket.Conn]bool)
+	signalRConnections = make(map[*websocket.Conn]*safeWebSocketConn)
 	signalRMutex       sync.RWMutex
 )
 
@@ -1013,6 +1019,8 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	safeConn := &safeWebSocketConn{conn: conn}
+
 	defer func() {
 		signalRMutex.Lock()
 		delete(signalRConnections, conn)
@@ -1021,18 +1029,24 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	signalRMutex.Lock()
-	signalRConnections[conn] = true
+	signalRConnections[conn] = safeConn
 	signalRMutex.Unlock()
 
 	handshakeResponse := `{"error":null}` + "\x1e"
-	if err := conn.WriteMessage(websocket.TextMessage, []byte(handshakeResponse)); err != nil {
+	safeConn.mutex.Lock()
+	err = conn.WriteMessage(websocket.TextMessage, []byte(handshakeResponse))
+	safeConn.mutex.Unlock()
+	if err != nil {
 		logger.Error("Failed to send handshake response: %v", err)
 		return
 	}
 
 	config := GetConfig()
 	versionMessage := fmt.Sprintf(`{"type":1,"target":"receiveMessage","arguments":[{"name":"version","body":{"version":"%s"}}]}`+"\x1e", config.Version)
-	if err := conn.WriteMessage(websocket.TextMessage, []byte(versionMessage)); err != nil {
+	safeConn.mutex.Lock()
+	err = conn.WriteMessage(websocket.TextMessage, []byte(versionMessage))
+	safeConn.mutex.Unlock()
+	if err != nil {
 		logger.Error("Failed to send version message: %v", err)
 		return
 	}
@@ -1060,8 +1074,11 @@ func handleSignalRWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker.C:
+			safeConn.mutex.Lock()
 			conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":6}`+"\x1e")); err != nil {
+			err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":6}`+"\x1e"))
+			safeConn.mutex.Unlock()
+			if err != nil {
 				return
 			}
 		case <-done:
@@ -1660,11 +1677,18 @@ func GetSignalRConnectionCount() int {
 // broadcastSignalRMessage sends a SignalR message to all connected clients
 func broadcastSignalRMessage(message map[string]interface{}) {
 	signalRMutex.RLock()
-	defer signalRMutex.RUnlock()
-
 	if len(signalRConnections) == 0 {
+		signalRMutex.RUnlock()
 		return
 	}
+
+	connectionSnapshot := make([]*safeWebSocketConn, 0, len(signalRConnections))
+	connectionKeys := make([]*websocket.Conn, 0, len(signalRConnections))
+	for key, safeConn := range signalRConnections {
+		connectionSnapshot = append(connectionSnapshot, safeConn)
+		connectionKeys = append(connectionKeys, key)
+	}
+	signalRMutex.RUnlock()
 
 	// Create SignalR message format
 	signalRMessage := map[string]interface{}{
@@ -1681,20 +1705,35 @@ func broadcastSignalRMessage(message map[string]interface{}) {
 
 	// Add SignalR message terminator
 	messageData := string(messageBytes) + "\x1e"
+	var failedConnections []*websocket.Conn
 
-
-	// Send to all connected clients with better error handling
-	for conn := range signalRConnections {
-		// Set write deadline for each message
-		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	// Send to all connected clients with per-connection mutex protection
+	for i, safeConn := range connectionSnapshot {
+		safeConn.mutex.Lock()
 		
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(messageData)); err != nil {
+		// Set write deadline for each message
+		safeConn.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		
+		err := safeConn.conn.WriteMessage(websocket.TextMessage, []byte(messageData))
+		safeConn.mutex.Unlock()
+		
+		if err != nil {
 			logger.Warn("Failed to send SignalR message to client: %v", err)
-			// Remove failed connection
-			delete(signalRConnections, conn)
-			// Close the connection gracefully
-			conn.Close()
+			failedConnections = append(failedConnections, connectionKeys[i])
 		}
+	}
+
+	// Remove failed connections with write lock
+	if len(failedConnections) > 0 {
+		signalRMutex.Lock()
+		for _, conn := range failedConnections {
+			if safeConn, exists := signalRConnections[conn]; exists {
+				delete(signalRConnections, conn)
+				conn.Close()
+				_ = safeConn
+			}
+		}
+		signalRMutex.Unlock()
 	}
 }
 
