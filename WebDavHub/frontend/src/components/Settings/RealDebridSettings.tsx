@@ -789,30 +789,6 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={config.repairSettings.autoStartRepair}
-                          onChange={(e) => handleConfigChange('repairSettings', {
-                            ...config.repairSettings,
-                            autoStartRepair: e.target.checked
-                          })}
-                          color="primary"
-                          disabled={!config.repairSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography variant="body2" fontWeight="500">
-                            Auto Start Repair
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Periodically scans for broken files at the specified interval
-                          </Typography>
-                        </Box>
-                      }
-                    />
-
-                    <FormControlLabel
-                      control={
-                        <Switch
                           checked={config.repairSettings.autoFix}
                           onChange={(e) => handleConfigChange('repairSettings', {
                             ...config.repairSettings,
@@ -828,57 +804,11 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                             Auto Fix
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Automatically fixes broken files found during scans
+                            Automatically fixes broken files when detected (event-driven)
                           </Typography>
                         </Box>
                       }
                     />
-
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={config.repairSettings.onDemand}
-                          onChange={(e) => handleConfigChange('repairSettings', {
-                            ...config.repairSettings,
-                            onDemand: e.target.checked
-                          })}
-                          color="primary"
-                          disabled={!config.repairSettings.enabled}
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography variant="body2" fontWeight="500">
-                            On Demand
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Fixes files when requested during playback
-                          </Typography>
-                        </Box>
-                      }
-                    />
-
-                    {config.repairSettings.autoStartRepair && (
-                      <TextField
-                        fullWidth
-                        size="small"
-                        type="number"
-                        label="Scan Interval (hours)"
-                        value={config.repairSettings.scanIntervalHours}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 48;
-                          handleConfigChange('repairSettings', {
-                            ...config.repairSettings,
-                            scanIntervalHours: Math.max(1, value)
-                          });
-                        }}
-                        disabled={!config.repairSettings.enabled || !config.repairSettings.autoStartRepair}
-                        helperText="How often to scan for broken torrents (default: 48 hours = 2 days)"
-                        InputProps={{
-                          inputProps: { min: 1, max: 720 }
-                        }}
-                      />
-                    )}
                   </Stack>
                 </Box>
 

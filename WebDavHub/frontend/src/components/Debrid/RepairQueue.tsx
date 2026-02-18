@@ -439,19 +439,6 @@ export default function RepairQueue() {
   }, [status?.queue_size, isQueueView, fetchRepairQueue]);
 
 
-  const handleStartRepair = async () => {
-    try {
-      const response = await axios.post('/api/realdebrid/repair-start');
-      if (response.data.success) {
-        fetchRepairStatus();
-        fetchRepairStats(false);
-      }
-    } catch (err) {
-      console.error('Failed to start repair:', err);
-      setError('Failed to start repair scan');
-    }
-  };
-
   const deleteRepairs = useCallback(
     async (ids: string[], deleteFromDebrid = false) => {
       if (ids.length === 0) {
@@ -890,7 +877,7 @@ export default function RepairQueue() {
             Repair Queue
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.8 }}>
-            Torrents with broken or missing links
+            Event-driven repair for broken torrents (auto-detected on file access)
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -950,8 +937,8 @@ export default function RepairQueue() {
               {repairing ? 'Queuing...' : 'Repair All'}
             </Button>
           )}
-          {/* Always show Start/Stop button, even if status is null */}
-          {status?.is_running ? (
+          {/* Show Stop button only when repair is running */}
+          {status?.is_running && (
             <Button
               variant="contained"
               color="error"
@@ -960,16 +947,6 @@ export default function RepairQueue() {
               sx={{ fontWeight: 600 }}
             >
               Stop Repair
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<PlayIcon />}
-              onClick={handleStartRepair}
-              sx={{ fontWeight: 600 }}
-            >
-              Start Repair
             </Button>
           )}
         </Box>
@@ -994,7 +971,7 @@ export default function RepairQueue() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {status.is_running && <CircularProgress size={20} />}
                   <Typography variant="h6" fontWeight="600">
-                    {status.is_running ? 'Repair in Progress' : 'Repair Status'}
+                    {status.is_running ? 'Repair in Progress' : 'Event-Driven Repair'}
                   </Typography>
                 </Box>
                 <Chip 
@@ -1008,7 +985,7 @@ export default function RepairQueue() {
               <Stack direction="row" spacing={1.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
                 <Chip
                   icon={<PlayIcon sx={{ fontSize: 16 }} />}
-                  label={`Runners: ${status.total_torrents}`}
+                  label={`Broken: ${status.total_torrents}`}
                   variant="outlined"
                   onClick={() => { clearReasons(); }}
                   sx={{ fontWeight: 600, cursor: 'pointer', '&:hover': { transform: 'scale(1.02)' }, transition: 'transform 0.1s' }}
@@ -1079,18 +1056,10 @@ export default function RepairQueue() {
               <Box sx={{ display: 'flex', gap: { xs: 2, sm: 3 }, flexWrap: 'wrap' }}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    Broken Found
-                  </Typography>
-                  <Typography variant="body1" fontWeight="600" color="error.main">
-                    {status.broken_found}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Validated
+                    Processing
                   </Typography>
                   <Typography variant="body1" fontWeight="600" color="info.main">
-                    {status.validated}
+                    {status.processed_torrents}
                   </Typography>
                 </Box>
                 {status.queue_size > 0 && (
@@ -1232,7 +1201,7 @@ export default function RepairQueue() {
                 {isQueueView ? 'Queue Empty' : 'All Clear!'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
-                {isQueueView ? 'No torrents are waiting in the repair queue' : 'No torrents require repair at this time'}
+                {isQueueView ? 'No torrents are waiting in the repair queue' : 'No broken torrents detected. Broken torrents are automatically added when file access fails.'}
               </Typography>
             </Box>
           </CardContent>

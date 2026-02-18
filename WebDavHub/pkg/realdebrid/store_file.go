@@ -626,25 +626,6 @@ func (s *CineSyncStore) GetIDsNeedingUpdate(limit int) ([]string, error) {
 	return needingUpdate, nil
 }
 
-// GetUncheckedTorrents returns torrents that haven't been checked recently
-func (s *CineSyncStore) GetUncheckedTorrents(maxAgeSeconds int64) ([]string, error) {
-	items, err := s.LoadAllItems()
-	if err != nil {
-		return nil, err
-	}
-
-	cutoff := time.Now().Unix() - maxAgeSeconds
-	unchecked := make([]string, 0)
-
-	for _, item := range items {
-		if item.Modified < cutoff {
-			unchecked = append(unchecked, item.ID)
-		}
-	}
-
-	return unchecked, nil
-}
-
 // GetItemByID returns a TorrentItem by ID
 func (s *CineSyncStore) GetItemByID(id string) (TorrentItem, error) {
 	item, err := s.LoadItemByID(id)

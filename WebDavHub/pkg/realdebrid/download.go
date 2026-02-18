@@ -1,6 +1,7 @@
 package realdebrid
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"path"
@@ -260,13 +261,24 @@ func (tm *TorrentManager) fetchDownloadLink(torrentID, filePath string) (string,
 	return unrestrictedLink.Download, targetFile.Bytes, nil
 }
 
-func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
+func (tm *TorrentManager) repairTorrentFiles(ctx context.Context, torrentID string) (bool, error) {
 	originalTorrentID := torrentID
 	
-	// Get torrent info
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	default:
+	}
+	
 	info, err := tm.GetTorrentInfo(torrentID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get torrent info: %w", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	default:
 	}
 
 	refreshedInfo, err := tm.client.GetTorrentInfo(torrentID)
@@ -305,6 +317,12 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 		return true, nil
 	}
 
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	default:
+	}
+
 	brokenCount := 0
 	brokenFiles := []string{}
 	
@@ -312,9 +330,9 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 		logger.Warn("[Repair] Torrent %s has no links, all %d files are broken", torrentID, len(videoFiles))
 		brokenCount = len(videoFiles)
 	} else {
-	for _, file := range videoFiles {
-		cleanPath := strings.Trim(file.Path, "/")
-		fileName := path.Base(cleanPath)
+		for _, file := range videoFiles {
+			cleanPath := strings.Trim(file.Path, "/")
+			fileName := path.Base(cleanPath)
 			cacheKey := MakeCacheKey(torrentID, fileName)
 			if _, exists := tm.failedFileCache.Get(cacheKey); exists {
 				brokenCount++
@@ -324,7 +342,7 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 		if brokenCount == 0 {
 			for _, file := range videoFiles {
 				if file.ID-1 >= len(info.Links) || file.ID <= 0 {
-			brokenCount++
+					brokenCount++
 					cleanPath := strings.Trim(file.Path, "/")
 					brokenFiles = append(brokenFiles, path.Base(cleanPath))
 				}
@@ -333,6 +351,12 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 	}
 	
 	if brokenCount > 0 {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
+		
 		newInfo, reinsertErr := tm.reInsertTorrent(info)
 		if reinsertErr != nil {
 			logger.Warn("[Repair] Failed to reinsert torrent %s: %v", torrentID, reinsertErr)
@@ -342,7 +366,7 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 				if strings.Contains(strings.ToLower(reinsertErr.Error()), "infringing_file") || strings.Contains(reinsertErr.Error(), "code: 35") {
 					reason = "infringing_file"
 				}
-			_ = tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason)
+				_ = tm.store.UpsertRepair(torrentID, info.Filename, info.Hash, info.Status, int(info.Progress), reason)
 			}
 			
 			return false, fmt.Errorf("torrent has %d broken files, reinsert failed: %w", brokenCount, reinsertErr)
@@ -354,7 +378,7 @@ func (tm *TorrentManager) repairTorrentFiles(torrentID string) (bool, error) {
 			}
 		}
 		
-        if newBrokenCount == 0 {
+		if newBrokenCount == 0 {
 			brokenCount = 0
 		} else {
 			return false, fmt.Errorf("torrent has %d broken files after reinsert", newBrokenCount)

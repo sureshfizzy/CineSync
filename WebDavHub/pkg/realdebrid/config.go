@@ -87,7 +87,6 @@ type RepairSettings struct {
     Enabled         bool `json:"enabled" yaml:"enabled"`
     AutoStartRepair bool `json:"autoStartRepair" yaml:"autoStartRepair"`
     AutoFix         bool `json:"autoFix" yaml:"autoFix"`
-    OnDemand        bool `json:"onDemand" yaml:"onDemand"`
     ScanIntervalHours int `json:"scanIntervalHours" yaml:"scanIntervalHours"`
 }
 
@@ -167,7 +166,6 @@ func GetConfigManager() *ConfigManager {
                     Enabled:           false,
                     AutoStartRepair:   false,
                     AutoFix:           false,
-                    OnDemand:          false,
                     ScanIntervalHours: 48, // 2 days
                 },
             },
@@ -433,9 +431,6 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
                 }
                 if autoFix, ok := repairSettingsMap["autoFix"].(bool); ok {
                     rs.AutoFix = autoFix
-                }
-                if onDemand, ok := repairSettingsMap["onDemand"].(bool); ok {
-                    rs.OnDemand = onDemand
                 }
                 if scanInterval, ok := asInt(repairSettingsMap["scanIntervalHours"]); ok && scanInterval > 0 {
                     rs.ScanIntervalHours = scanInterval

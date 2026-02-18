@@ -218,16 +218,12 @@ func GetTorrentManager(apiKey string) *TorrentManager {
 			tm.loadBrokenTorrentsFromDB()
 		}()
 
-		// Start background refresh job
 		tm.startRefreshJob()
 
-		// Start background catalog sync
 		tm.StartCatalogSyncJob(60 * time.Second)
 
-		// Start repair worker to scan for broken torrents
-		tm.StartRepairWorker()
+		tm.ValidateStuckRepairsOnStartup()
 
-		// Store atomically
 		torrentManager.Store(tm)
 		torrentApiKey.Store(apiKey)
 	})
@@ -244,6 +240,10 @@ func ResetTorrentManager() {
 	if tm != nil {
 		if tm.refreshCancel != nil {
 			tm.refreshCancel()
+		}
+		
+		if repairCtxCancel != nil {
+			repairCtxCancel()
 		}
 
 		if tm.store != nil {
