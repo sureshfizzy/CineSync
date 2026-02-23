@@ -14,6 +14,7 @@ import ForceConfirmationDialog from './ForceConfirmationDialog';
 import SeasonSelectionDialog from './SeasonSelectionDialog';
 import EpisodeSelectionDialog from './EpisodeSelectionDialog';
 import { ModifyDialogProps, ModifyOption, IDOption } from './types';
+import { normalizeMediaType } from '../../../utils/mediaType';
 
 const ModifyDialog: React.FC<ModifyDialogProps> = ({
   open, onClose, currentFilePath, bulkFilePaths, onNavigateBack,
@@ -589,7 +590,7 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         number: match[1],
         title: match[2]?.trim(),
         year: match[3],
-        mediaType: match[4] ? (match[4] === 'TV Show' ? 'tv' : 'movie') : null, // Extract media type if available
+        mediaType: match[4] ? normalizeMediaType(match[4], 'movie') : null, // Extract media type if available
         tmdbId: match[5] // TMDB ID is now in match[5] due to the capture group
       }));
 

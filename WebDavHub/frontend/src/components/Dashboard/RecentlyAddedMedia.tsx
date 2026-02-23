@@ -8,6 +8,7 @@ import axios from 'axios';
 import { useSymlinkCreatedListener } from '../../hooks/useMediaHubUpdates';
 import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 import { useNavigate } from 'react-router-dom';
+import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
 
 const MotionCard = motion(Card);
 
@@ -559,7 +560,7 @@ const RecentlyAddedMedia: React.FC = () => {
     }
 
     // Fallback to showName for TV shows (handle both "tv" and "tvshow")
-    if ((media.type === 'tvshow' || media.type === 'tv') && media.showName) {
+    if (isTvMediaType(media.type) && media.showName) {
       return media.showName;
     }
 
@@ -568,7 +569,7 @@ const RecentlyAddedMedia: React.FC = () => {
   }, [tmdbTitles]);
 
   const getSubtitle = useCallback((media: RecentMedia, episodeCount?: number) => {
-    if (media.type === 'tvshow' || media.type === 'tv') {
+    if (isTvMediaType(media.type)) {
       // Check if this is a regular episode with season and episode numbers
       if (media.seasonNumber && media.episodeNumber) {
         const seasonEpisode = `S${String(media.seasonNumber).padStart(2, '0')}E${String(media.episodeNumber).padStart(2, '0')}`;
@@ -608,14 +609,14 @@ const RecentlyAddedMedia: React.FC = () => {
     );
 
     for (const media of sortedMedia) {
-      if ((media.type === 'tvshow' || media.type === 'tv') && media.tmdbId && media.tmdbId.trim() !== '') {
+      if (isTvMediaType(media.type) && media.tmdbId && media.tmdbId.trim() !== '') {
         const showKey = `${media.tmdbId}-${media.type}`;
 
         if (processedShows.has(showKey)) continue;
 
         const showEpisodes = recentMedia.filter(m =>
           m.tmdbId === media.tmdbId &&
-          (m.type === 'tvshow' || m.type === 'tv') &&
+          isTvMediaType(m.type) &&
           m.tmdbId && m.tmdbId.trim() !== ''
         );
 
@@ -653,7 +654,7 @@ const RecentlyAddedMedia: React.FC = () => {
   const handleNavigateToMedia = useCallback((media: RecentMedia) => {
     if (!media.tmdbId) return;
 
-    const mediaType = media.type === 'tvshow' || media.type === 'tv' ? 'tv' : 'movie';
+    const mediaType = normalizeMediaType(media.type);
 
     const targetName = media.properName
       ? (media.year ? `${media.properName} (${media.year})` : media.properName)

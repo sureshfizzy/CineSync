@@ -7,6 +7,7 @@ import SeriesSelectionDialog from './SeriesSelectionDialog';
 import SeasonSelectionDialog from './SeasonSelectionDialog';
 import EpisodeSelectionDialog from './EpisodeSelectionDialog';
 import MovieSelectionDialog from './MovieSelectionDialog';
+import { inferImportMediaType } from '../../utils/mediaType';
 
 interface MediaFile {
   id: string;
@@ -27,6 +28,26 @@ interface MediaFile {
   size?: string;
   releaseType?: string;
   selected: boolean;
+}
+
+export interface InteractiveImport {
+  id?: string;
+  fileName?: string;
+  filePath: string;
+  mediaType?: 'movie' | 'tv';
+  series?: string;
+  seriesId?: number;
+  season?: number;
+  episode?: number;
+  movieTitle?: string;
+  movieId?: number;
+  year?: number;
+  title?: string;
+  releaseGroup?: string;
+  quality?: string;
+  language?: string;
+  size?: string;
+  releaseType?: string;
 }
 
 interface SeriesOption {
@@ -73,12 +94,60 @@ interface InteractiveImportDialogProps {
   open: boolean;
   onClose: () => void;
   folderPath: string;
+  initialFiles?: InteractiveImport[];
 }
+
+const mapToMediaFile = (file: InteractiveImport, index: number): MediaFile => {
+  const fallbackName = file.filePath.split(/[\\/]/).pop() || file.filePath;
+  const mediaType = inferImportMediaType({
+    explicitMediaType: file.mediaType,
+    filePath: file.filePath,
+    season: file.season,
+    episode: file.episode
+  });
+
+  const baseFile: MediaFile = {
+    id: file.id || `seed-${index}`,
+    fileName: file.fileName || fallbackName,
+    filePath: file.filePath,
+    mediaType,
+    seriesId: file.seriesId,
+    season: file.season,
+    episode: file.episode,
+    movieId: file.movieId,
+    year: file.year,
+    releaseGroup: file.releaseGroup || 'Unknown',
+    quality: file.quality || 'Unknown',
+    language: file.language || 'Unknown',
+    size: file.size || 'Unknown',
+    selected: true
+  };
+
+  if (mediaType === 'tv') {
+    return {
+      ...baseFile,
+      series: file.series || 'Unknown Series',
+      movieTitle: file.movieTitle,
+      title: file.title,
+      releaseType: file.releaseType || 'Episode'
+    };
+  }
+
+  const movieTitle = file.movieTitle || file.title || 'Unknown Movie';
+  return {
+    ...baseFile,
+    series: file.series,
+    movieTitle,
+    title: file.title || movieTitle,
+    releaseType: file.releaseType || 'Movie'
+  };
+};
 
 const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
   open,
   onClose,
-  folderPath
+  folderPath,
+  initialFiles
 }) => {
   const theme = useTheme();
   const [files, setFiles] = useState<MediaFile[]>([]);
@@ -100,15 +169,29 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
 
 
   useEffect(() => {
-    if (open && folderPath) {
-      setImportProgress({ completed: 0, total: 0, currentFile: '' });
-      setScanProgress({ current: 0, total: 0 });
-      setScanAbortController(null);
-      setScanWasCancelled(false);
-      setLastScanPosition(0);
-      scanFolder();
+    if (!open) return;
+
+    setImportProgress({ completed: 0, total: 0, currentFile: '' });
+    setScanProgress({ current: 0, total: 0 });
+    setScanAbortController(null);
+    setScanWasCancelled(false);
+    setLastScanPosition(0);
+
+    if (initialFiles && initialFiles.length > 0) {
+      setFiles(initialFiles.map(mapToMediaFile));
+      setLoading(false);
+      setIsScanning(false);
+      return;
     }
-  }, [open, folderPath]);
+
+    if (folderPath) {
+      scanFolder();
+    } else {
+      setFiles([]);
+      setLoading(false);
+      setIsScanning(false);
+    }
+  }, [open, folderPath, initialFiles]);
 
   // Cleanup effect to abort scan when dialog closes
   useEffect(() => {
@@ -176,7 +259,13 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
                   // Update files state incrementally
                   const currentFileIndex = skipFiles + allFiles.length - 1;
                   const newFile = allFiles[allFiles.length - 1];
-                  const mediaType = newFile.mediaType || (newFile.season || newFile.episode ? 'tv' : (defaultMediaType === 'default' ? (newFile.season || newFile.episode ? 'tv' : 'movie') : defaultMediaType));
+                  const mediaType = inferImportMediaType({
+                    explicitMediaType: newFile.mediaType,
+                    filePath: newFile.path,
+                    season: newFile.season,
+                    episode: newFile.episode,
+                    defaultMediaType
+                  });
                   const baseFile = {
                     id: `file-${currentFileIndex}`,
                     fileName: newFile.name,
@@ -860,14 +949,18 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             backgroundImage: 'none'
           }}>
             <Typography variant="h6" color="text.secondary">
-              No Media Files Found
+              {initialFiles ? 'No Failed Entries Found' : 'No Media Files Found'}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 400 }}>
-              No video files were found in the selected folder. Please ensure the folder contains supported video files (.mkv, .mp4, .avi, etc.).
+              {initialFiles
+                ? 'No failed entries are available for manual import.'
+                : 'No video files were found in the selected folder. Please ensure the folder contains supported video files (.mkv, .mp4, .avi, etc.).'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
-              Folder: {folderPath}
-            </Typography>
+            {!initialFiles && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+                Folder: {folderPath}
+              </Typography>
+            )}
           </Box>
         ) : processing ? (
           <Box sx={{

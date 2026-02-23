@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Search as SearchIcon, Refresh as RefreshIcon, CloudDownload, PlayArrow, Download, Delete as DeleteIcon, RestartAlt, MoreVert, Schedule, Storage as StorageIcon, CheckCircle, Error as ErrorIcon, HourglassEmpty, CloudSync, Pending, Warning, ContentCopy, ArrowUpward, ArrowDownward, Folder, Movie, Tv } from '@mui/icons-material';
 import axios from 'axios';
 import './RealDebridBrowser.css';
+import { inferMediaTypeFromText } from '../../utils/mediaType';
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
@@ -98,10 +99,7 @@ const getStatusConfig = (status: string) => {
 };
 
 // Detect if name is likely a TV show or movie
-const getMediaType = (name: string) => {
-  const isTvShow = /s\d{1,2}e\d{1,2}|season|episode|\d{1,2}x\d{2}/i.test(name);
-  return isTvShow ? 'tv' : 'movie';
-};
+const getMediaType = (name: string) => inferMediaTypeFromText(name);
 
 // Extract quality tag from name
 const getQualityTag = (name: string): string | null => {

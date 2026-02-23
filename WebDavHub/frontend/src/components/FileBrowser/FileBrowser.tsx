@@ -19,6 +19,7 @@ import ListView from './ListView';
 import AlphabetIndex from './AlphabetIndex';
 import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
+import { normalizeMediaType } from '../../utils/mediaType';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -534,7 +535,7 @@ const FileBrowserContent: React.FC = () => {
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
       if (tmdb || file.tmdbId) {
-        const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
+        const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
         const tmdbId = tmdb?.id || file.tmdbId;
 
         // Use the correct path from search results (with base_path)
@@ -547,7 +548,7 @@ const FileBrowserContent: React.FC = () => {
 
         navigate(`/media${mediaPath}`, {
           state: {
-            mediaType: isTvShow ? 'tv' : 'movie',
+            mediaType,
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: parentPath,
@@ -644,7 +645,7 @@ const FileBrowserContent: React.FC = () => {
 
           folderFetchRef.current[file.name] = true;
           tmdbProcessingRef.current[file.name] = true;
-          const mediaType = (file.mediaType || (file.hasSeasonFolders ? 'tv' : 'movie')).toLowerCase();
+          const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
 
           try {
             if (file.posterPath && file.tmdbId && file.mediaType) {

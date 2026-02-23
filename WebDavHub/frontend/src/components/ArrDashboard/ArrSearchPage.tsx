@@ -14,6 +14,7 @@ import {
 import axios from 'axios';
 import { SearchResult } from './types';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
+import { normalizeMediaType } from '../../utils/mediaType';
 
 interface ArrSearchPageProps {
   mediaType: 'movie' | 'tv';
@@ -120,7 +121,7 @@ export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps)
       const response = await axios.get('/api/tmdb/search', {
         params: {
           query,
-          mediaType: mediaType === 'tv' ? 'tv' : 'movie'
+          mediaType: normalizeMediaType(mediaType)
         }
       });
 

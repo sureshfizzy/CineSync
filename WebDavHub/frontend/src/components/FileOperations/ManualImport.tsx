@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, TextField, InputAdornment, IconButton, useTheme, CircularProgress } from '@mui/material';
 import { Close as CloseIcon, Folder as FolderIcon, Person as PersonIcon } from '@mui/icons-material';
 import FolderSelector from './FolderSelector';
-import InteractiveImportDialog from './InteractiveImportDialog';
+import InteractiveImportDialog, { type InteractiveImport } from './InteractiveImportDialog';
 
 interface ManualImportProps {
   open: boolean;
   onClose: () => void;
+  initialFiles?: InteractiveImport[];
+  initialTitle?: string;
 }
 
-const ManualImport: React.FC<ManualImportProps> = ({ open, onClose }) => {
+const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles, initialTitle }) => {
   const theme = useTheme();
   const [selectedPath, setSelectedPath] = useState('');
   const [folderSelectorOpen, setFolderSelectorOpen] = useState(false);
@@ -61,6 +63,17 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose }) => {
     // Open the interactive import dialog
     setInteractiveImportOpen(true);
   };
+
+  if (initialFiles && initialFiles.length > 0) {
+    return (
+      <InteractiveImportDialog
+        open={open}
+        onClose={onClose}
+        folderPath={initialTitle || 'Failed Entries'}
+        initialFiles={initialFiles}
+      />
+    );
+  }
 
   return (
     <Dialog

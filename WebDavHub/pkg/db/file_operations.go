@@ -35,6 +35,7 @@ type FileOperation struct {
 	Error           string `json:"error,omitempty"`
 	TmdbID          string `json:"tmdbId,omitempty"`
 	SeasonNumber    int    `json:"seasonNumber,omitempty"`
+	FileSize        int64  `json:"fileSize,omitempty"`
 	Type            string `json:"type"`
 	Operation       string `json:"operation"`
 }
@@ -1573,6 +1574,17 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 		return operations, nil
 	}
 
+	// Check if file_size column exists
+	var hasFileSizeColumn bool
+	var sizeDummy sql.NullInt64
+	err = db.QueryRow("SELECT file_size FROM processed_files LIMIT 1").Scan(&sizeDummy)
+	hasFileSizeColumn = err == nil || !strings.Contains(err.Error(), "no such column")
+
+	fileSizeSelect := "0 as file_size"
+	if hasFileSizeColumn {
+		fileSizeSelect = "COALESCE(file_size, 0) as file_size"
+	}
+
 	var failuresQuery string
 	var queryArgs []interface{}
 
@@ -1586,7 +1598,8 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 				COALESCE(season_number, '') as season_number,
 				COALESCE(reason, '') as reason,
 				COALESCE(error_message, '') as error_message,
-				COALESCE(processed_at, '') as processed_at
+				COALESCE(processed_at, '') as processed_at,
+				` + fileSizeSelect + `
 			FROM processed_files
 			WHERE reason IS NOT NULL AND reason != '' AND
 				  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
@@ -1606,7 +1619,8 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 				COALESCE(season_number, '') as season_number,
 				COALESCE(reason, '') as reason,
 				COALESCE(error_message, '') as error_message,
-				COALESCE(processed_at, '') as processed_at
+				COALESCE(processed_at, '') as processed_at,
+				` + fileSizeSelect + `
 			FROM processed_files
 			WHERE reason IS NOT NULL AND reason != '' AND
 				  NOT (LOWER(reason) LIKE '%skipped%' OR LOWER(reason) LIKE '%extra%' OR
@@ -1629,8 +1643,9 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 		var op FileOperation
 		var seasonStr, processedAt string
 		var errorMessage sql.NullString
+		var fileSize sql.NullInt64
 
-		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason, &errorMessage, &processedAt)
+		err := rows.Scan(&op.FilePath, &op.DestinationPath, &op.TmdbID, &seasonStr, &op.Reason, &errorMessage, &processedAt, &fileSize)
 		if err != nil {
 			logger.Warn("Failed to scan failure row: %v", err)
 			continue
@@ -1644,6 +1659,10 @@ func getFailureRecordsWithPagination(db *sql.DB, limit, offset int, searchQuery 
 
 		if errorMessage.Valid {
 			op.Error = errorMessage.String
+		}
+
+		if fileSize.Valid && fileSize.Int64 > 0 {
+			op.FileSize = fileSize.Int64
 		}
 
 		if seasonStr != "" && seasonStr != "NULL" {

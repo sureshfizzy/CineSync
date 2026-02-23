@@ -19,6 +19,7 @@ import { TmdbResult, searchTmdb } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
 import { libraryApi, LibraryItem } from '../../api/libraryApi';
 import ArrWantedList from './ArrWantedList';
+import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
 
 interface ArrDashboardProps {
   filter?: 'all' | 'movies' | 'series' | 'wanted';
@@ -142,7 +143,7 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
 
   const handleFileClick = (file: FileItem, tmdb: TmdbResult | null) => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
-      const isTvShow = file.mediaType === 'tv' || file.hasSeasonFolders;
+      const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
       const tmdbId = tmdb?.id || file.tmdbId;
 
       if (tmdbId) {
@@ -151,10 +152,10 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
         mediaPathParts.pop();
         const parentPath = '/' + mediaPathParts.join('/') + (mediaPathParts.length > 0 ? '/' : '');
 
-        const typeSegment = isTvShow ? 'tv' : 'movie';
+        const typeSegment = mediaType;
         navigate(`/media/${typeSegment}/${encodeURIComponent(tmdbId.toString())}`, {
           state: {
-            mediaType: isTvShow ? 'tv' : 'movie',
+            mediaType,
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: parentPath,
@@ -346,7 +347,7 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
                       // Treat library entries like directories so PosterView renders posters
                       type: 'directory' as const,
                       isSeasonFolder: false,
-                      hasSeasonFolders: item.media_type === 'tv' ? true : false,
+                      hasSeasonFolders: isTvMediaType(item.media_type),
                       size: '--',
                       modified: new Date(item.added_at * 1000).toISOString(),
                       mediaType: item.media_type,

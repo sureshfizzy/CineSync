@@ -4,6 +4,7 @@ import { Close as CloseIcon, Search as SearchIcon, Movie as MovieIcon, Tv as TvI
 import axios from 'axios';
 import { SearchResult } from './types';
 import FolderSelector from '../FileOperations/FolderSelector';
+import { normalizeMediaType } from '../../utils/mediaType';
 
 interface ArrSearchModalProps {
   open: boolean;
@@ -119,7 +120,7 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
       const response = await axios.get('/api/tmdb/search', {
         params: {
           query,
-          mediaType: mediaType === 'tv' ? 'tv' : 'movie'
+          mediaType: normalizeMediaType(mediaType)
         }
       });
 

@@ -26,6 +26,7 @@ import { getFileIcon } from './fileUtils';
 import CategoryPosterDisplay from './CategoryPosterDisplay';
 import PosterImage from './PosterImage';
 import './poster-optimizations.css';
+import { mediaTypeFromTmdb } from '../../utils/mediaType';
 
 interface PosterViewProps {
   files: FileItem[];
@@ -406,7 +407,7 @@ const PosterView = memo(({
                           <PosterImage
                             tmdbId={tmdbId}
                             posterPath={posterPath}
-                            mediaType={tmdb?.media_type || (tmdb?.first_air_date ? 'tv' : 'movie')}
+                            mediaType={mediaTypeFromTmdb(tmdb?.media_type, tmdb?.first_air_date)}
                             size="w92"
                             className="poster-image"
                             alt={`${title} (loading)`}
@@ -428,7 +429,7 @@ const PosterView = memo(({
                           <PosterImage
                             tmdbId={tmdbId}
                             posterPath={posterPath}
-                            mediaType={tmdb?.media_type || (tmdb?.first_air_date ? 'tv' : 'movie')}
+                            mediaType={mediaTypeFromTmdb(tmdb?.media_type, tmdb?.first_air_date)}
                             className="poster-image"
                             alt={title}
                             style={{

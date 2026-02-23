@@ -10,9 +10,61 @@ import { useSSEEventListener } from '../../hooks/useCentralizedSSE';
 import { FileItem } from '../FileBrowser/types';
 import ModifyDialog from '../FileBrowser/ModifyDialog/ModifyDialog';
 import ManualImport from './ManualImport';
+import type { InteractiveImport } from './InteractiveImportDialog';
+import { inferImportMediaType } from '../../utils/mediaType';
 
 
 const MotionFab = motion(Fab);
+
+const formatFileSize = (bytes?: number): string | undefined => {
+  if (!bytes || bytes <= 0) return undefined;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const mapFailedOperation = (op: FileOperation): InteractiveImport | null => {
+  if (!op.filePath) return null;
+
+  const parsedTmdbId = op.tmdbId ? parseInt(op.tmdbId, 10) : NaN;
+  const tmdbId = Number.isFinite(parsedTmdbId) ? parsedTmdbId : undefined;
+  const mediaType = inferImportMediaType({
+    operationType: op.type,
+    filePath: op.filePath,
+    season: op.seasonNumber
+  });
+
+  return {
+    id: op.id,
+    fileName: op.fileName,
+    filePath: op.filePath,
+    mediaType,
+    seriesId: mediaType === 'tv' ? tmdbId : undefined,
+    movieId: mediaType === 'movie' ? tmdbId : undefined,
+    season: op.seasonNumber && op.seasonNumber > 0 ? op.seasonNumber : undefined,
+    size: formatFileSize(op.fileSize),
+    releaseType: mediaType === 'tv' ? 'Episode' : 'Movie'
+  };
+};
+
+const FailedOperations = (failedOperations: FileOperation[]): InteractiveImport[] => {
+  const uniqueByPath = new Map<string, InteractiveImport>();
+
+  failedOperations.forEach((op) => {
+    const seedFile = mapFailedOperation(op);
+    if (!seedFile || uniqueByPath.has(seedFile.filePath)) {
+      return;
+    }
+    uniqueByPath.set(seedFile.filePath, seedFile);
+  });
+
+  return Array.from(uniqueByPath.values());
+};
 
 interface FileOperation {
   id: string;
@@ -25,6 +77,7 @@ interface FileOperation {
   error?: string;
   tmdbId?: string;
   seasonNumber?: number;
+  fileSize?: number;
   type: 'movie' | 'tvshow' | 'other';
   operation?: 'process' | 'delete';
 }
@@ -174,6 +227,8 @@ function FileOperations() {
   const [autoProcessingFiles, setAutoProcessingFiles] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [manualImportOpen, setManualImportOpen] = useState(false);
+  const [manualImportLoading, setManualImportLoading] = useState(false);
+  const [manualImport, setManualImport] = useState<InteractiveImport[]>([]);
 
   const fetchAutoModeSetting = async () => {
     try {
@@ -418,6 +473,38 @@ function FileOperations() {
 
     return allOperations;
   }, []);
+
+  const handleCloseManualImport = () => {
+    setManualImportOpen(false);
+    setManualImport([]);
+  };
+
+  const handleOpenManualImport = async () => {
+    if (manualImportLoading) return;
+
+    if (tabValue !== 2) {
+      setManualImport([]);
+      setManualImportOpen(true);
+      return;
+    }
+
+    setManualImportLoading(true);
+    try {
+      const failedOperations = await fetchAllFailedOperations();
+      const seedFiles = FailedOperations(failedOperations);
+      if (seedFiles.length === 0) {
+        setError('No failed files available for manual import.');
+        return;
+      }
+
+      setManualImport(seedFiles);
+      setManualImportOpen(true);
+    } catch (error: any) {
+      setError(error.response?.data?.error || error.message || 'Failed to load failed files for manual import');
+    } finally {
+      setManualImportLoading(false);
+    }
+  };
 
   const handleExportFailedFiles = async () => {
     if (failedActionLoading) return;
@@ -3567,7 +3654,8 @@ function FileOperations() {
               <MotionFab
                 color="secondary"
                 aria-label="manual import"
-                onClick={() => setManualImportOpen(true)}
+                onClick={handleOpenManualImport}
+                disabled={manualImportLoading}
                 sx={{
                   position: 'fixed',
                   bottom: 24,
@@ -3583,7 +3671,7 @@ function FileOperations() {
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <AssignmentIcon sx={{ fontSize: 24 }} />
+                {manualImportLoading ? <CircularProgress size={24} sx={{ color: 'white' }} /> : <AssignmentIcon sx={{ fontSize: 24 }} />}
               </MotionFab>
 
               {/* Refresh FAB */}
@@ -3629,7 +3717,8 @@ function FileOperations() {
               <MotionFab
                 color="secondary"
                 aria-label="manual import"
-                onClick={() => setManualImportOpen(true)}
+                onClick={handleOpenManualImport}
+                disabled={manualImportLoading}
                 sx={{
                   position: 'fixed',
                   bottom: 24,
@@ -3645,7 +3734,7 @@ function FileOperations() {
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <AssignmentIcon sx={{ fontSize: 24 }} />
+                {manualImportLoading ? <CircularProgress size={24} sx={{ color: 'white' }} /> : <AssignmentIcon sx={{ fontSize: 24 }} />}
               </MotionFab>
 
               {/* Refresh FAB */}
@@ -4158,7 +4247,9 @@ function FileOperations() {
       {/* Manual Import Dialog */}
       <ManualImport
         open={manualImportOpen}
-        onClose={() => setManualImportOpen(false)}
+        onClose={handleCloseManualImport}
+        initialFiles={manualImport}
+        initialTitle="Failed Entries"
       />
 
     </Box>
