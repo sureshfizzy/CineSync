@@ -654,6 +654,16 @@ def main(dest_dir):
 
             if terminate_flag.is_set():
                 log_message("Termination requested, stopping monitor thread", level="INFO")
+                terminate_subprocesses()
+                remove_lock_file()
+                sys.exit(1)
+
+            if not monitor_thread.is_alive():
+                log_message("RealTime-Monitoring stopped unexpectedly. Shutting down MediaHub.", level="ERROR")
+                set_shutdown()
+                terminate_subprocesses()
+                remove_lock_file()
+                sys.exit(1)
         else:
             if is_single_file_operation:
                 log_message("Single file operation - skipping monitoring services for faster processing", level="INFO")

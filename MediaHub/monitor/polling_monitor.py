@@ -442,6 +442,7 @@ def initial_scan(dirs_to_watch):
     """Performs an initial scan of directories to capture the current state of files."""
     log_message("Starting initial directory scan", level="INFO")
     current_files = {}
+    missing_directories = []
 
     for directory in dirs_to_watch:
         log_message(f"Performing initial scan of directory: {directory}", level="DEBUG")
@@ -458,6 +459,11 @@ def initial_scan(dirs_to_watch):
                 log_message(f"Error during initial scan of {directory}: {str(e)}", level="ERROR")
         else:
             log_message(f"Directory not found during initial scan: {directory}", level="ERROR")
+            missing_directories.append(directory)
+
+    if missing_directories:
+        log_message("Initial scan failed due to missing source directories. Triggering shutdown.", level="ERROR")
+        set_shutdown()
 
     log_message("Initial directory scan completed", level="INFO")
     return current_files
