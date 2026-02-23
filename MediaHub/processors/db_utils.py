@@ -568,6 +568,28 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
 
     try:
         cursor = conn.cursor()
+        # Safety guard: don't overwrite a valid existing destination entry with a skip-only row.
+        # This can happen when a later conflict/skip path is processed for a source that is
+        # already correctly linked in the database.
+        if reason and not dest_path:
+            cursor.execute(
+                "SELECT destination_path, reason FROM processed_files WHERE file_path = ?",
+                (source_path,)
+            )
+            existing_row = cursor.fetchone()
+            if existing_row:
+                existing_dest_raw, existing_reason = existing_row
+
+                # Keep existing valid destination mapping.
+                if existing_dest_raw:
+                    existing_dest = normalize_file_path(existing_dest_raw)
+                    if existing_dest and os.path.exists(existing_dest):
+                        return
+
+                # Keep previous reason-only state if a valid reason already exists.
+                if existing_reason and existing_reason != reason:
+                    return
+
 
         # Check if this is a new file (not an update)
         cursor.execute("SELECT COUNT(*) FROM processed_files WHERE file_path = ?", (source_path,))
