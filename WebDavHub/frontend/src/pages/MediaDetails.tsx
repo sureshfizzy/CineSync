@@ -54,9 +54,7 @@ export default function MediaDetails() {
 
   // Function to handle smooth folder name transitions
   const handleFolderNameChange = useCallback((newFolderName: string, newTmdbId?: string | number) => {
-    if (newFolderName === folderName) return;
-
-
+    if (newFolderName === folderName && (!newTmdbId || newTmdbId === tmdbId)) return;
 
     // Clear any existing transition timeout
     if (transitionTimeoutRef.current) {
@@ -69,24 +67,32 @@ export default function MediaDetails() {
 
     // Add a brief delay to allow for smooth visual transition
     transitionTimeoutRef.current = window.setTimeout(() => {
-      // Build new path by replacing the last segment with the new folder name
-      const pathParts = fullPath.split('/').filter(Boolean);
-      pathParts[pathParts.length - 1] = newFolderName;
-      const newFullPath = '/' + pathParts.join('/');
+      const nextTmdbId = newTmdbId || tmdbId;
+      const prevState = (location.state as any) || {};
+      const baseState = {
+        ...prevState,
+        mediaType,
+        tmdbId: nextTmdbId,
+        currentPath,
+        folderName: newFolderName,
+        tmdbData: undefined,
+        isTransition: true
+      };
 
-
-
-      // Navigate to the new full path, preserving TMDB ID if available
-      navigate(`/media${newFullPath}`, {
-        state: {
-          mediaType,
-          tmdbId: newTmdbId || tmdbId, // Use new TMDB ID if provided, otherwise keep current
-          currentPath,
-          tmdbData: undefined, // Don't preserve old data - force fresh fetch with correct ID
-          isTransition: true
-        },
-        replace: true // Replace current history entry to avoid back button issues
-      });
+      if (isTypedTmdbRoute || isLegacyTmdbRoute) {
+        navigate(location.pathname, {
+          state: baseState,
+          replace: true
+        });
+      } else {
+        const pathParts = fullPath.split('/').filter(Boolean);
+        pathParts[pathParts.length - 1] = newFolderName;
+        const newFullPath = '/' + pathParts.join('/');
+        navigate(`/media${newFullPath}`, {
+          state: baseState,
+          replace: true
+        });
+      }
 
       // Reset transition state after navigation and allow time for data fetch
       setTimeout(() => {
@@ -94,9 +100,8 @@ export default function MediaDetails() {
         setPendingFolderName(null);
       }, 500); // Longer delay to allow for data fetching
     }, 400); // Slightly longer delay for smoother transition
-  }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath]);
+  }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath, isTypedTmdbRoute, isLegacyTmdbRoute, location.pathname, location.state]);
 
-  // Test function to manually trigger transition (for debugging)
   const testTransition = useCallback(() => {
     const testFolderName = `${folderName} (Test)`;
 

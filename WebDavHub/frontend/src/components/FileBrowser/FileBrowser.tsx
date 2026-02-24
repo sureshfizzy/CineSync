@@ -536,7 +536,12 @@ const FileBrowserContent: React.FC = () => {
     if (file.type === 'directory' && !file.isSeasonFolder) {
       if (tmdb || file.tmdbId) {
         const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
-        const tmdbId = tmdb?.id || file.tmdbId;
+        const tmdbId = tmdb?.id ?? file.tmdbId;
+        if (!tmdbId) {
+          const targetPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
+          handlePathClick(targetPath);
+          return;
+        }
 
         // Use the correct path from search results (with base_path)
         const mediaPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
@@ -546,12 +551,15 @@ const FileBrowserContent: React.FC = () => {
         mediaPathParts.pop();
         const parentPath = '/' + mediaPathParts.join('/') + (mediaPathParts.length > 0 ? '/' : '');
 
-        navigate(`/media${mediaPath}`, {
+        const typeSegment = mediaType;
+        navigate(`/media/${typeSegment}/${encodeURIComponent(tmdbId.toString())}`, {
           state: {
             mediaType,
             tmdbId,
             hasSeasonFolders: file.hasSeasonFolders,
             currentPath: parentPath,
+            folderName: file.name,
+            legacyPath: mediaPath,
             tmdbData: tmdb,
             returnPage: page, // Preserve current page for navigation back
             returnSearch: search // Preserve current search for navigation back

@@ -663,13 +663,15 @@ const RecentlyAddedMedia: React.FC = () => {
     if (!targetName) return;
 
     const basePath = media.basePath || media.folderName;
-    const relativePath = `/${basePath}/${targetName}`;
 
-    navigate(`/media${relativePath}`, {
+    const typeSegment = mediaType;
+    navigate(`/media/${typeSegment}/${encodeURIComponent(media.tmdbId.toString())}`, {
       state: {
         mediaType,
         tmdbId: media.tmdbId,
         currentPath: `/${basePath}/`,
+        folderName: targetName,
+        legacyPath: `/${basePath}/${targetName}`,
         returnPage: 1,
         returnSearch: ''
       }
