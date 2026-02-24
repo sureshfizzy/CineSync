@@ -273,7 +273,7 @@ func InitializeFolderCache() error {
 
 			// Smart caching: Load first 2000 folders (covers most navigation patterns)
 			// This balances memory usage vs performance for large libraries
-			categoryFolders, totalCategory, err := GetFoldersFromDatabasePaginated(cat, 1, 2000)
+			categoryFolders, totalCategory, err := GetFoldersFromDatabasePaginated(cat, 1, 2000, "", "")
 
 			results <- categoryResult{
 				category: cat,
@@ -824,7 +824,7 @@ type FolderInfo struct {
 	Quality      string `json:"quality,omitempty"`
 }
 
-func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]FolderInfo, int, error) {
+func GetFoldersFromDatabasePaginated(basePath string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -834,20 +834,71 @@ func GetFoldersFromDatabasePaginated(basePath string, page, limit int) ([]Folder
 	cleanBasePath := strings.Trim(basePath, "/\\")
 
 	if cleanBasePath == "" {
-		// Root level - don't query database, let filesystem handle it
-		return nil, 0, fmt.Errorf("root level should use filesystem")
+		// Root level - return top-level categories from DB
+		offset := (page - 1) * limit
+		result, total, err := getRootFoldersPaginated(mediaHubDB, page, limit, offset, mediaType, tmdbId)
+		return result, total, err
 	}
 
 	// Category level - get movies/shows using optimized database query
 	offset := (page - 1) * limit
-	result, total, err := getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset)
+	result, total, err := getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset, mediaType, tmdbId)
 	return result, total, err
 }
 
 
 
+// getRootFoldersPaginated gets top-level category folders from base_path
+func getRootFoldersPaginated(db *sql.DB, page, limit, offset int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
+	where := "WHERE base_path IS NOT NULL AND base_path != ''"
+	args := []interface{}{}
+	if strings.TrimSpace(mediaType) != "" {
+		where += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		where += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
+	}
+
+	countQuery := `SELECT COUNT(*) FROM (SELECT DISTINCT CASE WHEN instr(REPLACE(base_path, '/', '\\'), '\\') > 0 THEN substr(REPLACE(base_path, '/', '\\'), 1, instr(REPLACE(base_path, '/', '\\'), '\\') - 1) ELSE REPLACE(base_path, '/', '\\') END AS root_folder FROM processed_files ` + where + `)`
+
+	var total int
+	if err := db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := `SELECT DISTINCT CASE WHEN instr(REPLACE(base_path, '/', '\\'), '\\') > 0 THEN substr(REPLACE(base_path, '/', '\\'), 1, instr(REPLACE(base_path, '/', '\\'), '\\') - 1) ELSE REPLACE(base_path, '/', '\\') END AS root_folder FROM processed_files ` + where + ` ORDER BY root_folder LIMIT ? OFFSET ?`
+	queryArgs := append(append([]interface{}{}, args...), limit, offset)
+
+	rows, err := db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var folders []FolderInfo
+	for rows.Next() {
+		var root string
+		if err := rows.Scan(&root); err != nil {
+			continue
+		}
+		if root == "" {
+			continue
+		}
+		folders = append(folders, FolderInfo{
+			FolderName: root,
+			FolderPath: "/" + root,
+			TmdbID:     "",
+			MediaType:  "",
+		})
+	}
+
+	return folders, total, nil
+}
+
 // getCategoryFoldersPaginated gets folders within a category using base_path field
-func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offset int) ([]FolderInfo, int, error) {
+func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offset int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	destDir := env.GetString("DESTINATION_DIR", "")
 	if destDir == "" {
 		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
@@ -862,17 +913,30 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 	// Normalize path separators - database stores with backslashes, API uses forward slashes
 	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
 
+	// Build filters
+	filterArgs := []interface{}{}
+	filterSQL := ""
+	if strings.TrimSpace(mediaType) != "" {
+		filterSQL += " AND LOWER(media_type) = ?"
+		filterArgs = append(filterArgs, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		filterSQL += " AND CAST(tmdb_id AS TEXT) = ?"
+		filterArgs = append(filterArgs, tmdbId)
+	}
+
 	// First check for exact match (leaf category with content)
-	exactMatchQuery := `SELECT COUNT(*) FROM processed_files WHERE base_path = ?`
+	exactMatchQuery := "SELECT COUNT(*) FROM processed_files WHERE base_path = ?" + filterSQL
 	var exactCount int
-	err := db.QueryRow(exactMatchQuery, normalizedCategory).Scan(&exactCount)
+	args := append([]interface{}{normalizedCategory}, filterArgs...)
+	err := db.QueryRow(exactMatchQuery, args...).Scan(&exactCount)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	if exactCount > 0 {
 		// This is a leaf category, return content folders
-		return getCategoryContentFolders(db, normalizedCategory, page, limit, offset)
+		return getCategoryContentFolders(db, normalizedCategory, page, limit, offset, mediaType, tmdbId)
 	}
 
 	// No exact match, look for subcategories
@@ -881,12 +945,13 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 		FROM processed_files
 		WHERE base_path IS NOT NULL
 		AND base_path != ''
-		AND base_path LIKE ?
+		AND base_path LIKE ?` + filterSQL + `
 		ORDER BY base_path`
 
 	likePattern := normalizedCategory + string(filepath.Separator) + "%"
+	args = append([]interface{}{likePattern}, filterArgs...)
 
-	rows, err := db.Query(subcategoryQuery, likePattern)
+	rows, err := db.Query(subcategoryQuery, args...)
 	if err != nil {
 		logger.Debug("Failed to query subcategories: %v", err)
 		return nil, 0, err
@@ -901,7 +966,6 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 		}
 		subcategoryBasePaths = append(subcategoryBasePaths, basePath)
 	}
-
 
 
 	// Extract the next level folder names from subcategory base_paths
@@ -937,9 +1001,20 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 }
 
 // getCategoryContentFolders gets content folders for a leaf category
-func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset int) ([]FolderInfo, int, error) {
+func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	if strings.Contains(basePath, "(") && strings.Contains(basePath, ")") {
 		return []FolderInfo{}, 0, nil
+	}
+
+	filterSQL := ""
+	args := []interface{}{basePath}
+	if strings.TrimSpace(mediaType) != "" {
+		filterSQL += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		filterSQL += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
 	}
 
 	query := `
@@ -956,12 +1031,13 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 		FROM processed_files
 		WHERE base_path = ?
 		AND proper_name IS NOT NULL
-		AND proper_name != ''
+		AND proper_name != ''` + filterSQL + `
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, basePath, limit, offset)
+	args = append(args, limit, offset)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		logger.Debug("Failed to query content folders: %v", err)
 		return nil, 0, err
@@ -1000,9 +1076,12 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 	return folders, totalCount, nil
 }
 
-func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInfo, int, error) {
+func GetFoldersFromDatabaseCached(basePath string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	if basePath == "" {
-		return GetFoldersFromDatabasePaginated(basePath, page, limit)
+		return GetFoldersFromDatabasePaginated(basePath, page, limit, mediaType, tmdbId)
+	}
+	if strings.TrimSpace(mediaType) != "" || strings.TrimSpace(tmdbId) != "" {
+		return GetFoldersFromDatabasePaginated(basePath, page, limit, mediaType, tmdbId)
 	}
 
 	cleanBasePath := strings.TrimPrefix(basePath, "/")
@@ -1032,7 +1111,7 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 				// Expand cache by loading more data
 				cache.mu.RUnlock()
 				expandedLimit := startIdx + limit + 500 // Add 500 item buffer
-				expandedFolders, expandedTotal, err := GetFoldersFromDatabasePaginated(cleanBasePath, 1, expandedLimit)
+				expandedFolders, expandedTotal, err := GetFoldersFromDatabasePaginated(cleanBasePath, 1, expandedLimit, mediaType, tmdbId)
 				if err == nil && len(expandedFolders) > len(cachedFolders) {
 					cache.mu.Lock()
 					cache.pathFolders[cleanBasePath] = expandedFolders
@@ -1063,7 +1142,7 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 		cacheLimit = 500
 	}
 
-	result, total, err := GetFoldersFromDatabasePaginated(basePath, 1, cacheLimit)
+	result, total, err := GetFoldersFromDatabasePaginated(basePath, 1, cacheLimit, mediaType, tmdbId)
 
 	if err == nil {
 		// Populate cache with the results
@@ -1089,7 +1168,7 @@ func GetFoldersFromDatabaseCached(basePath string, page, limit int) ([]FolderInf
 }
 
 // SearchFoldersFromDatabase searches folders in the database using proper_name and folder_name
-func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -1099,14 +1178,14 @@ func SearchFoldersFromDatabase(basePath string, searchQuery string, page, limit 
 	cleanBasePath := strings.Trim(basePath, "/\\")
 
 	if cleanBasePath == "" {
-		return searchRootFolders(mediaHubDB, searchQuery, page, limit)
+		return searchRootFolders(mediaHubDB, searchQuery, page, limit, mediaType, tmdbId)
 	}
 
-	return searchCategoryFolders(mediaHubDB, cleanBasePath, searchQuery, page, limit)
+	return searchCategoryFolders(mediaHubDB, cleanBasePath, searchQuery, page, limit, mediaType, tmdbId)
 }
 
 // searchRootFolders searches across all categories
-func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+func searchRootFolders(db *sql.DB, searchQuery string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	destDir := env.GetString("DESTINATION_DIR", "")
 	if destDir == "" {
 		return nil, 0, fmt.Errorf("DESTINATION_DIR not set")
@@ -1116,6 +1195,17 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 	searchPattern := "%" + searchQuery + "%"
 	searchPathPattern := destDir + string(filepath.Separator) + "%"
 	offset := (page - 1) * limit
+
+	filterSQL := ""
+	args := []interface{}{searchPathPattern, searchPattern, searchPattern}
+	if strings.TrimSpace(mediaType) != "" {
+		filterSQL += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		filterSQL += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
+	}
 
 	query := `
 		SELECT
@@ -1134,12 +1224,13 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 		AND destination_path LIKE ?
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
-		AND (proper_name LIKE ? OR year LIKE ?)
+		AND (proper_name LIKE ? OR year LIKE ?)` + filterSQL + `
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, searchPathPattern, searchPattern, searchPattern, limit, offset)
+	args = append(args, limit, offset)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		logger.Debug("Failed to search root folders: %v", err)
 		return nil, 0, err
@@ -1187,7 +1278,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int) ([]Folde
 }
 
 // searchCategoryFolders searches within a specific category
-func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page, limit int) ([]FolderInfo, int, error) {
+func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	if !checkBasePathColumnExists() {
 		return nil, 0, fmt.Errorf("base_path column not available")
 	}
@@ -1196,6 +1287,17 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 
 	searchPattern := "%" + searchQuery + "%"
 	offset := (page - 1) * limit
+	filterSQL := ""
+	args := []interface{}{normalizedCategory, searchPattern, searchPattern}
+	if strings.TrimSpace(mediaType) != "" {
+		filterSQL += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		filterSQL += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
+	}
+
 	query := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
@@ -1210,12 +1312,13 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		WHERE base_path = ?
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
-		AND (proper_name LIKE ? OR year LIKE ?)
+		AND (proper_name LIKE ? OR year LIKE ?)` + filterSQL + `
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, normalizedCategory, searchPattern, searchPattern, limit, offset)
+	args = append(args, limit, offset)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		logger.Debug("Failed to search category folders: %v", err)
 		return nil, 0, err
@@ -1256,7 +1359,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 }
 
 // SearchFoldersFromDatabaseWithLetter searches folders in the database with letter filtering
-func SearchFoldersFromDatabaseWithLetter(basePath string, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+func SearchFoldersFromDatabaseWithLetter(basePath string, letterFilter string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	mediaHubDB, err := GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -1266,14 +1369,14 @@ func SearchFoldersFromDatabaseWithLetter(basePath string, letterFilter string, p
 	cleanBasePath := strings.Trim(basePath, "/\\")
 
 	if cleanBasePath == "" {
-		return searchRootFoldersWithLetter(mediaHubDB, letterFilter, page, limit)
+		return searchRootFoldersWithLetter(mediaHubDB, letterFilter, page, limit, mediaType, tmdbId)
 	}
 
-	return searchCategoryFoldersWithLetter(mediaHubDB, cleanBasePath, letterFilter, page, limit)
+	return searchCategoryFoldersWithLetter(mediaHubDB, cleanBasePath, letterFilter, page, limit, mediaType, tmdbId)
 }
 
 // searchRootFoldersWithLetter searches root folders with letter filtering
-func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	offset := (page - 1) * limit
 	isNumeric := letterFilter == "#"
 
@@ -1287,6 +1390,15 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 		// For letter filter, match folders starting with the specific letter (case insensitive)
 		whereClause = `WHERE LOWER(SUBSTR(proper_name, 1, 1)) = LOWER(?)`
 		args = append(args, letterFilter)
+	}
+
+	if strings.TrimSpace(mediaType) != "" {
+		whereClause += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		whereClause += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
 	}
 
 	query := `
@@ -1350,7 +1462,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 }
 
 // searchCategoryFoldersWithLetter searches category folders with letter filtering
-func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter string, page, limit int) ([]FolderInfo, int, error) {
+func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	// Normalize path separators - database stores with backslashes, API uses forward slashes
 	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
 
@@ -1372,6 +1484,15 @@ func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter s
 		// For letter filter, match folders starting with the specific letter (case insensitive)
 		whereClause += ` AND LOWER(SUBSTR(proper_name, 1, 1)) = LOWER(?)`
 		args = append(args, letterFilter)
+	}
+
+	if strings.TrimSpace(mediaType) != "" {
+		whereClause += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	if strings.TrimSpace(tmdbId) != "" {
+		whereClause += " AND CAST(tmdb_id AS TEXT) = ?"
+		args = append(args, tmdbId)
 	}
 
 	query := `

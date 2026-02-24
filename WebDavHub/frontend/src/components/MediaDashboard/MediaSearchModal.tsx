@@ -6,7 +6,7 @@ import { SearchResult } from './types';
 import FolderSelector from '../FileOperations/FolderSelector';
 import { normalizeMediaType } from '../../utils/mediaType';
 
-interface ArrSearchModalProps {
+interface MediaSearchModalProps {
   open: boolean;
   onClose: () => void;
   mediaType: 'movie' | 'tv';
@@ -31,7 +31,7 @@ const defaultConfig: AddConfig = {
   tags: []
 };
 
-export default function ArrSearchModal({ open, onClose, mediaType, initialQuery }: ArrSearchModalProps) {
+export default function MediaSearchModal({ open, onClose, mediaType, initialQuery }: MediaSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);

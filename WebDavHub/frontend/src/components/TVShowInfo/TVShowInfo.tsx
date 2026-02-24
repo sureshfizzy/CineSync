@@ -15,12 +15,13 @@ interface TVShowInfoProps {
   folderName: string;
   currentPath: string;
   mediaType: 'movie' | 'tv';
+  tmdbId?: string | number;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, onSearchMissing }: TVShowInfoProps) {
+export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: TVShowInfoProps) {
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
     detailsData,
     videoPlayerOpen,
     setVideoPlayerOpen,
-  } = useSeasonFolders({ data, folderName, currentPath, mediaType, setSnackbar });
+  } = useSeasonFolders({ data, folderName, currentPath, mediaType, tmdbId, setSnackbar });
 
   return (
     <Box sx={{ position: 'relative' }}>

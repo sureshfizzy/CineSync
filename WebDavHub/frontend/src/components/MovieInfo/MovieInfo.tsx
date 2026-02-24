@@ -9,7 +9,7 @@ import CastList from './CastList';
 import MediaPathInfo from '../FileBrowser/MediaPathInfo';
 import { MovieInfoProps } from './types';
 
-export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, onSearchMissing }: MovieInfoProps) {
+export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
@@ -38,13 +38,37 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
     async function fetchFiles() {
       try {
         setIsLoadingFiles(true);
-        const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
-        const folderPath = `${normalizedPath}/${folderName}`;
         const token = localStorage.getItem('cineSyncJWT');
         const headers: any = {};
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
+
+        // Prefer DB-backed media files when TMDB ID is available
+        if (tmdbId) {
+          const resp = await axios.get('/api/media-files', {
+            headers,
+            params: { tmdbId, mediaType }
+          });
+          const mediaFiles = Array.isArray(resp.data) ? resp.data : [];
+          if (mediaFiles.length > 0) {
+            const processedFiles = mediaFiles.map((file: any) => ({
+              ...file,
+              type: 'file' as const,
+              fullPath: file.fullPath || file.path || file.destinationPath,
+              sourcePath: file.sourcePath || file.destinationPath || file.path,
+              webdavPath: file.webdavPath || file.path,
+              size: file.size ?? file.fileSize ?? file.filesize ?? '0 B',
+              quality: file.quality ?? file.Quality ?? file.qualityProfile ?? '',
+              modified: file.modified || new Date().toISOString()
+            }));
+            setFileInfo(processedFiles);
+            return;
+          }
+        }
+
+        const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
+        const folderPath = `${normalizedPath}/${folderName}`;
         const folderResponse = await axios.get(`/api/files${folderPath}`, { headers });
         const files = folderResponse.data;
         const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'];
@@ -70,7 +94,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
       }
     }
     fetchFiles();
-  }, [folderName, currentPath]);
+  }, [folderName, currentPath, tmdbId, mediaType]);
 
   return (
     <motion.div
@@ -147,6 +171,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
             mediaType={mediaType}
             selectedFile={selectedFile}
             isParentLoading={isLoadingFiles}
+            tmdbId={tmdbId}
           />
           <CastList data={data} getPosterUrl={getPosterUrl} />
         </motion.div>

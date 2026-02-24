@@ -9,7 +9,7 @@ import axios from 'axios';
 import CircularProgress from '@mui/material/CircularProgress';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSymlinkCreatedListener } from '../hooks/useMediaHubUpdates';
-import ArrSearchModal from '../components/ArrDashboard/ArrSearchModal';
+import MediaSearchModal from '../components/MediaDashboard/MediaSearchModal';
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -323,7 +323,7 @@ export default function MediaDetails() {
           </motion.div>
         </Box>
       )}
-      <ArrSearchModal
+      <MediaSearchModal
         open={arrSearchOpen}
         onClose={() => setArrSearchOpen(false)}
         mediaType={arrSearchMediaType}
@@ -498,6 +498,7 @@ export default function MediaDetails() {
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
                     onSearchMissing={handleOpenArrSearch}
+                    tmdbId={tmdbId}
                   />
                 ) : (
                   <MovieInfo
@@ -507,6 +508,7 @@ export default function MediaDetails() {
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
                     onSearchMissing={handleOpenArrSearch}
+                    tmdbId={tmdbId}
                   />
                 )}
               </Box>

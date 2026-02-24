@@ -100,7 +100,6 @@ func InitLibraryTable() error {
 	if _, err := database.Exec(createRootFoldersTableSQL); err != nil {
 		return fmt.Errorf("failed to create root_folders table: %w", err)
 	}
-	logger.Info("Root folders table created successfully")
 
 	// Create indexes for better performance
 	indexes := []string{
@@ -117,7 +116,6 @@ func InitLibraryTable() error {
 		}
 	}
 
-	logger.Info("Library and root_folders tables initialized successfully")
 	return nil
 }
 

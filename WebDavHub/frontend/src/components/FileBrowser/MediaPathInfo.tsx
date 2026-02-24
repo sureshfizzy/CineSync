@@ -9,6 +9,7 @@ interface MediaPathInfoProps {
   mediaType: 'movie' | 'tv';
   selectedFile?: any;
   isParentLoading?: boolean;
+  tmdbId?: string | number;
 }
 
 interface PathInfo {
@@ -28,6 +29,9 @@ interface FileItem {
   isSeasonFolder?: boolean;
   sourcePath?: string;
   destinationPath?: string;
+  path?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
 }
 
 interface SeasonInfo {
@@ -42,7 +46,7 @@ interface EpisodeInfo {
   path: string;
 }
 
-export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile, isParentLoading }: MediaPathInfoProps) {
+export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile, isParentLoading, tmdbId }: MediaPathInfoProps) {
   const [pathInfo, setPathInfo] = useState<PathInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,25 +54,88 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
   const lastRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // If we don't have a folder name (e.g., TMDB-ID based routes), avoid indefinite loading
-    if (!folderName) {
+    if (selectedFile && (selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path)) {
+      setPathInfo({
+        webdavPath: selectedFile.webdavPath || `Home${selectedFile.path || ''}`,
+        fullPath: selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path,
+        sourcePath: selectedFile.sourcePath || selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path,
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        modified: selectedFile.modified
+      });
       setLoading(false);
       setError(null);
-      lastRequestKeyRef.current = null;
       return;
     }
 
-    const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
-    const folderPath = `${normalizedPath}/${folderName}`;
-    const requestKey = `${folderPath}|${mediaType}|${selectedFile?.name || 'auto'}`;
+    const baseKey = tmdbId ? `tmdb:${tmdbId}` : `${currentPath}|${folderName}`;
+    const requestKey = `${baseKey}|${mediaType}|${selectedFile?.name || 'auto'}`;
     if (lastRequestKeyRef.current === requestKey) {
       // Already requested, skip
       return;
     }
     lastRequestKeyRef.current = requestKey;
+
     const findMediaFile = async () => {
       try {
         setLoading(true);
+
+        if (tmdbId) {
+          const resp = await axios.get('/api/media-files', { params: { tmdbId, mediaType } });
+          const mediaFiles: FileItem[] = Array.isArray(resp.data) ? resp.data : [];
+
+          if (mediaType === 'tv') {
+            const seasonMap: { [seasonNum: number]: EpisodeInfo[] } = {};
+            for (const file of mediaFiles) {
+              const seasonNum = (file as any).seasonNumber || 0;
+              if (!seasonMap[seasonNum]) seasonMap[seasonNum] = [];
+              seasonMap[seasonNum].push({
+                name: file.name,
+                size: file.size || '--',
+                modified: file.modified || '--',
+                path: (file as any).path || ''
+              });
+            }
+
+            const seasonsData: SeasonInfo[] = Object.entries(seasonMap)
+              .filter(([seasonNum, episodes]) => parseInt(seasonNum) > 0 && episodes.length > 0)
+              .map(([seasonNum, episodes]) => ({
+                name: `Season ${seasonNum}`,
+                episodes: episodes.sort((a, b) => {
+                  const aEp = parseInt(a.name.match(/[Ee](\d+)/)?.[1] || '0');
+                  const bEp = parseInt(b.name.match(/[Ee](\d+)/)?.[1] || '0');
+                  return aEp - bEp;
+                })
+              }));
+
+            setSeasons(seasonsData);
+            setLoading(false);
+            return;
+          }
+
+          const mediaFile = mediaFiles[0];
+          if (mediaFile) {
+            setPathInfo({
+              webdavPath: `Home${(mediaFile as any).path || ''}`,
+              fullPath: (mediaFile as any).destinationPath || (mediaFile as any).fullPath || (mediaFile as any).path,
+              sourcePath: (mediaFile as any).sourcePath || (mediaFile as any).destinationPath || (mediaFile as any).fullPath || (mediaFile as any).path,
+              fileName: mediaFile.name,
+              fileSize: mediaFile.size,
+              modified: mediaFile.modified
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
+        // If we don't have a folder name (e.g., TMDB-ID based routes), avoid indefinite loading
+        if (!folderName) {
+          setLoading(false);
+          setError(null);
+          lastRequestKeyRef.current = null;
+          return;
+        }
+
         // Remove any double slashes and ensure proper path format
         const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
         const folderPath = `${normalizedPath}/${folderName}`;
@@ -164,7 +231,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
     if (folderName) {
       findMediaFile();
     }
-  }, [folderName, currentPath, mediaType, selectedFile, isParentLoading]);
+  }, [folderName, currentPath, mediaType, selectedFile, isParentLoading, tmdbId]);
 
   if (loading) {
     return (

@@ -1,9 +1,9 @@
 import { Box, useMediaQuery, useTheme, Drawer } from '@mui/material';
 import { Outlet, useOutletContext, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Sidebar from './Sidebar';
 import DebridSidebar from '../Debrid/DebridSidebar';
-import { ArrSidebar } from '../ArrDashboard';
+import { MediaSidebar } from '../MediaDashboard';
 import Topbar from './Topbar';
 
 interface LayoutProps {
@@ -66,18 +66,6 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
     handleRefresh,
   };
 
-  const [activeDashboardView, setActiveDashboardView] = useState<'current' | 'arrdash'>('current');
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.view === 'arrdash' || detail?.view === 'current') {
-        setActiveDashboardView(detail.view);
-      }
-    };
-    window.addEventListener('dashboardViewChanged', handler as EventListener);
-    return () => window.removeEventListener('dashboardViewChanged', handler as EventListener);
-  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
@@ -103,9 +91,8 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
-             location.pathname.startsWith('/dashboard/') ? (
-              <ArrSidebar />
+            ) : ( location.pathname.startsWith('/Mediadashboard') ? (
+              <MediaSidebar />
             ) : (
               <Sidebar
                 currentView={view}
@@ -138,9 +125,8 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : ( (location.pathname === '/dashboard' && activeDashboardView === 'arrdash') || 
-             location.pathname.startsWith('/dashboard/') ? (
-              <ArrSidebar />
+            ) : ( location.pathname.startsWith('/Mediadashboard') ? (
+              <MediaSidebar />
             ) : (
               <Sidebar
                 onNavigate={handleSidebarNavigate}

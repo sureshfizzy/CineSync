@@ -281,6 +281,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard/*" element={<DashboardSwitcher />} />
+        <Route path="Mediadashboard/*" element={<DashboardSwitcher />} />
         <Route path="files/*" element={<FileBrowser />} />
         <Route path="browse/*" element={<FileBrowser />} />
         <Route path="file-operations" element={<FileOperations />} />

@@ -8,10 +8,11 @@ interface UseSeasonFoldersProps {
   folderName: string;
   currentPath: string;
   mediaType: 'movie' | 'tv';
+  tmdbId?: string | number;
   setSnackbar: (snackbar: { open: boolean, message: string, severity: 'success' | 'error' }) => void;
 }
 
-export default function useSeasonFolders({ data, folderName, currentPath, mediaType, setSnackbar }: UseSeasonFoldersProps) {
+export default function useSeasonFolders({ data, folderName, currentPath, mediaType, tmdbId, setSnackbar }: UseSeasonFoldersProps) {
   const [seasonFolders, setSeasonFolders] = useState<SeasonFolderInfo[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [errorFiles, setErrorFiles] = useState<string | null>(null);
@@ -28,6 +29,52 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
     setLoadingFiles(true);
     setErrorFiles(null);
     try {
+      if (tmdbId) {
+        const resp = await axios.get('/api/media-files', { params: { tmdbId, mediaType } });
+        const mediaFiles = Array.isArray(resp.data) ? resp.data : [];
+        const seasonMap: { [seasonNum: number]: any[] } = {};
+        for (const file of mediaFiles) {
+          let seasonNum: number | undefined = (file as any).seasonNumber;
+          let episodeNum: number | undefined = (file as any).episodeNumber;
+
+          if (seasonNum === undefined || seasonNum === null) {
+            let match = file.name.match(/S(\d{1,2})\.?E(\d{1,2})/i) || file.name.match(/s(\d{2})\.?e(\d{2})/i);
+            if (match) {
+              seasonNum = parseInt(match[1], 10);
+              episodeNum = parseInt(match[2], 10);
+            } else {
+              match = file.name.match(/(\d{1,2})x(\d{2})/i);
+              if (match) {
+                seasonNum = parseInt(match[1], 10);
+                episodeNum = parseInt(match[2], 10);
+              }
+            }
+          }
+
+          if (seasonNum === undefined || seasonNum === null) {
+            seasonNum = 0;
+          }
+          if (!seasonMap[seasonNum]) seasonMap[seasonNum] = [];
+          seasonMap[seasonNum].push({
+            name: file.name,
+            size: file.size || file.fileSize || file.filesize || '--',
+            quality: file.quality || file.Quality || file.qualityProfile || '',
+            modified: file.modified || '--',
+            path: (file.path as string) || '',
+            episodeNumber: episodeNum || (file as any).episodeNumber
+          });
+        }
+        const seasonFoldersData: SeasonFolderInfo[] = Object.entries(seasonMap)
+          .filter(([seasonNum, episodes]) => parseInt(seasonNum) > 0 && episodes.length > 0)
+          .map(([seasonNum, episodes]) => ({
+            folderName: `Season ${seasonNum}`,
+            seasonNumber: parseInt(seasonNum),
+            episodes: (episodes as any[]).sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
+          }));
+        setSeasonFolders(seasonFoldersData);
+        return;
+      }
+
       const normalizedPath = currentPath.replace(/\/+/g, '/').replace(/\/$/, '');
       const showFolderPath = `${normalizedPath}/${folderName}`;
       async function collectVideoFiles(path: string): Promise<{ file: any; relPath: string }[]> {
@@ -105,7 +152,7 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
       fetchSeasonFolders();
     }
     // eslint-disable-next-line
-  }, [folderName, currentPath, mediaType, data.seasons, data.id]);
+  }, [folderName, currentPath, mediaType, data.seasons, data.id, tmdbId]);
 
   useSymlinkCreatedListener((data) => {
     if (mediaType === 'tv' && (

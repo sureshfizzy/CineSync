@@ -6,5 +6,6 @@ export interface MovieInfoProps {
   folderName: string;
   currentPath: string;
   mediaType: 'movie' | 'tv';
+  tmdbId?: string | number;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 } 

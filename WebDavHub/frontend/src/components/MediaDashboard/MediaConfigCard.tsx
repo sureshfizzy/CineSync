@@ -24,7 +24,7 @@ interface ConfigCardProps {
   onRootFoldersUpdate?: (newRootFolders: string[]) => void;
 }
 
-export default function ArrConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, config, onChange, onClose, onSubmit, submitting, onRootFoldersUpdate }: ConfigCardProps) {
+export default function MediaConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, config, onChange, onClose, onSubmit, submitting, onRootFoldersUpdate }: ConfigCardProps) {
   const isTv = mediaType === 'tv';
   
   // State for adding new root folder

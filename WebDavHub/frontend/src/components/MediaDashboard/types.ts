@@ -29,7 +29,7 @@ export interface SearchResult {
   genre_ids: number[];
 }
 
-export interface ArrSidebarFilter {
+export interface MediaSidebarFilter {
   type: 'all' | 'movies' | 'series' | 'wanted' | 'settings';
   searchOpen: boolean;
 }

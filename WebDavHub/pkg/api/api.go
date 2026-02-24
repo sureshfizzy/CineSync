@@ -509,7 +509,6 @@ func resolveActualDirectoryPath(requestedDir, apiPath string) (string, error) {
 }
 
 func HandleFiles(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -548,6 +547,8 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	letterFilter := strings.TrimSpace(r.URL.Query().Get("letter"))
+	mediaTypeFilter := strings.TrimSpace(r.URL.Query().Get("mediaType"))
+	tmdbIdFilter := strings.TrimSpace(r.URL.Query().Get("tmdbId"))
 
 	dir := filepath.Join(rootDir, path)
 
@@ -559,7 +560,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	dir = actualDir
 
-	logger.Info("Listing directory: %s (API path: %s)", dir, path)
 
 	// Try database-first approach for folder listing with pagination
 	var dbFolders []db.FolderInfo
@@ -569,14 +569,14 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 	if searchQuery == "" && letterFilter == "" {
 		// Regular folder listing - use cached database approach
-		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, page, limit)
+		dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, page, limit, mediaTypeFilter, tmdbIdFilter)
 		if dbErr != nil {
 			useDatabase = false
 		} else {
 			useDatabase = len(dbFolders) > 0
 		}
 	} else if searchQuery != "" {
-		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabase(path, searchQuery, page, limit)
+		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabase(path, searchQuery, page, limit, mediaTypeFilter, tmdbIdFilter)
 		if dbErr != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Total-Count", "0")
@@ -591,28 +591,27 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if letterFilter != "" {
 		// Use database search with letter filtering for better performance
-		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabaseWithLetter(path, letterFilter, page, limit)
+		dbFolders, totalDbFolders, dbErr = db.SearchFoldersFromDatabaseWithLetter(path, letterFilter, page, limit, mediaTypeFilter, tmdbIdFilter)
 		if dbErr != nil {
-			dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, 1, 10000)
+			dbFolders, totalDbFolders, dbErr = db.GetFoldersFromDatabaseCached(path, 1, 10000, mediaTypeFilter, tmdbIdFilter)
 			useDatabase = dbErr == nil && len(dbFolders) > 0
 		} else {
 			useDatabase = true
 		}
 	}
 
-	// Only read filesystem if database is not available AND it's not a search query
 	var entries []os.DirEntry
-	if !useDatabase && searchQuery == "" {
-		var err error
-		entries, err = os.ReadDir(dir)
-		if err != nil {
-			logger.Warn("Failed to read directory: %s - %v", dir, err)
-			http.Error(w, "Failed to read directory", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		entries = []os.DirEntry{}
+	if !useDatabase {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Total-Count", "0")
+		w.Header().Set("X-Page", fmt.Sprintf("%d", page))
+		w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
+		w.Header().Set("X-Total-Pages", "0")
+		w.Header().Set("X-Search-Query", searchQuery)
+		json.NewEncoder(w).Encode([]FileInfo{})
+		return
 	}
+	entries = []os.DirEntry{}
 
 	// Process all entries
 	var tmdbID string
@@ -972,7 +971,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 
 // HandleSourceFiles handles requests for browsing source directories
 func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1565,7 +1563,6 @@ func HandleReadlink(w http.ResponseWriter, r *http.Request) {
 
 // HandleDelete deletes a file or directory at the given relative path
 func HandleDelete(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		logger.Warn("Invalid method: %s", r.Method)
@@ -2708,7 +2705,6 @@ func isDirectoryEffectivelyEmpty(dirPath string) (isEmpty bool, err error) {
 
 // HandleRename renames a file or directory at the given relative path
 func HandleRename(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 
 	if r.Method != http.MethodPost {
 		logger.Warn("Invalid method: %s", r.Method)
@@ -2808,7 +2804,6 @@ func HandleRename(w http.ResponseWriter, r *http.Request) {
 
 // HandleMove moves a file or directory from source to target path
 func HandleMove(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
 
 	if r.Method != http.MethodPost {
 		logger.Warn("Invalid method: %s", r.Method)
@@ -2966,6 +2961,123 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Success: moved %s to %s", sourceFullPath, targetFullPath)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(MoveResponse{Success: true})
+}
+
+
+// HandleMediaFiles returns media file entries from the database by TMDB ID
+func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	tmdbId := strings.TrimSpace(r.URL.Query().Get("tmdbId"))
+	mediaType := strings.TrimSpace(r.URL.Query().Get("mediaType"))
+	if tmdbId == "" {
+		http.Error(w, "tmdbId is required", http.StatusBadRequest)
+		return
+	}
+
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+
+	query := "SELECT destination_path, file_size, processed_at, quality, season_number, episode_number FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != ''"
+	args := []interface{}{tmdbId}
+	if mediaType != "" {
+		query += " AND LOWER(media_type) = ?"
+		args = append(args, strings.ToLower(mediaType))
+	}
+	query += " ORDER BY processed_at DESC"
+
+	rows, err := database.Query(query, args...)
+	if err != nil {
+		http.Error(w, "Failed to query media files", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type MediaFileInfo struct {
+		Name           string `json:"name"`
+		Type           string `json:"type"`
+		Path           string `json:"path"`
+		FullPath       string `json:"fullPath"`
+		SourcePath     string `json:"sourcePath"`
+		DestinationPath string `json:"destinationPath"`
+		Size           string `json:"size"`
+		Modified       string `json:"modified"`
+		SeasonNumber   *int   `json:"seasonNumber,omitempty"`
+		EpisodeNumber  *int   `json:"episodeNumber,omitempty"`
+		Quality        string `json:"quality,omitempty"`
+	}
+
+	results := make([]MediaFileInfo, 0)
+	for rows.Next() {
+		var destPath sql.NullString
+		var fileSize sql.NullInt64
+		var processedAt sql.NullString
+		var quality sql.NullString
+		var seasonNumber sql.NullString
+		var episodeNumber sql.NullString
+
+		if err := rows.Scan(&destPath, &fileSize, &processedAt, &quality, &seasonNumber, &episodeNumber); err != nil {
+			continue
+		}
+		if !destPath.Valid || destPath.String == "" {
+			continue
+		}
+
+		name := filepath.Base(destPath.String)
+		apiPath := destPath.String
+		if filepath.IsAbs(destPath.String) {
+			rel, relErr := filepath.Rel(rootDir, destPath.String)
+			if relErr == nil {
+				apiPath = rel
+			} else {
+				apiPath = strings.TrimPrefix(destPath.String, rootDir)
+			}
+		}
+		apiPath = strings.TrimPrefix(apiPath, string(filepath.Separator))
+		apiPath = strings.ReplaceAll(apiPath, string(filepath.Separator), "/")
+		apiPath = "/" + strings.TrimPrefix(apiPath, "/")
+
+		sizeStr := ""
+		if fileSize.Valid && fileSize.Int64 > 0 {
+			sizeStr = formatFileSize(fileSize.Int64)
+		}
+
+		var seasonPtr *int
+		if seasonNumber.Valid && seasonNumber.String != "" {
+			if sn, err := strconv.Atoi(seasonNumber.String); err == nil {
+				seasonPtr = &sn
+			}
+		}
+		var episodePtr *int
+		if episodeNumber.Valid && episodeNumber.String != "" {
+			if en, err := strconv.Atoi(episodeNumber.String); err == nil {
+				episodePtr = &en
+			}
+		}
+
+		results = append(results, MediaFileInfo{
+			Name:            name,
+			Type:            "file",
+			Path:            apiPath,
+			FullPath:        apiPath,
+			SourcePath:      destPath.String,
+			DestinationPath: destPath.String,
+			Size:            sizeStr,
+			Modified:        processedAt.String,
+			SeasonNumber:    seasonPtr,
+			EpisodeNumber:   episodePtr,
+			Quality:         quality.String,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
 }
 
 // HandleFileDetails handles GET/POST/DELETE for file details

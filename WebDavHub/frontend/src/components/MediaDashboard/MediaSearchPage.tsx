@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, TextField, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, CircularProgress, Chip, Card, CardContent, Divider, Paper, IconButton, Alert } from '@mui/material';
 import Modal from '@mui/material/Modal';
 import { useNavigate } from 'react-router-dom';
-import ArrConfigCard from './ArrConfigCard';
+import MediaConfigCard from './MediaConfigCard';
 import {
   Search as SearchIcon,
   Movie as MovieIcon,
@@ -16,7 +16,7 @@ import { SearchResult } from './types';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { normalizeMediaType } from '../../utils/mediaType';
 
-interface ArrSearchPageProps {
+interface MediaSearchPageProps {
   mediaType: 'movie' | 'tv';
   onBack?: () => void;
 }
@@ -39,7 +39,7 @@ const defaultConfig: AddConfig = {
   tags: []
 };
 
-export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps) {
+export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPageProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -350,7 +350,7 @@ export default function ArrSearchPage({ mediaType, onBack }: ArrSearchPageProps)
           <Box sx={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', p: 2 }}>
             {selectedResult && (
               <Box sx={{ width: '100%', maxWidth: 560, maxHeight: '90vh', overflow: 'auto' }}>
-                <ArrConfigCard
+                <MediaConfigCard
                 mediaType={mediaType}
                 title={(selectedResult.title ?? selectedResult.name) || ''}
                 year={(selectedResult.release_date || selectedResult.first_air_date) ? formatDate(selectedResult.release_date || selectedResult.first_air_date)! : ''}

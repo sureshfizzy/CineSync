@@ -2,13 +2,13 @@ import { Box, Typography, Card, CardContent, Chip, Avatar, IconButton } from '@m
 import { Movie as MovieIcon, Tv as TvIcon, Search as SearchIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { ArrItem } from './types';
 
-interface ArrWantedListProps {
+interface MediaWantedListProps {
   items: ArrItem[];
   onSearch?: (item: ArrItem) => void;
   onDelete?: (item: ArrItem) => void;
 }
 
-export default function ArrWantedList({ items, onSearch, onDelete }: ArrWantedListProps) {
+export default function MediaWantedList({ items, onSearch, onDelete }: MediaWantedListProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'wanted': return 'default';

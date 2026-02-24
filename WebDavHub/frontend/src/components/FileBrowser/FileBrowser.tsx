@@ -20,7 +20,7 @@ import AlphabetIndex from './AlphabetIndex';
 import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
 import { normalizeMediaType } from '../../utils/mediaType';
-import ArrSearchModal from '../ArrDashboard/ArrSearchModal';
+import MediaSearchModal from '../MediaDashboard/MediaSearchModal';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -974,7 +974,7 @@ const handleListViewFileClick = (file: FileItem) => {
         </Box>
       </Fade>
 
-      <ArrSearchModal
+      <MediaSearchModal
         open={arrSearchOpen}
         onClose={() => setArrSearchOpen(false)}
         mediaType={arrSearchMediaType}

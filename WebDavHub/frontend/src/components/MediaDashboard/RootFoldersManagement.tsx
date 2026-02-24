@@ -184,7 +184,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
                 if (onBack) {
                   onBack();
                 } else {
-                  navigate('/dashboard/settings');
+                  navigate('/Mediadashboard/settings');
                 }
               }} 
               sx={{ 

@@ -279,6 +279,7 @@ func main() {
 	apiMux.HandleFunc("/api/tmdb/details", api.WithTmdbValidation(api.HandleTmdbDetails))
 	apiMux.HandleFunc("/api/tmdb/category-content", api.WithTmdbValidation(api.HandleTmdbCategoryContent))
 	apiMux.HandleFunc("/api/file-details", api.HandleFileDetails)
+	apiMux.HandleFunc("/api/media-files", api.HandleMediaFiles)
 	apiMux.HandleFunc("/api/tmdb-cache", api.HandleTmdbCache)
 	apiMux.HandleFunc("/api/image-cache", api.HandleImageCache)
 	apiMux.HandleFunc("/api/MediaCover/", spoofing.HandleMediaCover)

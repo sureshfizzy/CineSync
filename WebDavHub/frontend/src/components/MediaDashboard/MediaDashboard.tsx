@@ -3,7 +3,7 @@ import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, Togg
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { FileItem } from '../FileBrowser/types';
 import { fetchFiles as fetchFilesApi } from '../FileBrowser/fileApi';
-import { formatDate, joinPaths } from '../FileBrowser/fileUtils';
+import { formatDate, joinPaths, inferQualityFromName } from '../FileBrowser/fileUtils';
 import FolderIcon from '@mui/icons-material/Folder';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import StraightenIcon from '@mui/icons-material/Straighten';
@@ -18,14 +18,16 @@ import { setPosterInCache } from '../FileBrowser/tmdbCache';
 import { TmdbResult, searchTmdb } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
 import { libraryApi, LibraryItem } from '../../api/libraryApi';
-import ArrWantedList from './ArrWantedList';
-import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
+import MediaWantedList from './MediaWantedList';
+import { isTvMediaType, normalizeMediaType, inferMediaTypeFromText } from '../../utils/mediaType';
 
-interface ArrDashboardProps {
+const MAX_SCAN_DEPTH = 3;
+
+interface MediaDashboardProps {
   filter?: 'all' | 'movies' | 'series' | 'wanted';
 }
 
-export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
+export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) {
   const { view } = useLayoutContext();
   const navigate = useNavigate();
 
@@ -35,6 +37,7 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
   const [error, setError] = useState<string>('');
   const [dashSort, setDashSort] = useState<'title' | 'path' | 'size' | 'folder'>('title');
   const [showSort, setShowSort] = useState(false);
+  const [qualityFilter, setQualityFilter] = useState<'all' | '1080p' | '4k'>('all');
   
   // Use filter from props instead of internal state
   const arrFilter = filter;
@@ -62,51 +65,65 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
       const baseFolders = (root.data || []).filter(f => f.type === 'directory');
 
       const results: FileItem[] = [];
+      const visited = new Set<string>();
+      const queue: Array<{ path: string; depth: number }> = [];
 
-      await Promise.all(
-        baseFolders.map(async (folder) => {
-          const basePath = folder.path || folder.fullPath || joinPaths('/', folder.name);
-          try {
-            const resp = await fetchFilesApi(basePath, true, 1, 200);
-            const inner = (resp.data || [])
-              .filter(item => {
-                if (item.isCategoryFolder) return false;
-                if (item.name === folder.name && item.type === 'directory') return false;
-                return true;
-              })
-              .map(item => {
-                const fullOrPath = item.path || item.fullPath || joinPaths(basePath, item.name);
-                return {
-                  ...item,
-                  path: fullOrPath,
-                  fullPath: fullOrPath,
-                } as FileItem;
-              });
+      const enqueue = (p: string, depth: number) => {
+        if (!p || visited.has(p) || depth > MAX_SCAN_DEPTH) return;
+        visited.add(p);
+        queue.push({ path: p, depth });
+      };
 
-            inner.forEach((it) => {
-              if (it.type === 'directory' && it.tmdbId && it.posterPath && it.mediaType) {
-                const normalizedMediaType = it.mediaType.toLowerCase() as 'movie' | 'tv';
-                const dbData = {
-                  id: parseInt(it.tmdbId),
-                  title: it.title || it.name,
-                  poster_path: it.posterPath,
-                  backdrop_path: null,
-                  media_type: normalizedMediaType,
-                  release_date: it.releaseDate || '',
-                  first_air_date: it.firstAirDate || '',
-                  overview: ''
-                };
-                updateTmdbData(it.name, dbData);
-                setPosterInCache(it.name, normalizedMediaType, dbData);
-              }
-            });
+      baseFolders.forEach(folder => {
+        const basePath = folder.path || folder.fullPath || joinPaths('/', folder.name);
+        enqueue(basePath, 0);
+      });
 
-            results.push(...inner);
-          } catch (e) {
-            console.error('Error fetching folder:', basePath, e);
+      while (queue.length > 0) {
+        const { path: currentPath, depth } = queue.shift()!;
+        try {
+          const resp = await fetchFilesApi(currentPath, true, 1, 200);
+          const mapped = (resp.data || []).map(item => {
+            const fullOrPath = item.path || item.fullPath || joinPaths(currentPath, item.name);
+            return {
+              ...item,
+              path: fullOrPath,
+              fullPath: fullOrPath,
+            } as FileItem;
+          });
+
+          const inner = mapped.filter(item => !item.isCategoryFolder);
+
+          inner.forEach((it) => {
+            if (it.type === 'directory' && it.tmdbId && it.posterPath && it.mediaType) {
+              const normalizedMediaType = it.mediaType.toLowerCase() as 'movie' | 'tv';
+              const dbData = {
+                id: parseInt(it.tmdbId),
+                title: it.title || it.name,
+                poster_path: it.posterPath,
+                backdrop_path: null,
+                media_type: normalizedMediaType,
+                release_date: it.releaseDate || '',
+                first_air_date: it.firstAirDate || '',
+                overview: ''
+              };
+              updateTmdbData(it.name, dbData);
+              setPosterInCache(it.name, normalizedMediaType, dbData);
+            }
+          });
+
+          results.push(...inner);
+
+          // Recurse into subfolders (skip season folders)
+          if (depth < MAX_SCAN_DEPTH) {
+            mapped
+              .filter(it => it.type === 'directory' && !it.isSeasonFolder)
+              .forEach(it => enqueue(it.path || it.fullPath || '', depth + 1));
           }
-        })
-      );
+        } catch (e) {
+          console.error('Error fetching folder:', currentPath, e);
+        }
+      }
 
       setFiles(results);
     } catch (e) {
@@ -185,8 +202,31 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
   const handleLibraryItemSearch = (item: any) => {
     // Navigate to search page for this item
     const mediaType = item.mediaType === 'movie' ? 'movie' : 'tv';
-    navigate(`/dashboard/search/${mediaType}`);
+    navigate(`/Mediadashboard/search/${mediaType}`);
   };
+
+
+  const inferFileMediaType = useCallback((file: FileItem): 'movie' | 'tv' => {
+    if (file.mediaType) {
+      return normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
+    }
+    if (file.hasSeasonFolders) return 'tv';
+
+    const rawPath = (file.path || file.fullPath || '').toLowerCase().replace(/\\/g, '/');
+    if (rawPath.includes('/shows') || rawPath.includes('/series') || rawPath.includes('/tv')) return 'tv';
+    if (rawPath.includes('/movies') || rawPath.includes('/movie')) return 'movie';
+
+    return inferMediaTypeFromText(file.name || file.path || file.fullPath);
+  }, []);
+
+  const matchesQualityFilter = useCallback((quality?: string | null) => {
+    if (qualityFilter === 'all') return true;
+    const q = (quality || '').toString().toLowerCase();
+    if (!q) return false;
+    if (qualityFilter === '4k') return q.includes('4k') || q.includes('2160') || q.includes('uhd');
+    if (qualityFilter === '1080p') return q.includes('1080');
+    return true;
+  }, [qualityFilter]);
 
   const handleLibraryItemDelete = async (item: any) => {
     try {
@@ -268,6 +308,40 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
                   </ToggleButtonGroup>
                 </Paper>
               </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
+                <Paper sx={{ p: 0.5, borderRadius: 999, border: '1px solid', borderColor: alpha('#ffffff', 0.08) }}>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={qualityFilter}
+                    onChange={(_, v) => { if (v) setQualityFilter(v); }}
+                    sx={{
+                      '& .MuiToggleButtonGroup-grouped': {
+                        border: 0,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        px: 1.25,
+                        borderRadius: 999,
+                        '&:not(:first-of-type)': { ml: 0.5 },
+                      },
+                      '& .MuiToggleButton-root.Mui-selected': {
+                        bgcolor: alpha('#4ECDC4', 0.16),
+                        color: '#4ECDC4',
+                      }
+                    }}
+                  >
+                    <ToggleButton value="all" aria-label="All qualities">
+                      All
+                    </ToggleButton>
+                    <ToggleButton value="1080p" aria-label="1080p">
+                      1080p
+                    </ToggleButton>
+                    <ToggleButton value="4k" aria-label="4K">
+                      4K
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Paper>
+              </Box>
               <Typography variant="caption" sx={{ mt: 0.5, color: 'text.secondary', display: 'block' }}>
                 {dashSort === 'title' && 'Sorting by title'}
                 {dashSort === 'path' && 'Sorting by full path'}
@@ -288,7 +362,7 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
           <Fade in timeout={250}>
             <Box>
               {arrFilter === 'wanted' ? (
-                <ArrWantedList
+                <MediaWantedList
                   items={libraryItems.map(item => ({
                     id: item.id.toString(),
                     tmdbId: item.tmdb_id,
@@ -319,52 +393,77 @@ export default function ArrDashboard({ filter = 'all' }: ArrDashboardProps) {
                       ? libraryItems.filter(item => item.media_type === 'tv')
                       : libraryItems;
 
+                    const libraryItemsQualityFiltered = qualityFilter === 'all'
+                      ? libraryItemsForFilter
+                      : libraryItemsForFilter.filter(item => {
+                          const q = item.quality_profile || item.title || '';
+                          return matchesQualityFilter(q);
+                        });
+
                     // Filter file system items by current filter
-                    const fileSystemItems = arrFilter === 'movies' ? files.filter(f => f.mediaType?.toLowerCase() === 'movie')
-                      : arrFilter === 'series' ? files.filter(f => f.mediaType?.toLowerCase() === 'tv')
+                    const fileSystemItems = arrFilter === 'movies'
+                      ? files.filter(f => inferFileMediaType(f) === 'movie')
+                      : arrFilter === 'series'
+                      ? files.filter(f => inferFileMediaType(f) === 'tv')
                       : files;
 
-                    console.log('Filter debug:', {
-                      arrFilter,
-                      totalFiles: files.length,
-                      fileSystemItems: fileSystemItems.length,
-                      libraryItems: libraryItems.length,
-                      libraryItemsForFilter: libraryItemsForFilter.length,
-                      sampleFiles: files.slice(0, 3).map(f => ({ name: f.name, mediaType: f.mediaType }))
-                    });
+                    const directoryItems = fileSystemItems.filter(f => f.type === 'directory');
 
-                    const fsTmdbSet = new Set(
-                      fileSystemItems
-                        .map(f => (f.tmdbId ? f.tmdbId.toString() : ''))
-                        .filter(Boolean)
+                    const filteredFileSystemItems = (qualityFilter === 'all'
+                      ? directoryItems
+                      : directoryItems.filter(f => {
+                          const q = f.quality || inferQualityFromName(f.name || '') || '';
+                          return matchesQualityFilter(q);
+                        }))
+                      .filter(f => Boolean(f.tmdbId));
+
+                    const fsByTmdbId = new Map(
+                      filteredFileSystemItems
+                        .filter(f => f.tmdbId)
+                        .map(f => [f.tmdbId!.toString(), f])
                     );
 
                     // Convert library items to FileItem format for consistent display
-                    const libraryItemsAsFiles: FileItem[] = libraryItemsForFilter.map(item => ({
-                      name: item.title,
-                      path: item.root_folder,
-                      fullPath: item.root_folder,
-                      // Treat library entries like directories so PosterView renders posters
-                      type: 'directory' as const,
-                      isSeasonFolder: false,
-                      hasSeasonFolders: isTvMediaType(item.media_type),
-                      size: '--',
-                      modified: new Date(item.added_at * 1000).toISOString(),
-                      mediaType: item.media_type,
-                      tmdbId: item.tmdb_id.toString(),
-                      year: item.year,
-                      isLibraryItem: true,
-                      libraryItemId: item.id,
-                      qualityProfile: item.quality_profile,
-                      monitorPolicy: item.monitor_policy,
-                      tags: item.tags ? JSON.parse(item.tags) : [],
-                      status: fsTmdbSet.has(item.tmdb_id.toString())
-                        ? 'available'
-                        : (item.status as any)
-                    }));
+                    const libraryItemsAsFiles: FileItem[] = libraryItemsQualityFiltered
+                      .filter(item => item.tmdb_id)
+                      .map(item => {
+                        const tmdbKey = item.tmdb_id.toString();
+                        const fsMatch = fsByTmdbId.get(tmdbKey);
+                        return {
+                          name: item.title,
+                          path: fsMatch?.path || item.root_folder,
+                          fullPath: fsMatch?.fullPath || item.root_folder,
+                          // Treat library entries like directories so PosterView renders posters
+                          type: 'directory' as const,
+                          isSeasonFolder: false,
+                          hasSeasonFolders: isTvMediaType(item.media_type),
+                          size: fsMatch?.size || '--',
+                          modified: fsMatch?.modified || new Date(item.added_at * 1000).toISOString(),
+                          mediaType: item.media_type,
+                          tmdbId: tmdbKey,
+                          year: item.year,
+                          isLibraryItem: true,
+                          libraryItemId: item.id,
+                          qualityProfile: item.quality_profile,
+                          monitorPolicy: item.monitor_policy,
+                          tags: item.tags ? JSON.parse(item.tags) : [],
+                          quality: fsMatch?.quality || undefined,
+                          posterPath: fsMatch?.posterPath,
+                          releaseDate: fsMatch?.releaseDate,
+                          firstAirDate: fsMatch?.firstAirDate,
+                          status: fsMatch ? 'available' : (item.status as any)
+                        };
+                      });
 
-                    // Combine library items and file system items
-                    const allItems = [...libraryItemsAsFiles, ...fileSystemItems];
+                    // Include filesystem-only items that have tmdbId but are not in library
+                    const libraryTmdbSet = new Set(libraryItemsAsFiles.map(i => i.tmdbId?.toString() || '').filter(Boolean));
+                    const fsOnlyItems = filteredFileSystemItems.filter(f => {
+                      if (!f.tmdbId) return false;
+                      return !libraryTmdbSet.has(f.tmdbId.toString());
+                    });
+
+                    // Combine library items and filesystem items (tmdbId-based)
+                    const allItems = [...libraryItemsAsFiles, ...fsOnlyItems];
 
                     if (allItems.length > 0) {
                       return (

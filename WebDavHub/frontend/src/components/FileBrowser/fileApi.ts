@@ -14,6 +14,14 @@ interface FileResponse {
   headers?: Record<string, string>;
 }
 
+const encodePath = (path: string): string => {
+  if (!path) return '';
+  return path
+    .split('/')
+    .map((segment) => (segment ? encodeURIComponent(segment) : ''))
+    .join('/');
+};
+
 export const fetchFiles = async (path: string, checkTmdb: boolean = false, page: number = 1, limit: number = 100, search?: string, letter?: string): Promise<FileResponse> => {
   const headers: Record<string, string> = {};
   if (checkTmdb) {
@@ -30,8 +38,7 @@ export const fetchFiles = async (path: string, checkTmdb: boolean = false, page:
     params.append('letter', letter.trim());
   }
 
-  const url = '/api/files' + path + '?' + params.toString();
-  console.log('fileApi: Making request to:', url);
+  const url = '/api/files' + encodePath(path) + '?' + params.toString();
   const response = await axios.get<FileItem[]>(url, { headers });
 
   return {
@@ -61,7 +68,7 @@ export const fetchSourceFiles = async (path: string, sourceIndex?: number, page:
     params.append('search', search.trim());
   }
 
-  const response = await axios.get<FileItem[]>('/api/source-browse' + path + '?' + params.toString());
+  const response = await axios.get<FileItem[]>('/api/source-browse' + encodePath(path) + '?' + params.toString());
 
   return {
     data: response.data,
@@ -81,7 +88,7 @@ export const fetchSourceFiles = async (path: string, sourceIndex?: number, page:
 };
 
 export async function downloadFile(path: string, fileName: string): Promise<void> {
-  const response = await axios.get(`/api/files${path}`, { responseType: 'blob' });
+  const response = await axios.get(`/api/files${encodePath(path)}`, { responseType: 'blob' });
   const blob = response.data;
   const blobUrl = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -93,7 +100,7 @@ export async function downloadFile(path: string, fileName: string): Promise<void
 }
 
 export async function openFile(path: string, fileName: string, isPreviewable: boolean): Promise<void> {
-  const response = await axios.get(`/api/files/${path}`, { responseType: 'blob' });
+  const response = await axios.get(`/api/files${encodePath(path)}`, { responseType: 'blob' });
   const blob = response.data;
   const blobUrl = window.URL.createObjectURL(blob);
   if (isPreviewable) {

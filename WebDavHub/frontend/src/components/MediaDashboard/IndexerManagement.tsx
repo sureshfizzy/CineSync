@@ -196,7 +196,7 @@ export default function IndexerManagement({ onBack }: IndexerManagementProps) {
                 if (onBack) {
                   onBack();
                 } else {
-                  navigate('/dashboard/settings');
+                  navigate('/Mediadashboard/settings');
                 }
               }} 
               sx={{ 
