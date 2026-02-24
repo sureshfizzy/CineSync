@@ -222,6 +222,10 @@ func main() {
 		}
 	}
 
+	if err := config.EnsureAPIKey(); err != nil {
+		logger.Warn("Failed to ensure API key: %v", err)
+	}
+
 	if configMissing && *dir == "" {
 		logger.Warn("No valid DESTINATION_DIR set. Running in configuration-only mode until setup is completed.")
 	}
@@ -343,6 +347,7 @@ func main() {
 	apiMux.HandleFunc("/api/config", config.HandleGetConfig)
 	apiMux.HandleFunc("/api/config/update", config.HandleUpdateConfig)
 	apiMux.HandleFunc("/api/config/update-silent", config.HandleUpdateConfigSilent)
+	apiMux.HandleFunc("/api/config/regenerate-api-key", api.HandleRegenerateCineSyncAPIKey)
 	apiMux.HandleFunc("/api/config/events", config.HandleConfigEvents)
 	apiMux.HandleFunc("/api/config/defaults", config.HandleGetDefaultConfig)
 	apiMux.HandleFunc("/api/restart", api.HandleRestart)
@@ -419,13 +424,13 @@ func main() {
 
 	// API handling
 	apiRouter := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// For all /api/ paths, apply JWT middleware if CINESYNC_AUTH_ENABLED is true
+		h := http.Handler(apiMux)
+		h = api.APIKeyMiddleware(h)
 		authRequired := env.IsBool("CINESYNC_AUTH_ENABLED", true)
 		if authRequired {
-			auth.JWTMiddleware(apiMux).ServeHTTP(w, r) // JWTMiddleware wraps the entire apiMux for protected routes
-		} else {
-			apiMux.ServeHTTP(w, r)
+			h = auth.JWTMiddleware(h)
 		}
+		h.ServeHTTP(w, r)
 	})
 	rootMux.Handle("/api/", apiRouter)
 
@@ -589,8 +594,7 @@ func main() {
 
 	// Authentication status
 	if env.IsBool("CINESYNC_AUTH_ENABLED", true) {
-		credentials := auth.GetCredentials()
-		logger.Info("Authentication enabled (username: %s)", credentials.Username)
+		logger.Info("Authentication enabled")
 	} else {
 		logger.Warn("Authentication is disabled")
 	}

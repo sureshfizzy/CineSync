@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -303,6 +305,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "CINESYNC_IP", Category: "CineSync Configuration", Type: "string", Required: false, Description: "The IP address to bind the CineSync server"},
 		{Key: "CINESYNC_PORT", Category: "CineSync Configuration", Type: "integer", Required: false, Description: "The port on which the server runs (serves both API and UI)"},
 		{Key: "CINESYNC_AUTH_ENABLED", Category: "CineSync Configuration", Type: "boolean", Required: false, Description: "Enable or disable CineSync authentication"},
+		{Key: "CINESYNC_API_KEY", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Global API key required for all API endpoints"},
 		{Key: "CINESYNC_USERNAME", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Username for CineSync authentication"},
 		{Key: "CINESYNC_PASSWORD", Category: "CineSync Configuration", Type: "string", Required: false, Description: "Password for CineSync authentication"},
 
@@ -376,6 +379,35 @@ func createEnvFileFromEnvironment() error {
 }
 
 // readEnvFile reads the .env file and returns a map of key-value pairs
+
+// EnsureAPIKey makes sure a global API key exists and persists it when missing.
+func EnsureAPIKey() error {
+	envVars, err := readEnvFile()
+	if err != nil {
+		return fmt.Errorf("failed to read configuration: %v", err)
+	}
+
+	if strings.TrimSpace(envVars["CINESYNC_API_KEY"]) != "" {
+		return nil
+	}
+
+	newKey, err := generateRandomKey(32)
+	if err != nil {
+		return fmt.Errorf("failed to generate API key: %v", err)
+	}
+
+	envVars["CINESYNC_API_KEY"] = newKey
+	if err := writeEnvFile(envVars); err != nil {
+		return fmt.Errorf("failed to write configuration: %v", err)
+	}
+
+	for key, value := range envVars {
+		os.Setenv(key, value)
+	}
+
+	return nil
+}
+
 func readEnvFile() (map[string]string, error) {
 	envPath := getEnvFilePath()
 
@@ -440,6 +472,7 @@ func writeEnvFile(envVars map[string]string) error {
 		"CINESYNC_IP":           "0.0.0.0",
 		"CINESYNC_PORT":         "8082",
 		"CINESYNC_AUTH_ENABLED": "true",
+		"CINESYNC_API_KEY": "",
 		"CINESYNC_USERNAME":     "admin",
 		"CINESYNC_PASSWORD":     "admin",
 	}
@@ -454,6 +487,45 @@ func writeEnvFile(envVars map[string]string) error {
 		return fmt.Errorf("failed to write .env file: %v", err)
 	}
 	return nil
+}
+
+// RegenerateAPIKey creates a new API key, stores it, and notifies clients.
+func RegenerateAPIKey() (string, error) {
+	envVars, err := readEnvFile()
+	if err != nil {
+		return "", fmt.Errorf("failed to read configuration: %v", err)
+	}
+
+	newKey, err := generateRandomKey(32)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate API key: %v", err)
+	}
+
+	envVars["CINESYNC_API_KEY"] = newKey
+
+	if err := writeEnvFile(envVars); err != nil {
+		return "", fmt.Errorf("failed to write configuration: %v", err)
+	}
+
+	for key, value := range envVars {
+		os.Setenv(key, value)
+	}
+
+	notifyConfigChange()
+	notifyAuthSettingsChanged()
+
+	return newKey, nil
+}
+
+func generateRandomKey(byteLength int) (string, error) {
+	if byteLength <= 0 {
+		byteLength = 32
+	}
+	buf := make([]byte, byteLength)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // validateConfigValue validates a configuration value based on its type
@@ -626,7 +698,7 @@ func HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Check if authentication settings changed
-		if update.Key == "CINESYNC_AUTH_ENABLED" || update.Key == "CINESYNC_USERNAME" || update.Key == "CINESYNC_PASSWORD" {
+		if update.Key == "CINESYNC_AUTH_ENABLED" || update.Key == "CINESYNC_USERNAME" || update.Key == "CINESYNC_PASSWORD" || update.Key == "CINESYNC_API_KEY" {
 			authSettingsChanged = true
 			logger.Info("Authentication settings changed: %s", update.Key)
 		}
@@ -749,6 +821,7 @@ func getConfigDefaults() map[string]string {
 		"CINESYNC_IP":           "0.0.0.0",
 		"CINESYNC_PORT":         "8082",
 		"CINESYNC_AUTH_ENABLED": "true",
+		"CINESYNC_API_KEY": "",
 		"CINESYNC_USERNAME":     "admin",
 		"CINESYNC_PASSWORD":     "admin",
 		// Services

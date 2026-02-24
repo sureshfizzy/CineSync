@@ -113,8 +113,10 @@ export function useCentralizedSSE() {
 
     try {
       const token = localStorage.getItem('cineSyncJWT');
-      const eventSourceUrl = token
-        ? `${endpoint}?token=${encodeURIComponent(token)}`
+      const params = new URLSearchParams();
+      if (token) params.set('token', token);
+      const eventSourceUrl = params.toString()
+        ? `${endpoint}?${params.toString()}`
         : endpoint;
 
       const eventSource = new EventSource(eventSourceUrl);

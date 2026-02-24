@@ -39,6 +39,87 @@ var statsScanProgress struct {
 
 var isPlaceholderConfig bool
 
+
+func isAPIKeyOptionalPath(path string) bool {
+	optional := []string{
+		"/api/health",
+		"/api/auth/enabled",
+		"/api/auth/test",
+		"/api/auth/login",
+		"/api/auth/check",
+	}
+	for _, endpoint := range optional {
+		if path == endpoint || strings.HasPrefix(path, endpoint+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// APIKeyMiddleware enforces a global API key when CINESYNC_API_KEY is set.
+func APIKeyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := strings.TrimSpace(os.Getenv("CINESYNC_API_KEY"))
+		if apiKey == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Allow CORS preflight
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		authEnabled := true
+		if v := os.Getenv("CINESYNC_AUTH_ENABLED"); v == "false" || v == "0" {
+			authEnabled = false
+		}
+
+		if authEnabled {
+			if isAPIKeyOptionalPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Allow JWT-authenticated requests to pass without API key
+			authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+			if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		provided := strings.TrimSpace(r.Header.Get("X-API-Key"))
+		if provided == "" && !authEnabled {
+			// Support Authorization: Bearer <key> when auth is disabled
+			authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+			if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+				provided = strings.TrimSpace(authHeader[7:])
+			}
+		}
+		if provided == "" {
+			// Support query parameter for EventSource
+			provided = strings.TrimSpace(r.URL.Query().Get("apiKey"))
+		}
+
+		if provided == "" || provided != apiKey {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+
 // HTTP client for faster API requests
 var httpClientWithTimeout = &http.Client{
 	Timeout: 1 * time.Second,
@@ -357,6 +438,24 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// HandleRegenerateCineSyncAPIKey generates a new API key and returns it.
+func HandleRegenerateCineSyncAPIKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	newKey, err := config.RegenerateAPIKey()
+	if err != nil {
+		logger.Error("Failed to regenerate API key: %v", err)
+		http.Error(w, "Failed to regenerate API key", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"apiKey": newKey})
 }
 
 func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, string, string, string) {

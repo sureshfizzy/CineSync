@@ -170,6 +170,22 @@ class WebDavHubDevelopmentServer:
         except Exception as e:
             print(f"⚠️  Warning: Could not parse .env file {env_file}: {e}")
 
+    def _reload_env_if_missing_key(self):
+        if self.env_vars.get('CINESYNC_API_KEY'):
+            return
+        env_file_path = get_env_file_path()
+        env_file = Path(env_file_path)
+        if env_file.exists():
+            self._parse_env_file(env_file)
+
+    def _build_api_request(self, url: str) -> urllib.request.Request:
+        self._reload_env_if_missing_key()
+        req = urllib.request.Request(url)
+        api_key = (self.env_vars.get('CINESYNC_API_KEY') or '').strip()
+        if api_key:
+            req.add_header('X-API-Key', api_key)
+        return req
+
     def check_prerequisites(self):
         """Check if required files and dependencies exist"""
         if not Path("cinesync").exists() and not Path("cinesync.exe").exists():
@@ -203,8 +219,9 @@ class WebDavHubDevelopmentServer:
         
         while time.time() - start_time < max_wait:
             try:
-                url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/status"
-                with urllib.request.urlopen(url, timeout=2) as response:
+                url = f"http://{self.api_host}:{self.api_port}/api/health"
+                req = self._build_api_request(url)
+                with urllib.request.urlopen(req, timeout=2) as response:
                     if response.status == 200:
                         print("✅ Backend API is ready")
                         return True
@@ -224,7 +241,8 @@ class WebDavHubDevelopmentServer:
         """Get mount path from Real-Debrid config API"""
         try:
             url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/config"
-            with urllib.request.urlopen(url, timeout=5) as response:
+            req = self._build_api_request(url)
+            with urllib.request.urlopen(req, timeout=5) as response:
                 if response.status == 200:
                     data = json.loads(response.read().decode('utf-8'))
                     config = data.get('config', {})
@@ -254,7 +272,8 @@ class WebDavHubDevelopmentServer:
             try:
                 encoded_path = urllib.parse.quote(mount_path, safe='')
                 url = f"http://{self.api_host}:{self.api_port}/api/realdebrid/rclone/status?path={encoded_path}"
-                with urllib.request.urlopen(url, timeout=3) as response:
+                req = self._build_api_request(url)
+                with urllib.request.urlopen(req, timeout=3) as response:
                     if response.status == 200:
                         data = json.loads(response.read().decode('utf-8'))
                         status = data.get('status', {})

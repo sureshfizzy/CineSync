@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade } from '@mui/material';
+import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade, Tooltip, TextField, InputAdornment } from '@mui/material';
 import axios from 'axios';
-import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded, FilterListRounded } from '@mui/icons-material';
+import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded, FilterListRounded, ContentCopyRounded } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
 import { FormField } from '../components/Settings/FormField';
@@ -47,6 +47,9 @@ const Settings: React.FC = () => {
   const [config, setConfig] = useState<ConfigValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [autoKeyGenerated, setAutoKeyGenerated] = useState(false);
+  const [cineSyncApiKey, setCineSyncApiKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedMainTab, setSelectedMainTab] = useState<number>(0); // 0: General, 1: Services, 2: Spoofing, 3: Jobs
@@ -258,12 +261,29 @@ const Settings: React.FC = () => {
       });
       const data: ConfigResponse = response.data;
       setConfig(data.config);
+      const apiKeyItem = data.config.find(item => item.key === 'CINESYNC_API_KEY');
+      if (apiKeyItem && apiKeyItem.value) {
+        setCineSyncApiKey(apiKeyItem.value);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const apiKeyItem = config.find(item => item.key === 'CINESYNC_API_KEY');
+    if (!apiKeyItem) return;
+    const value = (pendingChanges['CINESYNC_API_KEY'] !== undefined
+      ? pendingChanges['CINESYNC_API_KEY']
+      : apiKeyItem.value) || '';
+    if (!value && !regenLoading && !autoKeyGenerated) {
+      setAutoKeyGenerated(true);
+      handleRegenerateApiKey();
+    }
+  }, [config, pendingChanges, regenLoading, autoKeyGenerated]);
+
 
   const handleFieldChange = (key: string, value: string) => {
     // Find the original value from config
@@ -331,7 +351,39 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleRegenerateApiKey = async () => {
+    try {
+      setRegenLoading(true);
+      const response = await axios.post('/api/config/regenerate-api-key');
+      if (response.status !== 200) {
+        throw new Error('Failed to regenerate API key');
+      }
+      const apiKey = response.data?.apiKey || '';
+      setCineSyncApiKey(apiKey);
+      await fetchConfig();
+      setPendingChanges(prev => {
+        const next = { ...prev };
+        delete next['CINESYNC_API_KEY'];
+        return next;
+      });
+      setSuccess('API key regenerated successfully');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate API key');
+    } finally {
+      setRegenLoading(false);
+    }
+  };
 
+  const handleCopyApiKey = async (value: string) => {
+    const toCopy = value || cineSyncApiKey;
+    if (!toCopy) return;
+    try {
+      await navigator.clipboard.writeText(toCopy);
+      setSuccess('API key copied to clipboard');
+    } catch {
+      setError('Failed to copy API key');
+    }
+  };
 
   const getFieldValue = (item: ConfigValue) => {
     return pendingChanges[item.key] !== undefined ? pendingChanges[item.key] : item.value;
@@ -485,7 +537,7 @@ const Settings: React.FC = () => {
 
       // For CineSync Configuration category, prioritize server settings then auth
       if (category === 'CineSync Configuration') {
-        const cinesyncOrder = ['CINESYNC_IP', 'CINESYNC_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'];
+        const cinesyncOrder = ['CINESYNC_IP', 'CINESYNC_PORT', 'CINESYNC_AUTH_ENABLED', 'CINESYNC_API_KEY', 'CINESYNC_USERNAME', 'CINESYNC_PASSWORD'];
         const aIndex = cinesyncOrder.indexOf(a.key);
         const bIndex = cinesyncOrder.indexOf(b.key);
 
@@ -1535,6 +1587,202 @@ const Settings: React.FC = () => {
                   </Box>
                 )}
               </Box>
+            );
+          }
+
+          // Layout for CineSync Configuration
+          if (currentCategory === 'CineSync Configuration') {
+            const apiKeyItem = items.find(item => item.key === 'CINESYNC_API_KEY');
+            const otherItems = items.filter(item => item.key !== 'CINESYNC_API_KEY');
+            const apiKeyValue = cineSyncApiKey || '';
+
+            return (
+              <Grid container spacing={3}>
+                {apiKeyItem && (
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 6
+                    }}>
+                    <Box
+                      sx={{
+                        p: 3,
+                        bgcolor: alpha(theme.palette.primary.main, 0.06),
+                        border: '1px solid',
+                        borderColor: pendingChanges[apiKeyItem.key] !== undefined
+                          ? 'warning.main'
+                          : alpha(theme.palette.primary.main, 0.25),
+                        borderRadius: 3,
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          borderColor: 'primary.main',
+                          boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)',
+                          transform: 'translateY(-1px)',
+                        },
+                      }}
+                    >
+                      <Stack spacing={2}>
+                        <Box>
+                          <Typography
+                            variant="subtitle2"
+                            fontWeight="600"
+                            sx={{
+                              color: 'text.primary',
+                              mb: 0.5,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {formatFieldLabel(apiKeyItem.key)}
+                            {pendingChanges[apiKeyItem.key] !== undefined && (
+                              <Chip
+                                label="Modified"
+                                size="small"
+                                color="warning"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                              />
+                            )}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mb: 2, lineHeight: 1.4 }}
+                          >
+                            {apiKeyItem.description}
+                          </Typography>
+                        </Box>
+                        <TextField
+                          fullWidth
+                          value={regenLoading ? 'Generating API key...' : (apiKeyValue || '')}
+                          InputProps={{
+                            readOnly: true,
+                            style: { fontFamily: 'monospace', fontSize: '14px' },
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                <Box display="flex" gap={0.5}>
+                                  <Tooltip title="Copy API key">
+                                    <IconButton
+                                      onClick={() => handleCopyApiKey(apiKeyValue)}
+                                      size="small"
+                                      disabled={!apiKeyValue}
+                                    >
+                                      <ContentCopyRounded fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Regenerate API key">
+                                    <IconButton
+                                      onClick={handleRegenerateApiKey}
+                                      disabled={regenLoading}
+                                      size="small"
+                                    >
+                                      <Refresh
+                                        sx={{
+                                          animation: regenLoading ? 'spin 1s linear infinite' : 'none',
+                                          '@keyframes spin': {
+                                            '0%': { transform: 'rotate(0deg)' },
+                                            '100%': { transform: 'rotate(360deg)' },
+                                          },
+                                        }}
+                                      />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Box>
+                              </InputAdornment>
+                            ),
+                          }}
+                          error={!apiKeyValue && !regenLoading}
+                          helperText='Use this API key for external integrations.'
+                        />
+                      </Stack>
+                    </Box>
+                  </Grid>
+                )}
+
+                {otherItems.map((item) => (
+                  <Grid
+                    key={item.key}
+                    size={{
+                      xs: 12,
+                      md: 6
+                    }}>
+                    <Box
+                      sx={{
+                        p: 3,
+                        bgcolor: 'background.paper',
+                        border: '1px solid',
+                        borderColor: pendingChanges[item.key] !== undefined
+                          ? 'warning.main'
+                          : 'divider',
+                        borderRadius: 3,
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          borderColor: 'primary.main',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                          transform: 'translateY(-1px)',
+                        },
+                      }}
+                    >
+                      <Stack spacing={2}>
+                        <Box>
+                          <Typography
+                            variant="subtitle2"
+                            fontWeight="600"
+                            sx={{
+                              color: 'text.primary',
+                              mb: 0.5,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {formatFieldLabel(item.key)}
+                            {item.required && (
+                              <Chip
+                                label="Required"
+                                size="small"
+                                color="error"
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                              />
+                            )}
+                            {pendingChanges[item.key] !== undefined && (
+                              <Chip
+                                label="Modified"
+                                size="small"
+                                color="warning"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                              />
+                            )}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mb: 2, lineHeight: 1.4 }}
+                          >
+                            {item.description}
+                          </Typography>
+                        </Box>
+                        <FormField
+                          label=""
+                          value={getFieldValue(item)}
+                          onChange={(value) => handleFieldChange(item.key, value)}
+                          type={getFieldType(item)}
+                          required={item.required}
+                          options={getFieldOptions(item)}
+                          multiline={item.type === 'array' || item.key.includes('TAGS')}
+                          rows={item.type === 'array' ? 2 : 1}
+                          beta={item.beta}
+                          disabled={item.disabled}
+                          locked={item.locked}
+                        />
+                      </Stack>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
             );
           }
 

@@ -243,13 +243,17 @@ export function getTmdbBackdropUrl(backdropPath: string | null, size: string = '
 // Get MediaCover poster URL (Radarr/Sonarr local images)
 export function getMediaCoverPosterUrl(tmdbId: string | number): string | null {
   if (!tmdbId) return null;
-  return `/api/v3/MediaCover/${tmdbId}/poster.jpg`;
+  const token = localStorage.getItem('cineSyncJWT');
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `/api/v3/MediaCover/${tmdbId}/poster.jpg${tokenParam}`;
 }
 
 // Get MediaCover fanart URL (Radarr/Sonarr local images)
 export function getMediaCoverFanartUrl(tmdbId: string | number): string | null {
   if (!tmdbId) return null;
-  return `/api/v3/MediaCover/${tmdbId}/fanart.jpg`;
+  const token = localStorage.getItem('cineSyncJWT');
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `/api/v3/MediaCover/${tmdbId}/fanart.jpg${tokenParam}`;
 }
 
 // Get poster URL with MediaCover priority, TMDB fallback
