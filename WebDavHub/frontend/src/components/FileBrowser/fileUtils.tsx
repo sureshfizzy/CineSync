@@ -65,6 +65,118 @@ export function getMimeType(ext: string): string {
   return map[ext.toLowerCase()] || 'application/octet-stream';
 }
 
+export type ArrStatusTone = 'success' | 'warning' | 'info' | 'error' | 'default';
+
+export interface ArrBadgeData {
+  quality?: string;
+  statusLabel?: string;
+  statusTone?: ArrStatusTone;
+  isAvailable: boolean;
+  showSearch: boolean;
+  monitored: boolean;
+}
+
+function normalizeQualityLabel(value: string): string {
+  const raw = value.trim();
+  const tokens = raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/);
+  const has = (t: string) => tokens.includes(t);
+  const remux = has('remux');
+  const is4k = has('2160p') || has('4k') || has('uhd');
+  const is1080 = has('1080p');
+  const is720 = has('720p');
+  const is480 = has('480p');
+  let res = '';
+  if (is4k) res = '4K';
+  else if (is1080) res = '1080p';
+  else if (is720) res = '720p';
+  else if (is480) res = '480p';
+  if (remux && res) return `REMUX ${res}`;
+  if (remux) return 'REMUX';
+  if (res) return res;
+  return raw.toUpperCase();
+}
+
+export function inferQualityFromName(name: string): string | undefined {
+  const tokens = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/);
+  const has = (t: string) => tokens.includes(t);
+  const remux = has('remux');
+  const is4k = has('2160p') || has('4k') || has('uhd');
+  const is1080 = has('1080p');
+  const is720 = has('720p');
+  const is480 = has('480p');
+  let res = '';
+  if (is4k) res = '4K';
+  else if (is1080) res = '1080p';
+  else if (is720) res = '720p';
+  else if (is480) res = '480p';
+  if (remux && res) return `REMUX ${res}`;
+  if (remux) return 'REMUX';
+  if (res) return res;
+  return undefined;
+}
+
+export function getArrBadgeData(file: FileItem): ArrBadgeData {
+  const rawStatus = file.status || (
+    file.processingStatus === 'processed' ? 'available' :
+    file.processingStatus === 'failed' ? 'failed' :
+    file.processingStatus === 'unprocessed' ? 'missing' :
+    undefined
+  );
+
+  let statusLabel: string | undefined;
+  let statusTone: ArrStatusTone | undefined;
+  switch (rawStatus) {
+    case 'available':
+    case 'imported':
+      statusLabel = 'Available';
+      statusTone = 'success';
+      break;
+    case 'missing':
+      statusLabel = 'Missing';
+      statusTone = 'warning';
+      break;
+    case 'wanted':
+      statusLabel = 'Wanted';
+      statusTone = 'warning';
+      break;
+    case 'searching':
+      statusLabel = 'Searching';
+      statusTone = 'info';
+      break;
+    case 'downloading':
+      statusLabel = 'Downloading';
+      statusTone = 'info';
+      break;
+    case 'failed':
+      statusLabel = 'Failed';
+      statusTone = 'error';
+      break;
+  }
+
+  const quality = file.quality ? normalizeQualityLabel(file.quality) : inferQualityFromName(file.name);
+  const isAvailable = rawStatus ? (rawStatus === 'available' || rawStatus === 'imported') : (file.type === 'directory' || !!quality);
+  const showSearch = rawStatus ? ['missing', 'wanted', 'failed'].includes(rawStatus) : false;
+
+  return {
+    quality,
+    statusLabel: statusLabel || (isAvailable ? 'Available' : undefined),
+    statusTone: statusTone || (isAvailable ? 'success' : 'default'),
+    isAvailable,
+    showSearch,
+    monitored: !!file.isLibraryItem,
+  };
+}
+
+export function getQualityTone(label?: string): ArrStatusTone {
+  if (!label) return 'default';
+  const upper = label.toUpperCase();
+  if (upper.includes('4K') || upper.includes('2160')) return 'warning';
+  if (upper.includes('REMUX')) return 'info';
+  if (upper.includes('1080')) return 'success';
+  if (upper.includes('720')) return 'default';
+  return 'default';
+}
+
 // Helper function to parse file size string to bytes for comparison
 function parseSizeToBytes(sizeStr?: string): number {
   if (!sizeStr || sizeStr === '--') return 0;

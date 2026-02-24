@@ -44,6 +44,7 @@ export interface MobileListItemProps {
   onMenuClick?: (event: React.MouseEvent<HTMLElement>) => void;
   formatDate: (date?: string) => string;
   menu?: React.ReactNode;
+  showArrBadges?: boolean;
 }
 
 export interface AlphabetIndexProps {

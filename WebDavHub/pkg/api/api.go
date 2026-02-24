@@ -754,7 +754,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 			if mediaType == "" { // Only set if not already determined from database
 				w.Header().Set("X-Media-Type", "tv")
 				mediaType = "tv" // Update local mediaType as well
-				logger.Info("Directory %s identified as TV Show root by content, X-Media-Type set to tv", dir)
 			}
 		}
 	}

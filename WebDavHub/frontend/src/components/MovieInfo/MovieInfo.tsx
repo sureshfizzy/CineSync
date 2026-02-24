@@ -9,7 +9,7 @@ import CastList from './CastList';
 import MediaPathInfo from '../FileBrowser/MediaPathInfo';
 import { MovieInfoProps } from './types';
 
-export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: MovieInfoProps) {
+export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, onSearchMissing }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
@@ -137,6 +137,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
                 onVersionChange={setSelectedVersionIndex}
                 isArrDashboardContext={isArrDashboardContext}
                 isLoadingFiles={isLoadingFiles}
+                onSearchMissing={onSearchMissing}
               />
             </Box>
           </Box>

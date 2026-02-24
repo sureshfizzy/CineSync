@@ -15,11 +15,12 @@ interface TVShowInfoProps {
   folderName: string;
   currentPath: string;
   mediaType: 'movie' | 'tv';
+  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType }: TVShowInfoProps) {
+export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, onSearchMissing }: TVShowInfoProps) {
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
@@ -89,6 +90,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               isArrDashboardContext={isArrDashboardContext}
               isLoadingFiles={loadingFiles}
               seasonFolders={seasonFolders}
+              onSearchMissing={onSearchMissing}
             />
           </Box>
         </Box>
@@ -100,6 +102,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           handleDeleted={handleDeleted}
           handleError={handleError}
           isArrDashboardContext={isArrDashboardContext}
+          onSearchMissing={onSearchMissing}
         />
         <CastList data={data} getPosterUrl={getPosterUrl} />
         <DetailsDialog

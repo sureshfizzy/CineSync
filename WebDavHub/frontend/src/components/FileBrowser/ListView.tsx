@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, useTheme, useMediaQuery, Checkbox } from '@mui/material';
+import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, useTheme, useMediaQuery, Checkbox, Chip, IconButton, alpha } from '@mui/material';
 import { FileItem } from './types';
-import { getFileIcon } from './fileUtils';
+import { getArrBadgeData, getFileIcon, getQualityTone } from './fileUtils';
 import FileActionMenu from './FileActionMenu';
+import SearchIcon from '@mui/icons-material/Search';
 import MobileListItem from './MobileListItem';
 import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 import BulkActionsBar from './BulkActionsBar';
@@ -21,6 +22,8 @@ interface ListViewProps {
   onDeleted: () => void;
   onError: (error: string) => void;
   onNavigateBack?: () => void;
+  showArrBadges?: boolean;
+  onSearchMissing?: (file: FileItem) => void;
 }
 
 export default function ListView({
@@ -33,6 +36,8 @@ export default function ListView({
   onDeleted,
   onError,
   onNavigateBack,
+  showArrBadges = false,
+  onSearchMissing,
 }: ListViewProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -133,16 +138,27 @@ export default function ListView({
               }}
               formatDate={formatDate}
               menu={
-                <FileActionMenu
-                  file={file}
-                  currentPath={currentPath}
-                  onViewDetails={onViewDetails}
-                  onRename={onRename}
-                  onDeleted={onDeleted}
-                  onError={onError}
-                  onNavigateBack={onNavigateBack}
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={e => e.stopPropagation()}>
+                  {showArrBadges && (() => {
+                    const arrBadges = getArrBadgeData(file);
+                    return arrBadges.showSearch && onSearchMissing ? (
+                      <IconButton size="small" onClick={() => onSearchMissing(file)} title="Search">
+                        <SearchIcon fontSize="small" />
+                      </IconButton>
+                    ) : null;
+                  })()}
+                  <FileActionMenu
+                    file={file}
+                    currentPath={currentPath}
+                    onViewDetails={onViewDetails}
+                    onRename={onRename}
+                    onDeleted={onDeleted}
+                    onError={onError}
+                    onNavigateBack={onNavigateBack}
+                  />
+                </Box>
               }
+              showArrBadges={showArrBadges}
             />
           ))}
         </Paper>
@@ -217,7 +233,27 @@ export default function ListView({
             </TableRow>
           </TableHead>
           <TableBody>
-            {files.map((file) => (
+            {files.map((file) => {
+              const arrBadges = getArrBadgeData(file);
+              const statusColor = arrBadges.statusTone === 'success'
+                ? theme.palette.success.main
+                : arrBadges.statusTone === 'warning'
+                ? theme.palette.warning.main
+                : arrBadges.statusTone === 'info'
+                ? theme.palette.info.main
+                : arrBadges.statusTone === 'error'
+                ? theme.palette.error.main
+                : theme.palette.text.secondary;
+              const qualityTone = getQualityTone(arrBadges.quality);
+              const qualityColor = qualityTone === 'warning'
+                ? theme.palette.warning.main
+                : qualityTone === 'info'
+                ? theme.palette.info.main
+                : qualityTone === 'success'
+                ? theme.palette.success.main
+                : theme.palette.text.secondary;
+
+              return (
               <TableRow
                 key={file.name}
                 data-file-name={file.name}
@@ -266,21 +302,73 @@ export default function ListView({
                     <Box sx={{ mr: 2, display: 'flex' }}>
                       {getFileIcon(file.name, file.type)}
                     </Box>
-                    <Typography
-                      sx={{
-                        fontWeight: 500,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {file.name}
-                    </Typography>
+                    <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {file.name}
+                      </Typography>
+                      {showArrBadges && (
+                        <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {arrBadges.quality && (
+                            <Chip
+                              size="small"
+                              label={arrBadges.quality}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(qualityColor, 0.12),
+                                color: qualityColor,
+                              }}
+                            />
+                          )}
+                          {arrBadges.monitored && (
+                            <Chip
+                              size="small"
+                              label="Monitored"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(theme.palette.info.main, 0.1),
+                                color: theme.palette.info.main,
+                              }}
+                            />
+                          )}
+                          {arrBadges.statusLabel && (
+                            <Chip
+                              size="small"
+                              label={arrBadges.statusLabel}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(statusColor, 0.12),
+                                color: statusColor,
+                              }}
+                            />
+                          )}
+                        </Box>
+                      )}
+                    </Box>
                   </Box>
                 </TableCell>
                 <TableCell>{file.type === 'directory' ? '--' : file.size}</TableCell>
                 <TableCell>{formatDate(file.modified)}</TableCell>
                 <TableCell align="right" onClick={e => e.stopPropagation()}>
+                  {showArrBadges && arrBadges.showSearch && onSearchMissing && (
+                    <IconButton
+                      size="small"
+                      onClick={() => onSearchMissing(file)}
+                      title="Search"
+                      sx={{ mr: 0.5 }}
+                    >
+                      <SearchIcon fontSize="small" />
+                    </IconButton>
+                  )}
                   <FileActionMenu
                     file={file}
                     currentPath={currentPath}
@@ -292,7 +380,8 @@ export default function ListView({
                   />
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
           </TableBody>
         </Table>
       </TableContainer>

@@ -20,6 +20,7 @@ import AlphabetIndex from './AlphabetIndex';
 import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
 import { normalizeMediaType } from '../../utils/mediaType';
+import ArrSearchModal from '../ArrDashboard/ArrSearchModal';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -131,6 +132,10 @@ const FileBrowserContent: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<{current: number, total: number} | null>(null);
+
+  const [arrSearchOpen, setArrSearchOpen] = useState(false);
+  const [arrSearchMediaType, setArrSearchMediaType] = useState<'movie' | 'tv'>('movie');
+  const [arrSearchQuery, setArrSearchQuery] = useState('');
 
   // Real-Debrid integration
   const initialSource: 'local' | 'realdebrid' = inDebridPage ? 'realdebrid' : 'local';
@@ -575,7 +580,16 @@ const FileBrowserContent: React.FC = () => {
     }
   };
 
-  const handleListViewFileClick = (file: FileItem) => {
+  
+  const handleSearchMissing = useCallback((file: FileItem) => {
+    const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
+    const title = file.title || file.name;
+    setArrSearchMediaType(mediaType);
+    setArrSearchQuery(title);
+    setArrSearchOpen(true);
+  }, []);
+
+const handleListViewFileClick = (file: FileItem) => {
     if (file.type === 'directory') {
       // Use the correct path from search results (with base_path) or construct from current path
       const targetPath = file.path || file.fullPath || joinPaths(currentPath, file.name);
@@ -901,6 +915,8 @@ const FileBrowserContent: React.FC = () => {
                 onDeleted={() => debouncedRefresh(currentPath)}
                 onError={setError}
                 onNavigateBack={handleNavigateBack}
+                showArrBadges
+                onSearchMissing={handleSearchMissing}
               />
               <PaginationComponent
                 totalPages={totalPages}
@@ -922,6 +938,8 @@ const FileBrowserContent: React.FC = () => {
                 onRename={() => debouncedRefresh(currentPath)}
                 onDeleted={() => debouncedRefresh(currentPath)}
                 onNavigateBack={handleNavigateBack}
+                showArrBadges
+                onSearchMissing={handleSearchMissing}
               />
               <PaginationComponent
                 totalPages={totalPages}
@@ -942,6 +960,8 @@ const FileBrowserContent: React.FC = () => {
                 onDeleted={() => debouncedRefresh(currentPath)}
                 onError={setError}
                 onNavigateBack={handleNavigateBack}
+                showArrBadges
+                onSearchMissing={handleSearchMissing}
               />
               <PaginationComponent
                 totalPages={totalPages}
@@ -953,6 +973,13 @@ const FileBrowserContent: React.FC = () => {
           )}
         </Box>
       </Fade>
+
+      <ArrSearchModal
+        open={arrSearchOpen}
+        onClose={() => setArrSearchOpen(false)}
+        mediaType={arrSearchMediaType}
+        initialQuery={arrSearchQuery}
+      />
 
       <Dialog
         open={detailsOpen}

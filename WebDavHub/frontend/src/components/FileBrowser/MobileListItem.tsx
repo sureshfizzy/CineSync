@@ -1,10 +1,10 @@
 import React from 'react';
-import { Box, Typography, Checkbox, useTheme } from '@mui/material';
-import { getFileIcon } from './fileUtils.tsx';
+import { Box, Typography, Checkbox, Chip, useTheme, alpha } from '@mui/material';
+import { getArrBadgeData, getFileIcon, getQualityTone } from './fileUtils.tsx';
 import { MobileListItemProps } from './types';
 import { useBulkSelection } from '../../contexts/BulkSelectionContext';
 
-const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, formatDate, menu }) => {
+const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, formatDate, menu, showArrBadges }) => {
   const theme = useTheme();
   const { isSelectionMode, isSelected, toggleSelection } = useBulkSelection();
 
@@ -88,6 +88,68 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
           >
             {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
           </Typography>
+          {showArrBadges && (() => {
+            const arrBadges = getArrBadgeData(file);
+            const statusColor = arrBadges.statusTone === 'success'
+              ? theme.palette.success.main
+              : arrBadges.statusTone === 'warning'
+              ? theme.palette.warning.main
+              : arrBadges.statusTone === 'info'
+              ? theme.palette.info.main
+              : arrBadges.statusTone === 'error'
+              ? theme.palette.error.main
+              : theme.palette.text.secondary;
+            const qualityTone = getQualityTone(arrBadges.quality);
+            const qualityColor = qualityTone === 'warning'
+              ? theme.palette.warning.main
+              : qualityTone === 'info'
+              ? theme.palette.info.main
+              : qualityTone === 'success'
+              ? theme.palette.success.main
+              : theme.palette.text.secondary;
+
+            return (
+              <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {arrBadges.quality && (
+                  <Chip
+                    size="small"
+                    label={arrBadges.quality}
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      bgcolor: alpha(qualityColor, 0.12),
+                      color: qualityColor,
+                    }}
+                  />
+                )}
+                {arrBadges.monitored && (
+                  <Chip
+                    size="small"
+                    label="Monitored"
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      bgcolor: alpha(theme.palette.info.main, 0.1),
+                      color: theme.palette.info.main,
+                    }}
+                  />
+                )}
+                {arrBadges.statusLabel && (
+                  <Chip
+                    size="small"
+                    label={arrBadges.statusLabel}
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      bgcolor: alpha(statusColor, 0.12),
+                      color: statusColor,
+                    }}
+                  />
+                )}
+              </Box>
+            );
+          })()}
+
         </Box>
       </Box>
       {!isSelectionMode && menu}

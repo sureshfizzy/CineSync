@@ -10,6 +10,7 @@ interface ArrSearchModalProps {
   open: boolean;
   onClose: () => void;
   mediaType: 'movie' | 'tv';
+  initialQuery?: string;
 }
 
 interface AddConfig {
@@ -30,7 +31,7 @@ const defaultConfig: AddConfig = {
   tags: []
 };
 
-export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchModalProps) {
+export default function ArrSearchModal({ open, onClose, mediaType, initialQuery }: ArrSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,7 +81,7 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
 
   useEffect(() => {
     if (open) {
-      setSearchQuery('');
+      setSearchQuery(initialQuery || '');
       setSearchResults([]);
       setSelectedResult(null);
       setActiveStep(0);
@@ -104,7 +105,7 @@ export default function ArrSearchModal({ open, onClose, mediaType }: ArrSearchMo
         }
       })();
     }
-  }, [open]);
+  }, [open, initialQuery]);
 
   useEffect(() => {
     if (searchQuery.length >= 2) {

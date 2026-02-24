@@ -1,8 +1,9 @@
-import { Box, Typography, Chip, Paper, useTheme, useMediaQuery, alpha, Stack } from '@mui/material';
+import { Box, Typography, Chip, Paper, useTheme, useMediaQuery, alpha, Stack, IconButton, Tooltip } from '@mui/material';
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { MediaDetailsData } from '../../types/MediaTypes';
 import MovieFileActions from './MovieFileActions';
+import SearchIcon from '@mui/icons-material/Search';
 
 interface MovieHeaderProps {
   data: MediaDetailsData;
@@ -15,6 +16,7 @@ interface MovieHeaderProps {
   onVersionChange: (index: number) => void;
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
+  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 
@@ -60,7 +62,7 @@ const formatFileSize = (value: number | string | undefined) => {
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack, selectedVersionIndex, onVersionChange, isArrDashboardContext = false, isLoadingFiles = false }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack, selectedVersionIndex, onVersionChange, isArrDashboardContext = false, isLoadingFiles = false, onSearchMissing }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -74,6 +76,8 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
   const files = Array.isArray(fileInfo) ? fileInfo : (fileInfo ? [fileInfo] : []);
   const hasMultipleVersions = files.length > 1;
   const selectedFile = files[selectedVersionIndex] || files[0];
+  const canSearch = !isLoadingFiles && files.length === 0 && !!onSearchMissing;
+
 
   // Keyboard navigation for version switching
   useEffect(() => {
@@ -140,7 +144,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             WebkitBackfaceVisibility: 'hidden'
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: hasMultipleVersions ? 2 : 1, justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: hasMultipleVersions ? 2 : 1, justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' }, flexWrap: 'wrap' }}>
             <Typography
               variant="h3"
               fontWeight={700}
@@ -151,6 +155,21 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             >
               {data.title} {releaseYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({releaseYear})</span>}
             </Typography>
+            {canSearch && (
+              <Tooltip title="Search">
+                <IconButton
+                  onClick={() => onSearchMissing?.(data.title, 'movie')}
+                  sx={{
+                    bgcolor: alpha(theme.palette.primary.main, 0.12),
+                    color: theme.palette.primary.main,
+                    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
+                  }}
+                  size={isMobile ? 'small' : 'medium'}
+                >
+                  <SearchIcon fontSize={isMobile ? 'small' : 'medium'} />
+                </IconButton>
+              </Tooltip>
+            )}
             {hasMultipleVersions && (
               <Chip
                 label={`${files.length} versions`}

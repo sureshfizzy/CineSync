@@ -9,6 +9,7 @@ import axios from 'axios';
 import CircularProgress from '@mui/material/CircularProgress';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSymlinkCreatedListener } from '../hooks/useMediaHubUpdates';
+import ArrSearchModal from '../components/ArrDashboard/ArrSearchModal';
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -44,6 +45,9 @@ export default function MediaDetails() {
   const [error, setError] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
+  const [arrSearchOpen, setArrSearchOpen] = useState(false);
+  const [arrSearchMediaType, setArrSearchMediaType] = useState<'movie' | 'tv'>('movie');
+  const [arrSearchQuery, setArrSearchQuery] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const mediaType = mediaTypeFromUrl || location.state?.mediaType || 'movie';
@@ -51,6 +55,12 @@ export default function MediaDetails() {
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
   const transitionTimeoutRef = useRef<number | null>(null);
+
+  const handleOpenArrSearch = useCallback((title: string, type: 'movie' | 'tv') => {
+    setArrSearchMediaType(type);
+    setArrSearchQuery(title);
+    setArrSearchOpen(true);
+  }, []);
 
   // Function to handle smooth folder name transitions
   const handleFolderNameChange = useCallback((newFolderName: string, newTmdbId?: string | number) => {
@@ -313,6 +323,13 @@ export default function MediaDetails() {
           </motion.div>
         </Box>
       )}
+      <ArrSearchModal
+        open={arrSearchOpen}
+        onClose={() => setArrSearchOpen(false)}
+        mediaType={arrSearchMediaType}
+        initialQuery={arrSearchQuery}
+      />
+
       {/* Back button at very top left, always visible */}
       <IconButton
         onClick={() => {
@@ -480,6 +497,7 @@ export default function MediaDetails() {
                     folderName={folderName || ''}
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
+                    onSearchMissing={handleOpenArrSearch}
                   />
                 ) : (
                   <MovieInfo
@@ -488,6 +506,7 @@ export default function MediaDetails() {
                     folderName={folderName || ''}
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
+                    onSearchMissing={handleOpenArrSearch}
                   />
                 )}
               </Box>

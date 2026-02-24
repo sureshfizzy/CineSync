@@ -1,10 +1,11 @@
 
 import React, { useState, useCallback, memo } from 'react';
-import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha, Chip } from '@mui/material';
+import { Box, Paper, Typography, Skeleton, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Checkbox, alpha, Chip, IconButton } from '@mui/material';
 import { useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
+import SearchIcon from '@mui/icons-material/Search';
 import EditIcon from '@mui/icons-material/Edit';
 import TuneIcon from '@mui/icons-material/Tune';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -22,7 +23,7 @@ import BulkMoveDialog from './BulkMoveDialog';
 import BulkDeleteDialog from './BulkDeleteDialog';
 import { FileItem } from './types';
 import { TmdbResult } from '../api/tmdbApi';
-import { getFileIcon } from './fileUtils';
+import { getArrBadgeData, getFileIcon, getQualityTone } from './fileUtils';
 import CategoryPosterDisplay from './CategoryPosterDisplay';
 import PosterImage from './PosterImage';
 import './poster-optimizations.css';
@@ -41,6 +42,7 @@ interface PosterViewProps {
   onNavigateBack?: () => void;
   sizeVariant?: 'default' | 'compact';
   showArrBadges?: boolean;
+  onSearchMissing?: (file: FileItem) => void;
 }
 
 const PosterView = memo(({
@@ -56,6 +58,7 @@ const PosterView = memo(({
   onNavigateBack,
   sizeVariant = 'default',
   showArrBadges = false,
+  onSearchMissing,
 }: PosterViewProps) => {
   const theme = useTheme();
   const [contextMenu, setContextMenu] = useState<{
@@ -273,6 +276,15 @@ const PosterView = memo(({
           const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
           const tmdbId = file.tmdbId || (tmdb && tmdb.id);
           const hasPosterPath = !!posterPath || !!tmdbId;
+          const arrBadges = getArrBadgeData(file);
+          const qualityTone = getQualityTone(arrBadges.quality);
+          const qualityColor = qualityTone === 'warning'
+            ? theme.palette.warning.main
+            : qualityTone === 'info'
+            ? theme.palette.info.main
+            : qualityTone === 'success'
+            ? theme.palette.success.main
+            : theme.palette.text.secondary;
 
           return (
             <Paper
@@ -361,15 +373,15 @@ const PosterView = memo(({
                 )}
                 
                 {/* Quality Badge */}
-                {showArrBadges && file.quality && !isSelectionMode && (
+                {showArrBadges && arrBadges.quality && !isSelectionMode && (
                   <Box
                     sx={{
                       position: 'absolute',
                       top: 8,
                       left: 8,
                       zIndex: 5,
-                      bgcolor: alpha(theme.palette.success.main, 0.9),
-                      color: 'white',
+                      bgcolor: alpha(qualityColor, 0.9),
+                      color: theme.palette.getContrastText(qualityColor),
                       px: 1,
                       py: 0.25,
                       borderRadius: 1,
@@ -378,7 +390,7 @@ const PosterView = memo(({
                       backdropFilter: 'blur(8px)',
                     }}
                   >
-                    {file.quality}
+                    {arrBadges.quality}
                   </Box>
                 )}
                 {(() => {
@@ -537,16 +549,25 @@ const PosterView = memo(({
 
                 {/* Status row */}
                 {showArrBadges && (() => {
-                  const isAvailable = (file.status === 'imported' || file.status === 'available' || !!file.quality);
-                  const showMonitored = !!file.isLibraryItem;
+                  const statusColor = arrBadges.statusTone === 'success'
+                    ? theme.palette.success.main
+                    : arrBadges.statusTone === 'warning'
+                    ? theme.palette.warning.main
+                    : arrBadges.statusTone === 'info'
+                    ? theme.palette.info.main
+                    : arrBadges.statusTone === 'error'
+                    ? theme.palette.error.main
+                    : theme.palette.text.secondary;
+
                   return (
                   <Box sx={{
                     mt: 0.5,
                     display: 'flex',
                     justifyContent: 'center',
+                    alignItems: 'center',
                     gap: 1
                   }}>
-                    {showMonitored && (
+                    {arrBadges.monitored && (
                       <Chip size="small" label="Monitored" sx={{
                         height: 20,
                         fontSize: '0.7rem',
@@ -555,12 +576,37 @@ const PosterView = memo(({
                       }} />
                     )}
 
-                    <Chip size="small" label={isAvailable ? 'Available' : 'Missing'} sx={{
-                      height: 20,
-                      fontSize: '0.7rem',
-                      bgcolor: isAvailable ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.warning.main, 0.12),
-                      color: isAvailable ? theme.palette.success.main : theme.palette.warning.main,
-                    }} />
+                    {arrBadges.statusLabel && (
+                      <Chip size="small" label={arrBadges.statusLabel} sx={{
+                        height: 20,
+                        fontSize: '0.7rem',
+                        bgcolor: alpha(statusColor, 0.12),
+                        color: statusColor,
+                      }} />
+                    )}
+
+                    {arrBadges.showSearch && onSearchMissing && !isSelectionMode && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSearchMissing(file);
+                        }}
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 1,
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          color: theme.palette.primary.main,
+                          '&:hover': {
+                            bgcolor: alpha(theme.palette.primary.main, 0.2)
+                          }
+                        }}
+                        title="Search"
+                      >
+                        <SearchIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    )}
                   </Box>
                   );
                 })()}

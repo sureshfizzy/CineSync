@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Typography, Chip, Paper, alpha, useTheme } from '@mui/material';
+import { Box, Typography, Chip, Paper, alpha, useTheme, IconButton, Tooltip } from '@mui/material';
 import { motion } from 'framer-motion';
 import { MediaDetailsData } from './types';
 import ShowFileActions from './ShowFileActions';
+import SearchIcon from '@mui/icons-material/Search';
 
 interface ShowHeaderProps {
   data: MediaDetailsData;
@@ -16,15 +17,18 @@ interface ShowHeaderProps {
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
   seasonFolders?: any[];
+  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [] }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [], onSearchMissing }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
   const genres = data.genres || [];
   const country = data.production_countries?.[0]?.name;
   const theme = useTheme();
+  const canSearch = !isLoadingFiles && seasonFolders.length === 0 && !!onSearchMissing;
+
 
   return (
     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 4 }, alignItems: { xs: 'center', md: 'flex-start' } }}>
@@ -36,9 +40,26 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
         />
       </Paper>
       <Box sx={{ flex: 1, minWidth: 0, textAlign: { xs: 'center', md: 'left' } }}>
-        <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 1, textAlign: { xs: 'center', md: 'left' } }}>
-          {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' } }}>
+          <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 0, textAlign: { xs: 'center', md: 'left' } }}>
+            {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
+          </Typography>
+          {canSearch && (
+            <Tooltip title="Search">
+              <IconButton
+                onClick={() => onSearchMissing?.(data.name || data.title || folderName, 'tv')}
+                sx={{
+                  bgcolor: alpha(theme.palette.primary.main, 0.12),
+                  color: theme.palette.primary.main,
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
+                }}
+                size="small"
+              >
+                <SearchIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
         <ShowFileActions
           data={data}
           folderName={folderName}

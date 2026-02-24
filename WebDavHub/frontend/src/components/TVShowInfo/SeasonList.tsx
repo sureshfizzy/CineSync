@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Typography, Paper, Collapse, IconButton, alpha, useTheme } from '@mui/material';
+import { Box, Typography, Paper, Collapse, IconButton, alpha, useTheme, Tooltip } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search';
 import { MediaDetailsData, SeasonFolderInfo } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchEpisodesFromTmdb } from '../api/tmdbApi';
@@ -14,6 +15,7 @@ interface SeasonListProps {
   handleDeleted: any;
   handleError: any;
   isArrDashboardContext?: boolean;
+  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 const SeasonList: React.FC<SeasonListProps> = ({
@@ -24,6 +26,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
   handleDeleted,
   handleError,
   isArrDashboardContext = false,
+  onSearchMissing,
 }) => {
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
   const [expandedEpisodes, setExpandedEpisodes] = useState<Set<string>>(new Set());
@@ -283,6 +286,28 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                           >
                                             {new Date(episode.air_date).toLocaleDateString()}
                                           </Typography>
+                                        )}
+
+                                        {!isAvailable && onSearchMissing && (
+                                          <Tooltip title="Search">
+                                            <IconButton
+                                              size="small"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const showTitle = data.name || data.title || '';
+                                                const query = `${showTitle} S${String(season.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`.trim();
+                                                onSearchMissing(query, 'tv');
+                                              }}
+                                              sx={{
+                                                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                                                color: theme.palette.primary.main,
+                                                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
+                                                mr: 0.5
+                                              }}
+                                            >
+                                              <SearchIcon fontSize="small" />
+                                            </IconButton>
+                                          </Tooltip>
                                         )}
 
                                         {episodeFile && (
