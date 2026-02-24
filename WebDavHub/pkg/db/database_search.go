@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,6 +59,7 @@ func sanitizeFolderName(name string) string {
 		return "sanitized_filename"
 	}
 
+
 	// Base replacements for all OS
 	replacements := map[string]string{
 		"/": "-", "\\": "-", "*": "x", "?": "",
@@ -82,6 +84,18 @@ func sanitizeFolderName(name string) string {
 	}
 	return name
 }
+
+func normalizeCategoryPath(category string) (string, string) {
+	trimmed := strings.Trim(category, "/\\")
+	if trimmed == "" {
+		return "", ""
+	}
+	normalized := strings.ReplaceAll(trimmed, "\\", "/")
+	normalized = filepath.FromSlash(normalized)
+	api := filepath.ToSlash(normalized)
+	return normalized, api
+}
+
 
 // checkFileSizeColumnExists checks if the file_size column exists in processed_files table
 func checkFileSizeColumnExists() bool {
@@ -861,14 +875,27 @@ func getRootFoldersPaginated(db *sql.DB, page, limit, offset int, mediaType stri
 		args = append(args, tmdbId)
 	}
 
-	countQuery := `SELECT COUNT(*) FROM (SELECT DISTINCT CASE WHEN instr(REPLACE(base_path, '/', '\\'), '\\') > 0 THEN substr(REPLACE(base_path, '/', '\\'), 1, instr(REPLACE(base_path, '/', '\\'), '\\') - 1) ELSE REPLACE(base_path, '/', '\\') END AS root_folder FROM processed_files ` + where + `)`
+	rootFoldersCTE := `
+		WITH root_folders AS (
+			SELECT DISTINCT
+				CASE
+					WHEN instr(norm_path, char(92)) > 0 THEN substr(norm_path, 1, instr(norm_path, char(92)) - 1)
+					ELSE norm_path
+				END AS root_folder
+			FROM (
+				SELECT REPLACE(base_path, '/', char(92)) AS norm_path
+				FROM processed_files ` + where + `
+			)
+		)`
+
+	countQuery := rootFoldersCTE + ` SELECT COUNT(*) FROM root_folders`
 
 	var total int
 	if err := db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	query := `SELECT DISTINCT CASE WHEN instr(REPLACE(base_path, '/', '\\'), '\\') > 0 THEN substr(REPLACE(base_path, '/', '\\'), 1, instr(REPLACE(base_path, '/', '\\'), '\\') - 1) ELSE REPLACE(base_path, '/', '\\') END AS root_folder FROM processed_files ` + where + ` ORDER BY root_folder LIMIT ? OFFSET ?`
+	query := rootFoldersCTE + ` SELECT root_folder FROM root_folders ORDER BY root_folder LIMIT ? OFFSET ?`
 	queryArgs := append(append([]interface{}{}, args...), limit, offset)
 
 	rows, err := db.Query(query, queryArgs...)
@@ -911,7 +938,7 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 	}
 
 	// Normalize path separators - database stores with backslashes, API uses forward slashes
-	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
+	normalizedCategory, apiCategory := normalizeCategoryPath(category)
 
 	// Build filters
 	filterArgs := []interface{}{}
@@ -925,31 +952,16 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 		filterArgs = append(filterArgs, tmdbId)
 	}
 
-	// First check for exact match (leaf category with content)
-	exactMatchQuery := "SELECT COUNT(*) FROM processed_files WHERE base_path = ?" + filterSQL
-	var exactCount int
-	args := append([]interface{}{normalizedCategory}, filterArgs...)
-	err := db.QueryRow(exactMatchQuery, args...).Scan(&exactCount)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if exactCount > 0 {
-		// This is a leaf category, return content folders
-		return getCategoryContentFolders(db, normalizedCategory, page, limit, offset, mediaType, tmdbId)
-	}
-
-	// No exact match, look for subcategories
 	subcategoryQuery := `
-		SELECT DISTINCT base_path
+		SELECT DISTINCT REPLACE(base_path, '/', char(92)) AS norm_path
 		FROM processed_files
 		WHERE base_path IS NOT NULL
 		AND base_path != ''
-		AND base_path LIKE ?` + filterSQL + `
-		ORDER BY base_path`
+		AND REPLACE(base_path, '/', char(92)) LIKE ?` + filterSQL + `
+		ORDER BY norm_path`
 
 	likePattern := normalizedCategory + string(filepath.Separator) + "%"
-	args = append([]interface{}{likePattern}, filterArgs...)
+	args := append([]interface{}{likePattern}, filterArgs...)
 
 	rows, err := db.Query(subcategoryQuery, args...)
 	if err != nil {
@@ -967,33 +979,66 @@ func getCategoryFoldersPaginated(db *sql.DB, category string, page, limit, offse
 		subcategoryBasePaths = append(subcategoryBasePaths, basePath)
 	}
 
-
 	// Extract the next level folder names from subcategory base_paths
 	subfolderMap := make(map[string]bool)
+	separator := string(filepath.Separator)
+	prefix := normalizedCategory + separator
+	prefixLower := strings.ToLower(prefix)
 	for _, basePath := range subcategoryBasePaths {
-		// For base_path "Hunch\1080p" and category "Hunch", extract "1080p"
-		if strings.HasPrefix(basePath, normalizedCategory+string(filepath.Separator)) {
-			remainder := basePath[len(normalizedCategory)+1:] // Remove "Hunch\"
-			parts := strings.Split(remainder, string(filepath.Separator))
+		basePathNorm := filepath.FromSlash(strings.ReplaceAll(basePath, "\\", "/"))
+		basePathLower := strings.ToLower(basePathNorm)
+		if strings.HasPrefix(basePathLower, prefixLower) {
+			remainder := basePathNorm[len(prefix):]
+			parts := strings.Split(remainder, separator)
 			if len(parts) > 0 && parts[0] != "" {
 				subfolderMap[parts[0]] = true
 			}
 		}
 	}
 
-	var folders []FolderInfo
-
 	// If we have subfolders, return them as folders
 	if len(subfolderMap) > 0 {
+		subfolders := make([]string, 0, len(subfolderMap))
 		for subfolder := range subfolderMap {
+			subfolders = append(subfolders, subfolder)
+		}
+		sort.Strings(subfolders)
+
+		total := len(subfolders)
+		if limit <= 0 {
+			limit = total
+		}
+		start := offset
+		if start > total {
+			return []FolderInfo{}, total, nil
+		}
+		end := start + limit
+		if end > total {
+			end = total
+		}
+
+		var folders []FolderInfo
+		for _, subfolder := range subfolders[start:end] {
 			folders = append(folders, FolderInfo{
 				FolderName: subfolder,
-				FolderPath: "/" + category + "/" + subfolder,
+				FolderPath: "/" + apiCategory + "/" + subfolder,
 				TmdbID:     "",
 				MediaType:  "",
 			})
 		}
-		return folders, len(folders), nil
+		return folders, total, nil
+	}
+
+	exactMatchQuery := "SELECT COUNT(*) FROM processed_files WHERE REPLACE(base_path, '/', char(92)) = ?" + filterSQL
+	var exactCount int
+	args = append([]interface{}{normalizedCategory}, filterArgs...)
+	err = db.QueryRow(exactMatchQuery, args...).Scan(&exactCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if exactCount > 0 {
+		return getCategoryContentFolders(db, normalizedCategory, page, limit, offset, mediaType, tmdbId)
 	}
 
 	// No subcategories found, return empty result
@@ -1283,7 +1328,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		return nil, 0, fmt.Errorf("base_path column not available")
 	}
 
-	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
+	normalizedCategory, _ := normalizeCategoryPath(category)
 
 	searchPattern := "%" + searchQuery + "%"
 	offset := (page - 1) * limit
@@ -1464,7 +1509,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 // searchCategoryFoldersWithLetter searches category folders with letter filtering
 func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
 	// Normalize path separators - database stores with backslashes, API uses forward slashes
-	normalizedCategory := strings.ReplaceAll(category, "/", string(filepath.Separator))
+	normalizedCategory, _ := normalizeCategoryPath(category)
 
 	offset := (page - 1) * limit
 	isNumeric := letterFilter == "#"
