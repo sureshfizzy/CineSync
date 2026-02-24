@@ -1,11 +1,12 @@
 import { Indexer, IndexerSearchRequest, IndexerSearchResult, TestResult, IndexerFormData } from '../types/indexer';
+import { getAuthHeaders } from '../contexts/AuthContext';
 
 const API_BASE = '/api';
 
 export class IndexerApi {
   // Get all indexers
   static async getIndexers(): Promise<Indexer[]> {
-    const response = await fetch(`${API_BASE}/indexers`);
+    const response = await fetch(`${API_BASE}/indexers`, { headers: getAuthHeaders() });
     if (!response.ok) {
       throw new Error(`Failed to fetch indexers: ${response.statusText}`);
     }
@@ -14,7 +15,7 @@ export class IndexerApi {
 
   // Get a specific indexer by ID
   static async getIndexer(id: number): Promise<Indexer> {
-    const response = await fetch(`${API_BASE}/indexers/${id}`);
+    const response = await fetch(`${API_BASE}/indexers/${id}`, { headers: getAuthHeaders() });
     if (!response.ok) {
       throw new Error(`Failed to fetch indexer: ${response.statusText}`);
     }
@@ -25,9 +26,7 @@ export class IndexerApi {
   static async createIndexer(indexer: IndexerFormData): Promise<Indexer> {
     const response = await fetch(`${API_BASE}/indexers`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(indexer),
     });
 
@@ -43,9 +42,7 @@ export class IndexerApi {
   static async updateIndexer(id: number, indexer: IndexerFormData): Promise<Indexer> {
     const response = await fetch(`${API_BASE}/indexers/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(indexer),
     });
 
@@ -61,6 +58,7 @@ export class IndexerApi {
   static async deleteIndexer(id: number): Promise<void> {
     const response = await fetch(`${API_BASE}/indexers/${id}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -73,9 +71,7 @@ export class IndexerApi {
   static async testIndexer(id: number): Promise<TestResult> {
     const response = await fetch(`${API_BASE}/indexers/${id}/test`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     });
 
     if (!response.ok) {
@@ -90,9 +86,7 @@ export class IndexerApi {
   static async testIndexerConfig(config: IndexerFormData): Promise<TestResult> {
     const response = await fetch(`${API_BASE}/indexers/test-config`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(config),
     });
 
@@ -108,9 +102,7 @@ export class IndexerApi {
   static async searchIndexer(id: number, searchRequest: IndexerSearchRequest): Promise<IndexerSearchResult[]> {
     const response = await fetch(`${API_BASE}/indexers/${id}/search`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(searchRequest),
     });
 

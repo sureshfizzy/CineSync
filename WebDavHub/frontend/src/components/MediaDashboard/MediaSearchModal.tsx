@@ -5,6 +5,7 @@ import axios from 'axios';
 import { SearchResult } from './types';
 import FolderSelector from '../FileOperations/FolderSelector';
 import { normalizeMediaType } from '../../utils/mediaType';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 interface MediaSearchModalProps {
   open: boolean;
@@ -89,7 +90,7 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
       // Load root folders from API
       (async () => {
         try {
-          const response = await fetch('/api/root-folders');
+          const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
           if (response.ok) {
             const folders = await response.json();
             const paths = folders.map((folder: any) => folder.path);

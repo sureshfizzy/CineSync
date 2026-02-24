@@ -3,6 +3,7 @@ import { Box, Typography, Card, CardContent, List, ListItem, ListItemText, ListI
 import { Add as AddIcon, Delete as DeleteIcon, Folder as FolderIcon, ArrowBack as ArrowBackIcon, Storage as StorageIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import FolderSelector from '../FileOperations/FolderSelector';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 interface RootFolder {
   id: number;
@@ -34,7 +35,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       setError('');
       
       console.log('Fetching root folders from API...');
-      const response = await fetch('/api/root-folders');
+      const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch root folders: ${response.statusText}`);
@@ -68,9 +69,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       console.log('Adding root folder:', folderPath.trim());
       const response = await fetch('/api/root-folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           path: folderPath.trim()
         })
@@ -103,7 +102,8 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       setError('');
 
       const response = await fetch(`/api/root-folders/${folderToDelete.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {

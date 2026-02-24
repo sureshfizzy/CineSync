@@ -3,6 +3,7 @@ import {Alert, alpha, Avatar, Box, Button, Chip, CircularProgress, Dialog, Dialo
 import {Close as CloseIcon, Link as LinkIcon, Schedule as ScheduleIcon, Search as SearchIcon, Security as SecurityIcon, Timer as TimerIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon,} from '@mui/icons-material';
 import { Indexer, IndexerFormData, DEFAULT_INDEXER_CONFIG } from '../../types/indexer';
 import { IndexerApi } from '../../api/indexerApi';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 type FetchedCategory = { id: number; name: string; subs?: { id: number; name: string }[] };
 
@@ -70,11 +71,11 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
       try {
         let res: Response;
         if (indexer?.id) {
-          res = await fetch(`/api/indexers/${indexer.id}/caps`);
+          res = await fetch(`/api/indexers/${indexer.id}/caps`, { headers: getAuthHeaders() });
         } else {
           res = await fetch('/api/indexers/caps', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(formData),
           });
         }

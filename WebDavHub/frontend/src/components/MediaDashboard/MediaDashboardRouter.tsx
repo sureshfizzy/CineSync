@@ -12,7 +12,7 @@ import IndexerManagement from './IndexerManagement';
 export default function MediaDashboardRouter() {
   return (
     <Routes>
-      <Route index element={<MediaDashboard filter="all" />} />
+      <Route index element={<MediaDashboard filter="movies" />} />
       <Route path="movies" element={<MediaDashboard filter="movies" />} />
       <Route path="series" element={<MediaDashboard filter="series" />} />
       <Route path="wanted" element={<MediaDashboard filter="wanted" />} />
@@ -29,7 +29,7 @@ export default function MediaDashboardRouter() {
       <Route path="debrid/settings" element={<RealDebridSettings />} />
       <Route path="debrid/settings/rclone" element={<RcloneSettings />} />
 
-      <Route path="*" element={<MediaDashboard filter="all" />} />
+      <Route path="*" element={<MediaDashboard filter="movies" />} />
     </Routes>
   );
 }

@@ -12,6 +12,7 @@ import {
   Add as AddIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 import { SearchResult } from './types';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { normalizeMediaType } from '../../utils/mediaType';
@@ -94,7 +95,7 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
   useEffect(() => {
     const loadRoots = async () => {
       try {
-        const response = await fetch('/api/root-folders');
+        const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
         if (response.ok) {
           const folders = await response.json();
           const bases = folders.map((folder: any) => folder.path);

@@ -264,6 +264,7 @@ const Settings: React.FC = () => {
       const apiKeyItem = data.config.find(item => item.key === 'CINESYNC_API_KEY');
       if (apiKeyItem && apiKeyItem.value) {
         setCineSyncApiKey(apiKeyItem.value);
+        localStorage.setItem('CINESYNC_API_KEY', apiKeyItem.value);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration');
@@ -341,6 +342,14 @@ const Settings: React.FC = () => {
         }));
       }, 500);
 
+      if (pendingChanges['CINESYNC_API_KEY'] !== undefined) {
+        const nextKey = pendingChanges['CINESYNC_API_KEY'] || '';
+        if (nextKey) {
+          localStorage.setItem('CINESYNC_API_KEY', nextKey);
+        } else {
+          localStorage.removeItem('CINESYNC_API_KEY');
+        }
+      }
       setPendingChanges({});
       setSuccess('Configuration saved successfully');
       setShowConfirmDialog(false);
@@ -360,6 +369,11 @@ const Settings: React.FC = () => {
       }
       const apiKey = response.data?.apiKey || '';
       setCineSyncApiKey(apiKey);
+      if (apiKey) {
+        localStorage.setItem('CINESYNC_API_KEY', apiKey);
+      } else {
+        localStorage.removeItem('CINESYNC_API_KEY');
+      }
       await fetchConfig();
       setPendingChanges(prev => {
         const next = { ...prev };

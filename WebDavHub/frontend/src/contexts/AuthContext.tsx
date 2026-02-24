@@ -1,6 +1,18 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { getGlobalSSEInstanceSafe } from '../hooks/useCentralizedSSE';
+export const getAuthHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+  const headers: Record<string, string> = { ...extra };
+  const token = localStorage.getItem('cineSyncJWT');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const apiKey = localStorage.getItem('CINESYNC_API_KEY') || localStorage.getItem('cineSyncApiKey');
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+  return headers;
+};
 
 interface AuthContextType {
   isAuthenticated: boolean;
