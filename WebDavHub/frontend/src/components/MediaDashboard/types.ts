@@ -10,19 +10,25 @@ export interface QualityProfile {
 
 export interface ArrItem {
   id: string;
+  libraryItemId?: number;
   tmdbId: number;
   title: string;
   year?: number;
   mediaType: 'movie' | 'tv';
   posterPath?: string;
   overview?: string;
-  status: 'wanted' | 'searching' | 'downloading' | 'imported' | 'failed';
+  status: 'wanted' | 'searching' | 'downloading' | 'imported' | 'failed' | 'missing' | 'completed' | 'unavailable';
   rootFolder: string;
   qualityProfile: string;
   monitorPolicy: string;
   tags?: string[];
   createdAt: string;
   updatedAt?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episode?: string;
+  episodeTitle?: string;
+  airDate?: string;
 }
 
 export interface SearchResult {

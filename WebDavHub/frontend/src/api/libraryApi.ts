@@ -12,7 +12,7 @@ export interface LibraryItem {
   series_type?: string;
   season_folder?: boolean;
   tags: string;
-  status: 'wanted' | 'downloading' | 'completed' | 'unavailable';
+  status: 'wanted' | 'downloading' | 'completed' | 'unavailable' | 'missing' | 'imported';
   added_at: number;
   updated_at: number;
 }

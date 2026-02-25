@@ -364,6 +364,54 @@ export async function fetchSeasonsFromTmdb(tmdbId: string): Promise<SeasonOption
   }
 }
 
+
+export interface TmdbEpisodeSummary {
+  seasonNumber: number;
+  episodeNumber: number;
+  name: string;
+  airDate?: string;
+}
+
+export async function fetchSeriesEpisodesFromTmdb(tmdbId: string): Promise<TmdbEpisodeSummary[]> {
+  const response = await fetch(`/api/tmdb/details?id=${tmdbId}&mediaType=tv`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('cineSyncJWT')}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch series details: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data || !Array.isArray(data.seasons)) {
+    return [];
+  }
+
+  const episodes: TmdbEpisodeSummary[] = [];
+  for (const season of data.seasons) {
+    const seasonNumber = season?.season_number;
+    if (!seasonNumber || seasonNumber <= 0) {
+      continue;
+    }
+    const seasonEpisodes = Array.isArray(season.episodes) ? season.episodes : [];
+    for (const ep of seasonEpisodes) {
+      const episodeNumber = ep?.episode_number;
+      if (!episodeNumber) {
+        continue;
+      }
+      episodes.push({
+        seasonNumber,
+        episodeNumber,
+        name: ep?.name || `Episode ${episodeNumber}`,
+        airDate: ep?.air_date
+      });
+    }
+  }
+
+  return episodes;
+}
+
 // Fetch episodes from TMDB for a specific season
 export async function fetchEpisodesFromTmdb(tmdbId: string, seasonNumber: number): Promise<EpisodeOption[]> {
   console.log('Fetching episodes from TMDB for ID:', tmdbId, 'Season:', seasonNumber);
