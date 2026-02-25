@@ -1,4 +1,4 @@
-package spoofing
+﻿package spoofing
 
 import (
     "encoding/json"
@@ -14,7 +14,7 @@ import (
 
     "cinesync/pkg/logger"
     "github.com/gorilla/websocket"
-    prowlarrapi "cinesync/pkg/prowlarr"
+    prowlarrapi "cinesync/pkg/api/Media/prowlarr"
 )
 
 var processStartTime = time.Now()

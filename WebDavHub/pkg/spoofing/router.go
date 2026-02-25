@@ -1,8 +1,8 @@
-package spoofing
+﻿package spoofing
 
 import (
     "net/http"
-    prowlarrapi "cinesync/pkg/prowlarr"
+    prowlarrapi "cinesync/pkg/api/Media/prowlarr"
 )
 
 // RegisterRoutes registers all spoofing routes with the given mux
