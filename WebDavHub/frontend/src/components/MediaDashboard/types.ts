@@ -1,3 +1,13 @@
+
+export interface QualityProfile {
+  id: number;
+  name: string;
+  mediaType: 'movie' | 'tv';
+  qualities: string[];
+  cutoff: string;
+  upgradeAllowed: boolean;
+}
+
 export interface ArrItem {
   id: string;
   tmdbId: number;

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"cinesync/pkg/api"
+	"cinesync/pkg/api/Media"
 	"cinesync/pkg/auth"
 	"cinesync/pkg/config"
 	"cinesync/pkg/db"
@@ -324,7 +325,7 @@ func main() {
 
 	// Root folders management endpoints
 	apiMux.HandleFunc("/api/root-folders", api.HandleRootFolders)
-	apiMux.HandleFunc("/api/root-folders/", api.HandleRootFolders)
+	apiMux.HandleFunc("/api/quality-profiles", media.HandleQualityProfiles)
 
 	// Indexer management endpoints
 	apiMux.HandleFunc("/api/indexers", api.HandleIndexers)
@@ -618,3 +619,4 @@ func main() {
 
 	log.Fatal(server.ListenAndServe())
 }
+

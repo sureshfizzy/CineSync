@@ -101,7 +101,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       setDeleting(true);
       setError('');
 
-      const response = await fetch(`/api/root-folders/${folderToDelete.id}`, {
+      const response = await fetch(`/api/root-folders?id=${folderToDelete.id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -614,3 +614,4 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
     </Box>
   );
 }
+

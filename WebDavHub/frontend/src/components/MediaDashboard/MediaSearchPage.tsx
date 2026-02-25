@@ -22,6 +22,11 @@ interface MediaSearchPageProps {
   onBack?: () => void;
 }
 
+interface QualityProfileSummary {
+  name: string;
+  qualities?: string[];
+}
+
 interface AddConfig {
   rootFolder: string;
   qualityProfile: string;
@@ -33,7 +38,7 @@ interface AddConfig {
 
 const defaultConfig: AddConfig = {
   rootFolder: '',
-  qualityProfile: 'HD-1080p',
+  qualityProfile: '',
   monitorPolicy: 'all',
   seriesType: 'standard',
   seasonFolder: true,
@@ -51,6 +56,7 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
   const [adding, setAdding] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [rootFolders, setRootFolders] = useState<string[]>([]);
+  const [qualityProfiles, setQualityProfiles] = useState<QualityProfileSummary[]>([]);
 
   // Debug state changes
   useEffect(() => {
@@ -65,6 +71,33 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
       setSearchResults([]);
     }
   }, [searchQuery, mediaType]);
+
+
+  useEffect(() => {
+    const loadQualityProfiles = async () => {
+      try {
+        const response = await fetch(`/api/quality-profiles?mediaType=${mediaType}`, { headers: getAuthHeaders() });
+        if (response.ok) {
+          const profiles = (await response.json()) || [];
+          const normalized = profiles.map((p: any) => ({ name: p.name, qualities: p.qualities || [] })).filter((p: any) => p.name);
+          setQualityProfiles(normalized);
+          if (normalized.length > 0) {
+            const hasSelected = normalized.some((p: any) => p.name === config.qualityProfile);
+            if (!hasSelected) {
+              const preferred = normalized.find((p: any) => p.name.toLowerCase() === 'hd-1080p');
+              const selected = preferred || normalized[0];
+              if (selected) {
+                setConfig((c) => ({ ...c, qualityProfile: selected.name }));
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadQualityProfiles();
+  }, [mediaType]);
 
   // Handle escape key to close search page
   useEffect(() => {
@@ -358,6 +391,7 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                 posterUrl={getImageUrl(selectedResult.poster_path)}
                 overview={selectedResult.overview}
                 rootFolders={rootFolders}
+                qualityProfiles={qualityProfiles}
                 config={config}
                 onChange={(partial) => setConfig({ ...config, ...partial })}
                 onClose={resetConfig}
@@ -373,3 +407,5 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
     </ConfigurationWrapper>
   );
 }
+
+

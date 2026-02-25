@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useConfigUpdates } from '../hooks/useConfigUpdates';
 import RestartRequiredPopup from '../components/RestartRequiredPopup';
 import axios from 'axios';
+import { getAuthHeaders } from './AuthContext';
 
 interface RuntimeConfig {
   tmdbApiKey?: string;
@@ -40,10 +41,10 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
 
       // Fetch current configuration from the API
       const response = await fetch('/api/config', {
-        headers: {
+        headers: getAuthHeaders({
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
-        }
+        })
       });
 
       if (!response.ok) {
@@ -120,7 +121,7 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
   // Handle server restart action
   const handleRestart = async () => {
     try {
-      await axios.post('/api/restart');
+      await axios.post('/api/restart', null, { headers: getAuthHeaders() });
     } catch (error) {
       console.error('Failed to restart server:', error);
       throw error;
@@ -177,3 +178,4 @@ export function useConfigValue<T>(key: keyof RuntimeConfig, fallback: T): T {
   const value = config[key];
   return value !== undefined ? (value as T) : fallback;
 }
+

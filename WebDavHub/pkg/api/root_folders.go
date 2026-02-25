@@ -1,12 +1,12 @@
 package api
 
 import (
-	"cinesync/pkg/logger"
 	"cinesync/pkg/db"
+	"cinesync/pkg/logger"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -20,8 +20,6 @@ type RootFolder struct {
 
 // HandleRootFolders handles root folder management requests
 func HandleRootFolders(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Request: %s %s", r.Method, r.URL.Path)
-	
 	switch r.Method {
 	case http.MethodGet:
 		handleGetRootFolders(w, r)
@@ -227,16 +225,13 @@ func handleUpdateRootFolder(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteRootFolder deletes a root folder (only from root_folders table)
 func handleDeleteRootFolder(w http.ResponseWriter, r *http.Request) {
-	// Extract ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/root-folders/")
-	if path == "" {
-		http.Error(w, "Folder ID is required", http.StatusBadRequest)
-		return
-	}
-
-	folderID, err := strconv.Atoi(path)
+	folderID, err := getIDParamOrPath(r, "/api/root-folders")
 	if err != nil {
-		http.Error(w, "Invalid folder ID", http.StatusBadRequest)
+		if errors.Is(err, errInvalidID) {
+			http.Error(w, "Invalid folder ID", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Folder ID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -289,3 +284,7 @@ func getFolderNameFromPath(path string) string {
 	}
 	return cleanPath
 }
+
+
+
+

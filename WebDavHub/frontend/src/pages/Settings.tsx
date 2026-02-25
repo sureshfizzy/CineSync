@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Alert, Snackbar, Box, Typography, Grid, IconButton, Chip, Stack, useTheme, alpha, Backdrop, CircularProgress, Fade, Tooltip, TextField, InputAdornment } from '@mui/material';
 import axios from 'axios';
+import { getAuthHeaders } from '../contexts/AuthContext';
 import { Refresh, Save, TuneRounded, ChevronRight, ChevronLeft, HomeRounded, VideoLibraryRounded, StorageRounded, NetworkCheckRounded, ApiRounded, LiveTvRounded, CreateNewFolderRounded, AccountTreeRounded, DriveFileRenameOutlineRounded, SettingsApplicationsRounded, Build, WorkRounded, FilterListRounded, ContentCopyRounded } from '@mui/icons-material';
 import ConfirmDialog from '../components/Settings/ConfirmDialog';
 import LoadingButton from '../components/Settings/LoadingButton';
@@ -107,7 +108,7 @@ const Settings: React.FC = () => {
 
   const checkConfigStatus = async () => {
     try {
-      const response = await axios.get('/api/config-status');
+      const response = await axios.get('/api/config-status', { headers: getAuthHeaders() });
       setConfigStatus(response.data);
     } catch (err) {
       console.error('Failed to check config status:', err);
@@ -2402,3 +2403,4 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
+

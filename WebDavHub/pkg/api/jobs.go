@@ -69,14 +69,12 @@ func HandleJobDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract job ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	jobID := strings.Split(path, "/")[0]
-
-	if jobID == "" {
+	parts := getPathSegments(r, "/api/jobs")
+	if len(parts) == 0 || parts[0] == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
 	}
+	jobID := parts[0]
 
 	job, err := jobManager.GetJob(jobID)
 	if err != nil {
@@ -105,14 +103,12 @@ func HandleJobUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract job ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	jobID := strings.Split(path, "/")[0]
-
-	if jobID == "" {
+	parts := getPathSegments(r, "/api/jobs")
+	if len(parts) == 0 || parts[0] == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
 	}
+	jobID := parts[0]
 
 	// Parse request body
 	var updateReq jobs.UpdateJobRequest
@@ -161,9 +157,7 @@ func HandleJobRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract job ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	parts := strings.Split(path, "/")
+	parts := getPathSegments(r, "/api/jobs")
 	if len(parts) < 2 || parts[1] != "run" {
 		http.Error(w, "Invalid URL path", http.StatusBadRequest)
 		return
@@ -208,9 +202,7 @@ func HandleJobCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract job ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	parts := strings.Split(path, "/")
+	parts := getPathSegments(r, "/api/jobs")
 	if len(parts) < 2 || parts[1] != "cancel" {
 		http.Error(w, "Invalid URL path", http.StatusBadRequest)
 		return
@@ -252,9 +244,7 @@ func HandleJobExecutions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract job ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	parts := strings.Split(path, "/")
+	parts := getPathSegments(r, "/api/jobs")
 	if len(parts) < 2 || parts[1] != "executions" {
 		http.Error(w, "Invalid URL path", http.StatusBadRequest)
 		return
@@ -291,20 +281,11 @@ func HandleJobExecutions(w http.ResponseWriter, r *http.Request) {
 
 // HandleJobsRouter routes job-related requests to appropriate handlers
 func HandleJobsRouter(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/jobs")
-	
+	parts := getPathSegments(r, "/api/jobs")
+
 	// Handle /api/jobs (list all jobs)
-	if path == "" || path == "/" {
-		HandleJobs(w, r)
-		return
-	}
-	
-	// Remove leading slash
-	path = strings.TrimPrefix(path, "/")
-	parts := strings.Split(path, "/")
-	
 	if len(parts) == 0 {
-		http.Error(w, "Invalid URL path", http.StatusBadRequest)
+		HandleJobs(w, r)
 		return
 	}
 
@@ -396,3 +377,4 @@ func HandleJobEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+

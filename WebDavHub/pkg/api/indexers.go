@@ -81,10 +81,8 @@ func HandleIndexers(w http.ResponseWriter, r *http.Request) {
 func HandleIndexerByID(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Indexer ID request: %s %s", r.Method, r.URL.Path)
 
-	// Extract ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/indexers/")
-	parts := strings.Split(path, "/")
-	if len(parts) == 0 || parts[0] == "" {
+	parts := getPathSegments(r, "/api/indexers")
+		if len(parts) == 0 || parts[0] == "" {
 		http.Error(w, "Indexer ID is required", http.StatusBadRequest)
 		return
 	}
@@ -114,10 +112,8 @@ func HandleIndexerTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/indexers/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] != "test" {
+	parts := getPathSegments(r, "/api/indexers")
+		if len(parts) < 2 || parts[0] == "" || parts[1] != "test" {
 		http.Error(w, "Invalid test endpoint", http.StatusBadRequest)
 		return
 	}
@@ -138,10 +134,8 @@ func HandleIndexerSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/indexers/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] != "search" {
+	parts := getPathSegments(r, "/api/indexers")
+		if len(parts) < 2 || parts[0] == "" || parts[1] != "search" {
 		http.Error(w, "Invalid search endpoint", http.StatusBadRequest)
 		return
 	}
@@ -195,9 +189,8 @@ func HandleIndexerCaps(w http.ResponseWriter, r *http.Request) {
             return
         }
     } else {
-        path := strings.TrimPrefix(r.URL.Path, "/api/indexers/")
-        parts := strings.Split(path, "/")
-        if len(parts) < 2 || parts[0] == "" || parts[1] != "caps" {
+		parts := getPathSegments(r, "/api/indexers")
+		if len(parts) < 2 || parts[0] == "" || parts[1] != "caps" {
             http.Error(w, "Invalid caps endpoint", http.StatusBadRequest)
             return
         }
@@ -699,3 +692,7 @@ func searchIndexer(indexer Indexer, req IndexerSearchRequest) ([]IndexerSearchRe
 
 	return searchResults, nil
 }
+
+
+
+

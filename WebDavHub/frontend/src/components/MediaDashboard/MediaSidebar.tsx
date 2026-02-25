@@ -6,6 +6,7 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FolderIcon from '@mui/icons-material/Folder';
 import StorageIcon from '@mui/icons-material/Storage';
+import TuneIcon from '@mui/icons-material/Tune';
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MediaSidebarFilter } from './types';
@@ -271,6 +272,31 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               />
             </ListItemButton>
             
+
+            <ListItemButton 
+              onClick={() => navigate('/Mediadashboard/settings/quality-profiles')}
+              sx={{ 
+                borderRadius: 1, 
+                mx: 0.5, 
+                mb: 0.5,
+                py: 0.5,
+                '&:hover': {
+                  bgcolor: (t) => alpha(t.palette.primary.main, 0.08)
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <TuneIcon fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText 
+                primary={
+                  <Typography variant="body2" fontWeight={500}>
+                    Quality Profiles
+                  </Typography>
+                } 
+              />
+            </ListItemButton>
+
             <ListItemButton 
               onClick={() => navigate('/Mediadashboard/settings/indexers')}
               sx={{ 

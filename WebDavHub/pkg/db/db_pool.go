@@ -18,9 +18,9 @@ var (
 	dbPool     *sql.DB
 	dbPoolOnce sync.Once
 	dbPoolMux  sync.RWMutex
-	
+
 	// Write operation queue for serializing write operations
-	dbWriteQueue chan func()
+	dbWriteQueue     chan func()
 	dbWriteQueueOnce sync.Once
 )
 
@@ -44,7 +44,7 @@ func GetDatabaseConnection() (*sql.DB, error) {
 			"PRAGMA auto_vacuum=INCREMENTAL",
 			"PRAGMA incremental_vacuum(100)", // Clean up immediately
 			"PRAGMA wal_checkpoint(RESTART)", // Force WAL checkpoint on startup
-			"PRAGMA optimize", // Optimize query planner
+			"PRAGMA optimize",                // Optimize query planner
 		}
 
 		for _, pragma := range additionalPragmas {
@@ -63,7 +63,7 @@ func GetDatabaseConnection() (*sql.DB, error) {
 
 		// Initialize write operation queue for serializing writes
 		initWriteQueue()
-		
+
 		startWALCheckpointManager(db)
 	})
 
@@ -219,7 +219,7 @@ func executeWithRetryOptimized(operation func() error, maxRetries int, baseDelay
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt/3))
 				if delay > 1*time.Second {
-					delay = 1*time.Second
+					delay = 1 * time.Second
 				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 4)))
 				time.Sleep(delay + jitter)
@@ -286,6 +286,16 @@ func initializeMediaHubTables(db *sql.DB) error {
 			tested_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
 			FOREIGN KEY (indexer_id) REFERENCES indexers(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS quality_profiles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			media_type TEXT NOT NULL,
+			qualities TEXT NOT NULL,
+			cutoff TEXT NOT NULL,
+			upgrade_allowed INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 	}
 
 	indexes := []string{
@@ -306,6 +316,8 @@ func initializeMediaHubTables(db *sql.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_indexers_enabled ON indexers(enabled)",
 		"CREATE INDEX IF NOT EXISTS idx_indexers_protocol ON indexers(protocol)",
 		"CREATE INDEX IF NOT EXISTS idx_indexers_last_updated ON indexers(last_updated)",
+		"CREATE INDEX IF NOT EXISTS idx_quality_profiles_media_type ON quality_profiles(media_type)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_quality_profiles_name_type ON quality_profiles(name, media_type)",
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_indexer_id ON indexer_tests(indexer_id)",
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_tested_at ON indexer_tests(tested_at)",
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_status ON indexer_tests(status)",

@@ -2,6 +2,7 @@ import { useState, useEffect, ReactNode } from 'react';
 import { Box, Fade, Slide, Zoom } from '@mui/material';
 import axios from 'axios';
 import ConfigurationPlaceholder from '../FileBrowser/ConfigurationPlaceholder';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 interface ConfigStatus {
   isPlaceholder: boolean;
@@ -22,7 +23,7 @@ export function ConfigurationWrapper({ children, fallbackComponent }: Configurat
 
   const checkConfigStatus = async () => {
     try {
-      const response = await axios.get('/api/config-status');
+      const response = await axios.get('/api/config-status', { headers: getAuthHeaders() });
       const newStatus = response.data;
 
       // If transitioning from placeholder to configured, add a delay for smooth animation

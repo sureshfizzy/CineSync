@@ -2,6 +2,7 @@ import { Box, Card, CardContent, Typography, Avatar, IconButton, FormControl, In
 import { Movie as MovieIcon, Tv as TvIcon, Add as AddIcon } from '@mui/icons-material';
 import { useState } from 'react';
 import FolderSelector from '../FileOperations/FolderSelector';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 interface ConfigCardProps {
   mediaType: 'movie' | 'tv';
@@ -10,6 +11,7 @@ interface ConfigCardProps {
   posterUrl?: string;
   overview?: string;
   rootFolders: string[];
+  qualityProfiles: { name: string; qualities?: string[] }[];
   config: {
     rootFolder: string;
     qualityProfile: string;
@@ -24,8 +26,11 @@ interface ConfigCardProps {
   onRootFoldersUpdate?: (newRootFolders: string[]) => void;
 }
 
-export default function MediaConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, config, onChange, onClose, onSubmit, submitting, onRootFoldersUpdate }: ConfigCardProps) {
+export default function MediaConfigCard({ mediaType, title, year, posterUrl, overview, rootFolders, qualityProfiles, config, onChange, onClose, onSubmit, submitting, onRootFoldersUpdate }: ConfigCardProps) {
   const isTv = mediaType === 'tv';
+  const profileNames = (qualityProfiles || []).map((p) => p.name);
+  const selectedQualityValue = profileNames.includes(config.qualityProfile) ? config.qualityProfile : '';
+
   
   // State for adding new root folder
   const [folderSelectorOpen, setFolderSelectorOpen] = useState(false);
@@ -34,9 +39,7 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
     try {
       const response = await fetch('/api/root-folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           path: path
         })
@@ -167,11 +170,13 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
           <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Quality Profile</Typography>
           <FormControl size="small" fullWidth>
             <InputLabel>Quality Profile</InputLabel>
-            <Select value={config.qualityProfile} label="Quality Profile" onChange={(e) => onChange({ qualityProfile: String(e.target.value) })}>
-              <MenuItem value="HD-1080p">HD-1080p</MenuItem>
-              <MenuItem value="HD-720p">HD-720p</MenuItem>
-              <MenuItem value="4K">4K</MenuItem>
-              <MenuItem value="Any">Any</MenuItem>
+            <Select value={selectedQualityValue} label="Quality Profile" onChange={(e) => onChange({ qualityProfile: String(e.target.value) })}>
+              {(qualityProfiles || []).length === 0 && (
+                <MenuItem value="">No profiles available</MenuItem>
+              )}
+              {(qualityProfiles || []).map((profile) => (
+                <MenuItem key={profile.name} value={profile.name}>{profile.name}</MenuItem>
+              ))}
             </Select>
           </FormControl>
 

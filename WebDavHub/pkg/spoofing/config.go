@@ -188,7 +188,6 @@ func InitializeConfig() error {
 	// Try to load from file first
 	if cfg, err := loadConfigFromFile(); err == nil {
 		config = cfg
-		logger.Info("Loaded spoofing configuration from file")
 		if strings.TrimSpace(config.AppGuid) == "" {
 			config.AppGuid = generateGUID()
 			if err := saveConfigToFile(config); err != nil {

@@ -14,6 +14,11 @@ interface MediaSearchModalProps {
   initialQuery?: string;
 }
 
+interface QualityProfileSummary {
+  name: string;
+  qualities?: string[];
+}
+
 interface AddConfig {
   rootFolder: string;
   qualityProfile: string;
@@ -25,7 +30,7 @@ interface AddConfig {
 
 const defaultConfig: AddConfig = {
   rootFolder: '',
-  qualityProfile: 'HD-1080p',
+  qualityProfile: '',
   monitorPolicy: 'all',
   seriesType: 'standard',
   seasonFolder: true,
@@ -41,6 +46,10 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
   const [config, setConfig] = useState<AddConfig>(defaultConfig);
   const [adding, setAdding] = useState(false);
   const [rootFolders, setRootFolders] = useState<string[]>([]);
+  const [qualityProfiles, setQualityProfiles] = useState<QualityProfileSummary[]>([]);
+  const profileNames = qualityProfiles.map((p) => p.name);
+  const selectedQualityValue = profileNames.includes(config.qualityProfile) ? config.qualityProfile : '';
+
   
   // State for adding new root folder
   const [folderSelectorOpen, setFolderSelectorOpen] = useState(false);
@@ -105,8 +114,31 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
           setRootFolders([]);
         }
       })();
+
+      // Load quality profiles
+      (async () => {
+        try {
+                    const response = await fetch(`/api/quality-profiles?mediaType=${mediaType}`, { headers: getAuthHeaders() });
+          if (response.ok) {
+            const profiles = (await response.json()) || [];
+            const normalized = profiles.map((p: any) => ({ name: p.name, qualities: p.qualities || [] })).filter((p: any) => p.name);
+            setQualityProfiles(normalized);
+            if (normalized.length > 0) {
+              const preferred = normalized.find((p: any) => p.name.toLowerCase() === 'hd-1080p');
+              const selected = preferred || normalized[0];
+              if (selected) {
+                setConfig((c) => ({ ...c, qualityProfile: selected.name }));
+              }
+            }
+          } else {
+            setQualityProfiles([]);
+          }
+        } catch {
+          setQualityProfiles([]);
+        }
+      })();
     }
-  }, [open, initialQuery]);
+  }, [open, initialQuery, mediaType]);
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -336,14 +368,16 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
               <FormControl fullWidth>
                 <InputLabel>Quality Profile</InputLabel>
                 <Select
-                  value={config.qualityProfile}
+                  value={selectedQualityValue}
                   onChange={(e) => setConfig({ ...config, qualityProfile: e.target.value })}
                   label="Quality Profile"
                 >
-                  <MenuItem value="HD-1080p">HD - 1080p</MenuItem>
-                  <MenuItem value="HD-720p">HD - 720p</MenuItem>
-                  <MenuItem value="4K">Ultra-HD</MenuItem>
-                  <MenuItem value="Any">Any</MenuItem>
+                  {qualityProfiles.length === 0 && (
+                    <MenuItem value="">No profiles available</MenuItem>
+                  )}
+                  {qualityProfiles.map((profile) => (
+                    <MenuItem key={profile.name} value={profile.name}>{profile.name}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
 
@@ -486,3 +520,7 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
     </Dialog>
   );
 }
+
+
+
+

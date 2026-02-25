@@ -7,6 +7,7 @@ import RcloneSettings from '../Debrid/Settings/RcloneSettings';
 import MediaDashboard from './MediaDashboard';
 import MediaSearchPage from './MediaSearchPage';
 import RootFoldersManagement from './RootFoldersManagement';
+import QualityProfilesManagement from './QualityProfilesManagement';
 import IndexerManagement from './IndexerManagement';
 
 export default function MediaDashboardRouter() {
@@ -21,6 +22,7 @@ export default function MediaDashboardRouter() {
       <Route path="settings" element={<RootFoldersManagement />} />
       <Route path="settings/media-management" element={<RootFoldersManagement />} />
       <Route path="settings/indexers" element={<IndexerManagement />} />
+      <Route path="settings/quality-profiles" element={<QualityProfilesManagement />} />
 
       {/* Debrid */}
       <Route path="debrid" element={<DebridDashboard />} />

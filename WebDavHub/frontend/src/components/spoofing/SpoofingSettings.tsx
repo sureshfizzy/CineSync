@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, Switch, TextField, Button, Alert, Snackbar, IconButton, Tooltip, Chip, Divider, CircularProgress, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, useTheme, alpha, Stack } from '@mui/material';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 import { Refresh as RefreshIcon, ContentCopy as CopyIcon, Save as SaveIcon, Security as SecurityIcon, Tv as TvIcon, Person as PersonIcon, Tag as TagIcon, Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, Folder as FolderIcon, Close as CloseIcon } from '@mui/icons-material';
 import SpoofingConnectionGuide from './SpoofingConnectionGuide';
 
@@ -61,7 +62,7 @@ const SpoofingSettings: React.FC = () => {
   const fetchAvailableFolders = async () => {
     setLoadingFolders(true);
     try {
-      const response = await fetch('/api/spoofing/folders/available');
+      const response = await fetch('/api/spoofing/folders/available', { headers: getAuthHeaders() });
       if (response.ok) {
         const folders = await response.json();
         setAvailableFolders(folders || []);
@@ -79,7 +80,7 @@ const SpoofingSettings: React.FC = () => {
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/spoofing/config');
+      const response = await fetch('/api/spoofing/config', { headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
         setConfig({
@@ -107,9 +108,7 @@ const SpoofingSettings: React.FC = () => {
   const saveConfigInternal = async (configToSave: SpoofingConfig) => {
     const response = await fetch('/api/spoofing/config', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(configToSave),
     });
 
@@ -137,7 +136,7 @@ const SpoofingSettings: React.FC = () => {
   const regenerateAPIKey = async () => {
     setRegenerating(true);
     try {
-      const response = await fetch('/api/spoofing/regenerate-key', { method: 'POST' });
+      const response = await fetch('/api/spoofing/regenerate-key', { method: 'POST', headers: getAuthHeaders() });
       if (response.ok) {
         const updatedConfig = await response.json();
         setConfig(updatedConfig);
@@ -1406,3 +1405,5 @@ const SpoofingSettings: React.FC = () => {
 };
 
 export default SpoofingSettings;
+
+
