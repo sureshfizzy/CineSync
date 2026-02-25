@@ -65,8 +65,6 @@ type IndexerSearchResult struct {
 
 // HandleIndexers handles indexer management requests
 func HandleIndexers(w http.ResponseWriter, r *http.Request) {
-	logger.Info("Indexer request: %s %s", r.Method, r.URL.Path)
-
 	switch r.Method {
 	case http.MethodGet:
 		handleGetIndexers(w, r)

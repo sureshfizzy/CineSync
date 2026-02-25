@@ -168,9 +168,9 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
       PaperProps={{
         sx: {
           borderRadius: { xs: 0, sm: 3 },
-          boxShadow: theme.palette.mode === 'dark' 
-            ? `0 20px 60px ${alpha(theme.palette.common.black, 0.4)}`
-            : `0 20px 60px ${alpha(theme.palette.common.black, 0.25)}`,
+          boxShadow: theme.palette.mode === 'dark'
+            ? `0 20px 60px ${alpha(theme.palette.common.black, 0.45)}`
+            : `0 12px 28px ${alpha(theme.palette.common.black, 0.18)}`,
           background: theme.palette.mode === 'dark'
             ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, ${theme.palette.background.paper} 100%)`
             : theme.palette.background.paper,

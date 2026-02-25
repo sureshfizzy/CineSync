@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Typography, Card, CardContent, List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Button, Alert, CircularProgress, Divider, Avatar, alpha, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, Fade } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Folder as FolderIcon, ArrowBack as ArrowBackIcon, Storage as StorageIcon, Warning as WarningIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+﻿import { useState, useEffect } from 'react';
+import { Box, Typography, Card, CardContent, List, ListItem, IconButton, Button, Alert, CircularProgress, Avatar, alpha, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, Stack, Tooltip } from '@mui/material';
+import { Add as AddIcon, Delete as DeleteIcon, Folder as FolderIcon, Warning as WarningIcon } from '@mui/icons-material';
 import FolderSelector from '../FileOperations/FolderSelector';
 import { getAuthHeaders } from '../../contexts/AuthContext';
 
@@ -12,12 +11,7 @@ interface RootFolder {
   isSystemManaged?: boolean;
 }
 
-interface RootFoldersManagementProps {
-  onBack?: () => void;
-}
-
-export default function RootFoldersManagement({ onBack }: RootFoldersManagementProps) {
-  const navigate = useNavigate();
+export default function RootFoldersManagement() {
   const theme = useTheme();
   const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,17 +27,29 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
     try {
       setLoading(true);
       setError('');
-      
+
       console.log('Fetching root folders from API...');
       const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch root folders: ${response.statusText}`);
       }
-      
+
       const folders = await response.json();
       console.log('Fetched root folders:', folders);
-      setRootFolders(folders || []);
+      const normalizedFolders = Array.isArray(folders)
+        ? folders
+            .map((folder) => {
+              const path = typeof folder.path === 'string' ? folder.path.trim() : '';
+              const isSystemManaged = folder.isSystemManaged === true
+                || folder.isSystemManaged === 'true'
+                || folder.isSystemManaged === 1
+                || folder.isSystemManaged === '1';
+              return { ...folder, path, isSystemManaged };
+            })
+            .filter((folder) => folder.path)
+        : [];
+      setRootFolders(normalizedFolders);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch root folders');
       console.error('Error fetching root folders:', err);
@@ -55,6 +61,9 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
   useEffect(() => {
     fetchRootFolders();
   }, []);
+
+  const systemManagedCount = rootFolders.filter((folder) => folder.isSystemManaged).length;
+  const customCount = rootFolders.length - systemManagedCount;
 
   const handleAddFolder = async (path?: string) => {
     const folderPath = path || newFolderPath;
@@ -81,13 +90,22 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       }
 
       const newFolder = await response.json();
-      setRootFolders(prev => [...prev, newFolder]);
+      const normalizedNewFolder = {
+        ...newFolder,
+        path: typeof newFolder.path === 'string' ? newFolder.path.trim() : '',
+        isSystemManaged: newFolder.isSystemManaged === true
+          || newFolder.isSystemManaged === 'true'
+          || newFolder.isSystemManaged === 1
+          || newFolder.isSystemManaged === '1'
+      };
+      if (normalizedNewFolder.path) {
+        setRootFolders((prev) => [...prev, normalizedNewFolder]);
+      }
       setNewFolderPath('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add root folder');
     }
   };
-
 
   const handleDeleteFolder = (folder: RootFolder) => {
     setFolderToDelete(folder);
@@ -103,7 +121,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
 
       const response = await fetch(`/api/root-folders?id=${folderToDelete.id}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders()
       });
 
       if (!response.ok) {
@@ -112,7 +130,7 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
       }
 
       // Remove the folder from the list
-      setRootFolders(prev => prev.filter(folder => folder.id !== folderToDelete.id));
+      setRootFolders((prev) => prev.filter((folder) => folder.id !== folderToDelete.id));
       setDeleteDialogOpen(false);
       setFolderToDelete(null);
     } catch (err) {
@@ -127,8 +145,6 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
     setFolderToDelete(null);
   };
 
-
-
   const handleAddFolderClick = () => {
     setFolderSelectorOpen(true);
   };
@@ -141,15 +157,17 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
 
   if (loading) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: 400,
-        gap: 2
-      }}>
-        <CircularProgress size={40} />
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 320,
+          gap: 1.5
+        }}
+      >
+        <CircularProgress size={32} />
         <Typography variant="body2" color="text.secondary">
           Loading root folders...
         </Typography>
@@ -158,460 +176,219 @@ export default function RootFoldersManagement({ onBack }: RootFoldersManagementP
   }
 
   return (
-           <Box sx={{
-             minHeight: '100vh',
-             background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
-             p: { xs: 2, sm: 2, md: 3 }
-           }}>
-             <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
-        {/* Header Section */}
-        <Box sx={{ 
-          mb: { xs: 2, sm: 3 },
-          display: 'flex',
-          alignItems: { xs: 'flex-start', sm: 'center' },
-          justifyContent: 'space-between',
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 2, sm: 2 }
-        }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: { xs: 1.5, sm: 2 },
-            width: { xs: '100%', sm: 'auto' }
-          }}>
-            <IconButton 
-              onClick={() => {
-                if (onBack) {
-                  onBack();
-                } else {
-                  navigate('/Mediadashboard/settings');
-                }
-              }} 
-              sx={{ 
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                '&:hover': {
-                    bgcolor: alpha(theme.palette.primary.main, 0.2)
-                  },
-                  minWidth: { xs: 40, sm: 44 },
-                  minHeight: { xs: 40, sm: 44 }
-                }}
-              >
-                <ArrowBackIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-              </IconButton>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h5" fontWeight={600} sx={{ 
-                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                mb: 0.5,
-                fontSize: { xs: '1.25rem', sm: '1.5rem' }
-              }}>
-                Media Management
+    <Box sx={{ bgcolor: 'background.default', py: { xs: 1.5, sm: 2.5 } }}>
+      <Box sx={{ maxWidth: 920, mx: 'auto', px: { xs: 1.5, sm: 2.5 } }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1.5}
+          sx={{ mb: 2, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box>
+              <Typography variant="h6" fontWeight={600}>
+                Root Folders
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{
-                fontSize: { xs: '0.75rem', sm: '0.875rem' }
-              }}>
-                Configure your media storage locations
+              <Typography variant="caption" color="text.secondary">
+                Manage the directories used for media storage
               </Typography>
             </Box>
-          </Box>
-          
+          </Stack>
+
           <Button
             variant="contained"
-            startIcon={<AddIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
+            size="small"
+            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
             onClick={handleAddFolderClick}
-            sx={{ 
-              borderRadius: 3,
-              px: { xs: 2, sm: 3 },
-              py: { xs: 1, sm: 1.5 },
-              fontSize: { xs: '0.875rem', sm: '0.95rem' },
-              fontWeight: 600,
-              boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
-              '&:hover': {
-                boxShadow: `0 6px 25px ${alpha(theme.palette.primary.main, 0.4)}`,
-                transform: 'translateY(-2px)'
-              },
-              transition: 'all 0.3s ease',
-              width: { xs: '100%', sm: 'auto' },
-              minHeight: { xs: 44, sm: 48 }
-            }}
+            sx={{ fontWeight: 600, borderRadius: 2, minHeight: 36 }}
           >
             Add Root Folder
           </Button>
-        </Box>
+        </Stack>
 
-        {/* Error Alert */}
         {error && (
-          <Alert 
-            severity="error" 
-            sx={{ 
-              mb: 3,
-              borderRadius: 2,
-              '& .MuiAlert-message': {
-                width: '100%'
-              }
-            }} 
-            onClose={() => setError('')}
-          >
+          <Alert severity="error" sx={{ mb: 1.5, borderRadius: 2 }} onClose={() => setError('')}>
             {error}
           </Alert>
         )}
 
-               {/* Stats Card */}
-               <Card sx={{
-                 mb: { xs: 2, sm: 3 },
-                 background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-                 border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                 borderRadius: 2
-               }}>
-                 <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
-                   <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 } }}>
-                     <Avatar sx={{
-                       width: { xs: 28, sm: 32 },
-                       height: { xs: 28, sm: 32 },
-                       bgcolor: alpha(theme.palette.primary.main, 0.2),
-                       color: theme.palette.primary.main
-                     }}>
-                       <StorageIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                     </Avatar>
-                     <Box>
-                       <Typography variant="h5" fontWeight={600} color="primary" sx={{
-                         fontSize: { xs: '1.25rem', sm: '1.5rem' }
-                       }}>
-                         {rootFolders.length}
-                       </Typography>
-                       <Typography variant="body2" color="text.secondary" sx={{
-                         fontSize: { xs: '0.75rem', sm: '0.875rem' }
-                       }}>
-                         Root Folders
-                       </Typography>
-                     </Box>
-                   </Box>
-                 </CardContent>
-               </Card>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, color: 'text.secondary' }}>
+          <Typography variant="caption">{rootFolders.length} total</Typography>
+          <Typography variant="caption">•</Typography>
+          <Typography variant="caption">{customCount} custom</Typography>
+          <Typography variant="caption">•</Typography>
+          <Typography variant="caption">{systemManagedCount} system</Typography>
+        </Stack>
 
-        {/* Root Folders List */}
-        <Card sx={{ 
-          borderRadius: 3,
-          boxShadow: `0 8px 32px ${alpha(theme.palette.common.black, 0.1)}`,
-          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`
-        }}>
+        <Typography
+          variant="caption"
+          sx={{
+            display: 'block',
+            mb: 0.5,
+            ml: 0.5,
+            fontWeight: 600,
+            color: theme.palette.text.secondary
+          }}
+        >
+          Storage Locations
+        </Typography>
+        <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
           <CardContent sx={{ p: 0 }}>
-            <Box sx={{ 
-              p: 3, 
-              borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-              background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, transparent 100%)`
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar sx={{ 
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  color: theme.palette.primary.main
-                }}>
-                  <FolderIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="h6" fontWeight={600}>
-                    Storage Locations
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Manage your media storage directories
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-
             {rootFolders.length === 0 ? (
-              <Box sx={{ 
-                p: 6, 
-                textAlign: 'center',
-                background: theme.palette.mode === 'dark'
-                  ? `linear-gradient(135deg, ${alpha(theme.palette.grey[800], 0.3)} 0%, ${alpha(theme.palette.grey[700], 0.2)} 100%)`
-                  : `linear-gradient(135deg, ${alpha(theme.palette.grey[50], 0.5)} 0%, ${alpha(theme.palette.grey[100], 0.3)} 100%)`
-              }}>
-                <Avatar sx={{ 
-                  width: 80, 
-                  height: 80, 
-                  mx: 'auto', 
-                  mb: 3,
-                  bgcolor: theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.grey[600], 0.3)
-                    : alpha(theme.palette.grey[400], 0.2),
-                  color: theme.palette.mode === 'dark'
-                    ? theme.palette.grey[300]
-                    : theme.palette.grey[600]
-                }}>
-                  <FolderIcon sx={{ fontSize: 40 }} />
+              <Box sx={{ p: 3, textAlign: 'center' }}>
+                <Avatar sx={{ width: 48, height: 48, mx: 'auto', mb: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }}>
+                  <FolderIcon sx={{ fontSize: 24 }} />
                 </Avatar>
-                <Typography variant="h5" fontWeight={600} color="text.primary" gutterBottom>
-                  No Root Folders Configured
+                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                  No root folders yet
                 </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>
-                  Root folders define where your media files are stored. Add your first root folder to start organizing your media library.
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 420, mx: 'auto' }}>
+                  Add a root folder to define where your media libraries are stored.
                 </Typography>
-                       <Button
-                         variant="contained"
-                         size="large"
-                         startIcon={<AddIcon />}
-                         onClick={handleAddFolderClick}
-                         sx={{
-                           borderRadius: 3,
-                           px: 4,
-                           py: 1.5,
-                           fontSize: '1rem',
-                           fontWeight: 600,
-                           boxShadow: `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
-                           '&:hover': {
-                             boxShadow: `0 6px 25px ${alpha(theme.palette.primary.main, 0.4)}`,
-                             transform: 'translateY(-2px)'
-                           },
-                           transition: 'all 0.3s ease'
-                         }}
-                       >
-                         Add Your First Root Folder
-                       </Button>
+                <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddFolderClick}>
+                  Add Root Folder
+                </Button>
               </Box>
             ) : (
-              <List sx={{ p: 0 }}>
+              <List dense disablePadding>
                 {rootFolders.map((folder, index) => (
-                  <React.Fragment key={folder.id}>
-                           <ListItem
-                             sx={{
-                               p: { xs: 1.5, sm: 2 },
-                               '&:hover': {
-                                 bgcolor: alpha(theme.palette.primary.main, 0.02),
-                                 '& .folder-actions': {
-                                   opacity: 1
-                                 }
-                               },
-                               transition: 'all 0.2s ease'
-                             }}
-                           >
-                             <Avatar sx={{
-                               mr: { xs: 1.5, sm: 2 },
-                               width: { xs: 28, sm: 32 },
-                               height: { xs: 28, sm: 32 },
-                               bgcolor: folder.isSystemManaged 
-                                 ? alpha(theme.palette.info.main, 0.1)
-                                 : alpha(theme.palette.primary.main, 0.1),
-                               color: folder.isSystemManaged 
-                                 ? theme.palette.info.main
-                                 : theme.palette.primary.main
-                             }}>
-                               <FolderIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                             </Avatar>
-                             <ListItemText
-                               primary={
-                                 <Typography variant="body1" fontWeight={500} sx={{ 
-                                   mb: 0.5,
-                                   fontSize: { xs: '0.875rem', sm: '1rem' },
-                                   wordBreak: 'break-word'
-                                 }}>
-                                   {folder.path}
-                                 </Typography>
-                               }
-                               secondary={
-                                 <Typography variant="caption" color="text.secondary" display="block" sx={{
-                                   fontSize: { xs: '0.7rem', sm: '0.75rem' }
-                                 }}>
-                                   {folder.isSystemManaged 
-                                     ? 'System-managed root folder' 
-                                     : 'Manually added root folder'}
-                                 </Typography>
-                               }
-                             />
-                             <ListItemSecondaryAction>
-                               {!folder.isSystemManaged && (
-                                 <IconButton
-                                   onClick={() => handleDeleteFolder(folder)}
-                                   sx={{
-                                     bgcolor: alpha(theme.palette.error.main, 0.1),
-                                     color: theme.palette.error.main,
-                                     '&:hover': {
-                                       bgcolor: alpha(theme.palette.error.main, 0.2)
-                                     },
-                                     minWidth: { xs: 36, sm: 40 },
-                                     minHeight: { xs: 36, sm: 40 }
-                                   }}
-                                 >
-                                   <DeleteIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />
-                                 </IconButton>
-                               )}
-                             </ListItemSecondaryAction>
-                    </ListItem>
-                    {index < rootFolders.length - 1 && (
-                      <Divider sx={{ 
-                        mx: { xs: 2, sm: 3 },
-                        borderColor: alpha(theme.palette.divider, 0.1)
-                      }} />
-                    )}
-                  </React.Fragment>
+                  <ListItem
+                    key={folder.id}
+                    divider={index < rootFolders.length - 1}
+                    secondaryAction={
+                      !folder.isSystemManaged ? (
+                        <Tooltip title="Delete root folder">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteFolder(folder)}
+                            sx={{
+                              bgcolor: alpha(theme.palette.error.main, 0.08),
+                              color: theme.palette.error.main,
+                              '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.16) }
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : null
+                    }
+                    sx={{
+                      py: 1,
+                      pr: 6,
+                      '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.25) },
+                      transition: 'background-color 0.2s ease',
+                      alignItems: 'flex-start'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, width: '100%' }}>
+                      <Avatar
+                        sx={{
+                          width: 24,
+                          height: 24,
+                          bgcolor: folder.isSystemManaged ? alpha(theme.palette.info.main, 0.12) : alpha(theme.palette.primary.main, 0.12),
+                          color: folder.isSystemManaged ? theme.palette.info.main : theme.palette.primary.main
+                        }}
+                      >
+                        <FolderIcon sx={{ fontSize: 14 }} />
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        {folder.name && (
+                          <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
+                            {folder.name}
+                          </Typography>
+                        )}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontSize: '0.85rem',
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                            wordBreak: 'break-all',
+                            fontWeight: 500,
+                            color: theme.palette.text.primary
+                          }}
+                        >
+                          {folder.path}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: theme.palette.text.secondary,
+                            fontWeight: 500
+                          }}
+                        >
+                          {folder.isSystemManaged ? 'System-managed' : 'Custom'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </ListItem>
                 ))}
               </List>
             )}
           </CardContent>
         </Card>
 
+        <FolderSelector open={folderSelectorOpen} onClose={() => setFolderSelectorOpen(false)} onSelect={handleFolderSelect} />
 
-        {/* Folder Selector Dialog */}
-        <FolderSelector
-          open={folderSelectorOpen}
-          onClose={() => setFolderSelectorOpen(false)}
-          onSelect={handleFolderSelect}
-        />
-
-        {/* Cool Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={cancelDelete}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: theme.palette.mode === 'dark' 
-                ? `0 20px 60px ${alpha(theme.palette.common.black, 0.4)}`
-                : `0 20px 60px ${alpha(theme.palette.common.black, 0.25)}`,
-              background: theme.palette.mode === 'dark'
-                ? `linear-gradient(135deg, ${alpha(theme.palette.error.main, 0.15)} 0%, ${theme.palette.background.paper} 100%)`
-                : theme.palette.background.paper,
-              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-              overflow: 'hidden',
-              backdropFilter: 'blur(10px)'
-            }
-          }}
-        >
-          <Fade in={deleteDialogOpen} timeout={300}>
-            <Box>
-              <DialogTitle sx={{ 
-                pb: 2,
-                background: theme.palette.mode === 'dark'
-                  ? `linear-gradient(90deg, ${alpha(theme.palette.error.main, 0.2)} 0%, ${alpha(theme.palette.error.main, 0.05)} 100%)`
-                  : alpha(theme.palette.error.main, 0.1),
-                borderBottom: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-                p: 3
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Avatar sx={{ 
-                    bgcolor: theme.palette.mode === 'dark' 
-                      ? alpha(theme.palette.error.main, 0.25)
-                      : alpha(theme.palette.error.main, 0.2),
-                    color: theme.palette.error.main,
-                    width: 48,
-                    height: 48,
-                    border: theme.palette.mode === 'light' ? `1px solid ${alpha(theme.palette.error.main, 0.2)}` : 'none'
-                  }}>
-                    <WarningIcon sx={{ fontSize: 24 }} />
-                  </Avatar>
-                  <Box>
-                    <Typography variant="h6" fontWeight={600} color="error">
-                      Delete Root Folder
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      This action cannot be undone
-                    </Typography>
-                  </Box>
-                </Box>
-              </DialogTitle>
-              
-              <DialogContent sx={{ p: 3 }}>
-                <Box sx={{ 
-                  p: 2, 
-                  bgcolor: theme.palette.mode === 'dark' 
-                    ? alpha(theme.palette.error.main, 0.12)
-                    : alpha(theme.palette.error.main, 0.15),
-                  borderRadius: 2,
-                  border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-                  mb: 2
-                }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-                    <FolderIcon sx={{ color: theme.palette.error.main, fontSize: 20 }} />
-                    <Typography variant="body2" fontWeight={500} color="error">
-                      Folder to be deleted:
-                    </Typography>
-                  </Box>
-                  <Typography variant="body1" sx={{ 
-                    fontFamily: 'monospace',
-                    bgcolor: theme.palette.mode === 'dark' 
-                      ? theme.palette.background.paper 
-                      : theme.palette.grey[50],
-                    p: 1,
-                    borderRadius: 1,
-                    border: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-                    wordBreak: 'break-all',
-                    color: theme.palette.text.primary,
-                    fontWeight: 500
-                  }}>
-                    {folderToDelete?.path}
-                  </Typography>
-                </Box>
-                
-                <Alert 
-                  severity="warning" 
-                  sx={{ 
-                    borderRadius: 2,
-                    '& .MuiAlert-icon': {
-                      fontSize: 20
-                    }
-                  }}
-                >
-                  <Typography variant="body2">
-                    <strong>Warning:</strong> Deleting this root folder will remove it from your media management configuration. 
-                    Any library items associated with this folder may need to be reconfigured.
-                  </Typography>
-                </Alert>
-              </DialogContent>
-              
-              <DialogActions sx={{ 
-                p: 3, 
-                gap: 2,
-                background: theme.palette.mode === 'dark'
-                  ? `linear-gradient(90deg, ${alpha(theme.palette.error.main, 0.05)} 0%, ${alpha(theme.palette.error.main, 0.1)} 100%)`
-                  : alpha(theme.palette.error.main, 0.05),
-                borderTop: `1px solid ${alpha(theme.palette.error.main, 0.3)}`
-              }}>
-                <Button 
-                  onClick={cancelDelete}
-                  disabled={deleting}
-                  sx={{ 
-                    borderRadius: 2,
-                    px: 3,
-                    py: 1,
-                    fontWeight: 500,
-                    minWidth: 100
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={confirmDeleteFolder}
-                  variant="contained"
-                  color="error"
-                  disabled={deleting}
-                  startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
-                  sx={{
-                    borderRadius: 2,
-                    px: 3,
-                    py: 1,
-                    fontWeight: 600,
-                    minWidth: 120,
-                    boxShadow: `0 4px 20px ${alpha(theme.palette.error.main, 0.3)}`,
-                    '&:hover': {
-                      boxShadow: `0 6px 25px ${alpha(theme.palette.error.main, 0.4)}`,
-                      transform: 'translateY(-1px)'
-                    },
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {deleting ? 'Deleting...' : 'Delete Folder'}
-                </Button>
-              </DialogActions>
+        <Dialog open={deleteDialogOpen} onClose={cancelDelete} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+            <WarningIcon color="warning" fontSize="small" />
+            Delete Root Folder
+          </DialogTitle>
+          <DialogContent sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              This removes the folder from your media configuration.
+            </Typography>
+            <Box
+              sx={{
+                p: 1.5,
+                bgcolor: theme.palette.mode === 'dark'
+                  ? alpha(theme.palette.common.white, 0.08)
+                  : alpha(theme.palette.common.black, 0.04),
+                borderRadius: 1,
+                border: `1px solid ${alpha(theme.palette.divider, 0.8)}`
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                  wordBreak: 'break-all',
+                  fontWeight: 500
+                }}
+              >
+                {folderToDelete?.path}
+              </Typography>
             </Box>
-          </Fade>
+            <Alert
+              severity="warning"
+              variant="outlined"
+              sx={{
+                mt: 2,
+                bgcolor: alpha(theme.palette.warning.main, 0.08),
+                borderColor: alpha(theme.palette.warning.main, 0.4),
+                color: 'text.primary',
+                '& .MuiAlert-icon': { color: theme.palette.warning.main }
+              }}
+            >
+              Deleting this root folder does not remove any files from disk.
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={cancelDelete} disabled={deleting} sx={{ minWidth: 90 }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDeleteFolder}
+              variant="contained"
+              color="error"
+              disabled={deleting}
+              startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+              sx={{ minWidth: 130 }}
+            >
+              {deleting ? 'Deleting...' : 'Delete Folder'}
+            </Button>
+          </DialogActions>
         </Dialog>
-
       </Box>
     </Box>
   );
 }
-

@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography, Card, CardContent, IconButton, Button, Stack, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControlLabel, Switch, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, CircularProgress, Alert, alpha, useTheme } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { getAuthHeaders } from '../../contexts/AuthContext';
 
 interface QualityProfile {
@@ -11,10 +10,6 @@ interface QualityProfile {
   qualities: string[];
   cutoff: string;
   upgradeAllowed: boolean;
-}
-
-interface QualityProfilesManagementProps {
-  onBack?: () => void;
 }
 
 const mediaTypes: Array<{ key: 'movie' | 'tv'; label: string }> = [
@@ -31,8 +26,7 @@ const emptyForm: QualityProfile = {
   upgradeAllowed: true,
 };
 
-export default function QualityProfilesManagement({ onBack }: QualityProfilesManagementProps) {
-  const navigate = useNavigate();
+export default function QualityProfilesManagement() {
   const theme = useTheme();
   const [profiles, setProfiles] = useState<Record<'movie' | 'tv', QualityProfile[]>>({ movie: [], tv: [] });
   const [loading, setLoading] = useState(false);
@@ -180,25 +174,37 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
       elevation={0}
       sx={{
         borderRadius: 1,
-        bgcolor: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        bgcolor: theme.palette.mode === 'dark'
+          ? alpha(theme.palette.common.white, 0.12)
+          : theme.palette.background.paper,
+        border: `1px solid ${alpha(theme.palette.divider, theme.palette.mode === 'dark' ? 0.45 : 0.8)}`,
       }}
     >
       <CardContent sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ color: 'grey.100' }}>{profile.name}</Typography>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ color: theme.palette.text.primary }}>{profile.name}</Typography>
           <Stack direction="row" spacing={0.5}>
-            <IconButton size="small" onClick={() => openEditDialog(profile)} sx={{ color: 'grey.300' }}>
+            <IconButton size="small" onClick={() => openEditDialog(profile)} sx={{ color: theme.palette.text.secondary }}>
               <EditIcon fontSize="small" />
             </IconButton>
-            <IconButton size="small" onClick={() => setDeleteTarget(profile)} sx={{ color: 'grey.400' }}>
+            <IconButton size="small" onClick={() => setDeleteTarget(profile)} sx={{ color: theme.palette.text.secondary }}>
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Stack>
         </Box>
         <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
           {profile.qualities.map((q) => (
-            <Chip key={q} label={q} size="small" sx={{ mb: 0.5, bgcolor: 'rgba(255,255,255,0.12)', color: 'grey.100' }} />
+            <Chip
+              key={q}
+              label={q}
+              size="small"
+              sx={{
+                mb: 0.5,
+                bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.1),
+                color: theme.palette.text.primary,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`
+              }}
+            />
           ))}
         </Stack>
       </CardContent>
@@ -210,7 +216,9 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
   return (
     <Box sx={{
       minHeight: '100vh',
-      background: `linear-gradient(180deg, ${alpha(theme.palette.grey[900], 0.6)} 0%, ${alpha(theme.palette.grey[900], 0.8)} 100%)`,
+      background: theme.palette.mode === 'dark'
+        ? `linear-gradient(180deg, ${alpha(theme.palette.grey[900], 0.6)} 0%, ${alpha(theme.palette.grey[900], 0.8)} 100%)`
+        : theme.palette.background.default,
       p: { xs: 1.5, sm: 2 },
     }}>
       <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
@@ -223,26 +231,9 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
           gap: { xs: 1.5, sm: 2 },
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton
-              onClick={() => {
-                if (onBack) {
-                  onBack();
-                } else {
-                  navigate('/Mediadashboard/settings');
-                }
-              }}
-              sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
-                minWidth: { xs: 40, sm: 44 },
-                minHeight: { xs: 40, sm: 44 },
-              }}
-            >
-              <ArrowBackIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-            </IconButton>
             <Box>
               <Typography variant="h5" fontWeight={600} sx={{
-                color: theme.palette.grey[100],
+                color: theme.palette.text.primary,
                 
                 
                 mb: 0.5,
@@ -271,8 +262,8 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
             {mediaTypes.map(({ key, label }) => (
               <Box key={key}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-                  <Typography variant="h6" sx={{ color: 'grey.100' }}>{label} Quality Profiles</Typography>
-                  <Box sx={{ flex: 1, height: 1, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                  <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>{label} Quality Profiles</Typography>
+                  <Box sx={{ flex: 1, height: 1, bgcolor: alpha(theme.palette.divider, theme.palette.mode === 'dark' ? 0.35 : 0.8) }} />
                 </Box>
                 <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(3, 1fr)' } }}>
                   {profiles[key].map(renderProfileCard)}
@@ -280,18 +271,18 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
                     elevation={0}
                     sx={{
                       borderRadius: 1,
-                      border: '1px dashed rgba(255,255,255,0.2)',
-                      bgcolor: 'rgba(255,255,255,0.04)',
+                      border: `1px dashed ${alpha(theme.palette.divider, theme.palette.mode === 'dark' ? 0.65 : 0.9)}`,
+                      bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.1) : alpha(theme.palette.common.black, 0.02),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       minHeight: 96,
                       cursor: 'pointer',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.07)' },
+                      '&:hover': { bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.14) : alpha(theme.palette.primary.main, 0.06) },
                     }}
                     onClick={() => openCreateDialog(key)}
                   >
-                    <Box sx={{ textAlign: 'center', color: 'grey.300' }}>
+                    <Box sx={{ textAlign: 'center', color: theme.palette.text.secondary }}>
                       <AddIcon />
                       <Typography variant="caption" display="block">Add Profile</Typography>
                     </Box>
@@ -303,10 +294,26 @@ export default function QualityProfilesManagement({ onBack }: QualityProfilesMan
         )}
       </Box>
 
-      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
+      <Dialog
+        open={dialogOpen}
+        onClose={closeDialog}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: (theme) => theme.palette.mode === 'dark'
+              ? '0 20px 60px rgba(0, 0, 0, 0.45)'
+              : '0 12px 28px rgba(15, 23, 42, 0.16)',
+            border: (theme) => `1px solid ${theme.palette.divider}`,
+            maxWidth: 460
+          }
+        }}
+      >
         <DialogTitle sx={{ pb: 1 }}>{form.id ? 'Edit Quality Profile' : 'New Quality Profile'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
           <TextField
+            size="small"
             label="Profile Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}

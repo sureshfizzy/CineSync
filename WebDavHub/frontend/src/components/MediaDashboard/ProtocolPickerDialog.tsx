@@ -10,7 +10,21 @@ interface ProtocolPickerDialogProps {
 export default function ProtocolPickerDialog({ open, onClose, onPick }: ProtocolPickerDialogProps) {
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 2,
+          boxShadow: (theme) => theme.palette.mode === 'dark'
+            ? '0 20px 60px rgba(0, 0, 0, 0.45)'
+            : '0 12px 28px rgba(15, 23, 42, 0.16)',
+          border: (theme) => `1px solid ${theme.palette.divider}`
+        }
+      }}
+    >
       <DialogTitle>Select Indexer Type</DialogTitle>
       <DialogContent dividers>
         <Grid container spacing={2}>
