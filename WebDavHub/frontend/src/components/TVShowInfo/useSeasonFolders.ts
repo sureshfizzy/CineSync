@@ -61,8 +61,7 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
             quality: file.quality || file.Quality || file.qualityProfile || '',
             modified: file.modified || '--',
             path: (file.path as string) || '',
-            episodeNumber: episodeNum || (file as any).episodeNumber
-          });
+            episodeNumber: episodeNum || (file as any).episodeNumber,          });
         }
         const seasonFoldersData: SeasonFolderInfo[] = Object.entries(seasonMap)
           .filter(([seasonNum, episodes]) => parseInt(seasonNum) > 0 && episodes.length > 0)
@@ -124,8 +123,7 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
           quality: file.quality || file.Quality || file.qualityProfile || '',
           modified: file.modified || '--',
           path: (file.path as string) || '',
-          episodeNumber: episodeNum || file.episodeNumber
-        });
+          episodeNumber: episodeNum || file.episodeNumber,        });
       }
       const seasonFoldersData: SeasonFolderInfo[] = Object.entries(seasonMap)
         .filter(([seasonNum, episodes]) => parseInt(seasonNum) > 0 && episodes.length > 0)

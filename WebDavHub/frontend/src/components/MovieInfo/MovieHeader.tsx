@@ -1,6 +1,6 @@
-import { Box, Typography, Chip, Paper, useTheme, useMediaQuery, alpha, Stack, IconButton, Tooltip } from '@mui/material';
+import React from 'react';
+import { Box, Typography, Chip, Paper, useTheme, useMediaQuery, alpha, IconButton, Tooltip, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { motion } from 'framer-motion';
-import { useEffect } from 'react';
 import { MediaDetailsData } from '../../types/MediaTypes';
 import MovieFileActions from './MovieFileActions';
 import SearchIcon from '@mui/icons-material/Search';
@@ -9,11 +9,15 @@ interface MovieHeaderProps {
   data: MediaDetailsData;
   getPosterUrl: (path: string | null, size?: string) => string | undefined;
   fileInfo: any;
+  filteredFiles?: any[];
+  selectedFileIndex?: number;
+  onFileIndexChange?: (index: number) => void;
   folderName: string;
   currentPath: string;
   onNavigateBack?: () => void;
-  selectedVersionIndex: number;
-  onVersionChange: (index: number) => void;
+  availableQualities?: string[];
+  selectedQuality?: string | null;
+  onQualityChange?: (quality: string | null) => void;
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
@@ -21,48 +25,10 @@ interface MovieHeaderProps {
 
 
 
-// Helper function to format file size
-const formatFileSize = (value: number | string | undefined) => {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
-
-  if (value === undefined || value === null) return 'Unknown size';
-
-  if (typeof value === 'number') {
-    if (value <= 0 || !Number.isFinite(value)) return 'Unknown size';
-    let size = value;
-    let idx = 0;
-    while (size >= 1024 && idx < units.length - 1) {
-      size /= 1024;
-      idx++;
-    }
-    return `${size.toFixed(1)} ${units[idx]}`;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) return 'Unknown size';
-
-  const match = trimmed.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/i);
-  if (!match) return trimmed;
-
-  const amount = parseFloat(match[1]);
-  if (!Number.isFinite(amount) || amount <= 0) return 'Unknown size';
-
-  const unit = (match[2] || 'B').toUpperCase();
-  const unitIndex = Math.max(units.indexOf(unit as any), 0);
-  let bytes = amount * Math.pow(1024, unitIndex);
-
-  let displayIdx = 0;
-  while (bytes >= 1024 && displayIdx < units.length - 1) {
-    bytes /= 1024;
-    displayIdx++;
-  }
-
-  return `${bytes.toFixed(1)} ${units[displayIdx]}`;
-};
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, folderName, currentPath, onNavigateBack, selectedVersionIndex, onVersionChange, isArrDashboardContext = false, isLoadingFiles = false, onSearchMissing }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isArrDashboardContext = false, isLoadingFiles = false, onSearchMissing }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -72,30 +38,11 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Handle both single file (legacy) and multiple files (new)
   const files = Array.isArray(fileInfo) ? fileInfo : (fileInfo ? [fileInfo] : []);
-  const hasMultipleVersions = files.length > 1;
-  const selectedFile = files[selectedVersionIndex] || files[0];
+  const displayFiles = filteredFiles ?? files;
+  const selectedFile = displayFiles[selectedFileIndex] ?? displayFiles[0] ?? files[0];
+  const hasMultipleSameQuality = displayFiles.length > 1 && !!selectedQuality;
   const canSearch = !isLoadingFiles && files.length === 0 && !!onSearchMissing;
-
-
-  // Keyboard navigation for version switching
-  useEffect(() => {
-    if (!hasMultipleVersions) return;
-
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        onVersionChange(selectedVersionIndex > 0 ? selectedVersionIndex - 1 : files.length - 1);
-      } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-        event.preventDefault();
-        onVersionChange(selectedVersionIndex < files.length - 1 ? selectedVersionIndex + 1 : 0);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [hasMultipleVersions, files.length, selectedVersionIndex, onVersionChange]);
 
 
 
@@ -144,7 +91,7 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             WebkitBackfaceVisibility: 'hidden'
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: hasMultipleVersions ? 2 : 1, justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' }, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' }, flexWrap: 'wrap' }}>
             <Typography
               variant="h3"
               fontWeight={700}
@@ -170,125 +117,72 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                 </IconButton>
               </Tooltip>
             )}
-            {hasMultipleVersions && (
-              <Chip
-                label={`${files.length} versions`}
-                size="small"
-                sx={{
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  color: 'primary.main',
-                  fontWeight: 600,
-                  fontSize: '0.75rem',
-                  '& .MuiChip-label': {
-                    px: 1.5
-                  }
-                }}
-              />
-            )}
           </Box>
 
-          {/* Version Tab Switcher - Only show if multiple versions */}
-          {hasMultipleVersions && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.3 }}
-            >
-              <Box sx={{ mb: 3, display: 'flex', justifyContent: { xs: 'center', md: 'flex-start' } }}>
-                <Box
+          {/* Quality version toggle — only shown when multiple quality tracks are present */}
+          {availableQualities.length > 1 && onQualityChange && (
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              mb: 1.5,
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'center', md: 'flex-start' },
+            }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}
+              >
+                Version:
+              </Typography>
+              <ToggleButtonGroup
+                value={selectedQuality}
+                exclusive
+                size="small"
+                onChange={(_e, val) => onQualityChange(val)}
+                sx={{ flexWrap: 'wrap', gap: 0.5 }}
+              >
+                <ToggleButton
+                  value={null as any}
                   sx={{
-                    display: 'flex',
-                    gap: 1,
-                    overflowX: 'auto',
-                    scrollBehavior: 'smooth',
-                    pb: { xs: 1, md: 0 },
-                    scrollbarWidth: 'none',
-                    '&::-webkit-scrollbar': { display: 'none' },
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    borderRadius: '6px !important',
+                    border: `1px solid ${alpha(theme.palette.divider, 0.4)} !important`,
+                    '&.Mui-selected': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.15),
+                      color: 'primary.main',
+                      borderColor: `${alpha(theme.palette.primary.main, 0.5)} !important`,
+                    },
                   }}
                 >
-                  {files.map((file: any, index: number) => {
-                    const isSelected = selectedVersionIndex === index;
-                    const versionNumber = index + 1;
-
-                    return (
-                      <Box
-                        key={index}
-                        onClick={() => onVersionChange(index)}
-                        sx={{
-                          cursor: 'pointer',
-                          px: { xs: 2, sm: 3 },
-                          py: { xs: 1.5, sm: 2 },
-                          borderRadius: { xs: 3, sm: 2 },
-                          border: '1px solid',
-                          borderColor: isSelected ? 'primary.main' : 'divider',
-                          bgcolor: isSelected ? 'primary.main' : 'background.paper',
-                          color: isSelected ? 'primary.contrastText' : 'text.primary',
-                          transition: 'all 0.2s ease-in-out',
-                          minWidth: 'fit-content',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0,
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            bgcolor: isSelected ? 'primary.main' : 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                          },
-                          '&:active': {
-                            transform: 'translateY(0px)',
-                          },
-                        }}
-                      >
-                        <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
-                          <Box
-                            sx={{
-                              width: { xs: 18, sm: 20 },
-                              height: { xs: 18, sm: 20 },
-                              borderRadius: 1,
-                              bgcolor: isSelected ? 'rgba(255, 255, 255, 0.2)' : alpha(theme.palette.primary.main, 0.15),
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: isSelected ? 'primary.contrastText' : 'primary.main',
-                              transition: 'all 0.3s ease',
-                              flexShrink: 0,
-                              fontWeight: 600,
-                              fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                            }}
-                          >
-                            {versionNumber}
-                          </Box>
-                          <Box sx={{ textAlign: 'center' }}>
-                            <Typography
-                              variant="body2"
-                              fontWeight="600"
-                              sx={{
-                                fontSize: { xs: '0.8rem', sm: '0.9rem' },
-                                letterSpacing: '0.02em',
-                                lineHeight: 1.2,
-                              }}
-                            >
-                              Version {versionNumber}
-                            </Typography>
-                            {file.size && !isNaN(file.size) && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontSize: { xs: '0.65rem', sm: '0.7rem' },
-                                  opacity: 0.7,
-                                  lineHeight: 1,
-                                }}
-                              >
-                                {formatFileSize(file.size)}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Box>
-            </motion.div>
+                  All
+                </ToggleButton>
+                {availableQualities.map(q => (
+                  <ToggleButton
+                    key={q}
+                    value={q}
+                    sx={{
+                      px: 1.5,
+                      py: 0.5,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px !important',
+                      border: `1px solid ${alpha(theme.palette.divider, 0.4)} !important`,
+                      '&.Mui-selected': {
+                        bgcolor: alpha(theme.palette.info.main, 0.15),
+                        color: 'info.main',
+                        borderColor: `${alpha(theme.palette.info.main, 0.5)} !important`,
+                      },
+                    }}
+                  >
+                    {q}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
           )}
 
 
@@ -333,7 +227,54 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             {data.overview}
           </Typography>
 
-          {/* File Actions for the selected file */}
+          {/* Mini sub-selector: appears below quality toggle when the selected
+              quality contains more than one file (e.g. two 1080p cuts) */}
+          {hasMultipleSameQuality && onFileIndexChange && (
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              mb: 1.5,
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'center', md: 'flex-start' },
+            }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                File:
+              </Typography>
+              <ToggleButtonGroup
+                value={selectedFileIndex}
+                exclusive
+                size="small"
+                onChange={(_e, val) => { if (val !== null) onFileIndexChange(val); }}
+                sx={{ flexWrap: 'wrap', gap: 0.5 }}
+              >
+                {displayFiles.map((_: any, idx: number) => (
+                  <ToggleButton
+                    key={idx}
+                    value={idx}
+                    sx={{
+                      px: 1.5,
+                      py: 0.5,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px !important',
+                      border: `1px solid ${alpha(theme.palette.divider, 0.4)} !important`,
+                      '&.Mui-selected': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.15),
+                        color: 'primary.main',
+                        borderColor: `${alpha(theme.palette.primary.main, 0.5)} !important`,
+                      },
+                    }}
+                  >
+                    v{idx + 1}
+                    {displayFiles[idx]?.size ? ` · ${displayFiles[idx].size}` : ''}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+          )}
+
+          {/* File Actions for the active file */}
           {selectedFile && (
             <Box sx={{ mt: 2, mb: 3 }}>
               <MovieFileActions
@@ -398,42 +339,43 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                     </Typography>
                   </Box>
 
-                  {/* Quality Profile - Only show if files are available */}
+                  {/* Quality — show all available qualities or the selected one */}
                   {files.length > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ 
-                        color: 'text.secondary',
-                        fontSize: '0.875rem',
-                        fontWeight: 500
-                      }}>
-                        Quality Profile:
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.875rem', fontWeight: 500 }}>
+                        Quality:
                       </Typography>
-                      <Typography variant="body2" sx={{ 
-                        fontWeight: 600, 
-                        color: 'text.primary',
-                        fontSize: '0.875rem'
-                      }}>
-                        {selectedFile?.quality || 'Unknown'}
-                      </Typography>
+                      {availableQualities.length > 0
+                        ? availableQualities.map(q => (
+                            <Chip
+                              key={q}
+                              label={q}
+                              size="small"
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: '0.75rem',
+                                bgcolor: selectedQuality === q
+                                  ? alpha(theme.palette.info.main, 0.15)
+                                  : alpha(theme.palette.primary.main, 0.1),
+                                color: selectedQuality === q ? 'info.main' : 'primary.main',
+                              }}
+                            />
+                          ))
+                        : <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.875rem' }}>
+                            {selectedFile?.quality || 'Unknown'}
+                          </Typography>
+                      }
                     </Box>
                   )}
 
-                  {/* Size */}
-                  {selectedFile && selectedFile.size && (
+                  {/* Size of the currently active file */}
+                  {selectedFile?.size && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ 
-                        color: 'text.secondary',
-                        fontSize: '0.875rem',
-                        fontWeight: 500
-                      }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.875rem', fontWeight: 500 }}>
                         Size:
                       </Typography>
-                      <Typography variant="body2" sx={{ 
-                        fontWeight: 600, 
-                        color: 'text.primary',
-                        fontSize: '0.875rem'
-                      }}>
-                        {formatFileSize(selectedFile.size)}
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.875rem' }}>
+                        {selectedFile.size}
                       </Typography>
                     </Box>
                   )}

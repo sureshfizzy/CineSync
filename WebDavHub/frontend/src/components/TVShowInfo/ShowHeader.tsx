@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Chip, Paper, alpha, useTheme, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, Chip, Paper, alpha, useTheme, IconButton, Tooltip, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { motion } from 'framer-motion';
 import { MediaDetailsData } from './types';
 import ShowFileActions from './ShowFileActions';
@@ -18,9 +18,12 @@ interface ShowHeaderProps {
   isLoadingFiles?: boolean;
   seasonFolders?: any[];
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  availableQualities?: string[];
+  selectedQuality?: string | null;
+  onQualityChange?: (quality: string | null) => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [], onSearchMissing }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [], onSearchMissing, availableQualities = [], selectedQuality = null, onQualityChange }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
@@ -78,6 +81,72 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           {data.status && <Chip label={data.status} color="default" variant="outlined" />}
           {country && <Chip label={country} color="default" variant="outlined" />}
         </Box>
+
+        {/* Quality version toggle — only shown when multiple quality tracks are present */}
+        {availableQualities.length > 1 && onQualityChange && (
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            mb: 1.5,
+            flexWrap: 'wrap',
+            justifyContent: { xs: 'center', md: 'flex-start' },
+          }}>
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}
+            >
+              Version:
+            </Typography>
+            <ToggleButtonGroup
+              value={selectedQuality}
+              exclusive
+              size="small"
+              onChange={(_e, val) => onQualityChange(val)}
+              sx={{ flexWrap: 'wrap', gap: 0.5 }}
+            >
+              <ToggleButton
+                value={null as any}
+                sx={{
+                  px: 1.5,
+                  py: 0.5,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  borderRadius: '6px !important',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.4)} !important`,
+                  '&.Mui-selected': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.15),
+                    color: 'primary.main',
+                    borderColor: `${alpha(theme.palette.primary.main, 0.5)} !important`,
+                  },
+                }}
+              >
+                All
+              </ToggleButton>
+              {availableQualities.map(q => (
+                <ToggleButton
+                  key={q}
+                  value={q}
+                  sx={{
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    borderRadius: '6px !important',
+                    border: `1px solid ${alpha(theme.palette.divider, 0.4)} !important`,
+                    '&.Mui-selected': {
+                      bgcolor: alpha(theme.palette.info.main, 0.15),
+                      color: 'info.main',
+                      borderColor: `${alpha(theme.palette.info.main, 0.5)} !important`,
+                    },
+                  }}
+                >
+                  {q}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Box>
+        )}
         {data.tagline && (
           <Typography variant="h5" color="text.secondary" fontStyle="italic" gutterBottom sx={{ mb: 1 }}>
             {data.tagline}

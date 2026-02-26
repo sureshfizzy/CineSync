@@ -49,6 +49,7 @@ var (
 
 	basePathColumnExists sync.Once
 	hasBasePathColumn    bool
+
 )
 
 var invalidPathChars = regexp.MustCompile(`[\\/:*?"<>|]`)
@@ -359,7 +360,7 @@ func InvalidateFolderCacheForCategory(category string) {
 	}
 }
 
-// UpdateFolderCacheForNewFile adds a new file to the cache instead of invalidating everything
+// UpdateFolderCacheForNewFile adds a new file to the cache instead of invalidating everything.
 func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, mediaType string, seasonNumber int) {
 	if destinationPath == "" || properName == "" {
 		return
@@ -429,6 +430,7 @@ func UpdateFolderCacheForNewFile(destinationPath, properName, year, tmdbID, medi
 				MediaType:    mediaType,
 				SeasonNumber: seasonNumber,
 				FileCount:    1,
+				EpisodeCount: 1,
 			}
 
 			// Insert in alphabetical order
@@ -624,7 +626,7 @@ func buildSearchWhereClause(query, filterType string) (string, []interface{}) {
 	var whereClause strings.Builder
 	var whereArgs []interface{}
 
-	whereClause.WriteString(`WHERE 1=1`)
+	whereClause.WriteString(`WHERE file_path IS NOT NULL AND file_path != ''`)
 
 	// Add search filter with optimized LIKE patterns
 	if query != "" {
@@ -715,7 +717,7 @@ func HandleDatabaseSearch(w http.ResponseWriter, r *http.Request) {
 	// Single query that gets both data and total count
 	dataQuery := `
 		SELECT
-			file_path,
+			COALESCE(file_path, '') as file_path,
 			COALESCE(destination_path, '') as destination_path,
 			` + basePathSelect + `,
 			COALESCE(tmdb_id, '') as tmdb_id,
@@ -826,16 +828,22 @@ func GetFileSizeFromDatabase(filePath string) (int64, bool) {
 
 // FolderInfo represents folder information from database
 type FolderInfo struct {
-	FolderName   string `json:"folder_name"`
-	FolderPath   string `json:"folder_path"`
-	TmdbID       string `json:"tmdb_id,omitempty"`
-	MediaType    string `json:"media_type,omitempty"`
-	Year         string `json:"year,omitempty"`
-	ProperName   string `json:"proper_name,omitempty"`
-	SeasonNumber int    `json:"season_number,omitempty"`
-	FileCount    int    `json:"file_count"`
-	Modified     string `json:"modified,omitempty"`
-	Quality      string `json:"quality,omitempty"`
+	FolderName    string   `json:"folder_name"`
+	FolderPath    string   `json:"folder_path"`
+	TmdbID        string   `json:"tmdb_id,omitempty"`
+	MediaType     string   `json:"media_type,omitempty"`
+	Year          string   `json:"year,omitempty"`
+	ProperName    string   `json:"proper_name,omitempty"`
+	SeasonNumber  int      `json:"season_number,omitempty"`
+	FileCount     int      `json:"file_count"`
+	EpisodeCount  int      `json:"episode_count"`
+	Modified      string   `json:"modified,omitempty"`
+	Quality       string   `json:"quality,omitempty"`  // kept for backward compat (first quality)
+	Qualities     []string `json:"qualities,omitempty"` // all distinct non-empty quality values
+}
+
+func getDistinctEpisodeExpr() string {
+	return `COUNT(DISTINCT COALESCE(CAST(season_number AS TEXT),'') || '_' || COALESCE(CAST(episode_number AS TEXT),''))`
 }
 
 func GetFoldersFromDatabasePaginated(basePath string, page, limit int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {
@@ -1070,9 +1078,10 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			` + getDistinctEpisodeExpr() + ` as episode_count,
 			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count,
-			COALESCE(MAX(quality), '') as quality
+			GROUP_CONCAT(DISTINCT quality) as qualities
 		FROM processed_files
 		WHERE base_path = ?
 		AND proper_name IS NOT NULL
@@ -1095,10 +1104,23 @@ func getCategoryContentFolders(db *sql.DB, basePath string, page, limit, offset 
 	for rows.Next() {
 		var folder FolderInfo
 		var latestProcessedAt string
+		var qualitiesRaw sql.NullString
 
-		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount, &folder.Quality)
+		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType, &folder.SeasonNumber, &folder.FileCount, &folder.EpisodeCount, &latestProcessedAt, &totalCount, &qualitiesRaw)
 		if err != nil {
 			continue
+		}
+
+		if qualitiesRaw.Valid && qualitiesRaw.String != "" {
+			for _, q := range strings.Split(qualitiesRaw.String, ",") {
+				q = strings.TrimSpace(q)
+				if q != "" {
+					folder.Qualities = append(folder.Qualities, q)
+				}
+			}
+			if len(folder.Qualities) > 0 {
+				folder.Quality = folder.Qualities[0]
+			}
 		}
 
 		// Build folder name from proper_name and year
@@ -1260,6 +1282,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int, mediaTyp
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			` + getDistinctEpisodeExpr() + ` as episode_count,
 			COALESCE(base_path, '') as base_path,
 			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
@@ -1291,7 +1314,7 @@ func searchRootFolders(db *sql.DB, searchQuery string, page, limit int, mediaTyp
 		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &basePath, &latestProcessedAt, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &folder.EpisodeCount, &basePath, &latestProcessedAt, &totalCount)
 		if err != nil {
 			logger.Debug("Failed to scan search result: %v", err)
 			continue
@@ -1351,6 +1374,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			` + getDistinctEpisodeExpr() + ` as episode_count,
 			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
@@ -1378,7 +1402,7 @@ func searchCategoryFolders(db *sql.DB, category string, searchQuery string, page
 		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &folder.EpisodeCount, &latestProcessedAt, &totalCount)
 		if err != nil {
 			logger.Debug("Failed to scan category search result: %v", err)
 			continue
@@ -1454,6 +1478,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			` + getDistinctEpisodeExpr() + ` as episode_count,
 			base_path,
 			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
@@ -1482,7 +1507,7 @@ func searchRootFoldersWithLetter(db *sql.DB, letterFilter string, page, limit in
 		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &basePath, &latestProcessedAt, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &folder.EpisodeCount, &basePath, &latestProcessedAt, &totalCount)
 		if err != nil {
 			continue
 		}
@@ -1548,6 +1573,7 @@ func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter s
 			COALESCE(media_type, '') as media_type,
 			COALESCE(season_number, 0) as season_number,
 			COUNT(*) as file_count,
+			` + getDistinctEpisodeExpr() + ` as episode_count,
 			MAX(processed_at) as latest_processed_at,
 			COUNT(*) OVER() as total_count
 		FROM processed_files
@@ -1574,7 +1600,7 @@ func searchCategoryFoldersWithLetter(db *sql.DB, category string, letterFilter s
 		var latestProcessedAt string
 
 		err := rows.Scan(&folder.ProperName, &folder.Year, &folder.TmdbID, &folder.MediaType,
-			&folder.SeasonNumber, &folder.FileCount, &latestProcessedAt, &totalCount)
+			&folder.SeasonNumber, &folder.FileCount, &folder.EpisodeCount, &latestProcessedAt, &totalCount)
 		if err != nil {
 			continue
 		}
@@ -1738,7 +1764,7 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 
 	sqlQuery.WriteString(`
 		SELECT
-			file_path,
+			COALESCE(file_path, '') as file_path,
 			COALESCE(destination_path, '') as destination_path,
 			COALESCE(tmdb_id, '') as tmdb_id,
 			COALESCE(season_number, '') as season_number,
@@ -1803,8 +1829,8 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 
 	// Write CSV data
 	for rows.Next() {
-		var filePath, destPath, tmdbID, seasonNumber, reason string
-		var fileSize int64
+		var filePath, destPath, tmdbID, seasonNumber, reason sql.NullString
+		var fileSize sql.NullInt64
 
 		err := rows.Scan(&filePath, &destPath, &tmdbID, &seasonNumber, &reason, &fileSize)
 		if err != nil {
@@ -1812,17 +1838,17 @@ func HandleDatabaseExport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		fileSizeStr := strconv.FormatInt(fileSize, 10)
-		if !hasFileSizeColumn || fileSize == 0 {
-			fileSizeStr = "N/A"
+		fileSizeStr := "N/A"
+		if hasFileSizeColumn && fileSize.Valid && fileSize.Int64 > 0 {
+			fileSizeStr = strconv.FormatInt(fileSize.Int64, 10)
 		}
 
 		csvWriter.Write([]string{
-			filePath,
-			destPath,
-			tmdbID,
-			seasonNumber,
-			reason,
+			filePath.String,
+			destPath.String,
+			tmdbID.String,
+			seasonNumber.String,
+			reason.String,
 			fileSizeStr,
 		})
 	}

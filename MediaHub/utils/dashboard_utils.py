@@ -59,7 +59,6 @@ class DashboardAvailabilityChecker:
         
         if self._available:
             self._consecutive_failures = 0
-            log_message("Dashboard is available for notifications", level="DEBUG")
         else:
             self._consecutive_failures += 1
             if self._consecutive_failures == 1:

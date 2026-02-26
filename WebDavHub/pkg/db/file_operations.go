@@ -110,6 +110,8 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 		DestinationPath    string `json:"destinationPath"`
 		TmdbID             string `json:"tmdbId"`
 		SeasonNumber       string `json:"seasonNumber"`
+		EpisodeNumber      string `json:"episodeNumber"`
+		EpisodeTitle       string `json:"episodeTitle"`
 		Reason             string `json:"reason"`
 		Error              string `json:"error"`
 		ProperName         string `json:"properName"`
@@ -198,16 +200,50 @@ func handleTrackFileOperation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		message = "Addition tracked successfully"
-		if req.ProperName != "" && req.MediaType != "" {
-			seasonNumber := 0
-			if req.SeasonNumber != "" {
-				if sn, err := strconv.Atoi(req.SeasonNumber); err == nil {
-					seasonNumber = sn
-				}
+
+		seasonNumber := 0
+		if req.SeasonNumber != "" {
+			if sn, err := strconv.Atoi(req.SeasonNumber); err == nil {
+				seasonNumber = sn
 			}
+		}
+		episodeNumber := 0
+		if req.EpisodeNumber != "" {
+			if en, err := strconv.Atoi(req.EpisodeNumber); err == nil {
+				episodeNumber = en
+			}
+		}
+
+		if req.ProperName != "" && req.MediaType != "" {
 			UpdateFolderCacheForNewFile(req.DestinationPath, req.ProperName, req.Year, req.TmdbID, req.MediaType, seasonNumber)
 		} else {
 			UpdateFolderCacheForNewFileFromDB(req.DestinationPath, req.TmdbID, req.SeasonNumber)
+		}
+
+		if req.DestinationPath != "" && req.ProperName != "" {
+			mediaType := strings.ToLower(req.MediaType)
+			recentType := "movie"
+			folderLabel := "Movies"
+			if mediaType == "tv" || mediaType == "tvshow" {
+				recentType = "tv"
+				folderLabel = "TV Shows"
+			}
+			newMedia := RecentMedia{
+				Name:          req.ProperName,
+				Path:          req.DestinationPath,
+				FolderName:    folderLabel,
+				UpdatedAt:     time.Now().Unix(),
+				Type:          recentType,
+				TmdbId:        req.TmdbID,
+				ShowName:      req.ProperName,
+				SeasonNumber:  seasonNumber,
+				EpisodeNumber: episodeNumber,
+				EpisodeTitle:  req.EpisodeTitle,
+				Filename:      filepath.Base(req.DestinationPath),
+			}
+			if err := AddRecentMedia(newMedia); err != nil {
+				logger.Debug("Failed to add recent media: %v", err)
+			}
 		}
 
 		if fileOperationNotifier != nil && req.DestinationPath != "" {

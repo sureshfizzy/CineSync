@@ -33,6 +33,7 @@ export interface EpisodeFileInfo {
   modified: string;
   path: string;
   episodeNumber?: number;
+  quality?: string;
   metadata?: {
     still_path?: string;
     name?: string;

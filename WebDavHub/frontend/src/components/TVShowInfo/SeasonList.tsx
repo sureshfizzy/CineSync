@@ -16,6 +16,7 @@ interface SeasonListProps {
   handleError: any;
   isArrDashboardContext?: boolean;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  selectedQuality?: string | null;
 }
 
 const SeasonList: React.FC<SeasonListProps> = ({
@@ -27,6 +28,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
   handleError,
   isArrDashboardContext = false,
   onSearchMissing,
+  selectedQuality = null,
 }) => {
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
   const [expandedEpisodes, setExpandedEpisodes] = useState<Set<string>>(new Set());
@@ -83,11 +85,17 @@ const SeasonList: React.FC<SeasonListProps> = ({
     setExpandedSeasons(newExpanded);
   };
 
-  // Function to check if episode is available
-  const isEpisodeAvailable = (seasonNumber: number, episodeNumber: number) => {
+  // Returns episodes for a season filtered by selected quality
+  const getFilteredEpisodes = (seasonNumber: number) => {
     const folder = seasonFolders.find(f => f.seasonNumber === seasonNumber);
-    if (!folder) return false;
-    return folder.episodes.some(ep => ep.episodeNumber === episodeNumber);
+    if (!folder) return [];
+    if (!selectedQuality) return folder.episodes;
+    return folder.episodes.filter(ep => ep.quality === selectedQuality);
+  };
+
+  // Check if a specific episode is available
+  const isEpisodeAvailable = (seasonNumber: number, episodeNumber: number) => {
+    return getFilteredEpisodes(seasonNumber).some(ep => ep.episodeNumber === episodeNumber);
   };
   return (
     <>
@@ -101,7 +109,10 @@ const SeasonList: React.FC<SeasonListProps> = ({
                 .sort((a, b) => b.season_number - a.season_number)
                 .map((season: any, idx: number) => {
                 const folder = seasonFolders.find(f => f.seasonNumber === season.season_number);
-                const availableCount = folder ? folder.episodes.length : 0;
+                const filteredEps = getFilteredEpisodes(season.season_number);
+                const availableCount = new Set(
+                  filteredEps.map(ep => ep.episodeNumber).filter(n => n != null && n > 0)
+                ).size;
                 const totalCount = season.episode_count || (season.episodes ? season.episodes.length : 0);
                 return (
                   <motion.div
@@ -212,7 +223,8 @@ const SeasonList: React.FC<SeasonListProps> = ({
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                 {episodesData.get(season.season_number)?.map((episode: any) => {
                                   const isAvailable = isEpisodeAvailable(season.season_number, episode.episode_number);
-                                  const episodeFile = folder?.episodes.find(ep => ep.episodeNumber === episode.episode_number);
+                                  const episodeFile = getFilteredEpisodes(season.season_number)
+                                    .find(ep => ep.episodeNumber === episode.episode_number);
                                   return (
                                     <React.Fragment key={episode.id}>
                                       <Box
@@ -287,6 +299,31 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                             {new Date(episode.air_date).toLocaleDateString()}
                                           </Typography>
                                         )}
+
+                                        {/* Quality badges — shown per-file when multiple quality versions exist */}
+                                        {isAvailable && !selectedQuality && (() => {
+                                          const allFiles = folder?.episodes.filter(ep => ep.episodeNumber === episode.episode_number) ?? [];
+                                          const qualities = [...new Set(allFiles.map(ep => ep.quality).filter(Boolean))];
+                                          return qualities.length > 0 ? (
+                                            <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
+                                              {qualities.map(q => (
+                                                <Box
+                                                  key={q}
+                                                  sx={{
+                                                    px: 0.75, py: 0.125,
+                                                    borderRadius: 0.75,
+                                                    bgcolor: alpha(theme.palette.info.main, 0.12),
+                                                    border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                                                  }}
+                                                >
+                                                  <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 700, color: 'info.main' }}>
+                                                    {q}
+                                                  </Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          ) : null;
+                                        })()}
 
                                         {!isAvailable && onSearchMissing && (
                                           <Tooltip title="Search">

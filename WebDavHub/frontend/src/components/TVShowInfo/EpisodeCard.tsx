@@ -333,6 +333,35 @@ const EpisodeCard: React.FC<EpisodeCardProps> = ({
                     </Typography>
                   </Box>
                 )}
+
+                {/* Quality badge — shown when file has quality info */}
+                {file.quality && (
+                  <Box
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      px: 0.75,
+                      py: 0.25,
+                      borderRadius: 1,
+                      bgcolor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.info.main, 0.15)
+                        : alpha(theme.palette.info.main, 0.1),
+                      border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.7rem',
+                        color: 'info.main',
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      {file.quality}
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             </Box>
 

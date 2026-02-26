@@ -665,7 +665,7 @@ def process_file(args, force=False, batch_apply=False):
 
         reason = "Skipped by user"
         log_message(f"Adding skipped file to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
         return
 
     # Skip metadata and auxiliary files
@@ -673,7 +673,7 @@ def process_file(args, force=False, batch_apply=False):
         reason = "File skipped - metadata or auxiliary file"
         log_message(f"Skipping metadata/auxiliary file: {file} ({reason})", level="DEBUG")
         log_message(f"Adding metadata/auxiliary file to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
         return
 
     # Check for unsupported file type
@@ -681,7 +681,7 @@ def process_file(args, force=False, batch_apply=False):
         reason = "Unsupported file type"
         log_message(f"Skipping file: {file} ({reason})", level="INFO")
         log_message(f"Adding unsupported file to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
         return
 
     skip_extras_folder = is_skip_extras_folder_enabled()
@@ -776,7 +776,7 @@ def process_file(args, force=False, batch_apply=False):
             log_message(f"Skipping file with hash lacking media identifiers: {file}", level="INFO")
             reason = "Missing media identifiers on hash file"
             log_message(f"Adding hash file without identifiers to database: {src_file} (reason: {reason})", level="DEBUG")
-            save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+            save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
             return
 
     # Initialize file_result to ensure it's always available
@@ -909,7 +909,7 @@ def process_file(args, force=False, batch_apply=False):
                 if not is_file_processed(src_file):
                     reason = "Show processing failed"
                     log_message(f"Adding failed show processing to database: {src_file} (reason: {reason})", level="DEBUG")
-                    save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+                    save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
                 if force and 'old_symlink_info' in locals():
                     _cleanup_old_symlink(old_symlink_info)
                 return
@@ -948,7 +948,7 @@ def process_file(args, force=False, batch_apply=False):
 
                 reason = "Extra file skipped - size below limit threshold"
                 log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
-                save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+                save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
                 return
 
             # Handle show processor return format
@@ -1046,7 +1046,7 @@ def process_file(args, force=False, batch_apply=False):
                 if not is_file_processed(src_file):
                     reason = "Movie processing failed"
                     log_message(f"Adding failed movie processing to database: {src_file} (reason: {reason})", level="DEBUG")
-                    save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+                    save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
                 if force and 'old_symlink_info' in locals():
                     _cleanup_old_symlink(old_symlink_info)
                 return
@@ -1085,7 +1085,7 @@ def process_file(args, force=False, batch_apply=False):
 
                 reason = "Extra file skipped - size below limit threshold"
                 log_message(f"Adding skipped extra file to database: {src_file} (reason: {reason})", level="DEBUG")
-                save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+                save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
                 return
 
             # Handle movie processor return format
@@ -1096,7 +1096,7 @@ def process_file(args, force=False, batch_apply=False):
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
         reason = "Missing destination path"
         log_message(f"Adding file with missing destination to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
         if force and 'old_symlink_info' in locals():
             _cleanup_old_symlink(old_symlink_info)
         return
@@ -1305,7 +1305,7 @@ def process_file(args, force=False, batch_apply=False):
         reason = "File skipped - duplicate version already exists"
         log_message(f"Skipping duplicate version: {os.path.basename(original_dest_file)}", level="INFO")
         log_message(f"Adding skipped duplicate to database: {src_file} (reason: {reason})", level="DEBUG")
-        save_processed_file(src_file, None, tmdb_id, season_number, reason, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+        save_processed_file(src_file, reason=reason, tmdb_id=tmdb_id, season_number=season_number, media_type=media_type if "media_type" in locals() else None)
         return
     
     if dest_file != original_dest_file:
@@ -1340,12 +1340,14 @@ def process_file(args, force=False, batch_apply=False):
         structured_data = {
             "source_file": src_file,
             "destination_file": dest_file,
-            "media_name": new_folder_name,
+            "media_name": proper_name if (proper_name and media_type == "tv") else new_folder_name,
             "filename": new_filename,
             "media_type": media_type,
             "tmdb_id": tmdb_id,
             "season_number": season_number,
             "episode_number": episode_number,
+            "proper_name": proper_name if 'proper_name' in locals() else None,
+            "episode_title": episode_title if 'episode_title' in locals() else None,
             "timestamp": time.time(),
             "force_mode": force if 'force' in locals() else False
         }
@@ -1428,7 +1430,9 @@ def process_file(args, force=False, batch_apply=False):
             _cleanup_old_symlink(old_symlink_info, dest_file)
         else:
             try:
-                track_file_addition(src_file, dest_file, tmdb_id, season_number)
+                track_file_addition(src_file, dest_file, tmdb_id, season_number,
+                                   episode_number=episode_number_str, proper_name=proper_name,
+                                   media_type=media_type, episode_title=episode_title if 'episode_title' in locals() else None)
             except Exception as e:
                 log_message(f"Error updating cache for new symlink: {e}", level="DEBUG")
 

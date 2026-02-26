@@ -1,10 +1,12 @@
 package api
 
 import (
-	"cinesync/pkg/logger"
+	"crypto/subtle"
+	"cinesync/pkg/auth"
+	"cinesync/pkg/config"
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
-	"cinesync/pkg/config"
+	"cinesync/pkg/logger"
 	"cinesync/pkg/spoofing"
 	"database/sql"
 	"encoding/json"
@@ -106,6 +108,18 @@ func APIKeyMiddleware(next http.Handler) http.Handler {
 		if provided == "" {
 			// Support query parameter for EventSource
 			provided = strings.TrimSpace(r.URL.Query().Get("apiKey"))
+		}
+
+		// Allow rclone (Basic Auth) to access Real-Debrid WebDAV proxy
+		if provided == "" && strings.HasPrefix(r.URL.Path, "/api/realdebrid/webdav") {
+			if user, pass, ok := r.BasicAuth(); ok {
+				creds := auth.GetCredentials()
+				if subtle.ConstantTimeCompare([]byte(user), []byte(creds.Username)) == 1 &&
+					subtle.ConstantTimeCompare([]byte(pass), []byte(creds.Password)) == 1 {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
 		}
 
 		if provided == "" || provided != apiKey {
@@ -3083,7 +3097,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "SELECT destination_path, file_size, processed_at, quality, season_number, episode_number FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != ''"
+	query := "SELECT destination_path, file_size, processed_at, COALESCE(quality, ''), season_number, episode_number FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != '' AND file_path IS NOT NULL"
 	args := []interface{}{tmdbId}
 	if mediaType != "" {
 		query += " AND LOWER(media_type) = ?"
@@ -3099,25 +3113,28 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type MediaFileInfo struct {
-		Name           string `json:"name"`
-		Type           string `json:"type"`
-		Path           string `json:"path"`
-		FullPath       string `json:"fullPath"`
-		SourcePath     string `json:"sourcePath"`
+		Name            string `json:"name"`
+		Type            string `json:"type"`
+		Path            string `json:"path"`
+		FullPath        string `json:"fullPath"`
+		SourcePath      string `json:"sourcePath"`
 		DestinationPath string `json:"destinationPath"`
-		Size           string `json:"size"`
-		Modified       string `json:"modified"`
-		SeasonNumber   *int   `json:"seasonNumber,omitempty"`
-		EpisodeNumber  *int   `json:"episodeNumber,omitempty"`
-		Quality        string `json:"quality,omitempty"`
+		Size            string `json:"size"`
+		Modified        string `json:"modified"`
+		SeasonNumber    *int   `json:"seasonNumber,omitempty"`
+		EpisodeNumber   *int   `json:"episodeNumber,omitempty"`
+		Quality         string `json:"quality,omitempty"`
 	}
+
+	// Pre-compile bracket extractor for quality fallback
+	bracketRe := regexp.MustCompile(`\[([^\[\]]+)\]`)
 
 	results := make([]MediaFileInfo, 0)
 	for rows.Next() {
 		var destPath sql.NullString
 		var fileSize sql.NullInt64
 		var processedAt sql.NullString
-		var quality sql.NullString
+		var quality string
 		var seasonNumber sql.NullString
 		var episodeNumber sql.NullString
 
@@ -3126,6 +3143,12 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		if !destPath.Valid || destPath.String == "" {
 			continue
+		}
+
+		if quality == "" {
+			if matches := bracketRe.FindAllStringSubmatch(filepath.Base(destPath.String), -1); len(matches) > 0 {
+				quality = matches[len(matches)-1][1]
+			}
 		}
 
 		name := filepath.Base(destPath.String)
@@ -3171,7 +3194,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 			Modified:        processedAt.String,
 			SeasonNumber:    seasonPtr,
 			EpisodeNumber:   episodePtr,
-			Quality:         quality.String,
+			Quality:         quality,
 		})
 	}
 

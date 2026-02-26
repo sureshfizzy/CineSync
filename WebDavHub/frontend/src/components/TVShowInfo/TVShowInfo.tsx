@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense, useCallback } from 'react';
+import { useState, lazy, Suspense, useCallback, useMemo, useEffect } from 'react';
 import { Box, Snackbar, Alert, IconButton } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -24,6 +24,7 @@ const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'))
 export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: TVShowInfoProps) {
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -39,6 +40,8 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
     navigate(-1);
   };
 
+  useEffect(() => { setSelectedQuality(null); }, [folderName]);
+
   const {
     seasonFolders,
     loadingFiles,
@@ -53,6 +56,14 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
     videoPlayerOpen,
     setVideoPlayerOpen,
   } = useSeasonFolders({ data, folderName, currentPath, mediaType, tmdbId, setSnackbar });
+
+  const availableQualities = useMemo(() => {
+    const set = new Set<string>();
+    seasonFolders.forEach(sf => {
+      sf.episodes.forEach(ep => { if (ep.quality) set.add(ep.quality); });
+    });
+    return [...set].sort();
+  }, [seasonFolders]);
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -92,6 +103,9 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               isLoadingFiles={loadingFiles}
               seasonFolders={seasonFolders}
               onSearchMissing={onSearchMissing}
+              availableQualities={availableQualities}
+              selectedQuality={selectedQuality}
+              onQualityChange={setSelectedQuality}
             />
           </Box>
         </Box>
@@ -104,6 +118,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           handleError={handleError}
           isArrDashboardContext={isArrDashboardContext}
           onSearchMissing={onSearchMissing}
+          selectedQuality={selectedQuality}
         />
         <CastList data={data} getPosterUrl={getPosterUrl} />
         <DetailsDialog

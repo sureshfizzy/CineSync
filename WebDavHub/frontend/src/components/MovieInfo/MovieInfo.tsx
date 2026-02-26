@@ -1,7 +1,7 @@
 import { Box, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import MovieHeader from './MovieHeader';
@@ -11,7 +11,8 @@ import { MovieInfoProps } from './types';
 
 export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
-  const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,14 +22,23 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
   // Detect if we're in ArrDashboard context
   const isArrDashboardContext = location.state?.returnPage === 1 && location.state?.returnSearch === '';
 
-  // Handle both single file (legacy) and multiple files (new)
   const files = Array.isArray(fileInfo) ? fileInfo : (fileInfo ? [fileInfo] : []);
-  const selectedFile = files[selectedVersionIndex] || files[0];
+  const availableQualities = useMemo(() => {
+    const set = new Set<string>();
+    files.forEach((f: any) => { if (f.quality) set.add(f.quality); });
+    return [...set].sort();
+  }, [files]);
 
-  // Reset selected version when fileInfo changes
-  useEffect(() => {
-    setSelectedVersionIndex(0);
-  }, [fileInfo]);
+  const filteredFiles = useMemo(() =>
+    selectedQuality ? files.filter((f: any) => f.quality === selectedQuality) : files,
+    [files, selectedQuality]
+  );
+
+  const selectedFile = filteredFiles[selectedFileIndex] ?? filteredFiles[0] ?? files[0];
+
+  // Reset sub-index when quality changes or navigating to a new movie
+  useEffect(() => { setSelectedFileIndex(0); }, [selectedQuality]);
+  useEffect(() => { setSelectedQuality(null); setSelectedFileIndex(0); }, [folderName]);
 
   const handleNavigateBack = () => {
     navigate(-1);
@@ -154,11 +164,15 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
                 data={data}
                 getPosterUrl={getPosterUrl}
                 fileInfo={fileInfo}
+                filteredFiles={filteredFiles}
+                selectedFileIndex={selectedFileIndex}
+                onFileIndexChange={setSelectedFileIndex}
                 folderName={folderName}
                 currentPath={currentPath}
                 onNavigateBack={handleNavigateBack}
-                selectedVersionIndex={selectedVersionIndex}
-                onVersionChange={setSelectedVersionIndex}
+                availableQualities={availableQualities}
+                selectedQuality={selectedQuality}
+                onQualityChange={setSelectedQuality}
                 isArrDashboardContext={isArrDashboardContext}
                 isLoadingFiles={isLoadingFiles}
                 onSearchMissing={onSearchMissing}

@@ -63,6 +63,26 @@ def _cleanup_orphaned_db_entries(dest_dir, symlink_target_index=None):
                         cleanup_tmdb_covers(int(tmdb_id))
                     except Exception as e:
                         log_message(f"Failed to cleanup MediaCover for TMDB ID {tmdb_id}: {e}", level="WARNING")
+                # Decrement episode_count before deletion (handles multi-quality case)
+                try:
+                    cursor1.execute(
+                        "SELECT season_id, episode_id FROM processed_files WHERE destination_path = ? AND season_id IS NOT NULL AND episode_id IS NOT NULL",
+                        (dest_path,)
+                    )
+                    ep_row = cursor1.fetchone()
+                    if ep_row:
+                        ep_season_id, ep_episode_id = ep_row
+                        cursor1.execute(
+                            "SELECT COUNT(*) FROM processed_files WHERE episode_id = ? AND destination_path != ? AND reason IS NULL",
+                            (ep_episode_id, dest_path)
+                        )
+                        if cursor1.fetchone()[0] == 0:
+                            cursor1.execute(
+                                "UPDATE tv_seasons SET episode_count = MAX(0, episode_count - 1) WHERE id = ?",
+                                (ep_season_id,)
+                            )
+                except Exception:
+                    pass
                 cursor1.execute("DELETE FROM processed_files WHERE destination_path = ?", (dest_path,))
                 cursor2.execute("DELETE FROM file_index WHERE path = ?", (dest_path,))
                 removed += 1

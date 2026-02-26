@@ -995,6 +995,8 @@ def get_available_episodes(tmdb_id, season_number, api_key):
 
     try:
         episodes_response = session.get(episodes_url, params=episodes_params, timeout=10)
+        if episodes_response.status_code == 404:
+            return []
         episodes_response.raise_for_status()
         season_data = episodes_response.json()
         return season_data.get('episodes', [])
