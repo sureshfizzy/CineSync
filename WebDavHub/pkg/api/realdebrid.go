@@ -1591,17 +1591,23 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 		resp, err = streamClient.Do(req)
 		if err != nil {
-			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-				Error:     err,
-				Timestamp: time.Now(),
-			})
-
 			if isTimeoutError(err) {
 				if transport, ok := streamClient.Transport.(*http.Transport); ok {
 					transport.CloseIdleConnections()
 				}
 			}
+			if isTransientStreamError(err) {
+				if attempt+1 < maxRetries {
+					continue
+				}
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
 
+			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+				Error:     err,
+				Timestamp: time.Now(),
+			})
 			http.Error(w, "Failed to fetch file", http.StatusBadGateway)
 			return
 		}
@@ -1637,11 +1643,22 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 					}
 				}
 
-				// Non-bandwidth error, don't retry
-				tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-					Error:     dlErr,
-					Timestamp: time.Now(),
-				})
+				if isRetryableRDDownloadError(dlErr) {
+					clearStaleDownloadCaches(tm, torrentID, filePath)
+					if attempt+1 < maxRetries {
+						continue
+					}
+					http.Error(w, fmt.Sprintf("File temporarily unavailable: %v", dlErr), http.StatusServiceUnavailable)
+					return
+				}
+
+				if markTorrentBrokenFromDownloadErr(dlErr) {
+					tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+						Error:     dlErr,
+						Timestamp: time.Now(),
+					})
+				}
+
 				logger.Warn("RD download failed for %s: %v", torrentID, dlErr)
 				http.Error(w, fmt.Sprintf("File not available: %v", dlErr), resp.StatusCode)
 				return
@@ -1649,10 +1666,21 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 
 			// Generic error without X-Error header
 			resp.Body.Close()
-			tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-				Error:     fmt.Errorf("download failed with status %d", resp.StatusCode),
-				Timestamp: time.Now(),
-			})
+			if isRetryableDownloadStatus(resp.StatusCode) {
+				if attempt+1 < maxRetries {
+					continue
+				}
+				http.Error(w, fmt.Sprintf("File temporarily unavailable (status %d)", resp.StatusCode), http.StatusBadGateway)
+				return
+			}
+
+			if markTorrentBrokenFromStatus(resp.StatusCode) {
+				tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
+					Error:     fmt.Errorf("download failed with status %d", resp.StatusCode),
+					Timestamp: time.Now(),
+				})
+			}
+
 			logger.Warn("RD download failed for %s with status %d", torrentID, resp.StatusCode)
 			http.Error(w, fmt.Sprintf("File not available (status %d)", resp.StatusCode), resp.StatusCode)
 			return
@@ -1676,10 +1704,9 @@ func handleTorrentGet(w http.ResponseWriter, r *http.Request, apiKey string, req
 	buf := make([]byte, 512*1024)
 	n, err := io.CopyBuffer(w, resp.Body, buf)
 	if err != nil && !isClientDisconnection(err) {
-		tm.GetBrokenTorrentCache().Set(torrentID, &realdebrid.FailedFileEntry{
-			Error:     fmt.Errorf("stream failed: %w", err),
-			Timestamp: time.Now(),
-		})
+		if isTransientStreamError(err) {
+			clearStaleDownloadCaches(tm, torrentID, filePath)
+		}
 	}
 	if err == nil && n > 0 && reqRange == "" {
 		mb := float64(n) / (1024.0 * 1024.0)
@@ -1748,6 +1775,71 @@ func isClientDisconnection(err error) bool {
 		strings.Contains(errStr, "client disconnected") ||
 		strings.Contains(errStr, "wsasend") || // Windows-specific
 		strings.Contains(errStr, "eof")
+}
+
+func isTransientStreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if isClientDisconnection(err) || isTimeoutError(err) {
+		return true
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "unexpected eof") ||
+		strings.Contains(errStr, "temporary") ||
+		strings.Contains(errStr, "temporarily unavailable") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "tls handshake timeout")
+}
+
+func isRetryableRDDownloadError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "invalid_download_code") ||
+		strings.Contains(errStr, "failed_generation") ||
+		strings.Contains(errStr, "too_many_attempts")
+}
+
+func markTorrentBrokenFromDownloadErr(err error) bool {
+	if err == nil || realdebrid.IsBytesLimitReached(err) || isRetryableRDDownloadError(err) {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "file_unavailable") ||
+		strings.Contains(errStr, "unavailable_file") ||
+		strings.Contains(errStr, "hoster_unavailable") ||
+		strings.Contains(errStr, "hoster_not_supported") ||
+		strings.Contains(errStr, "file removed")
+}
+
+func isRetryableDownloadStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return statusCode >= 500 && statusCode <= 599
+	}
+}
+
+func markTorrentBrokenFromStatus(statusCode int) bool {
+	return statusCode == http.StatusNotFound || statusCode == http.StatusGone
+}
+
+func clearStaleDownloadCaches(tm *realdebrid.TorrentManager, torrentID, filePath string) {
+	if tm != nil {
+		tm.ClearDownloadLinkCache(torrentID, filePath)
+	}
+	if client := realdebrid.GetOrCreateClient(); client != nil {
+		client.ClearUnrestrictCache()
+	}
 }
 
 // isTimeoutError checks
