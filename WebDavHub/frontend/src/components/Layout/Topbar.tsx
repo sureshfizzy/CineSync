@@ -189,7 +189,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
                 CineSync
               </Typography>
               <Chip
-                label="v3.2.1-alpha"
+                label="v3.2.2-alpha"
                 size="small"
                 variant="outlined"
                 sx={{

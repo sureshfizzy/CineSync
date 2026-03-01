@@ -1,5 +1,5 @@
 #define MyAppName "CineSync"
-#define MyAppVersion "3.2.1-alpha"
+#define MyAppVersion "3.2.2-alpha"
 #define MyAppPublisher "CineSync"
 #define MyAppURL "https://github.com/sureshfizzy/CineSync"
 #define MyAppExeName "CineSync.exe"
