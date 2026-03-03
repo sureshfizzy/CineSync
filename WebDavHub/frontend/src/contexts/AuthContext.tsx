@@ -63,6 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return config;
         }
         const token = localStorage.getItem('cineSyncJWT');
+        const apiKey = localStorage.getItem('CINESYNC_API_KEY') || localStorage.getItem('cineSyncApiKey');
+        if (apiKey) {
+          config.headers = config.headers || {};
+          config.headers['X-API-Key'] = apiKey;
+        }
         if (token) {
           config.headers = config.headers || {};
           config.headers['Authorization'] = `Bearer ${token}`;

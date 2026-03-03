@@ -18,20 +18,40 @@ import (
 
 // LibraryItem represents a movie or series in the user's library
 type LibraryItem struct {
-	ID            int     `json:"id"`
-	TmdbID        int     `json:"tmdb_id"`
-	Title         string  `json:"title"`
-	Year          *int    `json:"year,omitempty"`
-	MediaType     string  `json:"media_type"` // 'movie' or 'tv'
-	RootFolder    string  `json:"root_folder"`
-	QualityProfile string `json:"quality_profile"`
-	MonitorPolicy string  `json:"monitor_policy"`
-	SeriesType    *string `json:"series_type,omitempty"` // Only for TV shows
-	SeasonFolder  *bool   `json:"season_folder,omitempty"` // Only for TV shows
-	Tags          string  `json:"tags"` // JSON array as string
-	Status        string  `json:"status"` // 'wanted', 'downloading', 'completed', 'unavailable'
-	AddedAt       int64   `json:"added_at"`
-	UpdatedAt     int64   `json:"updated_at"`
+	ID             int     `json:"id"`
+	TmdbID         int     `json:"tmdb_id"`
+	Title          string  `json:"title"`
+	Year           *int    `json:"year,omitempty"`
+	MediaType      string  `json:"media_type"` // 'movie' or 'tv'
+	RootFolder     string  `json:"root_folder"`
+	QualityProfile string  `json:"quality_profile"`
+	MonitorPolicy  string  `json:"monitor_policy"`
+	SeriesType     *string `json:"series_type,omitempty"`
+	SeasonFolder   *bool   `json:"season_folder,omitempty"`
+	Tags           string  `json:"tags"`
+	Status         string  `json:"status"`
+	AddedAt        int64   `json:"added_at"`
+	UpdatedAt      int64   `json:"updated_at"`
+}
+
+// LibraryItemFromDB represents a movie or series
+type LibraryItemFromDB struct {
+	ID             int     `json:"id"`
+	TmdbID         int     `json:"tmdb_id"`
+	Title          string  `json:"title"`
+	Year           *int    `json:"year,omitempty"`
+	MediaType      string  `json:"media_type"`
+	RootFolder     string  `json:"root_folder"`
+	QualityProfile string  `json:"quality_profile"`
+	MonitorPolicy  string  `json:"monitor_policy"`
+	Tags           string  `json:"tags"`
+	Status         string  `json:"status"`
+	AddedAt        int64   `json:"added_at"`
+	UpdatedAt      int64   `json:"updated_at"`
+	PosterPath     string  `json:"poster_path"` // /MediaCover/{tmdb_id}/poster.jpg
+	Overview       string  `json:"overview"`
+	Quality        string  `json:"quality"`
+	DestinationPath string `json:"destination_path"`
 }
 
 // AddMovieRequest represents the request to add a movie to the library
@@ -652,7 +672,267 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleUpdateLibraryItem handles PUT /api/library/{id} - update a library item
+// getMoviesFromProcessedFiles returns movies
+func getMoviesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, error) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get total count
+	var totalCount int
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM processed_files
+			WHERE UPPER(media_type) = 'MOVIE'
+			AND destination_path IS NOT NULL AND destination_path != ''
+			AND proper_name IS NOT NULL AND proper_name != ''
+			GROUP BY proper_name, year, tmdb_id
+		) AS sub`
+	if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '0') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(root_folder, '') as root_folder,
+			MAX(processed_at) as latest_processed_at,
+			COALESCE(quality, '') as quality,
+			COALESCE(overview, '') as overview
+		FROM processed_files
+		WHERE UPPER(media_type) = 'MOVIE'
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+	rows, err := mediaHubDB.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var items []LibraryItemFromDB
+	for rows.Next() {
+		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
+		var yearStr string
+		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview); err != nil {
+			continue
+		}
+		tmdbID, _ := strconv.Atoi(tmdbIDStr)
+		if tmdbID == 0 {
+			continue
+		}
+		yearInt, _ := strconv.Atoi(yearStr)
+		var yearPtr *int
+		if yearInt > 0 {
+			yearPtr = &yearInt
+		}
+		addedAt := int64(0)
+		if t, err := time.Parse(time.RFC3339, latestProcessedAt); err == nil {
+			addedAt = t.Unix()
+		} else if t, err := time.Parse("2006-01-02 15:04:05", latestProcessedAt); err == nil {
+			addedAt = t.Unix()
+		}
+		items = append(items, LibraryItemFromDB{
+			ID:              tmdbID,
+			TmdbID:          tmdbID,
+			Title:           properName,
+			Year:            yearPtr,
+			MediaType:       "movie",
+			RootFolder:      rootFolder,
+			QualityProfile:  quality,
+			MonitorPolicy:   "any",
+			Tags:            "[]",
+			Status:          "imported",
+			AddedAt:         addedAt,
+			UpdatedAt:       addedAt,
+			PosterPath:      fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
+			Overview:        overview,
+			Quality:         quality,
+			DestinationPath: destPath,
+		})
+	}
+	return items, totalCount, rows.Err()
+}
+
+// getSeriesFromProcessedFiles returns TV series
+func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, error) {
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var totalCount int
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM processed_files
+			WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
+			AND destination_path IS NOT NULL AND destination_path != ''
+			AND proper_name IS NOT NULL AND proper_name != ''
+			GROUP BY proper_name, year, tmdb_id
+		) AS sub`
+	if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			COALESCE(proper_name, '') as proper_name,
+			COALESCE(year, '0') as year,
+			COALESCE(tmdb_id, '') as tmdb_id,
+			COALESCE(destination_path, '') as destination_path,
+			COALESCE(root_folder, '') as root_folder,
+			MAX(processed_at) as latest_processed_at,
+			COALESCE(quality, '') as quality,
+			COALESCE(overview, '') as overview
+		FROM processed_files
+		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
+		AND destination_path IS NOT NULL
+		AND destination_path != ''
+		AND proper_name IS NOT NULL
+		AND proper_name != ''
+		GROUP BY proper_name, year, tmdb_id
+		ORDER BY proper_name, year
+		LIMIT ? OFFSET ?`
+	rows, err := mediaHubDB.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var items []LibraryItemFromDB
+	for rows.Next() {
+		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
+		var yearStr string
+		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview); err != nil {
+			continue
+		}
+		tmdbID, _ := strconv.Atoi(tmdbIDStr)
+		if tmdbID == 0 {
+			continue
+		}
+		yearInt, _ := strconv.Atoi(yearStr)
+		var yearPtr *int
+		if yearInt > 0 {
+			yearPtr = &yearInt
+		}
+		addedAt := int64(0)
+		if t, err := time.Parse(time.RFC3339, latestProcessedAt); err == nil {
+			addedAt = t.Unix()
+		} else if t, err := time.Parse("2006-01-02 15:04:05", latestProcessedAt); err == nil {
+			addedAt = t.Unix()
+		}
+		items = append(items, LibraryItemFromDB{
+			ID:              tmdbID,
+			TmdbID:          tmdbID,
+			Title:           properName,
+			Year:            yearPtr,
+			MediaType:       "tv",
+			RootFolder:      rootFolder,
+			QualityProfile:  quality,
+			MonitorPolicy:   "any",
+			Tags:            "[]",
+			Status:          "imported",
+			AddedAt:         addedAt,
+			UpdatedAt:       addedAt,
+			PosterPath:      fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
+			Overview:        overview,
+			Quality:         quality,
+			DestinationPath: destPath,
+		})
+	}
+	return items, totalCount, rows.Err()
+}
+
+// parseLimitOffset parses limit and offset from query params
+func parseLimitOffset(r *http.Request) (limit, offset int) {
+	limit = 100
+	offset = 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return limit, offset
+}
+
+// HandleGetLibraryMovies handles GET /api/library/movie
+func HandleGetLibraryMovies(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	limit, offset := parseLimitOffset(r)
+	items, totalCount, err := getMoviesFromProcessedFiles(limit, offset)
+	if err != nil {
+		logger.Error("Failed to get movies from database: %v", err)
+		http.Error(w, "Failed to get movies", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"data":       items,
+		"count":      len(items),
+		"total_count": totalCount,
+	})
+}
+
+// HandleGetLibraryTv handles GET /api/library/tv
+func HandleGetLibraryTv(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	limit, offset := parseLimitOffset(r)
+	items, totalCount, err := getSeriesFromProcessedFiles(limit, offset)
+	if err != nil {
+		logger.Error("Failed to get series from database: %v", err)
+		http.Error(w, "Failed to get series", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"data":       items,
+		"count":      len(items),
+		"total_count": totalCount,
+	})
+}
+
+// HandleUpdateLibraryItem handles PUT /api/library/{id}
 func HandleUpdateLibraryItem(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

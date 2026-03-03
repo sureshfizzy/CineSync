@@ -15,12 +15,17 @@ export interface LibraryItem {
   status: 'wanted' | 'downloading' | 'completed' | 'unavailable' | 'missing' | 'imported';
   added_at: number;
   updated_at: number;
+  poster_path?: string;
+  overview?: string;
+  quality?: string;
+  destination_path?: string;
 }
 
 export interface LibraryResponse {
   success: boolean;
   data: LibraryItem[];
   count: number;
+  total_count?: number;
 }
 
 export interface AddMovieRequest {
@@ -46,7 +51,25 @@ export interface AddSeriesRequest {
 }
 
 export const libraryApi = {
-  // Get all library items
+  // Get movies from DB
+  async getLibraryMovies(limit = 100, offset = 0): Promise<LibraryResponse> {
+    const response = await axios.get('/api/library/movie', {
+      params: { limit, offset },
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
+  // Get TV series from DB
+  async getLibraryTv(limit = 100, offset = 0): Promise<LibraryResponse> {
+    const response = await axios.get('/api/library/tv', {
+      params: { limit, offset },
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
+  // Get library items
   async getLibrary(mediaType?: 'movie' | 'tv', status?: string): Promise<LibraryResponse> {
     const params = new URLSearchParams();
     if (mediaType) params.append('type', mediaType);

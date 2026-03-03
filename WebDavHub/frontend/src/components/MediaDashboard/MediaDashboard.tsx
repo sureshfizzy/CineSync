@@ -1,29 +1,25 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, ToggleButton, alpha, Collapse, IconButton } from '@mui/material';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { FileItem } from '../FileBrowser/types';
-import { fetchFiles as fetchFilesApi } from '../FileBrowser/fileApi';
-import { formatDate, joinPaths, inferQualityFromName } from '../FileBrowser/fileUtils';
+import { formatDate, joinPaths } from '../FileBrowser/fileUtils';
 import FolderIcon from '@mui/icons-material/Folder';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import StraightenIcon from '@mui/icons-material/Straighten';
 import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize';
 import SortRoundedIcon from '@mui/icons-material/SortRounded';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PosterView from '../FileBrowser/PosterView';
 import ListView from '../FileBrowser/ListView';
+import VirtualizedLibraryGrid from './VirtualizedLibraryGrid';
 import { useLayoutContext } from '../Layout/Layout';
 import { useTmdb } from '../../contexts/TmdbContext';
-import { setPosterInCache } from '../FileBrowser/tmdbCache';
-import { TmdbResult, searchTmdb, fetchSeriesEpisodesFromTmdb } from '../api/tmdbApi';
+import { TmdbResult, fetchSeriesEpisodesFromTmdb } from '../api/tmdbApi';
 import { useNavigate } from 'react-router-dom';
 import { libraryApi, LibraryItem } from '../../api/libraryApi';
 import { fetchMediaFiles } from '../../api/mediaFilesApi';
 import MediaWantedList from './MediaWantedList';
 import { ArrItem } from './types';
-import { isTvMediaType, normalizeMediaType, inferMediaTypeFromText } from '../../utils/mediaType';
-
-const MAX_SCAN_DEPTH = 3;
+import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
 
 interface MediaDashboardProps {
   filter?: 'all' | 'movies' | 'series' | 'wanted';
@@ -33,7 +29,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const { view } = useLayoutContext();
   const navigate = useNavigate();
 
-  const { tmdbData, imgLoadedMap, updateTmdbData, setImageLoaded } = useTmdb();
+  const { tmdbData, updateTmdbData, setImageLoaded } = useTmdb();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -44,8 +40,13 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   // Use filter from props instead of internal state
   const arrFilter = filter;
   
-  const [files, setFiles] = useState<FileItem[]>([]);
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const itemsLengthRef = useRef(0);
+  const itemsRef = useRef<LibraryItem[]>([]);
+  itemsLengthRef.current = libraryItems.length;
+  itemsRef.current = libraryItems;
   const [wantedItems, setWantedItems] = useState<ArrItem[]>([]);
   const [wantedSeriesItems, setWantedSeriesItems] = useState<ArrItem[]>([]);
   const [wantedMovieItems, setWantedMovieItems] = useState<ArrItem[]>([]);
@@ -157,15 +158,18 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
     return { seriesRows, movieRows };
   }, [formatEpisodeCode, isEpisodeAired]);
 
-  const loadLibraryItems = useCallback(async (manageLoading = arrFilter === 'wanted') => {
-    try {
-      if (manageLoading) setLoading(true);
-      const mediaType = arrFilter === 'movies' ? 'movie' : arrFilter === 'series' ? 'tv' : undefined;
-      const response = await libraryApi.getLibrary(mediaType);
-      const items = response.data || [];
-      setLibraryItems(items);
+  const PAGE_SIZE = 100;
 
+  const loadLibraryItems = useCallback(async (manageLoading = arrFilter === 'wanted', append = false, appendOffset = 0) => {
+    try {
+      if (manageLoading && !append) setLoading(true);
+      if (append) setLoadingMore(true);
+      setError('');
       if (arrFilter === 'wanted') {
+        const response = await libraryApi.getLibrary(undefined);
+        const items = response.data || [];
+        setLibraryItems(items);
+        setTotalCount(items.length);
         const { seriesRows, movieRows } = await buildWantedRows(items);
         setWantedSeriesItems(seriesRows);
         setWantedMovieItems(movieRows);
@@ -175,120 +179,90 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
           setWantedItems(movieRows);
         }
       } else {
+        const offset = append ? appendOffset : 0;
+        let items: LibraryItem[] = [];
+        let total = 0;
+        if (arrFilter === 'movies') {
+          const res = await libraryApi.getLibraryMovies(PAGE_SIZE, offset);
+          items = res.data || [];
+          total = res.total_count ?? items.length;
+        } else if (arrFilter === 'series') {
+          const res = await libraryApi.getLibraryTv(PAGE_SIZE, offset);
+          items = res.data || [];
+          total = res.total_count ?? items.length;
+        } else {
+          if (append) {
+            const current = itemsRef.current;
+            const movieCount = current.filter((i) => i.media_type === 'movie').length;
+            const seriesCount = current.filter((i) => i.media_type === 'tv').length;
+            const [moviesRes, tvRes] = await Promise.all([
+              libraryApi.getLibraryMovies(PAGE_SIZE, movieCount),
+              libraryApi.getLibraryTv(PAGE_SIZE, seriesCount),
+            ]);
+            const movies = moviesRes.data || [];
+            const series = tvRes.data || [];
+            items = [...movies, ...series];
+            total = (moviesRes.total_count ?? 0) + (tvRes.total_count ?? 0);
+          } else {
+            const [moviesRes, tvRes] = await Promise.all([
+              libraryApi.getLibraryMovies(PAGE_SIZE, 0),
+              libraryApi.getLibraryTv(PAGE_SIZE, 0),
+            ]);
+            const movies = moviesRes.data || [];
+            const series = tvRes.data || [];
+            items = [...movies, ...series];
+            total = (moviesRes.total_count ?? 0) + (tvRes.total_count ?? 0);
+          }
+        }
+        setLibraryItems((prev) => (append ? [...prev, ...items] : items));
+        setTotalCount(total);
         setWantedItems([]);
         setWantedSeriesItems([]);
         setWantedMovieItems([]);
       }
     } catch (e) {
       console.error('Failed to load library items:', e);
-      setLibraryItems([]);
+      setError('Failed to load library items');
+      if (!append) {
+        setLibraryItems([]);
+        setTotalCount(0);
+      }
       setWantedItems([]);
       setWantedSeriesItems([]);
       setWantedMovieItems([]);
     } finally {
-      if (manageLoading) setLoading(false);
+      if (manageLoading && !append) setLoading(false);
+      if (append) setLoadingMore(false);
     }
   }, [arrFilter, buildWantedRows, wantedFilter]);
 
-  // Fetch root to get base_path folders
-  const loadArrItems = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const root = await fetchFilesApi('/', true, 1, 100);
-      const baseFolders = (root.data || []).filter(f => f.type === 'directory');
+  const loadMoreItems = useCallback(() => {
+    if (arrFilter === 'wanted') return;
+    loadLibraryItems(false, true, itemsLengthRef.current);
+  }, [arrFilter, loadLibraryItems]);
 
-      const results: FileItem[] = [];
-      const visited = new Set<string>();
-      const queue: Array<{ path: string; depth: number }> = [];
-
-      const enqueue = (p: string, depth: number) => {
-        if (!p || visited.has(p) || depth > MAX_SCAN_DEPTH) return;
-        visited.add(p);
-        queue.push({ path: p, depth });
-      };
-
-      baseFolders.forEach(folder => {
-        const basePath = folder.path || folder.fullPath || joinPaths('/', folder.name);
-        enqueue(basePath, 0);
-      });
-
-      while (queue.length > 0) {
-        const { path: currentPath, depth } = queue.shift()!;
-        try {
-          const resp = await fetchFilesApi(currentPath, true, 1, 200);
-          const mapped = (resp.data || []).map(item => {
-            const fullOrPath = item.path || item.fullPath || joinPaths(currentPath, item.name);
-            return {
-              ...item,
-              path: fullOrPath,
-              fullPath: fullOrPath,
-            } as FileItem;
-          });
-
-          const inner = mapped.filter(item => !item.isCategoryFolder);
-
-          inner.forEach((it) => {
-            if (it.type === 'directory' && it.tmdbId && it.posterPath && it.mediaType) {
-              const normalizedMediaType = it.mediaType.toLowerCase() as 'movie' | 'tv';
-              const dbData = {
-                id: parseInt(it.tmdbId),
-                title: it.title || it.name,
-                poster_path: it.posterPath,
-                backdrop_path: null,
-                media_type: normalizedMediaType,
-                release_date: it.releaseDate || '',
-                first_air_date: it.firstAirDate || '',
-                overview: ''
-              };
-              updateTmdbData(it.name, dbData);
-              setPosterInCache(it.name, normalizedMediaType, dbData);
-            }
-          });
-
-          results.push(...inner);
-
-          // Recurse into subfolders (skip season folders)
-          if (depth < MAX_SCAN_DEPTH) {
-            mapped
-              .filter(it => it.type === 'directory' && !it.isSeasonFolder)
-              .forEach(it => enqueue(it.path || it.fullPath || '', depth + 1));
-          }
-        } catch (e) {
-          console.error('Error fetching folder:', currentPath, e);
-        }
-      }
-
-      setFiles(results);
-    } catch (e) {
-      console.error('Failed to load dashboard items:', e);
-      setError('Failed to load dashboard items');
-      setFiles([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTmdbData]);
-
-  // Load data when filter changes
+  // Load data when filter changes - DB only, no filesystem
   useEffect(() => {
-    if (arrFilter === 'wanted') {
-      loadLibraryItems(true);
-    } else {
-      loadArrItems();
-      loadLibraryItems(false);
-    }
-  }, [arrFilter, loadArrItems, loadLibraryItems]);
+    loadLibraryItems(true);
+  }, [arrFilter, loadLibraryItems]);
 
-  // Enrich library items with TMDB details so posters/overviews populate like FS items
+  // Populate tmdbData
   useEffect(() => {
     libraryItems.forEach((item) => {
-      // Key used by PosterView lookup is file.name; for library items we set name = title
-      const key = item.title;
-      searchTmdb(item.tmdb_id.toString(), undefined, item.media_type).then((result) => {
-        if (result) {
-          updateTmdbData(key, result);
-        }
-      });
+      if (item.poster_path && item.title) {
+        const yearStr = item.year ? `${item.year}-01-01` : undefined;
+        updateTmdbData(item.title, {
+          id: item.tmdb_id,
+          title: item.title,
+          name: item.media_type === 'tv' ? item.title : undefined,
+          overview: item.overview || '',
+          poster_path: item.poster_path,
+          backdrop_path: null,
+          media_type: item.media_type,
+          release_date: yearStr,
+          first_air_date: yearStr
+        });
+      }
     });
   }, [libraryItems, updateTmdbData]);
 
@@ -327,7 +301,26 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   };
 
   const handleListItemClick = (file: FileItem) => {
-    if (file.type === 'directory') {
+    if (file.type === 'directory' && !file.isSeasonFolder && file.tmdbId) {
+      const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
+      const destPath = file.path || file.fullPath || joinPaths('/', file.name);
+      const pathParts = destPath.split('/').filter(Boolean);
+      pathParts.pop();
+      const parentPath = '/' + pathParts.join('/') + (pathParts.length > 0 ? '/' : '');
+      const tmdb = tmdbData[file.name || ''];
+      navigate(`/media/${mediaType}/${encodeURIComponent(file.tmdbId.toString())}`, {
+        state: {
+          mediaType,
+          tmdbId: file.tmdbId,
+          hasSeasonFolders: file.hasSeasonFolders,
+          currentPath: parentPath,
+          folderName: file.name,
+          tmdbData: tmdb,
+          returnPage: 1,
+          returnSearch: ''
+        }
+      });
+    } else if (file.type === 'directory') {
       const targetPath = file.path || file.fullPath || joinPaths('/', file.name);
       navigate(`/files${targetPath}`);
     }
@@ -339,19 +332,6 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
     navigate(`/Mediadashboard/search/${mediaType}`);
   };
 
-
-  const inferFileMediaType = useCallback((file: FileItem): 'movie' | 'tv' => {
-    if (file.mediaType) {
-      return normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
-    }
-    if (file.hasSeasonFolders) return 'tv';
-
-    const rawPath = (file.path || file.fullPath || '').toLowerCase().replace(/\\/g, '/');
-    if (rawPath.includes('/shows') || rawPath.includes('/series') || rawPath.includes('/tv')) return 'tv';
-    if (rawPath.includes('/movies') || rawPath.includes('/movie')) return 'movie';
-
-    return inferMediaTypeFromText(file.name || file.path || file.fullPath);
-  }, []);
 
   const matchesQualityFilter = useCallback((quality?: string | null) => {
     if (qualityFilter === 'all') return true;
@@ -561,104 +541,68 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                     const libraryItemsQualityFiltered = qualityFilter === 'all'
                       ? libraryItemsForFilter
                       : libraryItemsForFilter.filter(item => {
-                          const q = item.quality_profile || item.title || '';
+                          const q = item.quality_profile || item.quality || item.title || '';
                           return matchesQualityFilter(q);
                         });
 
-                    // Filter file system items by current filter
-                    const fileSystemItems = arrFilter === 'movies'
-                      ? files.filter(f => inferFileMediaType(f) === 'movie')
-                      : arrFilter === 'series'
-                      ? files.filter(f => inferFileMediaType(f) === 'tv')
-                      : files;
-
-                    const directoryItems = fileSystemItems.filter(f => f.type === 'directory');
-
-                    const filteredFileSystemItems = (qualityFilter === 'all'
-                      ? directoryItems
-                      : directoryItems.filter(f => {
-                          const q = f.quality || inferQualityFromName(f.name || '') || '';
-                          return matchesQualityFilter(q);
-                        }))
-                      .filter(f => Boolean(f.tmdbId));
-
-                    const fsByTmdbId = new Map(
-                      filteredFileSystemItems
-                        .filter(f => f.tmdbId)
-                        .map(f => [f.tmdbId!.toString(), f])
-                    );
-
-                    // Convert library items to FileItem format for consistent display
+                    // Convert library items to FileItem format
                     const libraryItemsAsFiles: FileItem[] = libraryItemsQualityFiltered
                       .filter(item => item.tmdb_id)
                       .map(item => {
                         const tmdbKey = item.tmdb_id.toString();
-                        const fsMatch = fsByTmdbId.get(tmdbKey);
+                        const destPath = item.destination_path || item.root_folder;
                         return {
                           name: item.title,
-                          path: fsMatch?.path || item.root_folder,
-                          fullPath: fsMatch?.fullPath || item.root_folder,
-                          // Treat library entries like directories so PosterView renders posters
+                          path: destPath,
+                          fullPath: destPath,
                           type: 'directory' as const,
                           isSeasonFolder: false,
                           hasSeasonFolders: isTvMediaType(item.media_type),
-                          size: fsMatch?.size || '--',
-                          modified: fsMatch?.modified || new Date(item.added_at * 1000).toISOString(),
+                          size: '--',
+                          modified: new Date(item.added_at * 1000).toISOString(),
                           mediaType: item.media_type,
                           tmdbId: tmdbKey,
                           year: item.year,
                           isLibraryItem: true,
                           libraryItemId: item.id,
-                          qualityProfile: item.quality_profile,
+                          qualityProfile: item.quality_profile || item.quality,
                           monitorPolicy: item.monitor_policy,
-                          tags: item.tags ? JSON.parse(item.tags) : [],
-                          quality: fsMatch?.quality || undefined,
-                          posterPath: fsMatch?.posterPath,
-                          releaseDate: fsMatch?.releaseDate,
-                          firstAirDate: fsMatch?.firstAirDate,
-                          status: fsMatch ? 'available' : (item.status as any)
+                          tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : [],
+                          quality: item.quality,
+                          posterPath: item.poster_path,
+                          releaseDate: undefined,
+                          firstAirDate: undefined,
+                          status: item.status as any
                         };
                       });
 
-                    // Include filesystem-only items that have tmdbId but are not in library
-                    const libraryTmdbSet = new Set(libraryItemsAsFiles.map(i => i.tmdbId?.toString() || '').filter(Boolean));
-                    const fsOnlyItems = filteredFileSystemItems.filter(f => {
-                      if (!f.tmdbId) return false;
-                      return !libraryTmdbSet.has(f.tmdbId.toString());
-                    });
-
-                    // Combine library items and filesystem items (tmdbId-based)
-                    const allItems = [...libraryItemsAsFiles, ...fsOnlyItems];
+                    const allItems = libraryItemsAsFiles;
 
                     if (allItems.length > 0) {
                       return (
                         <Box>
               {view === 'poster' ? (
-                <PosterView
-                              files={allItems}
+                <VirtualizedLibraryGrid
+                  items={allItems}
+                  totalCount={totalCount}
+                  loadingMore={loadingMore}
+                  onLoadMore={loadMoreItems}
                   tmdbData={tmdbData}
-                  imgLoadedMap={imgLoadedMap}
                   onFileClick={handleFileClick}
                   onImageLoad={(key: string) => setImageLoaded(key, true)}
-                  currentPath={'/'}
-                  onViewDetails={() => {}}
-                  onRename={() => loadArrItems()}
-                  onDeleted={() => loadArrItems()}
-                  showArrBadges
-                  sizeVariant="compact"
                 />
               ) : (
                 <ListView
-                              files={allItems}
+                  files={allItems}
                   currentPath={'/'}
                   formatDate={formatDate}
                   onItemClick={handleListItemClick}
                   onViewDetails={() => {}}
-                  onRename={() => loadArrItems()}
-                  onDeleted={() => loadArrItems()}
+                  onRename={() => loadLibraryItems(true)}
+                  onDeleted={() => loadLibraryItems(true)}
                   onError={setError}
                 />
-                          )}
+              )}
                         </Box>
                       );
                     }

@@ -310,7 +310,16 @@ func main() {
 	apiMux.HandleFunc("/api/database/export", db.HandleDatabaseExport)
 	apiMux.HandleFunc("/api/database/update", db.HandleDatabaseUpdate)
 	apiMux.HandleFunc("/api/series", api.HandleSeries)
-	apiMux.HandleFunc("/api/library/movie", api.HandleAddMovie)
+	apiMux.HandleFunc("/api/library/movie", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			api.HandleGetLibraryMovies(w, r)
+		} else if r.Method == http.MethodPost {
+			api.HandleAddMovie(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	apiMux.HandleFunc("/api/library/tv", api.HandleGetLibraryTv)
 	apiMux.HandleFunc("/api/library/series", api.HandleAddSeries)
 	apiMux.HandleFunc("/api/library", api.HandleGetLibrary)
 	apiMux.HandleFunc("/api/library/", func(w http.ResponseWriter, r *http.Request) {
