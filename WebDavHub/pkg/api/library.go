@@ -36,32 +36,77 @@ type LibraryItem struct {
 
 // LibraryItemFromDB represents a movie or series
 type LibraryItemFromDB struct {
-	ID             int     `json:"id"`
-	TmdbID         int     `json:"tmdb_id"`
-	Title          string  `json:"title"`
-	Year           *int    `json:"year,omitempty"`
-	MediaType      string  `json:"media_type"`
-	RootFolder     string  `json:"root_folder"`
-	QualityProfile string  `json:"quality_profile"`
-	MonitorPolicy  string  `json:"monitor_policy"`
-	Tags           string  `json:"tags"`
-	Status         string  `json:"status"`
-	AddedAt        int64   `json:"added_at"`
-	UpdatedAt      int64   `json:"updated_at"`
-	PosterPath     string  `json:"poster_path"` // /MediaCover/{tmdb_id}/poster.jpg
-	Overview       string  `json:"overview"`
-	Quality        string  `json:"quality"`
+	ID              int    `json:"id"`
+	TmdbID          int    `json:"tmdb_id"`
+	Title           string `json:"title"`
+	Year            *int   `json:"year,omitempty"`
+	MediaType       string `json:"media_type"`
+	RootFolder      string `json:"root_folder"`
+	QualityProfile  string `json:"quality_profile"`
+	MonitorPolicy   string `json:"monitor_policy"`
+	Tags            string `json:"tags"`
+	Status          string `json:"status"`
+	AddedAt         int64  `json:"added_at"`
+	UpdatedAt       int64  `json:"updated_at"`
+	PosterPath      string `json:"poster_path"` // /MediaCover/{tmdb_id}/poster.jpg
+	Overview        string `json:"overview"`
+	Quality         string `json:"quality"`
 	DestinationPath string `json:"destination_path"`
+}
+
+// WantedEpisode is a lightweight DTO for missing TV episodes
+type WantedEpisode struct {
+	ID             string `json:"id"`
+	TmdbID         int    `json:"tmdbId"`
+	Title          string `json:"title"`
+	Year           *int   `json:"year,omitempty"`
+	MediaType      string `json:"mediaType"` // always "tv" here
+	RootFolder     string `json:"rootFolder"`
+	QualityProfile string `json:"qualityProfile"`
+	SeasonNumber   int    `json:"seasonNumber"`
+	EpisodeNumber  int    `json:"episodeNumber"`
+	Episode        string `json:"episode"`
+	EpisodeTitle   string `json:"episodeTitle"`
+	AirDate        string `json:"airDate,omitempty"`
+}
+
+// WantedMovie is a lightweight DTO for movies that are in the library
+type WantedMovie struct {
+	ID             string   `json:"id"`
+	TmdbID         int      `json:"tmdbId"`
+	Title          string   `json:"title"`
+	Year           *int     `json:"year,omitempty"`
+	MediaType      string   `json:"mediaType"`
+	RootFolder     string   `json:"rootFolder"`
+	QualityProfile string   `json:"qualityProfile"`
+	MonitorPolicy  string   `json:"monitorPolicy"`
+	Tags           []string `json:"tags,omitempty"`
+	CreatedAt      string   `json:"createdAt"`
+	UpdatedAt      string   `json:"updatedAt"`
+}
+
+// writePagedJSON writes a standardized paged JSON response:
+func writePagedJSON[T any](w http.ResponseWriter, data []T, totalCount int) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Type", "application/json")
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"data":        data,
+		"count":       len(data),
+		"total_count": totalCount,
+	})
 }
 
 // AddMovieRequest represents the request to add a movie to the library
 type AddMovieRequest struct {
-	TmdbID         int    `json:"tmdbId"`
-	Title          string `json:"title"`
-	Year           *int   `json:"year,omitempty"`
-	RootFolder     string `json:"rootFolder"`
-	QualityProfile string `json:"qualityProfile"`
-	MonitorPolicy  string `json:"monitorPolicy"`
+	TmdbID         int      `json:"tmdbId"`
+	Title          string   `json:"title"`
+	Year           *int     `json:"year,omitempty"`
+	RootFolder     string   `json:"rootFolder"`
+	QualityProfile string   `json:"qualityProfile"`
+	MonitorPolicy  string   `json:"monitorPolicy"`
 	Tags           []string `json:"tags"`
 }
 
@@ -139,6 +184,227 @@ func InitLibraryTable() error {
 	return nil
 }
 
+// HandleGetLibraryWantedFast exposes missing TV episodes directly from MediaHub DB.
+func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Error("Failed to get MediaHub database connection: %v", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+
+	variant := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("variant")))
+
+	if variant == "movies" || variant == "movie" {
+		if err := InitLibraryTable(); err != nil {
+			logger.Error("Failed to initialize library table: %v", err)
+			http.Error(w, "Database initialization failed", http.StatusInternalServerError)
+			return
+		}
+
+		limit, offset := parseLimitOffset(r)
+
+		baseQuery := `
+        SELECT
+          li.id,
+          li.tmdb_id,
+          li.title,
+          li.year,
+          li.root_folder,
+          li.quality_profile,
+          li.monitor_policy,
+          li.tags,
+          li.added_at,
+          li.updated_at
+        FROM library_items li
+        LEFT JOIN processed_files p ON CAST(p.tmdb_id AS INTEGER) = li.tmdb_id
+          AND p.destination_path IS NOT NULL AND p.destination_path != ''
+          AND (p.reason IS NULL OR p.reason = '')
+          AND (p.season_number IS NULL OR p.season_number = '' OR p.season_number = 'NULL')
+        WHERE li.media_type = 'movie'
+          AND p.tmdb_id IS NULL
+        ORDER BY li.added_at DESC
+        `
+
+		countQuery := "SELECT COUNT(1) FROM (" + baseQuery + ") AS sub"
+		var totalCount int
+		if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+			logger.Warn("Failed to count wanted movies: %v", err)
+			totalCount = 0
+		}
+
+		rows, err := mediaHubDB.Query(baseQuery+" LIMIT ? OFFSET ?", limit, offset)
+		if err != nil {
+			logger.Error("Failed to query library movies: %v", err)
+			http.Error(w, "Failed to query wanted movies", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var out []WantedMovie
+		for rows.Next() {
+			var (
+				id             int
+				tmdbID         int
+				title          string
+				year           sql.NullInt64
+				rootFolder     string
+				qualityProfile string
+				monitorPolicy  string
+				tagsJSON       string
+				addedAt        int64
+				updatedAt      int64
+			)
+			if err := rows.Scan(&id, &tmdbID, &title, &year, &rootFolder, &qualityProfile, &monitorPolicy, &tagsJSON, &addedAt, &updatedAt); err != nil {
+				continue
+			}
+			var tags []string
+			if tagsJSON != "" {
+				_ = json.Unmarshal([]byte(tagsJSON), &tags)
+			}
+
+			var yearPtr *int
+			if year.Valid && year.Int64 > 0 {
+				y := int(year.Int64)
+				yearPtr = &y
+			}
+
+			out = append(out, WantedMovie{
+				ID:             fmt.Sprintf("movie-%d", id),
+				TmdbID:         tmdbID,
+				Title:          title,
+				Year:           yearPtr,
+				MediaType:      "movie",
+				RootFolder:     rootFolder,
+				QualityProfile: qualityProfile,
+				MonitorPolicy:  monitorPolicy,
+				Tags:           tags,
+				CreatedAt:      time.Unix(addedAt, 0).UTC().Format(time.RFC3339),
+				UpdatedAt:      time.Unix(updatedAt, 0).UTC().Format(time.RFC3339),
+			})
+		}
+
+		if err := rows.Err(); err != nil {
+			logger.Error("Error iterating wanted movies: %v", err)
+			http.Error(w, "Failed to enumerate wanted movies", http.StatusInternalServerError)
+			return
+		}
+
+		writePagedJSON(w, out, totalCount)
+		return
+	}
+
+	// Default: TV episodes
+	baseQuery := `
+        SELECT
+          sh.tmdb_id,
+          COALESCE(sh.proper_name, '') AS title,
+          COALESCE(sh.year, '')        AS year_str,
+          COALESCE(pf.root_folder, '') AS root_folder,
+          COALESCE(pf.quality, '')     AS quality_profile,
+          e.season_number,
+          e.episode_number,
+          COALESCE(e.title, '')        AS episode_title,
+          COALESCE(e.air_date, '')     AS air_date
+        FROM episodes e
+        JOIN tv_shows sh ON sh.id = e.show_id
+        LEFT JOIN (
+          SELECT show_id, MIN(root_folder) AS root_folder, MIN(quality) AS quality
+          FROM processed_files
+          WHERE destination_path IS NOT NULL AND destination_path != ''
+          GROUP BY show_id
+        ) pf ON pf.show_id = e.show_id
+        LEFT JOIN processed_files p
+          ON p.episode_id = e.id
+          AND p.destination_path IS NOT NULL AND p.destination_path != ''
+          AND (p.reason IS NULL OR p.reason = '')
+        WHERE p.episode_id IS NULL
+          AND (e.air_date IS NULL OR e.air_date <= date('now'))
+          AND sh.tmdb_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM processed_files p2
+            WHERE p2.show_id = e.show_id
+              AND p2.destination_path IS NOT NULL AND p2.destination_path != ''
+          )
+        ORDER BY sh.proper_name, e.season_number, e.episode_number
+        `
+	// Count total wanted episodes
+	countQuery := "SELECT COUNT(1) FROM (" + baseQuery + ") AS sub"
+	var totalCount int
+	if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+		logger.Warn("Failed to count wanted episodes: %v", err)
+		totalCount = 0
+	}
+
+	limit, offset := parseLimitOffset(r)
+	pagedQuery := baseQuery + " LIMIT ? OFFSET ?"
+
+	rows, err := mediaHubDB.Query(pagedQuery, limit, offset)
+	if err != nil {
+		logger.Error("Failed to query wanted episodes: %v", err)
+		http.Error(w, "Failed to query wanted episodes", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var out []WantedEpisode
+	for rows.Next() {
+		var (
+			tmdbID         int
+			title          string
+			yearStr        string
+			rootFolder     string
+			qualityProfile string
+			seasonNumber   int
+			episodeNumber  int
+			episodeTitle   string
+			airDate        string
+		)
+		if err := rows.Scan(&tmdbID, &title, &yearStr, &rootFolder, &qualityProfile, &seasonNumber, &episodeNumber, &episodeTitle, &airDate); err != nil {
+			continue
+		}
+
+		var yearPtr *int
+		if yearStr != "" {
+			if y, err := strconv.Atoi(yearStr); err == nil && y > 0 {
+				yearPtr = &y
+			}
+		}
+
+		id := fmt.Sprintf("%d-%d-%d", tmdbID, seasonNumber, episodeNumber)
+		epCode := fmt.Sprintf("%dx%02d", seasonNumber, episodeNumber)
+
+		out = append(out, WantedEpisode{
+			ID:             id,
+			TmdbID:         tmdbID,
+			Title:          title,
+			Year:           yearPtr,
+			MediaType:      "tv",
+			RootFolder:     rootFolder,
+			QualityProfile: qualityProfile,
+			SeasonNumber:   seasonNumber,
+			EpisodeNumber:  episodeNumber,
+			Episode:        epCode,
+			EpisodeTitle:   episodeTitle,
+			AirDate:        airDate,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		logger.Error("Error iterating wanted episodes: %v", err)
+		http.Error(w, "Failed to enumerate wanted episodes", http.StatusInternalServerError)
+		return
+	}
+
+	writePagedJSON(w, out, totalCount)
+}
+
 // MediaCover functionality
 const (
 	TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
@@ -181,7 +447,7 @@ func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
 	if posterPath != "" {
 		posterURL := fmt.Sprintf("%s%s%s", TMDB_IMAGE_BASE_URL, POSTER_SIZE, posterPath)
 		localPosterPath := getMediaCoverPath(tmdbID, "poster")
-		
+
 		if err := downloadImage(posterURL, localPosterPath); err != nil {
 			logger.Warn("Failed to download poster for TMDB ID %d: %v", tmdbID, err)
 		} else {
@@ -193,7 +459,7 @@ func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
 	if backdropPath != "" {
 		fanartURL := fmt.Sprintf("%s%s%s", TMDB_IMAGE_BASE_URL, FANART_SIZE, backdropPath)
 		localFanartPath := getMediaCoverPath(tmdbID, "fanart")
-		
+
 		if err := downloadImage(fanartURL, localFanartPath); err != nil {
 			logger.Warn("Failed to download fanart for TMDB ID %d: %v", tmdbID, err)
 		} else {
@@ -208,7 +474,7 @@ func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
 func fetchAndSaveMediaCover(tmdbID int, mediaType string) error {
 	// Fetch TMDB data
 	tmdbURL := fmt.Sprintf("https://api.themoviedb.org/3/%s/%d?api_key=%s", mediaType, tmdbID, getTMDBAPIKey())
-	
+
 	resp, err := http.Get(tmdbURL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch TMDB data: %v", err)
@@ -219,7 +485,7 @@ func fetchAndSaveMediaCover(tmdbID int, mediaType string) error {
 		return fmt.Errorf("TMDB API returned status %d", resp.StatusCode)
 	}
 
-    var tmdbData map[string]interface{}
+	var tmdbData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&tmdbData); err != nil {
 		return fmt.Errorf("failed to decode TMDB response: %v", err)
 	}
@@ -228,8 +494,8 @@ func fetchAndSaveMediaCover(tmdbID int, mediaType string) error {
 	posterPath, _ := tmdbData["poster_path"].(string)
 	backdropPath, _ := tmdbData["backdrop_path"].(string)
 
-    // Save media covers
-    return saveMediaCover(tmdbID, posterPath, backdropPath)
+	// Save media covers
+	return saveMediaCover(tmdbID, posterPath, backdropPath)
 }
 
 // getTMDBAPIKey returns the TMDB API key using the existing function
@@ -240,154 +506,218 @@ func getTMDBAPIKey() string {
 
 // upsertPlaceholderProcessedFile inserts or updates a minimal processed_files row
 func upsertPlaceholderProcessedFile(tmdbID int, mediaType, title string, yearPtr *int, quality string) error {
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        return err
-    }
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return err
+	}
 
-    tmdbStr := strconv.Itoa(tmdbID)
+	tmdbStr := strconv.Itoa(tmdbID)
 
-    // Ensure a row exists (with tmdb_id only) if none present.
-    _, _ = mediaHubDB.Exec(`
+	// Ensure a row exists (with tmdb_id only) if none present.
+	_, _ = mediaHubDB.Exec(`
         INSERT INTO processed_files (tmdb_id)
         SELECT ?
         WHERE NOT EXISTS (SELECT 1 FROM processed_files WHERE tmdb_id = ?)
     `, tmdbStr, tmdbStr)
 
-    // Update optional fields when columns exist
-    // media_type
-    _, _ = mediaHubDB.Exec(`UPDATE processed_files SET media_type = COALESCE(media_type, ?) WHERE tmdb_id = ? AND (media_type IS NULL OR media_type = '')`, mediaType, tmdbStr)
-    // proper_name
-    _, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = COALESCE(proper_name, ?) WHERE tmdb_id = ? AND (proper_name IS NULL OR proper_name = '')`, title, tmdbStr)
-    // year
-    if yearPtr != nil {
-        _, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
-    }
-    // quality
-    if quality != "" {
-        _, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
-    }
-    // processed_at
-    _, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
+	// Update optional fields when columns exist
+	// media_type
+	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET media_type = COALESCE(media_type, ?) WHERE tmdb_id = ? AND (media_type IS NULL OR media_type = '')`, mediaType, tmdbStr)
+	// proper_name
+	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = COALESCE(proper_name, ?) WHERE tmdb_id = ? AND (proper_name IS NULL OR proper_name = '')`, title, tmdbStr)
+	// year
+	if yearPtr != nil {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
+	}
+	// quality
+	if quality != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
+	}
+	// processed_at
+	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
 
-    return nil
+	return nil
 }
 
 // fetchTmdbDetails retrieves rich TMDB metadata for writing into processed_files
 func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
-    details := make(map[string]string)
-    apiKey := getTMDBAPIKey()
-    if apiKey == "" {
-        return details
-    }
+	details := make(map[string]string)
+	apiKey := getTMDBAPIKey()
+	if apiKey == "" {
+		return details
+	}
 
-    url := fmt.Sprintf("https://api.themoviedb.org/3/%s/%d?api_key=%s&language=en-US", mediaType, tmdbID, apiKey)
-    resp, err := http.Get(url)
-    if err != nil {
-        return details
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        return details
-    }
-    var data map[string]interface{}
-    if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-        return details
-    }
+	url := fmt.Sprintf("https://api.themoviedb.org/3/%s/%d?api_key=%s&language=en-US", mediaType, tmdbID, apiKey)
+	resp, err := http.Get(url)
+	if err != nil {
+		return details
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return details
+	}
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return details
+	}
 
-    // Common fields
-    if v, ok := data["overview"].(string); ok { details["overview"] = v }
-    if v, ok := data["status"].(string); ok { details["status"] = v }
-    if v, ok := data["original_language"].(string); ok { details["original_language"] = v }
-    // Genres -> comma-separated names
-    if arr, ok := data["genres"].([]interface{}); ok {
-        names := make([]string, 0)
-        for _, g := range arr {
-            if m, ok := g.(map[string]interface{}); ok {
-                if n, ok := m["name"].(string); ok { names = append(names, n) }
-            }
-        }
-        if len(names) > 0 { details["genres"] = strings.Join(names, ", ") }
-    }
+	// Common fields
+	if v, ok := data["overview"].(string); ok {
+		details["overview"] = v
+	}
+	if v, ok := data["status"].(string); ok {
+		details["status"] = v
+	}
+	if v, ok := data["original_language"].(string); ok {
+		details["original_language"] = v
+	}
+	// Genres -> comma-separated names
+	if arr, ok := data["genres"].([]interface{}); ok {
+		names := make([]string, 0)
+		for _, g := range arr {
+			if m, ok := g.(map[string]interface{}); ok {
+				if n, ok := m["name"].(string); ok {
+					names = append(names, n)
+				}
+			}
+		}
+		if len(names) > 0 {
+			details["genres"] = strings.Join(names, ", ")
+		}
+	}
 
-    if mediaType == "movie" {
-        if v, ok := data["title"].(string); ok { details["proper_name"] = v }
-        if v, ok := data["original_title"].(string); ok { details["original_title"] = v }
-        if v, ok := data["release_date"].(string); ok { details["release_date"] = v }
-        if n, ok := data["runtime"].(float64); ok { details["runtime"] = fmt.Sprintf("%d", int(n)) }
-        if v, ok := data["imdb_id"].(string); ok { details["imdb_id"] = v }
-        if y, ok := data["release_date"].(string); ok && len(y) >= 4 { details["year"] = y[:4] }
-    } else {
-        if v, ok := data["name"].(string); ok { details["proper_name"] = v }
-        if v, ok := data["original_name"].(string); ok { details["original_title"] = v }
-        if v, ok := data["first_air_date"].(string); ok { details["first_air_date"] = v }
-        if v, ok := data["last_air_date"].(string); ok { details["last_air_date"] = v }
-        if arr, ok := data["episode_run_time"].([]interface{}); ok && len(arr) > 0 {
-            if n, ok := arr[0].(float64); ok { details["runtime"] = fmt.Sprintf("%d", int(n)) }
-        }
-        if n, ok := data["number_of_episodes"].(float64); ok { details["total_episodes"] = fmt.Sprintf("%d", int(n)) }
-        if y, ok := data["first_air_date"].(string); ok && len(y) >= 4 { details["year"] = y[:4] }
-    }
+	if mediaType == "movie" {
+		if v, ok := data["title"].(string); ok {
+			details["proper_name"] = v
+		}
+		if v, ok := data["original_title"].(string); ok {
+			details["original_title"] = v
+		}
+		if v, ok := data["release_date"].(string); ok {
+			details["release_date"] = v
+		}
+		if n, ok := data["runtime"].(float64); ok {
+			details["runtime"] = fmt.Sprintf("%d", int(n))
+		}
+		if v, ok := data["imdb_id"].(string); ok {
+			details["imdb_id"] = v
+		}
+		if y, ok := data["release_date"].(string); ok && len(y) >= 4 {
+			details["year"] = y[:4]
+		}
+	} else {
+		if v, ok := data["name"].(string); ok {
+			details["proper_name"] = v
+		}
+		if v, ok := data["original_name"].(string); ok {
+			details["original_title"] = v
+		}
+		if v, ok := data["first_air_date"].(string); ok {
+			details["first_air_date"] = v
+		}
+		if v, ok := data["last_air_date"].(string); ok {
+			details["last_air_date"] = v
+		}
+		if arr, ok := data["episode_run_time"].([]interface{}); ok && len(arr) > 0 {
+			if n, ok := arr[0].(float64); ok {
+				details["runtime"] = fmt.Sprintf("%d", int(n))
+			}
+		}
+		if n, ok := data["number_of_episodes"].(float64); ok {
+			details["total_episodes"] = fmt.Sprintf("%d", int(n))
+		}
+		if y, ok := data["first_air_date"].(string); ok && len(y) >= 4 {
+			details["year"] = y[:4]
+		}
+	}
 
-    return details
+	return details
 }
 
 // upsertProcessedWithDetails writes fields available from TMDB into processed_files
 func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, quality string, yearPtr *int) {
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil { return }
-    tmdbStr := strconv.Itoa(tmdbID)
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return
+	}
+	tmdbStr := strconv.Itoa(tmdbID)
 
-    // Ensure row exists
-    _, _ = mediaHubDB.Exec(`
+	// Ensure row exists
+	_, _ = mediaHubDB.Exec(`
         INSERT INTO processed_files (tmdb_id)
         SELECT ?
         WHERE NOT EXISTS (SELECT 1 FROM processed_files WHERE tmdb_id = ?)
     `, tmdbStr, tmdbStr)
 
-    // Basic fields
-    _, _ = mediaHubDB.Exec(`UPDATE processed_files SET media_type = COALESCE(media_type, ?) WHERE tmdb_id = ? AND (media_type IS NULL OR media_type = '')`, mediaType, tmdbStr)
-    if basicTitle != "" {
-        _, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = COALESCE(proper_name, ?) WHERE tmdb_id = ? AND (proper_name IS NULL OR proper_name = '')`, basicTitle, tmdbStr)
-    }
-    if yearPtr != nil {
-        _, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
-    }
-    if quality != "" {
-        _, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
-    }
-    _, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
+	// Basic fields
+	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET media_type = COALESCE(media_type, ?) WHERE tmdb_id = ? AND (media_type IS NULL OR media_type = '')`, mediaType, tmdbStr)
+	if basicTitle != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = COALESCE(proper_name, ?) WHERE tmdb_id = ? AND (proper_name IS NULL OR proper_name = '')`, basicTitle, tmdbStr)
+	}
+	if yearPtr != nil {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
+	}
+	if quality != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
+	}
+	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
 
-    // Rich details
-    details := fetchTmdbDetails(tmdbID, mediaType)
-    if v := details["proper_name"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["year"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["imdb_id"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET imdb_id = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["overview"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET overview = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["runtime"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET runtime = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["original_title"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET original_title = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["status"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET status = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["release_date"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET release_date = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["first_air_date"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET first_air_date = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["last_air_date"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET last_air_date = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["genres"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET genres = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["original_language"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET original_language = ? WHERE tmdb_id = ?`, v, tmdbStr) }
-    if v := details["total_episodes"]; v != "" { _, _ = mediaHubDB.Exec(`UPDATE processed_files SET total_episodes = ? WHERE tmdb_id = ?`, v, tmdbStr) }
+	// Rich details
+	details := fetchTmdbDetails(tmdbID, mediaType)
+	if v := details["proper_name"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET proper_name = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["year"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["imdb_id"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET imdb_id = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["overview"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET overview = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["runtime"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET runtime = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["original_title"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET original_title = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["status"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET status = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["release_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET release_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["first_air_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET first_air_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["last_air_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET last_air_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["genres"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET genres = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["original_language"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET original_language = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["total_episodes"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET total_episodes = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
 }
 
 // isAvailableInDestinationDB returns true if the processed_files database has a row
 func isAvailableInDestinationDB(tmdbID int, mediaType string) bool {
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        return false
-    }
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return false
+	}
 
-    var count int
-    q := `SELECT COUNT(1) FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != ''`
-    if err := mediaHubDB.QueryRow(q, strconv.Itoa(tmdbID)).Scan(&count); err != nil {
-        return false
-    }
-    return count > 0
+	var count int
+	q := `SELECT COUNT(1) FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != ''`
+	if err := mediaHubDB.QueryRow(q, strconv.Itoa(tmdbID)).Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
 }
 
 // HandleAddMovie handles POST /api/library/movie - add a movie to the library
@@ -576,13 +906,13 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // Parse query parameters
-    mt := r.URL.Query().Get("type")
-    if mt == "" {
-        mt = r.URL.Query().Get("mediaType")
-    }
-    mediaType := mt
-    status := r.URL.Query().Get("status")
+	// Parse query parameters
+	mt := r.URL.Query().Get("type")
+	if mt == "" {
+		mt = r.URL.Query().Get("mediaType")
+	}
+	mediaType := mt
+	status := r.URL.Query().Get("status")
 
 	// Build query
 	query := "SELECT id, tmdb_id, title, year, media_type, root_folder, quality_profile, monitor_policy, series_type, season_folder, tags, status, added_at, updated_at FROM library_items WHERE 1=1"
@@ -649,11 +979,11 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		item.Tags = tagsJSON
 
-        if isAvailableInDestinationDB(item.TmdbID, item.MediaType) {
-            item.Status = "imported"
-        } else {
-            item.Status = "missing"
-        }
+		if isAvailableInDestinationDB(item.TmdbID, item.MediaType) {
+			item.Status = "imported"
+		} else {
+			item.Status = "missing"
+		}
 
 		items = append(items, item)
 	}
@@ -869,18 +1199,30 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 
 // parseLimitOffset parses limit and offset from query params
 func parseLimitOffset(r *http.Request) (limit, offset int) {
-	limit = 100
+	const (
+		defaultLimit = 100
+		maxLimit     = 1000
+	)
+
+	limit = defaultLimit
 	offset = 0
+
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
+			if n > maxLimit {
+				limit = maxLimit
+			} else {
+				limit = n
+			}
 		}
 	}
+
 	if v := r.URL.Query().Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			offset = n
 		}
 	}
+
 	return limit, offset
 }
 
@@ -897,15 +1239,8 @@ func HandleGetLibraryMovies(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get movies", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":     true,
-		"data":       items,
-		"count":      len(items),
-		"total_count": totalCount,
-	})
+
+	writePagedJSON(w, items, totalCount)
 }
 
 // HandleGetLibraryTv handles GET /api/library/tv
@@ -921,15 +1256,8 @@ func HandleGetLibraryTv(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get series", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":     true,
-		"data":       items,
-		"count":      len(items),
-		"total_count": totalCount,
-	})
+
+	writePagedJSON(w, items, totalCount)
 }
 
 // HandleUpdateLibraryItem handles PUT /api/library/{id}

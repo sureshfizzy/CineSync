@@ -21,12 +21,49 @@ export interface LibraryItem {
   destination_path?: string;
 }
 
-export interface LibraryResponse {
+export interface PagedResponse<T> {
   success: boolean;
-  data: LibraryItem[];
+  data: T[];
   count: number;
   total_count?: number;
 }
+
+export type LibraryResponse = PagedResponse<LibraryItem>;
+
+// Wanted episodes returned by /api/library/wanted
+export interface WantedEpisode {
+  id: string;
+  tmdbId: number;
+  title: string;
+  year?: number;
+  mediaType: 'tv';
+  rootFolder: string;
+  qualityProfile: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  episode: string;
+  episodeTitle: string;
+  airDate?: string;
+}
+
+export type WantedEpisodeResponse = PagedResponse<WantedEpisode>;
+
+// Wanted movies returned by /api/library/wanted/movies
+export interface WantedMovie {
+  id: string;
+  tmdbId: number;
+  title: string;
+  year?: number;
+  mediaType: 'movie';
+  rootFolder: string;
+  qualityProfile: string;
+  monitorPolicy: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WantedMovieResponse = PagedResponse<WantedMovie>;
 
 export interface AddMovieRequest {
   tmdbId: number;
@@ -79,6 +116,24 @@ export const libraryApi = {
     return response.data;
   },
 
+  // Get wanted TV episodes directly from DB for Wanted UI
+  async getWantedEpisodes(limit = 100, offset = 0): Promise<WantedEpisodeResponse> {
+    const response = await axios.get('/api/library/wanted', {
+      params: { limit, offset },
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
+  // Get wanted movies
+  async getWantedMovies(limit = 100, offset = 0): Promise<WantedMovieResponse> {
+    const response = await axios.get('/api/library/wanted', {
+      params: { variant: 'movies', limit, offset },
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
   // Add a movie to the library
   async addMovie(data: AddMovieRequest): Promise<{ success: boolean; message: string }> {
     const response = await axios.post('/api/library/movie', data);
@@ -103,6 +158,3 @@ export const libraryApi = {
     return response.data;
   }
 };
-
-
-

@@ -321,6 +321,7 @@ func main() {
 	})
 	apiMux.HandleFunc("/api/library/tv", api.HandleGetLibraryTv)
 	apiMux.HandleFunc("/api/library/series", api.HandleAddSeries)
+	apiMux.HandleFunc("/api/library/wanted", api.HandleGetLibraryWantedFast)
 	apiMux.HandleFunc("/api/library", api.HandleGetLibrary)
 	apiMux.HandleFunc("/api/library/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {

@@ -572,6 +572,15 @@ def initialize_db(conn):
     except Exception as _mme:
         log_message(f"Movie migration warning (non-fatal): {_mme}", level="DEBUG")
 
+    try:
+        _mconn = main_pool.get_connection()
+        try:
+            _repair_tv_season_totals_and_counts(_mconn.cursor(), _mconn)
+        finally:
+            main_pool.return_connection(_mconn)
+    except Exception as _re:
+        log_message(f"TV seasons repair warning (non-fatal): {_re}", level="DEBUG")
+
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
@@ -864,14 +873,11 @@ def _get_or_create_tv_season(cursor, show_id, season_number, total_episodes=None
         row = cursor.fetchone()
         if row:
             season_id = row[0]
-            if total_episodes and row[1] != total_episodes:
-                cursor.execute("UPDATE tv_seasons SET total_episodes = ? WHERE id = ?",
-                               (total_episodes, season_id))
             return season_id
         cursor.execute("""
             INSERT INTO tv_seasons (show_id, season_number, total_episodes, episode_count)
             VALUES (?, ?, ?, 0)
-        """, (show_id, sn, total_episodes or 0))
+        """, (show_id, sn, 0))
         return cursor.lastrowid
     except (sqlite3.Error, ValueError, TypeError) as e:
         log_message(f"Error in _get_or_create_tv_season: {e}", level="ERROR")
@@ -920,7 +926,12 @@ def _populate_season_episodes(cursor, show_id, season_id, tmdb_id, season_number
         sn = int(season_number)
         cursor.execute("SELECT COUNT(*) FROM episodes WHERE show_id = ? AND season_number = ?",
                        (show_id, sn))
-        if cursor.fetchone()[0] > 0:
+        existing = cursor.fetchone()[0] or 0
+        if existing > 0:
+            cursor.execute(
+                "UPDATE tv_seasons SET total_episodes = ? WHERE id = ? AND (total_episodes IS NULL OR total_episodes != ?)",
+                (existing, season_id, existing)
+            )
             return
 
         from MediaHub.api.tmdb_api_helpers import get_available_episodes
@@ -1018,7 +1029,7 @@ def _migrate_flat_tv_rows(cursor, conn):
             episode_id = None
             if season_number:
                 season_id = _get_or_create_tv_season(
-                    cursor, show_id, season_number, total_episodes
+                    cursor, show_id, season_number, None
                 )
                 if season_id:
                     _populate_season_episodes(cursor, show_id, season_id, tmdb_id, season_number)
@@ -1034,7 +1045,7 @@ def _migrate_flat_tv_rows(cursor, conn):
                                     FROM processed_files p
                                     WHERE p.season_id = tv_seasons.id
                                       AND p.episode_id IS NOT NULL
-                                      AND p.reason IS NULL
+                                      AND (p.reason IS NULL OR p.reason = '')
                                 )
                                 WHERE id = ?
                             """, (season_id,))
@@ -1122,6 +1133,48 @@ def _migrate_flat_movie_rows(cursor, conn):
         log_message(f"Error during movie migration: {e}", level="ERROR")
 
 
+def _repair_tv_season_totals_and_counts(cursor, conn):
+    """
+    Repair helper for legacy/migrated data:
+    - tv_seasons.total_episodes should reflect the number of rows in episodes per season (not show-wide totals)
+    - tv_seasons.episode_count should reflect distinct episode_ids present (ignoring reason-only rows)
+    """
+    try:
+        cursor.execute("""
+            UPDATE tv_seasons
+            SET total_episodes = (
+                SELECT COUNT(*)
+                FROM episodes e
+                WHERE e.show_id = tv_seasons.show_id
+                  AND e.season_number = tv_seasons.season_number
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM episodes e
+                WHERE e.show_id = tv_seasons.show_id
+                  AND e.season_number = tv_seasons.season_number
+            )
+        """)
+
+        cursor.execute("""
+            UPDATE tv_seasons
+            SET episode_count = (
+                SELECT COUNT(DISTINCT p.episode_id)
+                FROM processed_files p
+                WHERE p.season_id = tv_seasons.id
+                  AND p.episode_id IS NOT NULL
+                  AND (p.reason IS NULL OR p.reason = '')
+                  AND p.destination_path IS NOT NULL AND p.destination_path != ''
+            )
+        """)
+        conn.commit()
+    except sqlite3.Error as e:
+        log_message(f"Error repairing tv_seasons totals/counts: {e}", level="DEBUG")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
@@ -1190,7 +1243,7 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
             )
             if show_id and season_number:
                 season_id = _get_or_create_tv_season(
-                    cursor, show_id, season_number, total_episodes
+                    cursor, show_id, season_number, None
                 )
                 if season_id:
                     _populate_season_episodes(cursor, show_id, season_id, tmdb_id, season_number)
@@ -1286,7 +1339,8 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
                     SELECT COUNT(DISTINCT p.episode_id)
                     FROM processed_files p
                     WHERE p.season_id = ? AND p.episode_id IS NOT NULL
-                      AND p.reason IS NULL AND p.destination_path IS NOT NULL
+                      AND (p.reason IS NULL OR p.reason = '')
+                      AND p.destination_path IS NOT NULL AND p.destination_path != ''
                 ) WHERE id = ?
             """, (season_id, season_id))
 
@@ -2893,7 +2947,9 @@ def search_database(conn, pattern):
 
                     ep_count = len({rd.get('episode_number') for rd in season_files if rd.get('episode_number')})
                     total_ep = 0
-                    if show_id:
+                    if all_episodes:
+                        total_ep = len(all_episodes)
+                    elif show_id:
                         try:
                             cursor.execute("SELECT total_episodes FROM tv_seasons WHERE show_id = ? AND season_number = ?",
                                            (show_id, int(sn)))

@@ -13,10 +13,9 @@ import ListView from '../FileBrowser/ListView';
 import VirtualizedLibraryGrid from './VirtualizedLibraryGrid';
 import { useLayoutContext } from '../Layout/Layout';
 import { useTmdb } from '../../contexts/TmdbContext';
-import { TmdbResult, fetchSeriesEpisodesFromTmdb } from '../api/tmdbApi';
-import { useNavigate } from 'react-router-dom';
-import { libraryApi, LibraryItem } from '../../api/libraryApi';
-import { fetchMediaFiles } from '../../api/mediaFilesApi';
+import { TmdbResult } from '../api/tmdbApi';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { libraryApi, LibraryItem, WantedEpisode } from '../../api/libraryApi';
 import MediaWantedList from './MediaWantedList';
 import { ArrItem } from './types';
 import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
@@ -28,6 +27,7 @@ interface MediaDashboardProps {
 export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) {
   const { view } = useLayoutContext();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { tmdbData, updateTmdbData, setImageLoaded } = useTmdb();
 
@@ -48,115 +48,10 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   itemsLengthRef.current = libraryItems.length;
   itemsRef.current = libraryItems;
   const [wantedItems, setWantedItems] = useState<ArrItem[]>([]);
-  const [wantedSeriesItems, setWantedSeriesItems] = useState<ArrItem[]>([]);
-  const [wantedMovieItems, setWantedMovieItems] = useState<ArrItem[]>([]);
   const [wantedFilter, setWantedFilter] = useState<'series' | 'movies'>('series');
-
-  const formatEpisodeCode = useCallback((seasonNumber?: number, episodeNumber?: number) => {
-    if (!seasonNumber || !episodeNumber) return '--';
-    const episode = episodeNumber.toString().padStart(2, '0');
-    return `${seasonNumber}x${episode}`;
-  }, []);
-
-  const isEpisodeAired = useCallback((airDate?: string) => {
-    if (!airDate) return true;
-    const date = new Date(airDate);
-    if (Number.isNaN(date.getTime())) return true;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date <= today;
-  }, []);
-
-  const buildWantedRows = useCallback(async (items: LibraryItem[]): Promise<{ seriesRows: ArrItem[]; movieRows: ArrItem[] }> => {
-    const seriesRows: ArrItem[] = [];
-    const movieRows: ArrItem[] = [];
-    const missingItems = (items || []).filter((item) => item.status === 'missing');
-
-    for (const item of missingItems) {
-      const base: ArrItem = {
-        id: item.id.toString(),
-        libraryItemId: item.id,
-        tmdbId: item.tmdb_id,
-        title: item.title,
-        year: item.year,
-        mediaType: item.media_type,
-        posterPath: undefined,
-        overview: '',
-        status: (item.status as ArrItem['status']) || 'missing',
-        rootFolder: item.root_folder,
-        qualityProfile: item.quality_profile,
-        monitorPolicy: item.monitor_policy,
-        tags: item.tags ? JSON.parse(item.tags) : [],
-        createdAt: new Date(item.added_at * 1000).toISOString(),
-        updatedAt: new Date(item.updated_at * 1000).toISOString(),
-      };
-
-      if (item.media_type !== 'tv') {
-        movieRows.push({
-          ...base,
-          episode: '--',
-          episodeTitle: '--',
-        });
-        continue;
-      }
-
-      try {
-        const [mediaFiles, tmdbEpisodes] = await Promise.all([
-          fetchMediaFiles(item.tmdb_id, 'tv'),
-          fetchSeriesEpisodesFromTmdb(item.tmdb_id.toString())
-        ]);
-
-        const existing = new Set(
-          (mediaFiles || [])
-            .filter((file) => file.seasonNumber && file.episodeNumber)
-            .map((file) => `${file.seasonNumber}-${file.episodeNumber}`)
-        );
-
-        const missingEpisodes = (tmdbEpisodes || []).filter((episode) => {
-          const key = `${episode.seasonNumber}-${episode.episodeNumber}`;
-          if (existing.has(key)) return false;
-          return isEpisodeAired(episode.airDate);
-        });
-
-        for (const episode of missingEpisodes) {
-          seriesRows.push({
-            ...base,
-            id: `${item.id}-${episode.seasonNumber}-${episode.episodeNumber}`,
-            seasonNumber: episode.seasonNumber,
-            episodeNumber: episode.episodeNumber,
-            episode: formatEpisodeCode(episode.seasonNumber, episode.episodeNumber),
-            episodeTitle: episode.name,
-            airDate: episode.airDate,
-            status: 'missing',
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load missing episodes for', item.title, err);
-        seriesRows.push({
-          ...base,
-          episode: '--',
-          episodeTitle: 'Missing episodes',
-          status: 'missing',
-        });
-      }
-    }
-
-    seriesRows.sort((a, b) => {
-      const aTime = a.airDate ? new Date(a.airDate).getTime() : 0;
-      const bTime = b.airDate ? new Date(b.airDate).getTime() : 0;
-      if (aTime !== bTime) return bTime - aTime;
-      return a.title.localeCompare(b.title);
-    });
-
-    movieRows.sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      if (aTime !== bTime) return bTime - aTime;
-      return a.title.localeCompare(b.title);
-    });
-
-    return { seriesRows, movieRows };
-  }, [formatEpisodeCode, isEpisodeAired]);
+  const [wantedPage, setWantedPage] = useState(0);
+  const [wantedTotal, setWantedTotal] = useState(0);
+  const [wantedInitialized, setWantedInitialized] = useState(false);
 
   const PAGE_SIZE = 100;
 
@@ -166,16 +61,74 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
       if (append) setLoadingMore(true);
       setError('');
       if (arrFilter === 'wanted') {
-        const response = await libraryApi.getLibrary(undefined);
-        const items = response.data || [];
-        setLibraryItems(items);
-        setTotalCount(items.length);
-        const { seriesRows, movieRows } = await buildWantedRows(items);
-        setWantedSeriesItems(seriesRows);
-        setWantedMovieItems(movieRows);
-        setWantedItems(wantedFilter === 'series' ? seriesRows : movieRows);
-        if (wantedFilter === 'series' && seriesRows.length === 0 && movieRows.length > 0) {
-          setWantedFilter('movies');
+        const offset = wantedPage * PAGE_SIZE;
+
+        if (wantedFilter === 'series') {
+          const res = await libraryApi.getWantedEpisodes(PAGE_SIZE, offset);
+          const episodes: WantedEpisode[] = res.data || [];
+          const seriesRows: ArrItem[] = episodes.map((ep) => ({
+            id: ep.id,
+            libraryItemId: undefined,
+            tmdbId: ep.tmdbId,
+            title: ep.title,
+            year: ep.year,
+            mediaType: ep.mediaType,
+            posterPath: undefined,
+            overview: '',
+            status: 'missing',
+            rootFolder: ep.rootFolder,
+            qualityProfile: ep.qualityProfile,
+            monitorPolicy: 'any',
+            tags: [],
+            createdAt: '',
+            updatedAt: '',
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            episode: ep.episode,
+            episodeTitle: ep.episodeTitle,
+            airDate: ep.airDate,
+          }));
+
+          seriesRows.sort((a, b) => {
+            const aTime = a.airDate ? new Date(a.airDate).getTime() : 0;
+            const bTime = b.airDate ? new Date(b.airDate).getTime() : 0;
+            if (aTime !== bTime) return bTime - aTime;
+            return a.title.localeCompare(b.title);
+          });
+
+          setLibraryItems([]);
+          setTotalCount(seriesRows.length);
+          setWantedTotal(res.total_count ?? seriesRows.length);
+          setWantedItems(seriesRows);
+        } else {
+          const res = await libraryApi.getWantedMovies(PAGE_SIZE, offset);
+          const movies = res.data || [];
+          const movieRows: ArrItem[] = movies.map((m) => ({
+            id: m.id,
+            libraryItemId: undefined,
+            tmdbId: m.tmdbId,
+            title: m.title,
+            year: m.year,
+            mediaType: m.mediaType,
+            posterPath: undefined,
+            overview: '',
+            status: 'missing',
+            rootFolder: m.rootFolder,
+            qualityProfile: m.qualityProfile,
+            monitorPolicy: m.monitorPolicy,
+            tags: m.tags,
+            createdAt: m.createdAt,
+            updatedAt: m.updatedAt,
+            seasonNumber: undefined,
+            episodeNumber: undefined,
+            episode: undefined,
+            episodeTitle: undefined,
+            airDate: undefined,
+          }));
+
+          setLibraryItems([]);
+          setTotalCount(movieRows.length);
+          setWantedTotal(res.total_count ?? movieRows.length);
           setWantedItems(movieRows);
         }
       } else {
@@ -217,8 +170,6 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
         setLibraryItems((prev) => (append ? [...prev, ...items] : items));
         setTotalCount(total);
         setWantedItems([]);
-        setWantedSeriesItems([]);
-        setWantedMovieItems([]);
       }
     } catch (e) {
       console.error('Failed to load library items:', e);
@@ -228,23 +179,60 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
         setTotalCount(0);
       }
       setWantedItems([]);
-      setWantedSeriesItems([]);
-      setWantedMovieItems([]);
     } finally {
       if (manageLoading && !append) setLoading(false);
       if (append) setLoadingMore(false);
     }
-  }, [arrFilter, buildWantedRows, wantedFilter]);
+  }, [arrFilter, wantedFilter, wantedPage]);
 
   const loadMoreItems = useCallback(() => {
     if (arrFilter === 'wanted') return;
     loadLibraryItems(false, true, itemsLengthRef.current);
   }, [arrFilter, loadLibraryItems]);
 
-  // Load data when filter changes - DB only, no filesystem
+  // Load data when filter changes
+  useEffect(() => {
+    if (arrFilter !== 'wanted' || wantedInitialized) return;
+
+    const variantParam = (searchParams.get('variant') || '').toLowerCase();
+    const initialFilter: 'series' | 'movies' =
+      variantParam === 'movies' ? 'movies' : 'series';
+
+    const pageParam = Number.parseInt(searchParams.get('page') || '1', 10);
+    const initialPage =
+      Number.isFinite(pageParam) && pageParam > 0 ? pageParam - 1 : 0;
+
+    setWantedFilter(initialFilter);
+    setWantedPage(initialPage);
+    setWantedInitialized(true);
+  }, [arrFilter, searchParams, wantedInitialized]);
+
+  useEffect(() => {
+    if (arrFilter !== 'wanted' || !wantedInitialized) return;
+
+    const next = new URLSearchParams(searchParams);
+
+    if (wantedFilter === 'movies') {
+      next.set('variant', 'movies');
+    } else {
+      next.delete('variant');
+    }
+
+    const expectedPage = wantedPage + 1;
+    if (expectedPage <= 1) {
+      next.delete('page');
+    } else {
+      next.set('page', String(expectedPage));
+    }
+
+    if (next.toString() === searchParams.toString()) return;
+    setSearchParams(next, { replace: true });
+  }, [arrFilter, wantedFilter, wantedPage, searchParams, setSearchParams, wantedInitialized]);
+
+  // Load data when filter or wanted page changes
   useEffect(() => {
     loadLibraryItems(true);
-  }, [arrFilter, loadLibraryItems]);
+  }, [arrFilter, wantedFilter, wantedPage, loadLibraryItems]);
 
   // Populate tmdbData
   useEffect(() => {
@@ -480,7 +468,11 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
             <Box>
               {arrFilter === 'wanted' ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      {wantedFilter === 'series' ? 'Wanted episodes' : 'Wanted movies'}: {wantedTotal || wantedItems.length}
+                      {wantedTotal > PAGE_SIZE && `  •  Page ${wantedPage + 1}`}
+                    </Typography>
                     <Paper
                       variant="outlined"
                       sx={{
@@ -497,7 +489,8 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                         onChange={(_, value) => {
                           if (!value) return;
                           setWantedFilter(value);
-                          setWantedItems(value === 'series' ? wantedSeriesItems : wantedMovieItems);
+                          setWantedPage(0);
+                          setWantedItems([]);
                         }}
                         sx={{
                           '& .MuiToggleButtonGroup-grouped': {
@@ -514,10 +507,33 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                           }
                         }}
                       >
-                        <ToggleButton value="series">Series</ToggleButton>
+                        <ToggleButton value="series">Episodes</ToggleButton>
                         <ToggleButton value="movies">Movies</ToggleButton>
                       </ToggleButtonGroup>
                     </Paper>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 0.5 }}>
+                    <ToggleButton
+                      size="small"
+                      value="prev"
+                      disabled={wantedPage === 0}
+                      onClick={() => setWantedPage((p) => Math.max(0, p - 1))}
+                    >
+                      Prev
+                    </ToggleButton>
+                    <ToggleButton
+                      size="small"
+                      value="next"
+                      disabled={
+                        wantedTotal > 0
+                          ? (wantedPage + 1) * PAGE_SIZE >= wantedTotal
+                          : wantedItems.length < PAGE_SIZE
+                      }
+                      onClick={() => setWantedPage((p) => p + 1)}
+                    >
+                      Next
+                    </ToggleButton>
                   </Box>
 
                   <MediaWantedList
