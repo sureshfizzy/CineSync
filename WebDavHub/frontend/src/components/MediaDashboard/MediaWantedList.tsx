@@ -1,21 +1,51 @@
-﻿import { useMemo, useState } from 'react';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, IconButton, Paper, Stack, Tooltip, alpha, useTheme } from '@mui/material';
+import { useMemo, useState } from 'react';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, IconButton, Paper, Stack, Tooltip, alpha, useTheme, Select, MenuItem } from '@mui/material';
 import { Search as SearchIcon, Delete as DeleteIcon, WarningAmber as WarningAmberIcon, CheckCircle as CheckCircleIcon, Error as ErrorIcon, CloudDownload as CloudDownloadIcon, BookmarkBorder as BookmarkBorderIcon } from '@mui/icons-material';
 import { ArrItem } from './types';
+
+type ResolutionFilter = 'all' | '2160p' | '1080p' | '720p' | '480p';
 
 interface MediaWantedListProps {
   items: ArrItem[];
   variant?: 'series' | 'movies';
   onSearch?: (item: ArrItem) => void;
   onDelete?: (item: ArrItem) => void;
+  resolution?: ResolutionFilter;
+  onResolutionChange?: (value: ResolutionFilter) => void;
 }
 
-export default function MediaWantedList({ items, variant = 'series', onSearch, onDelete }: MediaWantedListProps) {
+export default function MediaWantedList({
+  items,
+  variant = 'series',
+  onSearch,
+  onDelete,
+  resolution,
+  onResolutionChange,
+}: MediaWantedListProps) {
   const theme = useTheme();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const selectedItems = useMemo(() => items.filter((item) => selected.has(item.id)), [items, selected]);
-  const allSelected = items.length > 0 && selectedItems.length === items.length;
+  const effectiveResolution: ResolutionFilter = resolution ?? 'all';
+
+  const qualityOptions: ResolutionFilter[] = ['2160p', '1080p', '720p', '480p'];
+
+  const getResolutionBucket = (qualityProfile?: string): ResolutionFilter | undefined => {
+    if (!qualityProfile) return undefined;
+    const q = qualityProfile.toLowerCase();
+    if (q.includes('2160') || q.includes('4k') || q.includes('uhd')) return '2160p';
+    if (q.includes('1080')) return '1080p';
+    if (q.includes('720')) return '720p';
+    if (q.includes('480')) return '480p';
+    return undefined;
+  };
+
+  const visibleItems = items;
+
+  const selectedItems = useMemo(
+    () => visibleItems.filter((item) => selected.has(item.id)),
+    [visibleItems, selected],
+  );
+  const allSelected = visibleItems.length > 0 && selectedItems.length === visibleItems.length;
 
   const getUniqueItems = (list: ArrItem[]) => {
     const seen = new Set<string | number>();
@@ -29,10 +59,10 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
 
   const toggleAll = (checked: boolean) => {
     if (checked) {
-      setSelected(new Set(items.map((item) => item.id)));
-    } else {
-      setSelected(new Set());
+      setSelected(new Set(visibleItems.map((item) => item.id)));
+      return;
     }
+    setSelected(new Set());
   };
 
   const toggleOne = (id: string) => {
@@ -49,7 +79,7 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
 
   const handleSearchAll = () => {
     if (!onSearch) return;
-    getUniqueItems(items).forEach((item) => onSearch(item));
+    getUniqueItems(visibleItems).forEach((item) => onSearch(item));
   };
 
   const handleSearchSelected = () => {
@@ -103,7 +133,7 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  if (items.length === 0) {
+  if (visibleItems.length === 0) {
     const title = variant === 'series' ? 'No missing series' : 'No missing movies';
     const subtitle = variant === 'series'
       ? 'Missing episodes will appear here once a series is monitored.'
@@ -178,6 +208,31 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
             </span>
           </Tooltip>
         </Stack>
+
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Typography variant="caption" color="text.secondary">
+            Quality
+          </Typography>
+          <Select
+            size="small"
+            value={effectiveResolution}
+            onChange={(e) => {
+              const next = e.target.value as ResolutionFilter;
+              if (onResolutionChange) {
+                onResolutionChange(next);
+                return;
+              }
+            }}
+            sx={{ minWidth: 120 }}
+          >
+            <MenuItem value="all">All qualities</MenuItem>
+            {qualityOptions.map((quality) => (
+              <MenuItem key={quality} value={quality}>
+                {quality}
+              </MenuItem>
+            ))}
+          </Select>
+        </Stack>
       </Box>
 
       <TableContainer>
@@ -203,6 +258,7 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
                   <TableCell sx={{ fontWeight: 600 }}>Series Title</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Episode</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Episode Title</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Quality</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Air Date</TableCell>
                 </>
               ) : (
@@ -218,7 +274,7 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.map((item) => {
+          {visibleItems.map((item) => {
               const meta = statusMeta(item.status);
               return (
                 <TableRow
@@ -251,6 +307,9 @@ export default function MediaWantedList({ items, variant = 'series', onSearch, o
                         <Typography variant="body2" noWrap>
                           {item.episodeTitle ?? '--'}
                         </Typography>
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {getResolutionBucket(item.qualityProfile) ?? '—'}
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatAirDate(item.airDate, item.year)}</TableCell>
                     </>

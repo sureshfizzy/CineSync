@@ -49,6 +49,8 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   itemsRef.current = libraryItems;
   const [wantedItems, setWantedItems] = useState<ArrItem[]>([]);
   const [wantedFilter, setWantedFilter] = useState<'series' | 'movies'>('series');
+  const [wantedResolutionSeries, setWantedResolutionSeries] = useState<'all' | '2160p' | '1080p' | '720p' | '480p'>('all');
+  const [wantedResolutionMovies, setWantedResolutionMovies] = useState<'all' | '2160p' | '1080p' | '720p' | '480p'>('all');
   const [wantedPage, setWantedPage] = useState(0);
   const [wantedTotal, setWantedTotal] = useState(0);
   const [wantedInitialized, setWantedInitialized] = useState(false);
@@ -64,7 +66,11 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
         const offset = wantedPage * PAGE_SIZE;
 
         if (wantedFilter === 'series') {
-          const res = await libraryApi.getWantedEpisodes(PAGE_SIZE, offset);
+          const res = await libraryApi.getWantedEpisodes(
+            PAGE_SIZE,
+            offset,
+            wantedResolutionSeries === 'all' ? undefined : wantedResolutionSeries,
+          );
           const episodes: WantedEpisode[] = res.data || [];
           const seriesRows: ArrItem[] = episodes.map((ep) => ({
             id: ep.id,
@@ -101,7 +107,11 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
           setWantedTotal(res.total_count ?? seriesRows.length);
           setWantedItems(seriesRows);
         } else {
-          const res = await libraryApi.getWantedMovies(PAGE_SIZE, offset);
+          const res = await libraryApi.getWantedMovies(
+            PAGE_SIZE,
+            offset,
+            wantedResolutionMovies === 'all' ? undefined : wantedResolutionMovies,
+          );
           const movies = res.data || [];
           const movieRows: ArrItem[] = movies.map((m) => ({
             id: m.id,
@@ -183,7 +193,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
       if (manageLoading && !append) setLoading(false);
       if (append) setLoadingMore(false);
     }
-  }, [arrFilter, wantedFilter, wantedPage]);
+  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies]);
 
   const loadMoreItems = useCallback(() => {
     if (arrFilter === 'wanted') return;
@@ -204,6 +214,17 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
 
     setWantedFilter(initialFilter);
     setWantedPage(initialPage);
+    const resParam = (searchParams.get('resolution') || '').toLowerCase();
+    const initialResolution: 'all' | '2160p' | '1080p' | '720p' | '480p' =
+      resParam === '2160p' || resParam === '1080p' || resParam === '720p' || resParam === '480p'
+        ? (resParam as '2160p' | '1080p' | '720p' | '480p')
+        : 'all';
+
+    if (initialFilter === 'movies') {
+      setWantedResolutionMovies(initialResolution);
+    } else {
+      setWantedResolutionSeries(initialResolution);
+    }
     setWantedInitialized(true);
   }, [arrFilter, searchParams, wantedInitialized]);
 
@@ -218,6 +239,13 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
       next.delete('variant');
     }
 
+    const activeResolution = wantedFilter === 'movies' ? wantedResolutionMovies : wantedResolutionSeries;
+    if (activeResolution === 'all') {
+      next.delete('resolution');
+    } else {
+      next.set('resolution', activeResolution);
+    }
+
     const expectedPage = wantedPage + 1;
     if (expectedPage <= 1) {
       next.delete('page');
@@ -227,12 +255,12 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
 
     if (next.toString() === searchParams.toString()) return;
     setSearchParams(next, { replace: true });
-  }, [arrFilter, wantedFilter, wantedPage, searchParams, setSearchParams, wantedInitialized]);
+  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies, searchParams, setSearchParams, wantedInitialized]);
 
   // Load data when filter or wanted page changes
   useEffect(() => {
     loadLibraryItems(true);
-  }, [arrFilter, wantedFilter, wantedPage, loadLibraryItems]);
+  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies, loadLibraryItems]);
 
   // Populate tmdbData
   useEffect(() => {
@@ -541,6 +569,15 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                     variant={wantedFilter}
                     onSearch={handleLibraryItemSearch}
                     onDelete={handleLibraryItemDelete}
+                    resolution={wantedFilter === 'movies' ? wantedResolutionMovies : wantedResolutionSeries}
+                    onResolutionChange={(value) => {
+                      setWantedPage(0);
+                      if (wantedFilter === 'movies') {
+                        setWantedResolutionMovies(value);
+                      } else {
+                        setWantedResolutionSeries(value);
+                      }
+                    }}
                   />
                 </Box>
               ) : (

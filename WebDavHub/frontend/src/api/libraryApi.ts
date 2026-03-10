@@ -117,18 +117,24 @@ export const libraryApi = {
   },
 
   // Get wanted TV episodes directly from DB for Wanted UI
-  async getWantedEpisodes(limit = 100, offset = 0): Promise<WantedEpisodeResponse> {
+  async getWantedEpisodes(limit = 100, offset = 0, resolution?: '2160p' | '1080p' | '720p' | '480p'): Promise<WantedEpisodeResponse> {
+    const params: Record<string, string | number> = { limit, offset };
+    if (resolution) params.resolution = resolution;
+
     const response = await axios.get('/api/library/wanted', {
-      params: { limit, offset },
+      params,
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     });
     return response.data;
   },
 
   // Get wanted movies
-  async getWantedMovies(limit = 100, offset = 0): Promise<WantedMovieResponse> {
+  async getWantedMovies(limit = 100, offset = 0, resolution?: '2160p' | '1080p' | '720p' | '480p'): Promise<WantedMovieResponse> {
+    const params: Record<string, string | number> = { variant: 'movies', limit, offset };
+    if (resolution) params.resolution = resolution;
+
     const response = await axios.get('/api/library/wanted', {
-      params: { variant: 'movies', limit, offset },
+      params,
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     });
     return response.data;

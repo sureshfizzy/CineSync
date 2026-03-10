@@ -199,6 +199,7 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	variant := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("variant")))
+	resolution := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("resolution")))
 
 	if variant == "movies" || variant == "movie" {
 		if err := InitLibraryTable(); err != nil {
@@ -207,9 +208,23 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		limit, offset := parseLimitOffset(r)
+		movieFilter := ""
+		switch resolution {
+		case "2160p":
+			movieFilter = `
+          AND (LOWER(li.quality_profile) LIKE '%2160%' OR LOWER(li.quality_profile) LIKE '%4k%' OR LOWER(li.quality_profile) LIKE '%uhd%')`
+		case "1080p":
+			movieFilter = `
+          AND LOWER(li.quality_profile) LIKE '%1080%'`
+		case "720p":
+			movieFilter = `
+          AND LOWER(li.quality_profile) LIKE '%720%'`
+		case "480p":
+			movieFilter = `
+          AND LOWER(li.quality_profile) LIKE '%480%'`
+		}
 
-		baseQuery := `
+		baseQuery := fmt.Sprintf(`
         SELECT
           li.id,
           li.tmdb_id,
@@ -227,9 +242,9 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
           AND (p.reason IS NULL OR p.reason = '')
           AND (p.season_number IS NULL OR p.season_number = '' OR p.season_number = 'NULL')
         WHERE li.media_type = 'movie'
-          AND p.tmdb_id IS NULL
-        ORDER BY li.added_at DESC
-        `
+          AND p.tmdb_id IS NULL%s
+        `, movieFilter)
+		orderBy := " ORDER BY li.added_at DESC"
 
 		countQuery := "SELECT COUNT(1) FROM (" + baseQuery + ") AS sub"
 		var totalCount int
@@ -238,7 +253,16 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 			totalCount = 0
 		}
 
-		rows, err := mediaHubDB.Query(baseQuery+" LIMIT ? OFFSET ?", limit, offset)
+		limit, offset := parseLimitOffset(r)
+
+		query := baseQuery + orderBy
+		args := []interface{}{}
+		if limit > 0 {
+			query += " LIMIT ? OFFSET ?"
+			args = append(args, limit, offset)
+		}
+
+		rows, err := mediaHubDB.Query(query, args...)
 		if err != nil {
 			logger.Error("Failed to query library movies: %v", err)
 			http.Error(w, "Failed to query wanted movies", http.StatusInternalServerError)
@@ -300,13 +324,113 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default: TV episodes
-	baseQuery := `
+	// If a resolution is provided, return episodes that are missing THAT resolution
+	// (even if another quality exists), matching the per-quality stats in logs.
+	showHasResolution := ""
+	episodeMissingResolution := `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM processed_files p
+            WHERE p.episode_id = e.id
+              AND p.destination_path IS NOT NULL AND p.destination_path != ''
+              AND (p.reason IS NULL OR p.reason = '')
+          )`
+	qualityProfileExpr := "COALESCE(li.quality_profile, pf.quality, '')"
+
+	switch resolution {
+	case "2160p":
+		qualityProfileExpr = "'2160p'"
+		showHasResolution = `
+          AND EXISTS (
+            SELECT 1
+            FROM processed_files q
+            WHERE q.show_id = e.show_id
+              AND q.destination_path IS NOT NULL AND q.destination_path != ''
+              AND (
+                LOWER(COALESCE(q.quality, '')) LIKE '%2160%'
+                OR LOWER(COALESCE(q.quality, '')) LIKE '%4k%'
+                OR LOWER(COALESCE(q.quality, '')) LIKE '%uhd%'
+              )
+          )`
+		episodeMissingResolution = `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM processed_files p
+            WHERE p.episode_id = e.id
+              AND p.destination_path IS NOT NULL AND p.destination_path != ''
+              AND (p.reason IS NULL OR p.reason = '')
+              AND (
+                LOWER(COALESCE(p.quality, '')) LIKE '%2160%'
+                OR LOWER(COALESCE(p.quality, '')) LIKE '%4k%'
+                OR LOWER(COALESCE(p.quality, '')) LIKE '%uhd%'
+              )
+          )`
+	case "1080p":
+		qualityProfileExpr = "'1080p'"
+		showHasResolution = `
+          AND EXISTS (
+            SELECT 1
+            FROM processed_files q
+            WHERE q.show_id = e.show_id
+              AND q.destination_path IS NOT NULL AND q.destination_path != ''
+              AND LOWER(COALESCE(q.quality, '')) LIKE '%1080%'
+          )`
+		episodeMissingResolution = `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM processed_files p
+            WHERE p.episode_id = e.id
+              AND p.destination_path IS NOT NULL AND p.destination_path != ''
+              AND (p.reason IS NULL OR p.reason = '')
+              AND LOWER(COALESCE(p.quality, '')) LIKE '%1080%'
+          )`
+	case "720p":
+		qualityProfileExpr = "'720p'"
+		showHasResolution = `
+          AND EXISTS (
+            SELECT 1
+            FROM processed_files q
+            WHERE q.show_id = e.show_id
+              AND q.destination_path IS NOT NULL AND q.destination_path != ''
+              AND LOWER(COALESCE(q.quality, '')) LIKE '%720%'
+          )`
+		episodeMissingResolution = `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM processed_files p
+            WHERE p.episode_id = e.id
+              AND p.destination_path IS NOT NULL AND p.destination_path != ''
+              AND (p.reason IS NULL OR p.reason = '')
+              AND LOWER(COALESCE(p.quality, '')) LIKE '%720%'
+          )`
+	case "480p":
+		qualityProfileExpr = "'480p'"
+		showHasResolution = `
+          AND EXISTS (
+            SELECT 1
+            FROM processed_files q
+            WHERE q.show_id = e.show_id
+              AND q.destination_path IS NOT NULL AND q.destination_path != ''
+              AND LOWER(COALESCE(q.quality, '')) LIKE '%480%'
+          )`
+		episodeMissingResolution = `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM processed_files p
+            WHERE p.episode_id = e.id
+              AND p.destination_path IS NOT NULL AND p.destination_path != ''
+              AND (p.reason IS NULL OR p.reason = '')
+              AND LOWER(COALESCE(p.quality, '')) LIKE '%480%'
+          )`
+	}
+
+	baseQuery := fmt.Sprintf(`
         SELECT
           sh.tmdb_id,
           COALESCE(sh.proper_name, '') AS title,
           COALESCE(sh.year, '')        AS year_str,
           COALESCE(pf.root_folder, '') AS root_folder,
-          COALESCE(pf.quality, '')     AS quality_profile,
+          %s AS quality_profile,
           e.season_number,
           e.episode_number,
           COALESCE(e.title, '')        AS episode_title,
@@ -319,21 +443,13 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
           WHERE destination_path IS NOT NULL AND destination_path != ''
           GROUP BY show_id
         ) pf ON pf.show_id = e.show_id
-        LEFT JOIN processed_files p
-          ON p.episode_id = e.id
-          AND p.destination_path IS NOT NULL AND p.destination_path != ''
-          AND (p.reason IS NULL OR p.reason = '')
-        WHERE p.episode_id IS NULL
-          AND (e.air_date IS NULL OR e.air_date <= date('now'))
-          AND sh.tmdb_id IS NOT NULL
-          AND EXISTS (
-            SELECT 1
-            FROM processed_files p2
-            WHERE p2.show_id = e.show_id
-              AND p2.destination_path IS NOT NULL AND p2.destination_path != ''
-          )
-        ORDER BY sh.proper_name, e.season_number, e.episode_number
-        `
+        LEFT JOIN library_items li
+          ON li.tmdb_id = sh.tmdb_id
+          AND li.media_type = 'tv'
+        WHERE (e.air_date IS NULL OR e.air_date <= date('now'))
+          AND sh.tmdb_id IS NOT NULL%s%s
+        `, qualityProfileExpr, showHasResolution, episodeMissingResolution)
+	orderBy := " ORDER BY e.air_date DESC, sh.proper_name, e.season_number, e.episode_number"
 	// Count total wanted episodes
 	countQuery := "SELECT COUNT(1) FROM (" + baseQuery + ") AS sub"
 	var totalCount int
@@ -343,9 +459,14 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit, offset := parseLimitOffset(r)
-	pagedQuery := baseQuery + " LIMIT ? OFFSET ?"
+	query := baseQuery + orderBy
+	args := []interface{}{}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
 
-	rows, err := mediaHubDB.Query(pagedQuery, limit, offset)
+	rows, err := mediaHubDB.Query(query, args...)
 	if err != nil {
 		logger.Error("Failed to query wanted episodes: %v", err)
 		http.Error(w, "Failed to query wanted episodes", http.StatusInternalServerError)
@@ -1197,14 +1318,11 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 	return items, totalCount, rows.Err()
 }
 
-// parseLimitOffset parses limit and offset from query params
+// parseLimitOffset parses limit and offset from query params.
 func parseLimitOffset(r *http.Request) (limit, offset int) {
-	const (
-		defaultLimit = 100
-		maxLimit     = 1000
-	)
+	const maxLimit = 1000
 
-	limit = defaultLimit
+	limit = 0
 	offset = 0
 
 	if v := r.URL.Query().Get("limit"); v != "" {
