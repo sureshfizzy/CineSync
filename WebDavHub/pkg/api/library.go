@@ -1252,21 +1252,53 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 
 	query := `
 		SELECT
-			COALESCE(proper_name, '') as proper_name,
-			COALESCE(year, '0') as year,
-			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(root_folder, '') as root_folder,
-			MAX(processed_at) as latest_processed_at,
-			COALESCE(quality, '') as quality,
-			COALESCE(overview, '') as overview
-		FROM processed_files
-		WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
-		AND destination_path IS NOT NULL
-		AND destination_path != ''
-		AND proper_name IS NOT NULL
-		AND proper_name != ''
-		GROUP BY proper_name, year, tmdb_id
+			pf.show_id as show_id,
+			COALESCE(pf.proper_name, '') as proper_name,
+			COALESCE(pf.year, '0') as year,
+			COALESCE(pf.tmdb_id, '') as tmdb_id,
+			COALESCE(MIN(pf.destination_path), '') as destination_path,
+			COALESCE(MIN(pf.root_folder), '') as root_folder,
+			MAX(pf.processed_at) as latest_processed_at,
+			COALESCE((
+				SELECT GROUP_CONCAT(DISTINCT q.res_bucket)
+				FROM (
+					SELECT
+						CASE
+							WHEN LOWER(COALESCE(pq.quality, '')) LIKE '%2160%' OR LOWER(COALESCE(pq.quality, '')) LIKE '%4k%' OR LOWER(COALESCE(pq.quality, '')) LIKE '%uhd%' THEN '2160p'
+							WHEN LOWER(COALESCE(pq.quality, '')) LIKE '%1080%' THEN '1080p'
+							WHEN LOWER(COALESCE(pq.quality, '')) LIKE '%720%' THEN '720p'
+							WHEN LOWER(COALESCE(pq.quality, '')) LIKE '%480%' THEN '480p'
+							ELSE NULL
+						END AS res_bucket
+					FROM processed_files pq
+					WHERE pq.show_id = pf.show_id
+					  AND pq.destination_path IS NOT NULL AND pq.destination_path != ''
+				) q
+				WHERE q.res_bucket IS NOT NULL
+			), '') AS quality,
+			COALESCE(MAX(pf.overview), '') as overview,
+			COALESCE((
+				SELECT COUNT(1)
+				FROM episodes e
+				WHERE e.show_id = pf.show_id
+				  AND (e.air_date IS NULL OR e.air_date <= date('now'))
+			), 0) AS total_aired,
+			COALESCE((
+				SELECT COUNT(DISTINCT p2.episode_id)
+				FROM processed_files p2
+				WHERE p2.show_id = pf.show_id
+				  AND p2.episode_id IS NOT NULL
+				  AND p2.destination_path IS NOT NULL AND p2.destination_path != ''
+				  AND (p2.reason IS NULL OR p2.reason = '')
+			), 0) AS imported_eps
+		FROM processed_files pf
+		WHERE (UPPER(pf.media_type) = 'TV' OR UPPER(pf.media_type) = 'EPISODE' OR pf.media_type LIKE '%TV%' OR pf.media_type LIKE '%SHOW%')
+		  AND pf.destination_path IS NOT NULL
+		  AND pf.destination_path != ''
+		  AND pf.proper_name IS NOT NULL
+		  AND pf.proper_name != ''
+		  AND pf.show_id IS NOT NULL
+		GROUP BY pf.show_id, pf.proper_name, pf.year, pf.tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 	rows, err := mediaHubDB.Query(query, limit, offset)
@@ -1278,7 +1310,9 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 	for rows.Next() {
 		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
 		var yearStr string
-		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview); err != nil {
+		var showID sql.NullInt64
+		var totalAired, importedEps int
+		if err := rows.Scan(&showID, &properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview, &totalAired, &importedEps); err != nil {
 			continue
 		}
 		tmdbID, _ := strconv.Atoi(tmdbIDStr)
@@ -1296,6 +1330,11 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 		} else if t, err := time.Parse("2006-01-02 15:04:05", latestProcessedAt); err == nil {
 			addedAt = t.Unix()
 		}
+		status := "imported"
+		if totalAired > 0 && importedEps < totalAired {
+			status = "missing"
+		}
+
 		items = append(items, LibraryItemFromDB{
 			ID:              tmdbID,
 			TmdbID:          tmdbID,
@@ -1306,7 +1345,7 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 			QualityProfile:  quality,
 			MonitorPolicy:   "any",
 			Tags:            "[]",
-			Status:          "imported",
+			Status:          status,
 			AddedAt:         addedAt,
 			UpdatedAt:       addedAt,
 			PosterPath:      fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),

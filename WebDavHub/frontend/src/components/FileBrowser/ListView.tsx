@@ -140,7 +140,7 @@ export default function ListView({
               menu={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={e => e.stopPropagation()}>
                   {showArrBadges && (() => {
-                    const arrBadges = getArrBadgeData(file);
+                    const arrBadges = getArrBadgeData(file, { showAvailable: false });
                     return arrBadges.showSearch && onSearchMissing ? (
                       <IconButton size="small" onClick={() => onSearchMissing(file)} title="Search">
                         <SearchIcon fontSize="small" />
@@ -234,7 +234,7 @@ export default function ListView({
           </TableHead>
           <TableBody>
             {files.map((file) => {
-              const arrBadges = getArrBadgeData(file);
+              const arrBadges = getArrBadgeData(file, { showAvailable: false });
               const statusColor = arrBadges.statusTone === 'success'
                 ? theme.palette.success.main
                 : arrBadges.statusTone === 'warning'

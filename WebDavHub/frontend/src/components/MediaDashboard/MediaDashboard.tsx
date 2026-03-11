@@ -36,6 +36,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const [dashSort, setDashSort] = useState<'title' | 'path' | 'size' | 'folder'>('title');
   const [showSort, setShowSort] = useState(false);
   const [qualityFilter, setQualityFilter] = useState<'all' | '1080p' | '4k'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'missing'>('all');
   
   // Use filter from props instead of internal state
   const arrFilter = filter;
@@ -54,6 +55,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const [wantedPage, setWantedPage] = useState(0);
   const [wantedTotal, setWantedTotal] = useState(0);
   const [wantedInitialized, setWantedInitialized] = useState(false);
+  const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   const PAGE_SIZE = 100;
 
@@ -227,6 +229,47 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
     }
     setWantedInitialized(true);
   }, [arrFilter, searchParams, wantedInitialized]);
+
+  useEffect(() => {
+    if (filtersInitialized) return;
+
+    const sortParam = (searchParams.get('sort') || '').toLowerCase();
+    const initialSort: typeof dashSort =
+      sortParam === 'path' || sortParam === 'size' || sortParam === 'folder' || sortParam === 'title'
+        ? (sortParam as typeof dashSort)
+        : 'title';
+
+    const qualityParam = (searchParams.get('q') || '').toLowerCase();
+    const initialQuality: typeof qualityFilter =
+      qualityParam === '1080p' || qualityParam === '4k' ? (qualityParam as typeof qualityFilter) : 'all';
+
+    const missingParam = (searchParams.get('missing') || '').toLowerCase();
+    const initialStatus: typeof statusFilter =
+      missingParam === '1' || missingParam === 'true' ? 'missing' : 'all';
+
+    setDashSort(initialSort);
+    setQualityFilter(initialQuality);
+    setStatusFilter(initialStatus);
+    setFiltersInitialized(true);
+  }, [filtersInitialized, searchParams]);
+
+  useEffect(() => {
+    if (!filtersInitialized) return;
+
+    const next = new URLSearchParams(searchParams);
+
+    if (dashSort === 'title') next.delete('sort');
+    else next.set('sort', dashSort);
+
+    if (qualityFilter === 'all') next.delete('q');
+    else next.set('q', qualityFilter);
+
+    if (statusFilter === 'missing') next.set('missing', '1');
+    else next.delete('missing');
+
+    if (next.toString() === searchParams.toString()) return;
+    setSearchParams(next, { replace: true });
+  }, [filtersInitialized, dashSort, qualityFilter, statusFilter, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (arrFilter !== 'wanted' || !wantedInitialized) return;
@@ -440,7 +483,36 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                   </ToggleButtonGroup>
                 </Paper>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1, gap: 1 }}>
+                <Paper sx={{ p: 0.5, borderRadius: 999, border: '1px solid', borderColor: alpha('#ffffff', 0.08) }}>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={statusFilter}
+                    onChange={(_, v) => { if (v) setStatusFilter(v); }}
+                    sx={{
+                      '& .MuiToggleButtonGroup-grouped': {
+                        border: 0,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        px: 1.25,
+                        borderRadius: 999,
+                        '&:not(:first-of-type)': { ml: 0.5 },
+                      },
+                      '& .MuiToggleButton-root.Mui-selected': {
+                        bgcolor: alpha('#4ECDC4', 0.16),
+                        color: '#4ECDC4',
+                      },
+                    }}
+                  >
+                    <ToggleButton value="all" aria-label="All statuses">
+                      All
+                    </ToggleButton>
+                    <ToggleButton value="missing" aria-label="Missing only">
+                      Missing
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Paper>
                 <Paper sx={{ p: 0.5, borderRadius: 999, border: '1px solid', borderColor: alpha('#ffffff', 0.08) }}>
                   <ToggleButtonGroup
                     size="small"
@@ -591,9 +663,13 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
                       ? libraryItems.filter(item => item.media_type === 'tv')
                       : libraryItems;
 
+                    const libraryItemsStatusFiltered = statusFilter === 'missing'
+                      ? libraryItemsForFilter.filter(item => item.status === 'missing')
+                      : libraryItemsForFilter;
+
                     const libraryItemsQualityFiltered = qualityFilter === 'all'
-                      ? libraryItemsForFilter
-                      : libraryItemsForFilter.filter(item => {
+                      ? libraryItemsStatusFiltered
+                      : libraryItemsStatusFiltered.filter(item => {
                           const q = item.quality_profile || item.quality || item.title || '';
                           return matchesQualityFilter(q);
                         });

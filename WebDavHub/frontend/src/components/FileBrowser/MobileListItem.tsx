@@ -89,7 +89,7 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
             {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
           </Typography>
           {showArrBadges && (() => {
-            const arrBadges = getArrBadgeData(file);
+            const arrBadges = getArrBadgeData(file, { showAvailable: false });
             const statusColor = arrBadges.statusTone === 'success'
               ? theme.palette.success.main
               : arrBadges.statusTone === 'warning'

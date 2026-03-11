@@ -276,7 +276,7 @@ const PosterView = memo(({
           const posterPath = file.posterPath || (tmdb && tmdb.poster_path);
           const tmdbId = file.tmdbId || (tmdb && tmdb.id);
           const hasPosterPath = !!posterPath || !!tmdbId;
-          const arrBadges = getArrBadgeData(file);
+          const arrBadges = getArrBadgeData(file, { showAvailable: false });
           const qualityTone = getQualityTone(arrBadges.quality);
           const qualityColor = qualityTone === 'warning'
             ? theme.palette.warning.main

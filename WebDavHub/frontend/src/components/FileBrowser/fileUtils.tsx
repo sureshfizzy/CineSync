@@ -76,20 +76,31 @@ export interface ArrBadgeData {
   monitored: boolean;
 }
 
+export interface GetArrBadgeOptions {
+  showAvailable?: boolean;
+}
+
 function normalizeQualityLabel(value: string): string {
   const raw = value.trim();
   const tokens = raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/);
   const has = (t: string) => tokens.includes(t);
   const remux = has('remux');
-  const is4k = has('2160p') || has('4k') || has('uhd');
-  const is1080 = has('1080p');
-  const is720 = has('720p');
-  const is480 = has('480p');
-  let res = '';
-  if (is4k) res = '4K';
-  else if (is1080) res = '1080p';
-  else if (is720) res = '720p';
-  else if (is480) res = '480p';
+
+  const resSet = new Set<string>();
+  if (has('2160p') || has('4k') || has('uhd')) resSet.add('2160p');
+  if (has('1080p')) resSet.add('1080p');
+  if (has('720p')) resSet.add('720p');
+  if (has('480p')) resSet.add('480p');
+
+  const order = ['2160p', '1080p', '720p', '480p'] as const;
+  const resList = order.filter((r) => resSet.has(r));
+
+  if (resList.length > 1) {
+    const label = resList.join('/');
+    return remux ? `REMUX ${label}` : label;
+  }
+
+  const res = resList[0] || '';
   if (remux && res) return `REMUX ${res}`;
   if (remux) return 'REMUX';
   if (res) return res;
@@ -115,7 +126,8 @@ export function inferQualityFromName(name: string): string | undefined {
   return undefined;
 }
 
-export function getArrBadgeData(file: FileItem): ArrBadgeData {
+export function getArrBadgeData(file: FileItem, options: GetArrBadgeOptions = {}): ArrBadgeData {
+  const { showAvailable = true } = options;
   const rawStatus = file.status || (
     file.processingStatus === 'processed' ? 'available' :
     file.processingStatus === 'failed' ? 'failed' :
@@ -128,7 +140,7 @@ export function getArrBadgeData(file: FileItem): ArrBadgeData {
   switch (rawStatus) {
     case 'available':
     case 'imported':
-      statusLabel = 'Available';
+      if (showAvailable) statusLabel = 'Available';
       statusTone = 'success';
       break;
     case 'missing':
@@ -159,7 +171,7 @@ export function getArrBadgeData(file: FileItem): ArrBadgeData {
 
   return {
     quality,
-    statusLabel: statusLabel || (isAvailable ? 'Available' : undefined),
+    statusLabel,
     statusTone: statusTone || (isAvailable ? 'success' : 'default'),
     isAvailable,
     showSearch,
