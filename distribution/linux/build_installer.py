@@ -13,7 +13,7 @@ import tarfile
 import zipfile
 
 class LinuxInstallerBuilder:
-    VERSION = "3.2.1-alpha"
+    VERSION = "3.2.2-alpha"
     
     def __init__(self, architecture="amd64", package_type="both", clean_build=False):
         self.architecture = architecture

@@ -16,7 +16,7 @@ import zipfile
 import plistlib
 
 class MacOSInstallerBuilder:
-    VERSION = "3.2.1-alpha"
+    VERSION = "3.2.2-alpha"
     BUNDLE_ID = "com.cinesync.app"
     
     def __init__(self, architecture="universal", package_type="both", clean_build=False):
