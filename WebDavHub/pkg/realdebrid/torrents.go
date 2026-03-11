@@ -500,59 +500,91 @@ func (tm *TorrentManager) SetPrefetchedTorrents(torrents []TorrentItem) {
 	logger.Info("[SetPrefetch] Starting to prefetch %d torrents into memory", len(torrents))
 
 	allTorrents, _ := tm.DirectoryMap.Get(ALL_TORRENTS)
+	n := len(torrents)
+	missingInfoIDs := make([]string, 0, n/4)
 
-	missingInfoIDs := make([]string, 0)
-	alreadyCachedCount := 0
-	preservedFromCache := 0
+	numWorkers := runtime.NumCPU() * 2
+	if numWorkers > 32 {
+		numWorkers = 32
+	}
+	if n < numWorkers {
+		numWorkers = n
+	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
 
-	logger.Info("[SetPrefetch] Merging %d torrents into directory map...", len(torrents))
-	for i := range torrents {
-		src := &torrents[i]
-		accessKey := GetDirectoryName(src.Filename)
+	type mergeResult struct{ missingID string }
+	jobs := make(chan int, numWorkers*2)
+	results := make(chan mergeResult, numWorkers*2)
 
-		newItem := &TorrentItem{
-			ID:       src.ID,
-			Filename: src.Filename,
-			Bytes:    src.Bytes,
-			Files:    src.Files,
-			Status:   src.Status,
-			Added:    src.Added,
-			Ended:    src.Ended,
-		}
-		if existingItem, exists := tm.idToItemMap.Get(newItem.ID); exists && existingItem != nil {
-			if len(existingItem.CachedFiles) > 0 {
-				newItem.CachedFiles = existingItem.CachedFiles
-				newItem.CachedLinks = existingItem.CachedLinks
-				if existingItem.Ended != "" {
-					newItem.Ended = existingItem.Ended
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				src := &torrents[i]
+				accessKey := GetDirectoryName(src.Filename)
+				newItem := &TorrentItem{
+					ID:       src.ID,
+					Filename: src.Filename,
+					Bytes:    src.Bytes,
+					Files:    src.Files,
+					Status:   src.Status,
+					Added:    src.Added,
+					Ended:    src.Ended,
 				}
-				preservedFromCache++
-			}
-		}
-		if len(newItem.CachedFiles) == 0 {
-			if cached, ok := tm.InfoMap.Get(newItem.ID); ok && cached != nil {
-				newItem.CachedFiles = cached.Files
-				newItem.CachedLinks = cached.Links
-				newItem.Ended = cached.Ended
-				alreadyCachedCount++
-			}
-		}
-		if len(newItem.CachedFiles) == 0 && tm.store != nil {
-			if cached, err := tm.store.LoadInfo(newItem.ID); err == nil && cached != nil {
-				newItem.CachedFiles = cached.Files
-				newItem.CachedLinks = cached.Links
-				newItem.Ended = cached.Ended
-				if cached.Progress == 100 {
-					tm.InfoMap.Set(newItem.ID, cached)
+				if existingItem, exists := tm.idToItemMap.Get(newItem.ID); exists && existingItem != nil {
+					if len(existingItem.CachedFiles) > 0 {
+						newItem.CachedFiles = existingItem.CachedFiles
+						newItem.CachedLinks = existingItem.CachedLinks
+						if existingItem.Ended != "" {
+							newItem.Ended = existingItem.Ended
+						}
+					}
 				}
-				alreadyCachedCount++
+				if len(newItem.CachedFiles) == 0 {
+					if cached, ok := tm.InfoMap.Get(newItem.ID); ok && cached != nil {
+						newItem.CachedFiles = cached.Files
+						newItem.CachedLinks = cached.Links
+						newItem.Ended = cached.Ended
+					}
+				}
+				if len(newItem.CachedFiles) == 0 && tm.store != nil {
+					if cached, err := tm.store.LoadInfo(newItem.ID); err == nil && cached != nil {
+						newItem.CachedFiles = cached.Files
+						newItem.CachedLinks = cached.Links
+						newItem.Ended = cached.Ended
+						if cached.Progress == 100 {
+							tm.InfoMap.Set(newItem.ID, cached)
+						}
+					}
+				}
+				allTorrents.Set(accessKey, newItem)
+				tm.idToItemMap.Set(newItem.ID, newItem)
+				missingID := ""
+				if len(newItem.CachedFiles) == 0 {
+					missingID = newItem.ID
+				}
+				results <- mergeResult{missingID: missingID}
 			}
-		}
+		}()
+	}
 
-		allTorrents.Set(accessKey, newItem)
-		tm.idToItemMap.Set(newItem.ID, newItem)
-		if len(newItem.CachedFiles) == 0 {
-			missingInfoIDs = append(missingInfoIDs, newItem.ID)
+	logger.Info("[SetPrefetch] Merging %d torrents into directory map...", n)
+	go func() {
+		for i := 0; i < n; i++ {
+			jobs <- i
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+
+	for r := range results {
+		if r.missingID != "" {
+			missingInfoIDs = append(missingInfoIDs, r.missingID)
 		}
 	}
 
