@@ -571,8 +571,6 @@ func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
 
 		if err := downloadImage(posterURL, localPosterPath); err != nil {
 			logger.Warn("Failed to download poster for TMDB ID %d: %v", tmdbID, err)
-		} else {
-			logger.Info("Downloaded poster for TMDB ID %d", tmdbID)
 		}
 	}
 
@@ -583,8 +581,6 @@ func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
 
 		if err := downloadImage(fanartURL, localFanartPath); err != nil {
 			logger.Warn("Failed to download fanart for TMDB ID %d: %v", tmdbID, err)
-		} else {
-			logger.Info("Downloaded fanart for TMDB ID %d", tmdbID)
 		}
 	}
 
@@ -752,7 +748,7 @@ func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
 }
 
 // upsertProcessedWithDetails writes fields available from TMDB into processed_files.
-func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, yearPtr *int) {
+func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, yearPtr *int, rootFolder string) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return
@@ -773,6 +769,9 @@ func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string,
 	}
 	if yearPtr != nil {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
+	}
+	if rootFolder != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET root_folder = ? WHERE tmdb_id = ?`, rootFolder, tmdbStr)
 	}
 	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
 
@@ -897,9 +896,9 @@ func HandleAddMovie(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Movie added to library: %s (TMDB ID: %d)", req.Title, req.TmdbID)
 
-	go func(tmdbID int, title string, yearPtr *int) {
-		upsertProcessedWithDetails(tmdbID, "movie", title, yearPtr)
-	}(req.TmdbID, req.Title, req.Year)
+	go func(tmdbID int, title string, yearPtr *int, rootFolder string) {
+		upsertProcessedWithDetails(tmdbID, "movie", title, yearPtr, rootFolder)
+	}(req.TmdbID, req.Title, req.Year, req.RootFolder)
 
 	// Fetch TMDB data and save poster/fanart
 	go func() {
@@ -981,9 +980,9 @@ func HandleAddSeries(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Series added to library: %s (TMDB ID: %d)", req.Title, req.TmdbID)
 
 	// Placeholder processed_files entry (no source/destination yet)
-	go func(tmdbID int, title string, yearPtr *int) {
-		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr)
-	}(req.TmdbID, req.Title, req.Year)
+	go func(tmdbID int, title string, yearPtr *int, rootFolder string) {
+		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr, rootFolder)
+	}(req.TmdbID, req.Title, req.Year, req.RootFolder)
 
 	// Fetch TMDB data and save poster/fanart
 	go func() {

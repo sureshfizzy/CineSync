@@ -18,6 +18,7 @@ interface ShowFileActionsProps {
 }
 
 const ShowFileActions: React.FC<ShowFileActionsProps> = ({
+  data,
   folderName,
   currentPath,
   placement,
@@ -109,16 +110,18 @@ const ShowFileActions: React.FC<ShowFileActionsProps> = ({
     path: fileInfo.path || fullFilePath,
     size: fileInfo.size || '0 B',
     modified: fileInfo.modified || new Date().toISOString(),
-    destinationPath: fileInfo.destinationPath
+    destinationPath: fileInfo.destinationPath,
+    tmdbId: data?.id ? String(data.id) : undefined
   } : {
-    name: folderName || 'Unknown Folder',
+    name: folderName || data?.name || data?.title || 'Unknown Folder',
     type: 'directory' as const,
     fullPath: filePath,
     sourcePath: filePath,
     webdavPath: filePath,
     path: filePath,
     size: '0 B',
-    modified: new Date().toISOString()
+    modified: new Date().toISOString(),
+    tmdbId: data?.id ? String(data.id) : undefined
   };
 
   return (

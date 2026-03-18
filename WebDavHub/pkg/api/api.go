@@ -328,8 +328,9 @@ type ReadlinkResponse struct {
 }
 
 type DeleteRequest struct {
-	Path  string   `json:"path"`
-	Paths []string `json:"paths"`
+	Path   string   `json:"path"`
+	Paths  []string `json:"paths"`
+	TmdbID string   `json:"tmdb_id,omitempty"`
 }
 
 type DeleteResponse struct {
@@ -1704,7 +1705,7 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Handle single file deletion
-	handleSingleDelete(w, req.Path)
+	handleSingleDelete(w, req.Path, req.TmdbID)
 }
 
 // HandleRestoreSymlinks restores files by calling MediaHub's restore functionality
@@ -1931,18 +1932,79 @@ func restoreDeletedFileByID(idStr string) bool {
     return true
 }
 
+// deleteLibraryItemByTmdbID removes a library_items row and its placeholder
+func deleteLibraryItemByTmdbID(tmdbID string) bool {
+	if tmdbID == "" {
+		return false
+	}
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return false
+	}
+	result, err := mediaHubDB.Exec(`DELETE FROM library_items WHERE tmdb_id = ?`, tmdbID)
+	if err != nil {
+		logger.Warn("Failed to delete library_items for tmdb_id %s: %v", tmdbID, err)
+		return false
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return false
+	}
+	_, _ = mediaHubDB.Exec(
+		`DELETE FROM processed_files
+		 WHERE tmdb_id = ?
+		   AND (file_path IS NULL OR file_path = '')
+		   AND (destination_path IS NULL OR destination_path = '')`,
+		tmdbID,
+	)
+	return true
+}
+
 // handleSingleDelete handles deletion of a single file
-func handleSingleDelete(w http.ResponseWriter, relativePath string) {
+func handleSingleDelete(w http.ResponseWriter, relativePath string, tmdbID string) {
 	if relativePath == "" {
 		logger.Warn("Error: empty path provided")
 		http.Error(w, "Path is required", http.StatusBadRequest)
 		return
 	}
 
+	notFoundResponse := func(pathForDB string) bool {
+		if dbPath, found := findFileInDatabase(pathForDB); found {
+			logger.Info("Found file in database, cleaning up entries: %s", dbPath)
+			var deletedCount int
+			if isFolderDeletion(pathForDB) {
+				showName := filepath.Base(strings.Trim(pathForDB, "/\\"))
+				deletedCount = deleteAllShowEntries(showName, pathForDB)
+			} else {
+				deletedCount = deleteSpecificFile(pathForDB)
+			}
+			if deletedCount > 0 {
+				cleanupWebDavHubDatabase(pathForDB, dbPath)
+				broadcastFileDeletionEvents(dbPath)
+				db.InvalidateFolderCache()
+				db.NotifyDashboardStatsChanged()
+				db.NotifyFileOperationChanged()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+				return true
+			}
+		}
+
+		if deleteLibraryItemByTmdbID(tmdbID) {
+			db.InvalidateFolderCache()
+			db.NotifyDashboardStatsChanged()
+			db.NotifyFileOperationChanged()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(DeleteResponse{Success: true})
+			return true
+		}
+		http.Error(w, "File or directory not found", http.StatusNotFound)
+		return true
+	}
+
 	var path string
 	var absPath string
 
-	// Check if the path is absolute
 	if filepath.IsAbs(relativePath) {
 		destDir := env.GetString("DESTINATION_DIR", "")
 		if destDir == "" {
@@ -1965,44 +2027,19 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 			return
 		}
 
-		// Check if the absolute path is within DESTINATION_DIR
 		if !strings.HasPrefix(reqAbsPath, absDestDir) {
 			apiLike := strings.TrimPrefix(relativePath, "/")
 			candidate := filepath.Join(rootDir, apiLike)
 			deleteTarget := reqAbsPath
 			if _, mapErr := os.Stat(candidate); mapErr == nil {
-				logger.Info("Outside DESTINATION_DIR: mapped API path to rootDir for permanent delete: api=%s -> %s", relativePath, candidate)
+				logger.Info("Outside DESTINATION_DIR: mapped API path to rootDir: %s -> %s", relativePath, candidate)
 				deleteTarget = candidate
 			} else {
-				logger.Info("Outside DESTINATION_DIR: no rootDir mapping found, using provided absolute path: %s", reqAbsPath)
+				logger.Info("Outside DESTINATION_DIR: using provided absolute path: %s", reqAbsPath)
 			}
 
 			if _, err := os.Stat(deleteTarget); os.IsNotExist(err) {
-				logger.Info("File or directory not found at expected location: %s", deleteTarget)
-				if dbPath, found := findFileInDatabase(relativePath); found {
-					logger.Info("Found file in database, cleaning up entries: %s", dbPath)
-
-					var deletedCount int
-					if isFolderDeletion(relativePath) {
-						showName := filepath.Base(strings.Trim(relativePath, "/\\"))
-						deletedCount = deleteAllShowEntries(showName, relativePath)
-					} else {
-						deletedCount = deleteSpecificFile(relativePath)
-					}
-
-					if deletedCount > 0 {
-						cleanupWebDavHubDatabase(relativePath, dbPath)
-						broadcastFileDeletionEvents(dbPath)
-						db.InvalidateFolderCache()
-						db.NotifyDashboardStatsChanged()
-						db.NotifyFileOperationChanged()
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(DeleteResponse{Success: true})
-						return
-					}
-				}
-
-				http.Error(w, "File or directory not found", http.StatusNotFound)
+				notFoundResponse(relativePath)
 				return
 			}
 
@@ -2019,13 +2056,11 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 			db.InvalidateFolderCache()
 			db.NotifyDashboardStatsChanged()
 			db.NotifyFileOperationChanged()
-
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(DeleteResponse{Success: true})
 			return
 		}
 	} else {
-		// For relative paths, use the existing logic with rootDir
 		cleanPath := filepath.Clean(relativePath)
 		if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "..") {
 			logger.Warn("Error: invalid relative path: %s", cleanPath)
@@ -2035,11 +2070,8 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 
 		path = filepath.Join(rootDir, cleanPath)
 
-		// Try to resolve the actual directory path
-		// Convert Windows path separators to forward slashes for API path
 		apiPath := strings.ReplaceAll(cleanPath, "\\", "/")
-		resolvedPath, err := resolveActualDirectoryPath(path, apiPath)
-		if err == nil {
+		if resolvedPath, err := resolveActualDirectoryPath(path, apiPath); err == nil {
 			path = resolvedPath
 		}
 
@@ -2066,32 +2098,7 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string) {
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		logger.Info("File or directory not found at expected location: %s", path)
-
-		if dbPath, found := findFileInDatabase(relativePath); found {
-			logger.Info("Found file in database, cleaning up entries: %s", dbPath)
-
-			var deletedCount int
-			if isFolderDeletion(relativePath) {
-				showName := filepath.Base(strings.Trim(relativePath, "/\\"))
-				deletedCount = deleteAllShowEntries(showName, relativePath)
-			} else {
-				deletedCount = deleteSpecificFile(relativePath)
-			}
-
-			if deletedCount > 0 {
-				cleanupWebDavHubDatabase(relativePath, dbPath)
-				broadcastFileDeletionEvents(dbPath)
-				db.InvalidateFolderCache()
-				db.NotifyDashboardStatsChanged()
-				db.NotifyFileOperationChanged()
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(DeleteResponse{Success: true})
-				return
-			}
-		}
-
-		http.Error(w, "File or directory not found", http.StatusNotFound)
+		notFoundResponse(relativePath)
 		return
 	}
 
@@ -2247,10 +2254,8 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 					deleteTarget = candidate
 				}
 
-				if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
-					logger.Info("File or directory not found at expected location (bulk): %s", deleteTarget)
-
-					if dbPath, found := findFileInDatabase(relativePath); found {
+			if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
+				if dbPath, found := findFileInDatabase(relativePath); found {
 						logger.Info("Found file in database (bulk), cleaning up entries: %s", dbPath)
 
 						var showDeletedCount int
@@ -2325,7 +2330,6 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 		}
 
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			logger.Warn("File or directory not found at expected location (bulk relative): %s", path)
 
 			if dbPath, found := findFileInDatabase(relativePath); found {
 				logger.Info("Found file in database (bulk relative), cleaning up entries: %s", dbPath)
@@ -2482,7 +2486,7 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// findFileInDatabase finds a file in the database by filename
+// findFileInDatabase finds a file in the database by exact folder-prefix match.
 func findFileInDatabase(filePath string) (string, bool) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
@@ -2494,11 +2498,15 @@ func findFileInDatabase(filePath string) (string, bool) {
 		return "", false
 	}
 
-	query := `SELECT file_path, destination_path FROM processed_files 
-		WHERE destination_path LIKE ? LIMIT 1`
+	segmentPrefix := "%" + showName + "/%"
+	segmentExact := "%" + showName
+
+	query := `SELECT file_path, destination_path FROM processed_files
+		WHERE destination_path LIKE ? OR destination_path LIKE ?
+		LIMIT 1`
 
 	var dbFilePath, dbDestPath sql.NullString
-	err = mediaHubDB.QueryRow(query, "%"+showName+"%").Scan(&dbFilePath, &dbDestPath)
+	err = mediaHubDB.QueryRow(query, segmentPrefix, segmentExact).Scan(&dbFilePath, &dbDestPath)
 	if err == nil {
 		if dbFilePath.Valid && dbFilePath.String != "" {
 			return dbFilePath.String, true
@@ -2510,7 +2518,7 @@ func findFileInDatabase(filePath string) (string, bool) {
 	return "", false
 }
 
-// deleteAllShowEntries deletes all database entries for a show in a specific path
+// deleteAllShowEntries deletes processed_files entries whose destination_path
 func deleteAllShowEntries(showName, relativePath string) int {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
@@ -2518,27 +2526,29 @@ func deleteAllShowEntries(showName, relativePath string) int {
 		return 0
 	}
 
+	if showName == "" {
+		logger.Warn("deleteAllShowEntries: empty showName, refusing broad delete")
+		return 0
+	}
+
+	segmentPrefix := "%" + showName + "/%"
+	segmentExact := "%" + showName
 	parentDir := filepath.Dir(relativePath)
-	if parentDir == "." || parentDir == "/" {
-		parentDir = ""
+	if parentDir != "." && parentDir != "/" && parentDir != "\\" {
+		norm := strings.ReplaceAll(parentDir, "\\", "/")
+		segmentPrefix = "%" + norm + "/" + showName + "/%"
+		segmentExact = "%" + norm + "/" + showName
 	}
 
-	var pattern string
-	if parentDir != "" {
-		pattern = "%" + parentDir + "/" + showName + "%"
-	} else {
-		pattern = "%" + showName + "%"
-	}
-
-	query := `DELETE FROM processed_files WHERE destination_path LIKE ?`
-	result, err := mediaHubDB.Exec(query, pattern)
+	query := `DELETE FROM processed_files WHERE destination_path LIKE ? OR destination_path LIKE ?`
+	result, err := mediaHubDB.Exec(query, segmentPrefix, segmentExact)
 	if err != nil {
-		logger.Warn("Failed to delete show entries: %v", err)
+		logger.Warn("Failed to delete show entries for '%s': %v", showName, err)
 		return 0
 	}
 
 	rowsAffected, _ := result.RowsAffected()
-	logger.Info("Deleted %d database entries for show '%s' in path '%s'", rowsAffected, showName, parentDir)
+	logger.Info("Deleted %d database entries for show '%s'", rowsAffected, showName)
 	return int(rowsAffected)
 }
 

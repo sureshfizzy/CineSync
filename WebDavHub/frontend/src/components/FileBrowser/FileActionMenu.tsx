@@ -30,6 +30,7 @@ interface FileItem {
   fullPath?: string;
   destinationPath?: string;
   isCategoryFolder?: boolean;
+  tmdbId?: string;
 }
 
 interface FileActionMenuProps {
@@ -317,13 +318,17 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
       return;
     }
     try {
-      await axios.post('/api/delete', { path: relPath });
+      await axios.post('/api/delete', { path: relPath, tmdb_id: file.tmdbId ? String(file.tmdbId) : undefined });
       await deleteFileDetail(relPath);
       setDeleteDialogOpen(false);
       setDeleting(false);
-      setSuccessMessage(`${file.type === 'directory' ? 'Folder' : 'File'} "${file.name}" deleted successfully`);
-      setSuccessDialogOpen(true);
       if (onDeleted) onDeleted();
+      if (onNavigateBack) {
+        onNavigateBack();
+      } else {
+        setSuccessMessage(`${file.type === 'directory' ? 'Folder' : 'File'} "${file.name}" deleted successfully`);
+        setSuccessDialogOpen(true);
+      }
     } catch (error) {
       console.error('Failed to delete file:', error);
       if (axios.isAxiosError(error)) {
