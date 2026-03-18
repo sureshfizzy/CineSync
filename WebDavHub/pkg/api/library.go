@@ -626,7 +626,7 @@ func getTMDBAPIKey() string {
 }
 
 // upsertPlaceholderProcessedFile inserts or updates a minimal processed_files row
-func upsertPlaceholderProcessedFile(tmdbID int, mediaType, title string, yearPtr *int, quality string) error {
+func upsertPlaceholderProcessedFile(tmdbID int, mediaType, title string, yearPtr *int) error {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return err
@@ -649,10 +649,6 @@ func upsertPlaceholderProcessedFile(tmdbID int, mediaType, title string, yearPtr
 	// year
 	if yearPtr != nil {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
-	}
-	// quality
-	if quality != "" {
-		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
 	}
 	// processed_at
 	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
@@ -755,8 +751,8 @@ func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
 	return details
 }
 
-// upsertProcessedWithDetails writes fields available from TMDB into processed_files
-func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, quality string, yearPtr *int) {
+// upsertProcessedWithDetails writes fields available from TMDB into processed_files.
+func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, yearPtr *int) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return
@@ -777,9 +773,6 @@ func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string,
 	}
 	if yearPtr != nil {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET year = COALESCE(year, ?) WHERE tmdb_id = ? AND (year IS NULL OR year = '')`, strconv.Itoa(*yearPtr), tmdbStr)
-	}
-	if quality != "" {
-		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET quality = COALESCE(quality, ?) WHERE tmdb_id = ? AND (quality IS NULL OR quality = '')`, quality, tmdbStr)
 	}
 	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
 
@@ -905,7 +898,7 @@ func HandleAddMovie(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Movie added to library: %s (TMDB ID: %d)", req.Title, req.TmdbID)
 
 	go func(tmdbID int, title string, yearPtr *int) {
-		upsertProcessedWithDetails(tmdbID, "movie", title, req.QualityProfile, yearPtr)
+		upsertProcessedWithDetails(tmdbID, "movie", title, yearPtr)
 	}(req.TmdbID, req.Title, req.Year)
 
 	// Fetch TMDB data and save poster/fanart
@@ -989,7 +982,7 @@ func HandleAddSeries(w http.ResponseWriter, r *http.Request) {
 
 	// Placeholder processed_files entry (no source/destination yet)
 	go func(tmdbID int, title string, yearPtr *int) {
-		upsertProcessedWithDetails(tmdbID, "tv", title, req.QualityProfile, yearPtr)
+		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr)
 	}(req.TmdbID, req.Title, req.Year)
 
 	// Fetch TMDB data and save poster/fanart
