@@ -10,6 +10,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSymlinkCreatedListener } from '../hooks/useMediaHubUpdates';
 import MediaSearchModal from '../components/MediaDashboard/MediaSearchModal';
+import { NotFound } from '../App';
 
 function getPosterUrl(path: string | null, size = 'w500') {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : undefined;
@@ -30,11 +31,11 @@ export default function MediaDetails() {
   const pathParts = fullPath.split('/').filter(Boolean);
   // Support URL format: /media/:type/:tmdbId (type is 'movie' or 'tv')
   // Also support legacy: /media/tmdb/:tmdbId and /media/<folder path>
-  const isTypedTmdbRoute = (pathParts[0] === 'movie' || pathParts[0] === 'tv') && pathParts[1];
+  const isTmdbRoute = (pathParts[0] === 'movie' || pathParts[0] === 'tv') && pathParts[1];
   const isLegacyTmdbRoute = pathParts[0] === 'tmdb' && pathParts[1];
-  const tmdbIdFromUrl = isTypedTmdbRoute ? pathParts[1] : (isLegacyTmdbRoute ? pathParts[1] : undefined);
-  const mediaTypeFromUrl = isTypedTmdbRoute ? (pathParts[0] as 'movie' | 'tv') : undefined;
-  const legacyFolderParts = (isTypedTmdbRoute || isLegacyTmdbRoute) ? pathParts.slice(2) : pathParts;
+  const tmdbIdFromUrl = isTmdbRoute ? pathParts[1] : (isLegacyTmdbRoute ? pathParts[1] : undefined);
+  const mediaTypeFromUrl = isTmdbRoute ? (pathParts[0] as 'movie' | 'tv') : undefined;
+  const legacyFolderParts = (isTmdbRoute || isLegacyTmdbRoute) ? pathParts.slice(2) : pathParts;
   const folderName = (location.state?.folderName as string) || (legacyFolderParts.length > 0 ? legacyFolderParts[legacyFolderParts.length - 1] : '');
   const currentPath = location.state?.currentPath || ('/' + legacyFolderParts.slice(0, -1).join('/') + (legacyFolderParts.length > 1 ? '/' : ''));
   const returnPage = location.state?.returnPage || 1;
@@ -43,6 +44,7 @@ export default function MediaDetails() {
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notInLibrary, setNotInLibrary] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
   const [arrSearchOpen, setArrSearchOpen] = useState(false);
@@ -89,7 +91,7 @@ export default function MediaDetails() {
         isTransition: true
       };
 
-      if (isTypedTmdbRoute || isLegacyTmdbRoute) {
+      if (isTmdbRoute || isLegacyTmdbRoute) {
         navigate(location.pathname, {
           state: baseState,
           replace: true
@@ -108,9 +110,9 @@ export default function MediaDetails() {
       setTimeout(() => {
         setIsTransitioning(false);
         setPendingFolderName(null);
-      }, 500); // Longer delay to allow for data fetching
-    }, 400); // Slightly longer delay for smoother transition
-  }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath, isTypedTmdbRoute, isLegacyTmdbRoute, location.pathname, location.state]);
+      }, 500);
+    }, 400);
+  }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath, isTmdbRoute, isLegacyTmdbRoute, location.pathname, location.state]);
 
   const testTransition = useCallback(() => {
     const testFolderName = `${folderName} (Test)`;
@@ -204,6 +206,7 @@ export default function MediaDetails() {
     setData(null);
     setError(null);
     setLoading(true);
+    setNotInLibrary(false);
 
     // Only use navigation state if it contains credits (full details) AND it's not a transition
     const isTransition = location.state?.isTransition;
@@ -227,6 +230,25 @@ export default function MediaDetails() {
       return;
     }
     lastRequestRef.current = { tmdbId, currentPath, folderName, requestKey };
+
+    if (isTmdbRoute && tmdbId) {
+      Promise.all([
+        axios.get(`/api/library?tmdbId=${tmdbId}&type=${mediaType}`, { headers }).catch(() => null),
+        axios.get(`/api/media-files?tmdbId=${tmdbId}&mediaType=${mediaType}`, { headers }).catch(() => null),
+      ]).then(([libraryRes, filesRes]) => {
+        const libraryItems = libraryRes?.data?.data;
+        const fileItems = filesRes?.data;
+        const inLibrary = Array.isArray(libraryItems) && libraryItems.length > 0;
+        const hasFiles = Array.isArray(fileItems) && fileItems.length > 0;
+        if (!inLibrary && !hasFiles) {
+          setNotInLibrary(true);
+          setLoading(false);
+        } else {
+          fetchTmdbDetails();
+        }
+      });
+      return;
+    }
 
     // Only fetch TMDB details from API
     fetchTmdbDetails();
@@ -276,6 +298,10 @@ export default function MediaDetails() {
         });
     }
   }, [folderName, mediaType, tmdbId, currentPath, tmdbDataFromNav]);
+
+  if (notInLibrary) {
+    return <NotFound inline />;
+  }
 
   // Always render backdrop and back button
   return (

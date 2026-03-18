@@ -1026,6 +1026,7 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaType := mt
 	status := r.URL.Query().Get("status")
+	tmdbIDFilter := r.URL.Query().Get("tmdbId")
 
 	// Build query
 	query := "SELECT id, tmdb_id, title, year, media_type, root_folder, quality_profile, monitor_policy, series_type, season_folder, tags, status, added_at, updated_at FROM library_items WHERE 1=1"
@@ -1039,6 +1040,11 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	if status != "" {
 		query += " AND status = ?"
 		args = append(args, status)
+	}
+
+	if tmdbIDFilter != "" {
+		query += " AND tmdb_id = ?"
+		args = append(args, tmdbIDFilter)
 	}
 
 	query += " ORDER BY added_at DESC"

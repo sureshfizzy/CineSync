@@ -27,7 +27,6 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  const isMediaDetailsPage = location.pathname.startsWith('/media/');
 
   // Get initial view from localStorage or default to 'poster'
   const getInitialView = () => {
@@ -75,10 +74,10 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
         display: 'flex',
         flexGrow: 1,
         overflow: 'hidden',
-        pt: { xs: '56px', sm: '64px' } // Add top padding to account for fixed header
+        pt: { xs: '56px', sm: '64px' }
       }}>
 
-        {!isMobile && !isMediaDetailsPage && (
+        {!isMobile && (
           <Box
             component="nav"
             sx={{
@@ -91,7 +90,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : ( location.pathname.startsWith('/Mediadashboard') ? (
+            ) : (location.pathname.startsWith('/Mediadashboard') || location.pathname.startsWith('/media/')) ? (
               <MediaSidebar />
             ) : (
               <Sidebar
@@ -99,7 +98,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
                 onViewChange={handleViewChange}
                 onRefresh={handleRefresh}
               />
-            ))}
+            )}
           </Box>
         )}
 
@@ -125,7 +124,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : ( location.pathname.startsWith('/Mediadashboard') ? (
+            ) : (location.pathname.startsWith('/Mediadashboard') || location.pathname.startsWith('/media/')) ? (
               <MediaSidebar />
             ) : (
               <Sidebar
@@ -134,7 +133,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
                 onViewChange={handleViewChange}
                 onRefresh={handleRefresh}
               />
-            ))}
+            )}
           </Drawer>
         )}
 

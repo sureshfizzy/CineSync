@@ -9,6 +9,7 @@ import MediaSearchPage from './MediaSearchPage';
 import RootFoldersManagement from './RootFoldersManagement';
 import QualityProfilesManagement from './QualityProfilesManagement';
 import IndexerManagement from './IndexerManagement';
+import { NotFound } from '../../App';
 
 export default function MediaDashboardRouter() {
   return (
@@ -31,7 +32,7 @@ export default function MediaDashboardRouter() {
       <Route path="debrid/settings" element={<RealDebridSettings />} />
       <Route path="debrid/settings/rclone" element={<RcloneSettings />} />
 
-      <Route path="*" element={<MediaDashboard filter="movies" />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

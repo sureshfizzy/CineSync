@@ -44,7 +44,7 @@ export default function Topbar({ toggleTheme, mode, onMenuClick }: TopbarProps) 
   const onDashboard = true;
   const getInitialView = (): 'current' | 'debrid' | 'mediadash' => {
     if (location.pathname.startsWith('/dashboard/debrid')) return 'debrid';
-    if (location.pathname.startsWith('/Mediadashboard')) return 'mediadash';
+    if (location.pathname.startsWith('/Mediadashboard') || location.pathname.startsWith('/media/')) return 'mediadash';
     return 'current';
   };
   

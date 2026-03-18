@@ -28,7 +28,7 @@ function LoadingScreen() {
     </Box>
   );
 }
-function NotFound() {
+export function NotFound({ inline = false, returnPath }: { inline?: boolean; returnPath?: string }) {
   const { isAuthenticated, authEnabled } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,7 +58,11 @@ function NotFound() {
   }, [isAuthenticated, authEnabled, navigate, location]);
 
   const handleDashboardClick = () => {
-    navigate('/dashboard');
+    if (returnPath) {
+      navigate(returnPath);
+    } else {
+      navigate('/Mediadashboard');
+    }
   };
 
   if (!isAuthenticated && authEnabled) {
@@ -171,9 +175,7 @@ function NotFound() {
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 100%)',
-        p: 3
+        ...(inline ? { py: 8, px: 3 } : { minHeight: '100vh', background: 'linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 100%)', p: 3 }),
       }}
     >
       <motion.div
@@ -182,16 +184,17 @@ function NotFound() {
         transition={{ duration: 0.5 }}
       >
         <Typography
-          variant="h3"
+          variant={inline ? 'h4' : 'h3'}
           sx={{
             mb: 2,
             background: 'linear-gradient(45deg, #FF6B6B, #4ECDC4)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
-            fontWeight: 700
+            fontWeight: 700,
+            textAlign: 'center',
           }}
         >
-          404 - Page Not Found
+          404 - Not Found
         </Typography>
       </motion.div>
 
@@ -205,7 +208,7 @@ function NotFound() {
           color="text.secondary"
           sx={{ mb: 3, textAlign: 'center' }}
         >
-          The page you're looking for doesn't exist.
+          {inline ? "This title isn't in your library." : "The page you're looking for doesn't exist."}
         </Typography>
       </motion.div>
 
@@ -288,6 +291,7 @@ function AppContent({ toggleTheme, mode }: { toggleTheme: () => void; mode: 'lig
         <Route path="media/*" element={<MediaDetails />} />
         <Route path="settings" element={<Settings />} />
         <Route path="about" element={<About />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
