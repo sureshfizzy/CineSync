@@ -1,6 +1,5 @@
 import { useState, lazy, Suspense, useCallback, useMemo, useEffect } from 'react';
-import { Box, Snackbar, Alert, IconButton } from '@mui/material';
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import { Box, Snackbar, Alert } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ShowHeader from './ShowHeader';
 import SeasonList from './SeasonList';
@@ -67,26 +66,6 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
 
   return (
     <Box sx={{ position: 'relative' }}>
-      <IconButton
-        onClick={() => navigate(-1)}
-        sx={{
-          position: 'absolute',
-          top: { xs: -24, md: 'calc(-47px)' },
-          left: { xs: -8, md: 'calc(-47px)' },
-          zIndex: 10,
-          bgcolor: 'background.paper',
-          color: 'primary.main',
-          boxShadow: 2,
-          '&:hover': { bgcolor: 'primary.main', color: 'background.paper' },
-          borderRadius: '50%',
-          width: 44,
-          height: 44,
-        }}
-        size="large"
-        aria-label="Back"
-      >
-        <ArrowBackIosNewIcon fontSize="medium" />
-      </IconButton>
       <Box sx={{ width: '100%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Box sx={{ flex: 1 }}>

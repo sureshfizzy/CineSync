@@ -566,8 +566,9 @@ const FileBrowserContent: React.FC = () => {
             folderName: file.name,
             legacyPath: mediaPath,
             tmdbData: tmdb,
-            returnPage: page, // Preserve current page for navigation back
-            returnSearch: search // Preserve current search for navigation back
+            returnPage: page,
+            returnSearch: search,
+            fromContext: 'symlinks'
           }
         });
       } else {

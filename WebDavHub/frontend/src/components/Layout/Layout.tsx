@@ -90,7 +90,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : (location.pathname.startsWith('/Mediadashboard') || location.pathname.startsWith('/media/')) ? (
+            ) : (location.pathname.startsWith('/Mediadashboard') || (location.pathname.startsWith('/media/') && location.state?.fromContext !== 'symlinks')) ? (
               <MediaSidebar />
             ) : (
               <Sidebar
@@ -124,7 +124,7 @@ export default function Layout({ toggleTheme, mode }: LayoutProps) {
           >
             {(location.pathname.startsWith('/dashboard/debrid')) ? (
               <DebridSidebar />
-            ) : (location.pathname.startsWith('/Mediadashboard') || location.pathname.startsWith('/media/')) ? (
+            ) : (location.pathname.startsWith('/Mediadashboard') || (location.pathname.startsWith('/media/') && location.state?.fromContext !== 'symlinks')) ? (
               <MediaSidebar />
             ) : (
               <Sidebar

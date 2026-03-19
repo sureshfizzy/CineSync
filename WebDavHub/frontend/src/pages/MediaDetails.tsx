@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
 import MovieInfo from '../components/MovieInfo/MovieInfo';
 import TVShowInfo from '../components/TVShowInfo/TVShowInfo';
 import { MediaDetailsData } from '../types/MediaTypes';
@@ -38,9 +37,6 @@ export default function MediaDetails() {
   const legacyFolderParts = (isTmdbRoute || isLegacyTmdbRoute) ? pathParts.slice(2) : pathParts;
   const folderName = (location.state?.folderName as string) || (legacyFolderParts.length > 0 ? legacyFolderParts[legacyFolderParts.length - 1] : '');
   const currentPath = location.state?.currentPath || ('/' + legacyFolderParts.slice(0, -1).join('/') + (legacyFolderParts.length > 1 ? '/' : ''));
-  const returnPage = location.state?.returnPage || 1;
-  const returnSearch = location.state?.returnSearch || '';
-
   const [data, setData] = useState<MediaDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,34 +110,6 @@ export default function MediaDetails() {
     }, 400);
   }, [folderName, fullPath, navigate, mediaType, tmdbId, currentPath, isTmdbRoute, isLegacyTmdbRoute, location.pathname, location.state]);
 
-  const testTransition = useCallback(() => {
-    const testFolderName = `${folderName} (Test)`;
-
-    handleFolderNameChange(testFolderName);
-  }, [folderName, handleFolderNameChange]);
-
-  // Expose test functions to window for console testing (development only)
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      (window as any).testMediaDetailsTransition = testTransition;
-      (window as any).testSymlinkUpdate = (oldName: string, newName: string) => {
-        import('../utils/symlinkUpdates').then(({ triggerFolderNameUpdate }) => {
-          triggerFolderNameUpdate({
-            oldFolderName: oldName,
-            newFolderName: newName,
-            newPath: `/test/path/${newName}`,
-            timestamp: Date.now()
-          });
-        });
-      };
-    }
-    return () => {
-      if (import.meta.env.DEV) {
-        delete (window as any).testMediaDetailsTransition;
-        delete (window as any).testSymlinkUpdate;
-      }
-    };
-  }, [testTransition]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -306,14 +274,14 @@ export default function MediaDetails() {
   // Always render backdrop and back button
   return (
     <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default', position: 'relative' }}>
-      {/* Improved Backdrop: edge-to-edge, with gradient overlay */}
+      {/* Backdrop: fixed to the content viewport area */}
       {data?.backdrop_path && (
         <Box sx={{
           position: 'fixed',
           top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
+          right: 0,
+          bottom: 0,
+          left: { xs: 0, md: '180px' },
           zIndex: 0,
           pointerEvents: 'none',
           overflow: 'hidden'
@@ -356,57 +324,6 @@ export default function MediaDetails() {
         initialQuery={arrSearchQuery}
       />
 
-      {/* Back button at very top left, always visible */}
-      <IconButton
-        onClick={() => {
-          const urlPath = currentPath.replace(/\/$/, '');
-          const searchParams = new URLSearchParams();
-          if (returnPage > 1) {
-            searchParams.set('page', returnPage.toString());
-          }
-          if (returnSearch) {
-            searchParams.set('search', returnSearch);
-          }
-          const queryString = searchParams.toString();
-          navigate(`/files${urlPath}${queryString ? `?${queryString}` : ''}`);
-        }}
-        sx={{
-          position: 'fixed',
-          top: { xs: 8, md: 16 },
-          left: { xs: 8, md: 16 },
-          zIndex: 100,
-          bgcolor: theme.palette.background.default,
-          color: theme.palette.text.primary,
-          boxShadow: 2,
-          '&:hover': {
-            bgcolor: theme.palette.action.hover,
-          },
-        }}
-      >
-        <ArrowBackIcon />
-      </IconButton>
-
-      {/* Temporary test button for transition (remove in production) */}
-      {import.meta.env.DEV && (
-        <IconButton
-          onClick={testTransition}
-          sx={{
-            position: 'fixed',
-            top: { xs: 8, md: 16 },
-            right: { xs: 8, md: 16 },
-            zIndex: 100,
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            boxShadow: 2,
-            '&:hover': {
-              bgcolor: 'primary.dark',
-            },
-          }}
-          title="Test Transition"
-        >
-          <Typography variant="caption" sx={{ fontSize: '10px' }}>TEST</Typography>
-        </IconButton>
-      )}
       {/* Main content area: animate only this */}
       <Box sx={{
         position: 'relative',

@@ -1,5 +1,4 @@
-import { Box, IconButton, useTheme, useMediaQuery } from '@mui/material';
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
@@ -122,26 +121,6 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
         WebkitBackfaceVisibility: 'hidden'
       }}
     >
-      <IconButton
-        onClick={() => navigate(-1)}
-        sx={{
-          position: 'absolute',
-          top: { xs: -20, md: 'calc(-47px)' },
-          left: { xs: -4, md: 'calc(-47px)' },
-          zIndex: 10,
-          bgcolor: 'background.paper',
-          color: 'primary.main',
-          boxShadow: 2,
-          '&:hover': { bgcolor: 'primary.main', color: 'background.paper' },
-          borderRadius: '50%',
-          width: { xs: 36, md: 44 },
-          height: { xs: 36, md: 44 },
-        }}
-        size={isMobile ? "medium" : "large"}
-        aria-label="Back"
-      >
-        <ArrowBackIosNewIcon fontSize={isMobile ? "small" : "medium"} />
-      </IconButton>
       <Box sx={{ width: '100%' }}>
         <motion.div
           initial={{ opacity: 0, y: isMobile ? 10 : 20 }}
