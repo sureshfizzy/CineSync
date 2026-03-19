@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, ToggleButton, alpha, Collapse, IconButton } from '@mui/material';
+import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, ToggleButton, alpha, Collapse, IconButton, TextField, InputAdornment } from '@mui/material';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { FileItem } from '../FileBrowser/types';
 import { formatDate, joinPaths } from '../FileBrowser/fileUtils';
@@ -9,6 +9,7 @@ import StraightenIcon from '@mui/icons-material/Straighten';
 import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize';
 import SortRoundedIcon from '@mui/icons-material/SortRounded';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search';
 import ListView from '../FileBrowser/ListView';
 import VirtualizedLibraryGrid from './VirtualizedLibraryGrid';
 import { useLayoutContext } from '../Layout/Layout';
@@ -21,10 +22,10 @@ import { ArrItem } from './types';
 import { isTvMediaType, normalizeMediaType } from '../../utils/mediaType';
 
 interface MediaDashboardProps {
-  filter?: 'all' | 'movies' | 'series' | 'wanted';
+  filter?: 'movies' | 'series' | 'wanted';
 }
 
-export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) {
+export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProps) {
   const { view } = useLayoutContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,6 +38,8 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const [showSort, setShowSort] = useState(false);
   const [qualityFilter, setQualityFilter] = useState<'all' | '1080p' | '4k'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'missing'>('all');
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [debouncedLibrarySearch, setDebouncedLibrarySearch] = useState('');
   
   // Use filter from props instead of internal state
   const arrFilter = filter;
@@ -45,9 +48,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const [totalCount, setTotalCount] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const itemsLengthRef = useRef(0);
-  const itemsRef = useRef<LibraryItem[]>([]);
   itemsLengthRef.current = libraryItems.length;
-  itemsRef.current = libraryItems;
   const [wantedItems, setWantedItems] = useState<ArrItem[]>([]);
   const [wantedFilter, setWantedFilter] = useState<'series' | 'movies'>('series');
   const [wantedResolutionSeries, setWantedResolutionSeries] = useState<'all' | '2160p' | '1080p' | '720p' | '480p'>('all');
@@ -58,6 +59,11 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   const PAGE_SIZE = 100;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedLibrarySearch(librarySearch), 250);
+    return () => clearTimeout(t);
+  }, [librarySearch]);
 
   const loadLibraryItems = useCallback(async (manageLoading = arrFilter === 'wanted', append = false, appendOffset = 0) => {
     try {
@@ -144,40 +150,18 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
           setWantedItems(movieRows);
         }
       } else {
+        const queryArg = debouncedLibrarySearch.trim() || undefined;
         const offset = append ? appendOffset : 0;
         let items: LibraryItem[] = [];
         let total = 0;
         if (arrFilter === 'movies') {
-          const res = await libraryApi.getLibraryMovies(PAGE_SIZE, offset);
+          const res = await libraryApi.getLibraryMovies(PAGE_SIZE, offset, queryArg);
           items = res.data || [];
           total = res.total_count ?? items.length;
         } else if (arrFilter === 'series') {
-          const res = await libraryApi.getLibraryTv(PAGE_SIZE, offset);
+          const res = await libraryApi.getLibraryTv(PAGE_SIZE, offset, queryArg);
           items = res.data || [];
           total = res.total_count ?? items.length;
-        } else {
-          if (append) {
-            const current = itemsRef.current;
-            const movieCount = current.filter((i) => i.media_type === 'movie').length;
-            const seriesCount = current.filter((i) => i.media_type === 'tv').length;
-            const [moviesRes, tvRes] = await Promise.all([
-              libraryApi.getLibraryMovies(PAGE_SIZE, movieCount),
-              libraryApi.getLibraryTv(PAGE_SIZE, seriesCount),
-            ]);
-            const movies = moviesRes.data || [];
-            const series = tvRes.data || [];
-            items = [...movies, ...series];
-            total = (moviesRes.total_count ?? 0) + (tvRes.total_count ?? 0);
-          } else {
-            const [moviesRes, tvRes] = await Promise.all([
-              libraryApi.getLibraryMovies(PAGE_SIZE, 0),
-              libraryApi.getLibraryTv(PAGE_SIZE, 0),
-            ]);
-            const movies = moviesRes.data || [];
-            const series = tvRes.data || [];
-            items = [...movies, ...series];
-            total = (moviesRes.total_count ?? 0) + (tvRes.total_count ?? 0);
-          }
         }
         setLibraryItems((prev) => (append ? [...prev, ...items] : items));
         setTotalCount(total);
@@ -195,7 +179,7 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
       if (manageLoading && !append) setLoading(false);
       if (append) setLoadingMore(false);
     }
-  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies]);
+  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies, debouncedLibrarySearch]);
 
   const loadMoreItems = useCallback(() => {
     if (arrFilter === 'wanted') return;
@@ -386,9 +370,9 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
   };
 
   const handleLibraryItemSearch = (item: any) => {
-    // Navigate to search page for this item
-    const mediaType = item.mediaType === 'movie' ? 'movie' : 'tv';
-    navigate(`/Mediadashboard/search/${mediaType}`);
+    const title = (item?.title || '').toString().trim();
+    if (!title) return;
+    setLibrarySearch(title);
   };
 
 
@@ -420,27 +404,46 @@ export default function MediaDashboard({ filter = 'all' }: MediaDashboardProps) 
         {arrFilter !== 'wanted' && (
         <Box sx={{ mb: 1 }}>
           {/* Collapsible header */}
-          <Box
-            role="button"
-            tabIndex={0}
-            onClick={() => setShowSort(s => !s)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowSort(s => !s); }}
-            sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.6, cursor: 'pointer' }}
-          >
-            <Box sx={{
-              backgroundColor: (theme) => `${theme.palette.primary.main}15`,
-              borderRadius: '10px',
-              p: 0.5,
-              border: (theme) => `1px solid ${theme.palette.primary.main}30`
-            }}>
-              <SortRoundedIcon sx={{ color: 'primary.main', fontSize: 18 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.6 }}>
+            <Box
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowSort(s => !s)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowSort(s => !s); }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+            >
+              <Box sx={{
+                backgroundColor: (theme) => `${theme.palette.primary.main}15`,
+                borderRadius: '10px',
+                p: 0.5,
+                border: (theme) => `1px solid ${theme.palette.primary.main}30`
+              }}>
+                <SortRoundedIcon sx={{ color: 'primary.main', fontSize: 18 }} />
+              </Box>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+                Sort by
+              </Typography>
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <ExpandMoreIcon sx={{ transform: showSort ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease' }} />
+              </IconButton>
             </Box>
-            <Typography variant="subtitle1" fontWeight={700} sx={{ fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
-              Sort by
-            </Typography>
-            <IconButton size="small" sx={{ ml: 0.5 }}>
-              <ExpandMoreIcon sx={{ transform: showSort ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease' }} />
-            </IconButton>
+
+            {(arrFilter === 'movies' || arrFilter === 'series') && (
+              <TextField
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                size="small"
+                placeholder={`Search ${arrFilter === 'movies' ? 'movies' : 'series'}...`}
+                sx={{ minWidth: { xs: 160, sm: 240, md: 320 } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 18 }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            )}
           </Box>
 
           <Collapse in={showSort} timeout={200} unmountOnExit>

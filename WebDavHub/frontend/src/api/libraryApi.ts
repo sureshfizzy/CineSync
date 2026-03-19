@@ -89,18 +89,18 @@ export interface AddSeriesRequest {
 
 export const libraryApi = {
   // Get movies from DB
-  async getLibraryMovies(limit = 100, offset = 0): Promise<LibraryResponse> {
+  async getLibraryMovies(limit = 100, offset = 0, query?: string): Promise<LibraryResponse> {
     const response = await axios.get('/api/library/movie', {
-      params: { limit, offset },
+      params: { limit, offset, ...(query ? { query } : {}) },
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     });
     return response.data;
   },
 
   // Get TV series from DB
-  async getLibraryTv(limit = 100, offset = 0): Promise<LibraryResponse> {
+  async getLibraryTv(limit = 100, offset = 0, query?: string): Promise<LibraryResponse> {
     const response = await axios.get('/api/library/tv', {
-      params: { limit, offset },
+      params: { limit, offset, ...(query ? { query } : {}) },
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     });
     return response.data;

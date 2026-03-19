@@ -1029,8 +1029,18 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func applyTitleQueryFilter(sql string, columnExpr string, rawQuery string) (string, []any) {
+	q := strings.TrimSpace(rawQuery)
+	if q == "" {
+		return strings.ReplaceAll(sql, "{{QUERY_FILTER}}", ""), nil
+	}
+	like := "%" + strings.ToLower(q) + "%"
+	sql = strings.ReplaceAll(sql, "{{QUERY_FILTER}}", fmt.Sprintf("AND LOWER(%s) LIKE ?", columnExpr))
+	return sql, []any{like}
+}
+
 // getMoviesFromProcessedFiles returns movies
-func getMoviesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, error) {
+func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItemFromDB, int, error) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -1053,13 +1063,15 @@ func getMoviesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 			WHERE UPPER(media_type) = 'MOVIE'
 			AND destination_path IS NOT NULL AND destination_path != ''
 			AND proper_name IS NOT NULL AND proper_name != ''
+			{{QUERY_FILTER}}
 			GROUP BY proper_name, year, tmdb_id
 		) AS sub`
-	if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+	countQuery, countArgs := applyTitleQueryFilter(countQuery, "proper_name", query)
+	if err := mediaHubDB.QueryRow(countQuery, countArgs...).Scan(&totalCount); err != nil {
 		return nil, 0, err
 	}
 
-	query := `
+	sqlQuery := `
 		SELECT
 			COALESCE(proper_name, '') as proper_name,
 			COALESCE(year, '0') as year,
@@ -1075,10 +1087,15 @@ func getMoviesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 		AND destination_path != ''
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
+		{{QUERY_FILTER}}
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
-	rows, err := mediaHubDB.Query(query, limit, offset)
+
+	sqlQuery, args := applyTitleQueryFilter(sqlQuery, "proper_name", query)
+	args = append(args, limit, offset)
+
+	rows, err := mediaHubDB.Query(sqlQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1128,7 +1145,7 @@ func getMoviesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 }
 
 // getSeriesFromProcessedFiles returns TV series
-func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, error) {
+func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItemFromDB, int, error) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -1150,13 +1167,15 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 			WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
 			AND destination_path IS NOT NULL AND destination_path != ''
 			AND proper_name IS NOT NULL AND proper_name != ''
+			{{QUERY_FILTER}}
 			GROUP BY proper_name, year, tmdb_id
 		) AS sub`
-	if err := mediaHubDB.QueryRow(countQuery).Scan(&totalCount); err != nil {
+	countQuery, countArgs := applyTitleQueryFilter(countQuery, "proper_name", query)
+	if err := mediaHubDB.QueryRow(countQuery, countArgs...).Scan(&totalCount); err != nil {
 		return nil, 0, err
 	}
 
-	query := `
+	sqlQuery := `
 		SELECT
 			pf.show_id as show_id,
 			COALESCE(pf.proper_name, '') as proper_name,
@@ -1204,10 +1223,15 @@ func getSeriesFromProcessedFiles(limit, offset int) ([]LibraryItemFromDB, int, e
 		  AND pf.proper_name IS NOT NULL
 		  AND pf.proper_name != ''
 		  AND pf.show_id IS NOT NULL
+		  {{QUERY_FILTER}}
 		GROUP BY pf.show_id, pf.proper_name, pf.year, pf.tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
-	rows, err := mediaHubDB.Query(query, limit, offset)
+
+	sqlQuery, args := applyTitleQueryFilter(sqlQuery, "pf.proper_name", query)
+	args = append(args, limit, offset)
+
+	rows, err := mediaHubDB.Query(sqlQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1296,7 +1320,8 @@ func HandleGetLibraryMovies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := parseLimitOffset(r)
-	items, totalCount, err := getMoviesFromProcessedFiles(limit, offset)
+	q := r.URL.Query().Get("query")
+	items, totalCount, err := getMoviesFromProcessedFiles(limit, offset, q)
 	if err != nil {
 		logger.Error("Failed to get movies from database: %v", err)
 		http.Error(w, "Failed to get movies", http.StatusInternalServerError)
@@ -1313,7 +1338,8 @@ func HandleGetLibraryTv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := parseLimitOffset(r)
-	items, totalCount, err := getSeriesFromProcessedFiles(limit, offset)
+	q := r.URL.Query().Get("query")
+	items, totalCount, err := getSeriesFromProcessedFiles(limit, offset, q)
 	if err != nil {
 		logger.Error("Failed to get series from database: %v", err)
 		http.Error(w, "Failed to get series", http.StatusInternalServerError)
