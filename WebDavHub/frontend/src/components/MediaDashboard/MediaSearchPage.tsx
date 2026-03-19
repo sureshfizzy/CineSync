@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, TextField, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, CircularProgress, Chip, Card, CardContent, Divider, Paper, IconButton, Alert } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Modal from '@mui/material/Modal';
 import { useNavigate } from 'react-router-dom';
 import MediaConfigCard from './MediaConfigCard';
@@ -57,12 +58,30 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
   const [successMessage, setSuccessMessage] = useState('');
   const [rootFolders, setRootFolders] = useState<string[]>([]);
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfileSummary[]>([]);
+  const [libraryIds, setLibraryIds] = useState<Set<number>>(new Set());
+  const libraryFetchedRef = useRef(false);
 
-  // Debug state changes
+  const fetchLibraryIds = (results?: SearchResult[]) => {
+    const toCheck = results || searchResults;
+    if (toCheck.length === 0) return;
+
+    const headers = getAuthHeaders();
+    Promise.all(
+      toCheck.map(r =>
+        axios.get(`/api/media-files?tmdbId=${r.id}&mediaType=${mediaType}`, { headers })
+          .then(res => (Array.isArray(res.data) && res.data.length > 0 ? Number(r.id) : null))
+          .catch(() => null)
+      )
+    ).then(resolved => {
+      setLibraryIds(new Set(resolved.filter((id): id is number => id !== null)));
+      libraryFetchedRef.current = true;
+    });
+  };
+
   useEffect(() => {
-    console.log('showConfig changed to:', showConfig);
-    console.log('selectedResult changed to:', selectedResult?.title || selectedResult?.name || 'null');
-  }, [showConfig, selectedResult]);
+    libraryFetchedRef.current = false;
+    setLibraryIds(new Set());
+  }, [mediaType]);
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -176,6 +195,7 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
             genre_ids: item.genre_ids || []
           }));
         setSearchResults(results);
+        fetchLibraryIds(results);
       }
     } catch (error) {
       console.error('Search failed:', error);
@@ -213,9 +233,10 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
       });
 
       setSuccessMessage(`${selectedResult.title || selectedResult.name} has been added to your library!`);
+      setLibraryIds(prev => new Set([...prev, selectedResult.id]));
       setSelectedResult(null);
       setShowConfig(false);
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
@@ -305,7 +326,9 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                   <React.Fragment key={result.id}>
                     <ListItem
                       component="div"
-                      onClick={() => handleResultSelect(result)}
+                      onClick={() => libraryIds.has(Number(result.id))
+                        ? navigate(`/media/${mediaType}/${result.id}`)
+                        : handleResultSelect(result)}
                       sx={{
                         py: 2,
                         cursor: 'pointer',
@@ -325,7 +348,7 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                       
                       <ListItemText
                         primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                             <Typography variant="h6" fontWeight={600}>
                               {result.title || result.name}
                             </Typography>
@@ -341,6 +364,14 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                                 label={result.vote_average.toFixed(1)}
                                 size="small"
                                 color="primary"
+                              />
+                            )}
+                            {libraryIds.has(Number(result.id)) && (
+                              <Chip
+                                icon={<CheckCircleIcon />}
+                                label="In Library"
+                                size="small"
+                                color="success"
                               />
                             )}
                           </Box>
@@ -361,14 +392,16 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                         }
                       />
                       
-                      <IconButton 
-                        color="primary" 
+                      <IconButton
+                        color={libraryIds.has(Number(result.id)) ? 'success' : 'primary'}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleResultSelect(result);
+                          libraryIds.has(Number(result.id))
+                            ? navigate(`/media/${mediaType}/${result.id}`)
+                            : handleResultSelect(result);
                         }}
                       >
-                        <AddIcon />
+                        {libraryIds.has(Number(result.id)) ? <CheckCircleIcon /> : <AddIcon />}
                       </IconButton>
                     </ListItem>
                     {index < searchResults.length - 1 && <Divider />}
