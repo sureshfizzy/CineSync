@@ -92,7 +92,6 @@ func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 	// Construct the full file path
 	filePath := filepath.Join("../db", "MediaCover", path)
 
-	// Security check: ensure the path doesn't escape the MediaCover directory
 	absMediaCoverDir, _ := filepath.Abs(filepath.Join("../db", "MediaCover"))
 	absFilePath, _ := filepath.Abs(filePath)
 	if !strings.HasPrefix(absFilePath, absMediaCoverDir) {
@@ -100,10 +99,20 @@ func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		http.NotFound(w, r)
-		return
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 2 {
+			var tmdbID int
+			if _, scanErr := fmt.Sscanf(parts[0], "%d", &tmdbID); scanErr == nil && tmdbID > 0 {
+			if dlErr := media.FetchAndSave(tmdbID, "movie"); dlErr != nil {
+				media.FetchAndSave(tmdbID, "tv")
+			}
+			}
+		}
+		if _, err2 := os.Stat(filePath); os.IsNotExist(err2) {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	// Set appropriate content type based on file extension

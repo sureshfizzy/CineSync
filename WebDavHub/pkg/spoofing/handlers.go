@@ -1,4 +1,4 @@
-﻿package spoofing
+package spoofing
 
 import (
     "encoding/json"
@@ -13,6 +13,7 @@ import (
     "time"
 
     "cinesync/pkg/logger"
+	media "cinesync/pkg/api/Media"
     "github.com/gorilla/websocket"
     prowlarrapi "cinesync/pkg/api/Media/prowlarr"
 )
@@ -523,8 +524,16 @@ func HandleMediaCover(w http.ResponseWriter, r *http.Request) {
 	filePath := filepath.Join("../db", "MediaCover", tmdbID, baseImageFile)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		http.NotFound(w, r)
-		return
+		var id int
+		if _, scanErr := fmt.Sscanf(tmdbID, "%d", &id); scanErr == nil && id > 0 {
+		if dlErr := media.FetchAndSave(id, "movie"); dlErr != nil {
+			media.FetchAndSave(id, "tv")
+		}
+		}
+		if _, err2 := os.Stat(filePath); os.IsNotExist(err2) {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	// Set appropriate headers

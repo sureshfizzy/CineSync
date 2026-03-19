@@ -1,19 +1,21 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"cinesync/pkg/logger"
-	"encoding/json"
-	"fmt"
-	"strconv"
+
 	"cinesync/pkg/db"
+	"cinesync/pkg/logger"
+	media "cinesync/pkg/api/Media"
 )
 
 // WithTmdbValidation wraps TMDB handlers with common validation and queue management
@@ -51,24 +53,7 @@ func WithTmdbValidation(handler func(w http.ResponseWriter, r *http.Request, api
 
 // getTmdbApiKey returns the TMDB API key with fallback mechanism
 func getTmdbApiKey() string {
-	envKey := strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
-
-	placeholderValues := []string{
-		"",
-		"your_tmdb_api_key_here",
-		"your-tmdb-api-key",
-		"placeholder",
-		"none",
-		"null",
-	}
-
-	for _, placeholder := range placeholderValues {
-		if strings.ToLower(envKey) == placeholder {
-			return "a4f28c50ae81b7529a05b61910d64398"
-		}
-	}
-
-	return envKey
+	return media.GetAPIKey()
 }
 
 var tmdbRateLimit = 500 // TMDB legacy limits removed, now ~50 req/sec (500 per 10s)

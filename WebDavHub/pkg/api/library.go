@@ -4,16 +4,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
+	media "cinesync/pkg/api/Media"
 )
 
 // LibraryItem represents a movie or series in the user's library
@@ -526,99 +524,9 @@ func HandleGetLibraryWantedFast(w http.ResponseWriter, r *http.Request) {
 	writePagedJSON(w, out, totalCount)
 }
 
-// MediaCover functionality
-const (
-	TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
-	POSTER_SIZE         = "w500"
-	FANART_SIZE         = "w1280"
-)
-
-// getMediaCoverPath returns the local path for a media cover
-func getMediaCoverPath(tmdbID int, coverType string) string {
-	mediaCoverDir := filepath.Join("..", "db", "MediaCover", fmt.Sprintf("%d", tmdbID))
-	os.MkdirAll(mediaCoverDir, 0755)
-	return filepath.Join(mediaCoverDir, fmt.Sprintf("%s.jpg", coverType))
-}
-
-// downloadImage downloads an image from URL to local path
-func downloadImage(imageURL, localPath string) error {
-	resp, err := http.Get(imageURL)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download image: status %d", resp.StatusCode)
-	}
-
-	file, err := os.Create(localPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, resp.Body)
-	return err
-}
-
-// saveMediaCover saves poster and fanart for a TMDB item
-func saveMediaCover(tmdbID int, posterPath, backdropPath string) error {
-	// Save poster
-	if posterPath != "" {
-		posterURL := fmt.Sprintf("%s%s%s", TMDB_IMAGE_BASE_URL, POSTER_SIZE, posterPath)
-		localPosterPath := getMediaCoverPath(tmdbID, "poster")
-
-		if err := downloadImage(posterURL, localPosterPath); err != nil {
-			logger.Warn("Failed to download poster for TMDB ID %d: %v", tmdbID, err)
-		}
-	}
-
-	// Save fanart (backdrop)
-	if backdropPath != "" {
-		fanartURL := fmt.Sprintf("%s%s%s", TMDB_IMAGE_BASE_URL, FANART_SIZE, backdropPath)
-		localFanartPath := getMediaCoverPath(tmdbID, "fanart")
-
-		if err := downloadImage(fanartURL, localFanartPath); err != nil {
-			logger.Warn("Failed to download fanart for TMDB ID %d: %v", tmdbID, err)
-		}
-	}
-
-	return nil
-}
-
 // fetchAndSaveMediaCover fetches TMDB data and saves poster/fanart
 func fetchAndSaveMediaCover(tmdbID int, mediaType string) error {
-	// Fetch TMDB data
-	tmdbURL := fmt.Sprintf("https://api.themoviedb.org/3/%s/%d?api_key=%s", mediaType, tmdbID, getTMDBAPIKey())
-
-	resp, err := http.Get(tmdbURL)
-	if err != nil {
-		return fmt.Errorf("failed to fetch TMDB data: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("TMDB API returned status %d", resp.StatusCode)
-	}
-
-	var tmdbData map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&tmdbData); err != nil {
-		return fmt.Errorf("failed to decode TMDB response: %v", err)
-	}
-
-	// Extract poster and backdrop paths
-	posterPath, _ := tmdbData["poster_path"].(string)
-	backdropPath, _ := tmdbData["backdrop_path"].(string)
-
-	// Save media covers
-	return saveMediaCover(tmdbID, posterPath, backdropPath)
-}
-
-// getTMDBAPIKey returns the TMDB API key using the existing function
-func getTMDBAPIKey() string {
-	// Use the existing getTmdbApiKey function from tmdb.go
-	return getTmdbApiKey()
+	return media.FetchAndSave(tmdbID, mediaType)
 }
 
 // upsertPlaceholderProcessedFile inserts or updates a minimal processed_files row
@@ -655,7 +563,7 @@ func upsertPlaceholderProcessedFile(tmdbID int, mediaType, title string, yearPtr
 // fetchTmdbDetails retrieves rich TMDB metadata for writing into processed_files
 func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
 	details := make(map[string]string)
-	apiKey := getTMDBAPIKey()
+	apiKey := getTmdbApiKey()
 	if apiKey == "" {
 		return details
 	}
