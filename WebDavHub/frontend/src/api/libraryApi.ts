@@ -89,9 +89,9 @@ export interface AddSeriesRequest {
 
 export const libraryApi = {
   // Get movies from DB
-  async getLibraryMovies(limit = 100, offset = 0, query?: string): Promise<LibraryResponse> {
+  async getLibraryMovies(limit = 100, offset = 0, query?: string, missingOnly?: boolean): Promise<LibraryResponse> {
     const response = await axios.get('/api/library/movie', {
-      params: { limit, offset, ...(query ? { query } : {}) },
+      params: { limit, offset, ...(query ? { query } : {}), ...(missingOnly ? { status: 'missing' } : {}) },
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
     });
     return response.data;

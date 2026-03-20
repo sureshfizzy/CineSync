@@ -155,7 +155,7 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
         let items: LibraryItem[] = [];
         let total = 0;
         if (arrFilter === 'movies') {
-          const res = await libraryApi.getLibraryMovies(PAGE_SIZE, offset, queryArg);
+          const res = await libraryApi.getLibraryMovies(PAGE_SIZE, offset, queryArg, statusFilter === 'missing');
           items = res.data || [];
           total = res.total_count ?? items.length;
         } else if (arrFilter === 'series') {
@@ -179,7 +179,7 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
       if (manageLoading && !append) setLoading(false);
       if (append) setLoadingMore(false);
     }
-  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies, debouncedLibrarySearch]);
+  }, [arrFilter, wantedFilter, wantedPage, wantedResolutionSeries, wantedResolutionMovies, debouncedLibrarySearch, statusFilter]);
 
   const loadMoreItems = useCallback(() => {
     if (arrFilter === 'wanted') return;

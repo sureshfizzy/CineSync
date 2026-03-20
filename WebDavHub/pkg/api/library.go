@@ -1040,7 +1040,7 @@ func applyTitleQueryFilter(sql string, columnExpr string, rawQuery string) (stri
 }
 
 // getMoviesFromProcessedFiles returns movies
-func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItemFromDB, int, error) {
+func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bool) ([]LibraryItemFromDB, int, error) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return nil, 0, err
@@ -1063,9 +1063,15 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			WHERE UPPER(media_type) = 'MOVIE'
 			AND proper_name IS NOT NULL AND proper_name != ''
 			{{QUERY_FILTER}}
+			{{MISSING_FILTER}}
 			GROUP BY proper_name, year, tmdb_id
 		) AS sub`
 	countQuery, countArgs := applyTitleQueryFilter(countQuery, "proper_name", query)
+	missingFilter := ""
+	if missingOnly {
+		missingFilter = "AND (destination_path IS NULL OR destination_path = '')"
+	}
+	countQuery = strings.ReplaceAll(countQuery, "{{MISSING_FILTER}}", missingFilter)
 	if err := mediaHubDB.QueryRow(countQuery, countArgs...).Scan(&totalCount); err != nil {
 		return nil, 0, err
 	}
@@ -1085,11 +1091,13 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		{{QUERY_FILTER}}
+		{{MISSING_FILTER}}
 		GROUP BY proper_name, year, tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
 	sqlQuery, args := applyTitleQueryFilter(sqlQuery, "proper_name", query)
+	sqlQuery = strings.ReplaceAll(sqlQuery, "{{MISSING_FILTER}}", missingFilter)
 	args = append(args, limit, offset)
 
 	rows, err := mediaHubDB.Query(sqlQuery, args...)
@@ -1316,7 +1324,8 @@ func HandleGetLibraryMovies(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset := parseLimitOffset(r)
 	q := r.URL.Query().Get("query")
-	items, totalCount, err := getMoviesFromProcessedFiles(limit, offset, q)
+	missingOnly := r.URL.Query().Get("status") == "missing"
+	items, totalCount, err := getMoviesFromProcessedFiles(limit, offset, q, missingOnly)
 	if err != nil {
 		logger.Error("Failed to get movies from database: %v", err)
 		http.Error(w, "Failed to get movies", http.StatusInternalServerError)
