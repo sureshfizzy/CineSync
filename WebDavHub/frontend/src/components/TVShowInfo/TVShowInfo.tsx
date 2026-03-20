@@ -26,9 +26,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Detect if we're in ArrDashboard context
-  const isArrDashboardContext = location.state?.returnPage === 1 && location.state?.returnSearch === '';
+  const isArrDashboardContext = !!tmdbId;
 
   // Function to trigger refresh of file actions
   const handleRefresh = useCallback(() => {

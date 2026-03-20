@@ -2917,6 +2917,15 @@ def search_database(conn, pattern):
                         seasons_map[sn] = []
                     seasons_map[sn].append(rd)
 
+                if show_id and list(seasons_map.keys()) == ['?']:
+                    try:
+                        cursor.execute("SELECT DISTINCT season_number FROM tv_seasons WHERE show_id = ? ORDER BY season_number", (show_id,))
+                        db_seasons = [r[0] for r in cursor.fetchall()]
+                        if db_seasons:
+                            seasons_map = {str(s): [] for s in db_seasons}
+                    except Exception:
+                        pass
+
                 def _season_sort_key(s):
                     try:
                         return int(s)
@@ -2978,7 +2987,13 @@ def search_database(conn, pattern):
                         else:
                             resolution_parts.append(f"{res}: {res_have}")
 
-                    count_str = "  |  ".join(resolution_parts) if resolution_parts else f"{ep_count} episode(s)"
+                    if resolution_parts:
+                        count_str = "  |  ".join(resolution_parts)
+                    elif total_ep:
+                        missing = total_ep - ep_count
+                        count_str = f"0 ({missing} missing)" if missing else f"{ep_count} episode(s)"
+                    else:
+                        count_str = f"{ep_count} episode(s)"
                     log_message(f"  [ {season_label}  --  {count_str} ]", level="INFO")
 
                     if all_episodes:

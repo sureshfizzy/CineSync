@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -721,4 +722,167 @@ func detectContentTypeFromDirectoryName(dirName string) string {
 
 	// Default to movie for unknown patterns
 	return "movie"
+}
+
+// populateTvShowMetadata fetches full TV show/season/episode data from TMDB
+func populateTvShowMetadata(tmdbID int) error {
+	apiKey := getTmdbApiKey()
+	if apiKey == "" {
+		return fmt.Errorf("TMDB API key not configured")
+	}
+
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		return err
+	}
+
+	tmdbStr := strconv.Itoa(tmdbID)
+
+	showURL := fmt.Sprintf("https://api.themoviedb.org/3/tv/%s?api_key=%s&language=en-US", tmdbStr, apiKey)
+	resp, err := tmdbHttpClient.Get(showURL)
+	if err != nil || resp.StatusCode != 200 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return fmt.Errorf("TMDB fetch failed for tv/%s: %v", tmdbStr, err)
+	}
+	defer resp.Body.Close()
+
+	var show map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&show); err != nil {
+		return fmt.Errorf("failed to decode TMDB response: %v", err)
+	}
+
+	name, _ := show["name"].(string)
+	firstAirDate, _ := show["first_air_date"].(string)
+	lastAirDate, _ := show["last_air_date"].(string)
+	overview, _ := show["overview"].(string)
+	status, _ := show["status"].(string)
+	origLang, _ := show["original_language"].(string)
+	origName, _ := show["original_name"].(string)
+	var totalEpisodes int
+	if n, ok := show["number_of_episodes"].(float64); ok {
+		totalEpisodes = int(n)
+	}
+	var runtime int
+	if arr, ok := show["episode_run_time"].([]interface{}); ok && len(arr) > 0 {
+		if n, ok := arr[0].(float64); ok {
+			runtime = int(n)
+		}
+	}
+	year := ""
+	if len(firstAirDate) >= 4 {
+		year = firstAirDate[:4]
+	}
+
+	var showID int
+	var upsertErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		upsertErr = database.QueryRow("SELECT id FROM tv_shows WHERE tmdb_id = ?", tmdbStr).Scan(&showID)
+		if upsertErr == sql.ErrNoRows {
+			var res sql.Result
+			res, upsertErr = database.Exec(`
+				INSERT INTO tv_shows (tmdb_id, proper_name, year, status, overview, original_language,
+					original_title, first_air_date, last_air_date, runtime, total_episodes, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+				tmdbStr, name, year, status, overview, origLang, origName,
+				firstAirDate, lastAirDate, runtime, totalEpisodes)
+			if upsertErr == nil {
+				id, _ := res.LastInsertId()
+				showID = int(id)
+				break
+			}
+			if !strings.Contains(upsertErr.Error(), "SQLITE_BUSY") && !strings.Contains(upsertErr.Error(), "database is locked") {
+				return fmt.Errorf("failed to insert tv_show: %v", upsertErr)
+			}
+		} else if upsertErr == nil {
+			database.Exec(`UPDATE tv_shows SET proper_name=?, year=?, status=?, overview=?,
+				original_language=?, original_title=?, first_air_date=?, last_air_date=?,
+				runtime=?, total_episodes=?, updated_at=strftime('%s','now') WHERE id=?`,
+				name, year, status, overview, origLang, origName,
+				firstAirDate, lastAirDate, runtime, totalEpisodes, showID)
+			break
+		} else {
+			return fmt.Errorf("failed to query tv_shows: %v", upsertErr)
+		}
+	}
+	if upsertErr != nil {
+		return fmt.Errorf("failed to upsert tv_show after retries: %v", upsertErr)
+	}
+
+	seasons, _ := show["seasons"].([]interface{})
+	for _, s := range seasons {
+		season, ok := s.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		sn, ok := season["season_number"].(float64)
+		if !ok {
+			continue
+		}
+		seasonNum := int(sn)
+		totalEps := 0
+		if n, ok := season["episode_count"].(float64); ok {
+			totalEps = int(n)
+		}
+
+		var seasonID int
+		err = database.QueryRow("SELECT id FROM tv_seasons WHERE show_id=? AND season_number=?", showID, seasonNum).Scan(&seasonID)
+		if err == sql.ErrNoRows {
+			res, err := database.Exec(`INSERT INTO tv_seasons (show_id, season_number, total_episodes) VALUES (?, ?, ?)`,
+				showID, seasonNum, totalEps)
+			if err != nil {
+				logger.Warn("Failed to insert tv_season S%d for show_id=%d: %v", seasonNum, showID, err)
+				continue
+			}
+			id, _ := res.LastInsertId()
+			seasonID = int(id)
+		}
+
+		seasonURL := fmt.Sprintf("https://api.themoviedb.org/3/tv/%s/season/%d?api_key=%s&language=en-US", tmdbStr, seasonNum, apiKey)
+		sResp, err := tmdbHttpClient.Get(seasonURL)
+		if err != nil || sResp.StatusCode != 200 {
+			if sResp != nil {
+				sResp.Body.Close()
+			}
+			continue
+		}
+		var seasonData map[string]interface{}
+		json.NewDecoder(sResp.Body).Decode(&seasonData)
+		sResp.Body.Close()
+
+		episodes, _ := seasonData["episodes"].([]interface{})
+		for _, e := range episodes {
+			ep, ok := e.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			epNum, ok := ep["episode_number"].(float64)
+			if !ok {
+				continue
+			}
+			epTitle, _ := ep["name"].(string)
+			airDate, _ := ep["air_date"].(string)
+			epOverview, _ := ep["overview"].(string)
+
+			database.Exec(`
+				INSERT INTO episodes (show_id, season_id, season_number, episode_number, title, overview, air_date, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+				ON CONFLICT(show_id, season_number, episode_number) DO UPDATE SET
+					title=excluded.title, overview=excluded.overview, air_date=excluded.air_date,
+					updated_at=strftime('%s','now')`,
+				showID, seasonID, seasonNum, int(epNum), epTitle, epOverview, airDate)
+		}
+	}
+
+	_, _ = database.Exec(
+		`UPDATE processed_files SET show_id = ? WHERE tmdb_id = ? AND (show_id IS NULL OR show_id = 0)`,
+		showID, tmdbStr,
+	)
+
+	logger.Info("Populated TV show metadata for TMDB ID %d (%s): show_id=%d", tmdbID, name, showID)
+	return nil
 }

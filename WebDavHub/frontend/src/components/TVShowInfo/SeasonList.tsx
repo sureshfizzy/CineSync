@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Typography, Paper, Collapse, IconButton, alpha, useTheme, Tooltip } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { MediaDetailsData, SeasonFolderInfo } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchEpisodesFromTmdb } from '../api/tmdbApi';
@@ -221,7 +222,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                 Episodes
                               </Typography>
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                {episodesData.get(season.season_number)?.map((episode: any) => {
+                                {[...(episodesData.get(season.season_number) ?? [])].sort((a, b) => b.episode_number - a.episode_number).map((episode: any) => {
                                   const isAvailable = isEpisodeAvailable(season.season_number, episode.episode_number);
                                   const episodeFile = getFilteredEpisodes(season.season_number)
                                     .find(ep => ep.episodeNumber === episode.episode_number);
@@ -287,7 +288,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                         </Typography>
                                         
                                         {/* Air Date */}
-                                        {episode.air_date && (
+                                        {episode.air_date ? (
                                           <Typography
                                             variant="caption"
                                             sx={{
@@ -298,6 +299,10 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                           >
                                             {new Date(episode.air_date).toLocaleDateString()}
                                           </Typography>
+                                        ) : (
+                                          <Tooltip title="Air date not announced">
+                                            <AccessTimeIcon sx={{ fontSize: 14, color: 'text.disabled', minWidth: '80px' }} />
+                                          </Tooltip>
                                         )}
 
                                         {/* Quality badges — shown per-file when multiple quality versions exist */}

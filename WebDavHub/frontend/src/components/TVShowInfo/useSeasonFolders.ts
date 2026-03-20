@@ -141,13 +141,15 @@ export default function useSeasonFolders({ data, folderName, currentPath, mediaT
   }
 
   useEffect(() => {
-    if (mediaType === 'tv' && folderName) {
-      const requestKey = `${folderName}|${currentPath}|${mediaType}`;
+    if (mediaType === 'tv' && (folderName || tmdbId)) {
+      const requestKey = `${folderName}|${currentPath}|${mediaType}|${tmdbId}`;
       if (lastRequestKeyRef.current === requestKey) {
         return;
       }
       lastRequestKeyRef.current = requestKey;
       fetchSeasonFolders();
+    } else if (mediaType !== 'tv') {
+      setLoadingFiles(false);
     }
     // eslint-disable-next-line
   }, [folderName, currentPath, mediaType, data.seasons, data.id, tmdbId]);

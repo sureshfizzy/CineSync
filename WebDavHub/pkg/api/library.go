@@ -892,6 +892,14 @@ func HandleAddSeries(w http.ResponseWriter, r *http.Request) {
 		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr, rootFolder)
 	}(req.TmdbID, req.Title, req.Year, req.RootFolder)
 
+	// Populate tv_shows / tv_seasons / episodes from TMDB
+	go func(tmdbID int) {
+		time.Sleep(2 * time.Second)
+		if err := populateTvShowMetadata(tmdbID); err != nil {
+			logger.Warn("Failed to populate TV show metadata for TMDB ID %d: %v", tmdbID, err)
+		}
+	}(req.TmdbID)
+
 	// Fetch TMDB data and save poster/fanart
 	go func() {
 		if err := fetchAndSaveMediaCover(req.TmdbID, "tv"); err != nil {
