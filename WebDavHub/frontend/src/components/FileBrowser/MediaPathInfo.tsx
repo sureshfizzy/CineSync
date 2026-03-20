@@ -123,9 +123,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
               fileSize: mediaFile.size,
               modified: mediaFile.modified
             });
-            setLoading(false);
-            return;
           }
+          setLoading(false);
+          return;
         }
 
         // If we don't have a folder name (e.g., TMDB-ID based routes), avoid indefinite loading
@@ -204,10 +204,9 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
           }
 
           if (!mediaFile) {
-            if (isParentLoading) {
-              return;
-            }
-            throw new Error('No media file found in folder');
+            lastRequestKeyRef.current = null;
+            setLoading(false);
+            return;
           }
 
           const relPath = `${folderPath}/${mediaFile.name}`;

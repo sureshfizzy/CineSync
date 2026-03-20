@@ -1061,7 +1061,6 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 		SELECT COUNT(*) FROM (
 			SELECT 1 FROM processed_files
 			WHERE UPPER(media_type) = 'MOVIE'
-			AND destination_path IS NOT NULL AND destination_path != ''
 			AND proper_name IS NOT NULL AND proper_name != ''
 			{{QUERY_FILTER}}
 			GROUP BY proper_name, year, tmdb_id
@@ -1083,8 +1082,6 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			COALESCE(overview, '') as overview
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
-		AND destination_path IS NOT NULL
-		AND destination_path != ''
 		AND proper_name IS NOT NULL
 		AND proper_name != ''
 		{{QUERY_FILTER}}
@@ -1122,6 +1119,10 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 		} else if t, err := time.Parse("2006-01-02 15:04:05", latestProcessedAt); err == nil {
 			addedAt = t.Unix()
 		}
+		movieStatus := "imported"
+		if destPath == "" {
+			movieStatus = "missing"
+		}
 		items = append(items, LibraryItemFromDB{
 			ID:              tmdbID,
 			TmdbID:          tmdbID,
@@ -1132,7 +1133,7 @@ func getMoviesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			QualityProfile:  quality,
 			MonitorPolicy:   "any",
 			Tags:            "[]",
-			Status:          "imported",
+			Status:          movieStatus,
 			AddedAt:         addedAt,
 			UpdatedAt:       addedAt,
 			PosterPath:      fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
@@ -1165,7 +1166,6 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 		SELECT COUNT(*) FROM (
 			SELECT 1 FROM processed_files
 			WHERE (UPPER(media_type) = 'TV' OR UPPER(media_type) = 'EPISODE' OR media_type LIKE '%TV%' OR media_type LIKE '%SHOW%')
-			AND destination_path IS NOT NULL AND destination_path != ''
 			AND proper_name IS NOT NULL AND proper_name != ''
 			{{QUERY_FILTER}}
 			GROUP BY proper_name, year, tmdb_id
@@ -1177,7 +1177,6 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 
 	sqlQuery := `
 		SELECT
-			pf.show_id as show_id,
 			COALESCE(pf.proper_name, '') as proper_name,
 			COALESCE(pf.year, '0') as year,
 			COALESCE(pf.tmdb_id, '') as tmdb_id,
@@ -1218,13 +1217,10 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			), 0) AS imported_eps
 		FROM processed_files pf
 		WHERE (UPPER(pf.media_type) = 'TV' OR UPPER(pf.media_type) = 'EPISODE' OR pf.media_type LIKE '%TV%' OR pf.media_type LIKE '%SHOW%')
-		  AND pf.destination_path IS NOT NULL
-		  AND pf.destination_path != ''
 		  AND pf.proper_name IS NOT NULL
 		  AND pf.proper_name != ''
-		  AND pf.show_id IS NOT NULL
 		  {{QUERY_FILTER}}
-		GROUP BY pf.show_id, pf.proper_name, pf.year, pf.tmdb_id
+		GROUP BY pf.proper_name, pf.year, pf.tmdb_id
 		ORDER BY proper_name, year
 		LIMIT ? OFFSET ?`
 
@@ -1240,9 +1236,8 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 	for rows.Next() {
 		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
 		var yearStr string
-		var showID sql.NullInt64
 		var totalAired, importedEps int
-		if err := rows.Scan(&showID, &properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview, &totalAired, &importedEps); err != nil {
+		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview, &totalAired, &importedEps); err != nil {
 			continue
 		}
 		tmdbID, _ := strconv.Atoi(tmdbIDStr)
@@ -1261,7 +1256,7 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			addedAt = t.Unix()
 		}
 		status := "imported"
-		if totalAired > 0 && importedEps < totalAired {
+		if destPath == "" || (totalAired > 0 && importedEps < totalAired) {
 			status = "missing"
 		}
 

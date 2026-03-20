@@ -28,7 +28,7 @@ interface MovieHeaderProps {
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isArrDashboardContext = false, isLoadingFiles = false, onSearchMissing }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isLoadingFiles = false, onSearchMissing }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -275,22 +275,21 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
           )}
 
           {/* File Actions for the active file */}
-          {selectedFile && (
+          {!isLoadingFiles && (
             <Box sx={{ mt: 2, mb: 3 }}>
               <MovieFileActions
                 data={data}
                 folderName={folderName}
                 currentPath={currentPath}
                 placement="belowDescription"
-                fileInfo={selectedFile}
+                fileInfo={selectedFile || null}
                 onNavigateBack={onNavigateBack}
               />
             </Box>
           )}
 
-          {/* Overview Section - Only show in ArrDashboard context */}
-          {isArrDashboardContext && (
-            <motion.div
+          {/* Status / quality badge row */}
+          <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.3 }}
@@ -423,7 +422,6 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                 </Box>
               </Box>
             </motion.div>
-            )}
 
         </motion.div>
       </Box>

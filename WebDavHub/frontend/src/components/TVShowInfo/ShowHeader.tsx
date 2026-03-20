@@ -23,7 +23,7 @@ interface ShowHeaderProps {
   onQualityChange?: (quality: string | null) => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isArrDashboardContext = false, isLoadingFiles = false, seasonFolders = [], onSearchMissing, availableQualities = [], selectedQuality = null, onQualityChange }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isLoadingFiles = false, seasonFolders = [], onSearchMissing, availableQualities = [], selectedQuality = null, onQualityChange }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');
@@ -170,9 +170,8 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           onNavigateBack={onNavigateBack}
         />
 
-        {/* Overview Section - Only show in ArrDashboard context */}
-        {isArrDashboardContext && (
-          <motion.div
+        {/* Status / quality badge row */}
+        <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.3 }}
@@ -264,7 +263,6 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
               </Box>
             </Box>
           </motion.div>
-        )}
 
       </Box>
     </Box>

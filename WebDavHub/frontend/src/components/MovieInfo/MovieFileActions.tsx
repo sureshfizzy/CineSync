@@ -19,6 +19,7 @@ interface MovieFileActionsProps {
 const globalRequestCache = new Set<string>();
 
 const MovieFileActions: React.FC<MovieFileActionsProps> = ({
+  data,
   folderName,
   currentPath,
   placement,
@@ -68,9 +69,13 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
             size: mediaFile.size || '0 B',
             modified: mediaFile.modified || new Date().toISOString()
           });
+        } else {
+          // No video file found — use folder itself so action buttons still render
+          setFileInfo({ name: folderName, type: 'directory' });
         }
       } catch (e) {
-        setFileInfo(null);
+        // Folder doesn't exist yet (newly added item) — use folder path for actions
+        setFileInfo({ name: folderName, type: 'directory' });
       }
     }
     fetchFile();
@@ -93,6 +98,28 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
 
   const fullFilePath = filePath.endsWith(fileInfo.name) ? filePath : `${filePath}/${fileInfo.name}`;
 
+  const fileForMenu = fileInfo.type === 'directory' ? {
+    name: folderName || data?.title || 'Unknown Folder',
+    type: 'directory' as const,
+    fullPath: filePath,
+    sourcePath: filePath,
+    webdavPath: filePath,
+    path: filePath,
+    size: '0 B',
+    modified: new Date().toISOString(),
+    tmdbId: data?.id ? String(data.id) : undefined
+  } : {
+    name: fileInfo.name || folderName || 'Unknown File',
+    type: 'file' as const,
+    fullPath: fileInfo.fullPath || fileInfo.sourcePath || fullFilePath,
+    sourcePath: fileInfo.sourcePath || fileInfo.fullPath || fullFilePath,
+    webdavPath: fileInfo.webdavPath || fullFilePath,
+    path: fileInfo.path || fullFilePath,
+    size: fileInfo.size || '0 B',
+    modified: fileInfo.modified || new Date().toISOString(),
+    destinationPath: fileInfo.destinationPath
+  };
+
   return (
     <Box
       sx={{
@@ -104,17 +131,7 @@ const MovieFileActions: React.FC<MovieFileActionsProps> = ({
     >
       <>
         <FileActionMenu
-          file={{
-            name: fileInfo.name || folderName || 'Unknown File',
-            type: 'file' as const,
-            fullPath: fileInfo.fullPath || fileInfo.sourcePath || fullFilePath,
-            sourcePath: fileInfo.sourcePath || fileInfo.fullPath || fullFilePath,
-            webdavPath: fileInfo.webdavPath || fullFilePath,
-            path: fileInfo.path || fullFilePath,
-            size: fileInfo.size || '0 B',
-            modified: fileInfo.modified || new Date().toISOString(),
-            destinationPath: fileInfo.destinationPath
-          }}
+          file={fileForMenu}
           currentPath={currentPath}
           onViewDetails={() => {}}
           onRename={handleRename}

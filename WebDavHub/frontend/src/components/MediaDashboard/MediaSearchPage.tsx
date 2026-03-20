@@ -61,21 +61,15 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
   const [libraryIds, setLibraryIds] = useState<Set<number>>(new Set());
   const libraryFetchedRef = useRef(false);
 
-  const fetchLibraryIds = (results?: SearchResult[]) => {
-    const toCheck = results || searchResults;
-    if (toCheck.length === 0) return;
-
+  const fetchLibraryIds = (_results?: SearchResult[]) => {
     const headers = getAuthHeaders();
-    Promise.all(
-      toCheck.map(r =>
-        axios.get(`/api/media-files?tmdbId=${r.id}&mediaType=${mediaType}`, { headers })
-          .then(res => (Array.isArray(res.data) && res.data.length > 0 ? Number(r.id) : null))
-          .catch(() => null)
-      )
-    ).then(resolved => {
-      setLibraryIds(new Set(resolved.filter((id): id is number => id !== null)));
-      libraryFetchedRef.current = true;
-    });
+    axios.get(`/api/library?type=${mediaType}`, { headers })
+      .then(res => {
+        const data: { tmdb_id: number }[] = res.data?.data || [];
+        setLibraryIds(new Set(data.map(item => item.tmdb_id)));
+        libraryFetchedRef.current = true;
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -94,25 +88,21 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
 
   useEffect(() => {
     const loadQualityProfiles = async () => {
-      try {
-        const response = await fetch(`/api/quality-profiles?mediaType=${mediaType}`, { headers: getAuthHeaders() });
-        if (response.ok) {
-          const profiles = (await response.json()) || [];
-          const normalized = profiles.map((p: any) => ({ name: p.name, qualities: p.qualities || [] })).filter((p: any) => p.name);
-          setQualityProfiles(normalized);
-          if (normalized.length > 0) {
-            const hasSelected = normalized.some((p: any) => p.name === config.qualityProfile);
-            if (!hasSelected) {
-              const preferred = normalized.find((p: any) => p.name.toLowerCase() === 'hd-1080p');
-              const selected = preferred || normalized[0];
-              if (selected) {
-                setConfig((c) => ({ ...c, qualityProfile: selected.name }));
-              }
+      const response = await fetch(`/api/quality-profiles?mediaType=${mediaType}`, { headers: getAuthHeaders() });
+      if (response.ok) {
+        const profiles = (await response.json()) || [];
+        const normalized = profiles.map((p: any) => ({ name: p.name, qualities: p.qualities || [] })).filter((p: any) => p.name);
+        setQualityProfiles(normalized);
+        if (normalized.length > 0) {
+          const hasSelected = normalized.some((p: any) => p.name === config.qualityProfile);
+          if (!hasSelected) {
+            const preferred = normalized.find((p: any) => p.name.toLowerCase() === 'hd-1080p');
+            const selected = preferred || normalized[0];
+            if (selected) {
+              setConfig((c) => ({ ...c, qualityProfile: selected.name }));
             }
           }
         }
-      } catch {
-        // ignore
       }
     };
     loadQualityProfiles();
@@ -146,23 +136,18 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
   // Load root folders from API
   useEffect(() => {
     const loadRoots = async () => {
-      try {
-        const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
-        if (response.ok) {
-          const folders = await response.json();
-          const bases = folders.map((folder: any) => folder.path);
-          setRootFolders(bases);
+      const response = await fetch('/api/root-folders', { headers: getAuthHeaders() });
+      if (response.ok) {
+        const folders = await response.json();
+        const bases = folders.map((folder: any) => folder.path);
+        setRootFolders(bases);
 
-          const byType = bases.find((p: string) => (mediaType === 'movie' ? /mov/i.test(p) : /(show|tv|series)/i.test(p)));
-          if (byType) {
-            setConfig((c) => ({ ...c, rootFolder: byType }));
-          } else if (bases.length > 0) {
-            const first = bases[0];
-            setConfig((c) => ({ ...c, rootFolder: first }));
-          }
+        const byType = bases.find((p: string) => (mediaType === 'movie' ? /mov/i.test(p) : /(show|tv|series)/i.test(p)));
+        if (byType) {
+          setConfig((c) => ({ ...c, rootFolder: byType }));
+        } else if (bases.length > 0) {
+          setConfig((c) => ({ ...c, rootFolder: bases[0] }));
         }
-      } catch {
-        // ignore; fallback to defaults
       }
     };
     loadRoots();
