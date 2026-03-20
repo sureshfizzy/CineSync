@@ -1941,6 +1941,7 @@ func deleteLibraryItemByTmdbID(tmdbID string) bool {
 	if err != nil {
 		return false
 	}
+
 	result, err := mediaHubDB.Exec(`DELETE FROM library_items WHERE tmdb_id = ?`, tmdbID)
 	if err != nil {
 		logger.Warn("Failed to delete library_items for tmdb_id %s: %v", tmdbID, err)
@@ -1950,6 +1951,8 @@ func deleteLibraryItemByTmdbID(tmdbID string) bool {
 	if rows == 0 {
 		return false
 	}
+
+	// Remove placeholder processed_files entry
 	_, _ = mediaHubDB.Exec(
 		`DELETE FROM processed_files
 		 WHERE tmdb_id = ?
@@ -1957,6 +1960,18 @@ func deleteLibraryItemByTmdbID(tmdbID string) bool {
 		   AND (destination_path IS NULL OR destination_path = '')`,
 		tmdbID,
 	)
+
+	// Cascade-delete TV show metadata
+	var showID int
+	if err := mediaHubDB.QueryRow("SELECT id FROM tv_shows WHERE tmdb_id = ?", tmdbID).Scan(&showID); err == nil {
+		_, _ = mediaHubDB.Exec("DELETE FROM episodes WHERE show_id = ?", showID)
+		_, _ = mediaHubDB.Exec("DELETE FROM tv_seasons WHERE show_id = ?", showID)
+		_, _ = mediaHubDB.Exec("DELETE FROM seasons WHERE show_id = ?", showID)
+		_, _ = mediaHubDB.Exec("DELETE FROM tv_shows WHERE id = ?", showID)
+	}
+	_, _ = mediaHubDB.Exec("DELETE FROM tv_missing_episodes WHERE tmdb_id = ?", tmdbID)
+	_, _ = mediaHubDB.Exec("DELETE FROM tv_missing_refresh WHERE tmdb_id = ?", tmdbID)
+
 	return true
 }
 
