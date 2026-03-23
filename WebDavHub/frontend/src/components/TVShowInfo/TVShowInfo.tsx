@@ -15,13 +15,12 @@ interface TVShowInfoProps {
   currentPath: string;
   mediaType: 'movie' | 'tv';
   tmdbId?: string | number;
-  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
   onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing, onSearchIndexer }: TVShowInfoProps) {
+export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchIndexer }: TVShowInfoProps) {
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
@@ -79,7 +78,6 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               isArrDashboardContext={isArrDashboardContext}
               isLoadingFiles={loadingFiles}
               seasonFolders={seasonFolders}
-              onSearchMissing={onSearchMissing}
               onSearchIndexer={onSearchIndexer}
               availableQualities={availableQualities}
               selectedQuality={selectedQuality}

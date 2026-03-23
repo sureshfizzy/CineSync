@@ -5,6 +5,7 @@ import {
   Chip, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Tooltip,
   alpha, useTheme, Alert, TableSortLabel,
+  Select, MenuItem, FormControl,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -16,6 +17,13 @@ import {
 } from '@mui/icons-material';
 import { IndexerApi } from '../../api/indexerApi';
 import { Indexer, IndexerSearchResult } from '../../types/indexer';
+import { getAuthHeaders } from '../../contexts/AuthContext';
+
+interface QualityProfile {
+  id: number;
+  name: string;
+  qualities: string[];
+}
 
 interface IndexerSearchModalProps {
   open: boolean;
@@ -88,6 +96,8 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
   const amoledRowHover = isDark ? '#111111' : alpha(theme.palette.action.hover, 0.5);
 
   const [indexers, setIndexers] = useState<Indexer[]>([]);
+  const [profiles, setProfiles] = useState<QualityProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<QualityProfile | null>(null);
   const [results, setResults] = useState<IndexerSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +114,17 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
     IndexerApi.getIndexers()
       .then((all) => setIndexers(all.filter((ix) => ix.enabled)))
       .catch(() => setIndexers([]));
-  }, [open]);
+    fetch(`/api/quality-profiles?mediaType=${mediaType}`, { headers: getAuthHeaders() })
+      .then((r) => r.ok ? r.json() : [])
+      .then((ps: QualityProfile[]) => {
+        setProfiles(ps);
+        const preferred = ps.find((p) => /1080/i.test(p.name))
+          || ps.find((p) => p.name !== 'Any')
+          || ps[0] || null;
+        setSelectedProfile(preferred);
+      })
+      .catch(() => { setProfiles([]); setSelectedProfile(null); });
+  }, [open, mediaType]);
 
   const handleSearch = useCallback(async (indexerList: Indexer[]) => {
     if (!initialQuery?.trim() || indexerList.length === 0) return;
@@ -167,6 +187,19 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
     }
   };
 
+  const evaluate = (result: IndexerSearchResult) => {
+    if (!selectedProfile || !selectedProfile.qualities?.length) {
+      return { allowed: result.allowed, rejectionReason: result.rejectionReasons?.[0] ?? '' };
+    }
+    const allowed = selectedProfile.qualities
+      .map((q) => q.toLowerCase())
+      .includes((result.quality ?? '').toLowerCase());
+    const rejectionReason = allowed
+      ? ''
+      : `"${result.quality}" not in profile "${selectedProfile.name}"`;
+    return { allowed, rejectionReason };
+  };
+
   const sortedResults = [...results].sort((a, b) => {
     let cmp = 0;
     if (sortField === 'seeders') cmp = (a.seeders ?? 0) - (b.seeders ?? 0);
@@ -174,7 +207,7 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
     else if (sortField === 'age') cmp = new Date(a.publishDate || 0).getTime() - new Date(b.publishDate || 0).getTime();
     else if (sortField === 'title') cmp = (a.title || '').localeCompare(b.title || '');
     else if (sortField === 'quality') cmp = (QUALITY_RANK[a.quality] ?? 1) - (QUALITY_RANK[b.quality] ?? 1);
-    else if (sortField === 'rejection') cmp = (a.allowed ? 0 : 1) - (b.allowed ? 0 : 1);
+    else if (sortField === 'rejection') cmp = (evaluate(a).allowed ? 0 : 1) - (evaluate(b).allowed ? 0 : 1);
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -209,6 +242,25 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
           {!loading && results.length > 0 && (
             <Chip label={`${results.length} result${results.length !== 1 ? 's' : ''}`}
               size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+          )}
+          {profiles.length > 0 && (
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <Select
+                value={selectedProfile?.id ?? ''}
+                onChange={(e) => setSelectedProfile(profiles.find((p) => p.id === e.target.value) || null)}
+                sx={{
+                  fontSize: '0.72rem', height: 24, color: 'warning.main',
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.warning.main, 0.4) },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.main' },
+                  '.MuiSelect-icon': { color: 'warning.main', fontSize: '1rem' },
+                  '.MuiSelect-select': { py: '2px', px: 1 },
+                }}
+              >
+                {profiles.map((p) => (
+                  <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.8rem' }}>{p.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           )}
         </Box>
         <IconButton onClick={onClose} size="small"><CloseIcon fontSize="small" /></IconButton>
@@ -288,8 +340,8 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                   const key = result.link || result.magnet || `${result.title}-${idx}`;
                   const isGrabbing = grabbing === key;
                   const isGrabbed = grabbed.has(key);
-                  const { quality, allowed, rejectionReasons } = result;
-                  const rejectionReason = rejectionReasons?.[0] ?? '';
+                  const { quality } = result;
+                  const { allowed, rejectionReason } = evaluate(result);
                   const language = detectLanguage(result.title);
                   const ageDays = getAgeDays(result.publishDate);
                   const sourceLabel = getSourceLabel(result.category);

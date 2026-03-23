@@ -45,8 +45,8 @@ export default function MediaDetails() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
   const [arrSearchOpen, setArrSearchOpen] = useState(false);
-  const [arrSearchMediaType, setArrSearchMediaType] = useState<'movie' | 'tv'>('movie');
-  const [arrSearchQuery, setArrSearchQuery] = useState('');
+  const [arrSearchMediaType] = useState<'movie' | 'tv'>('movie');
+  const [arrSearchQuery] = useState('');
   const [indexerSearchOpen, setIndexerSearchOpen] = useState(false);
   const [indexerSearchQuery, setIndexerSearchQuery] = useState('');
   const [indexerSearchMediaType, setIndexerSearchMediaType] = useState<'movie' | 'tv'>('movie');
@@ -57,12 +57,6 @@ export default function MediaDetails() {
   const lastRequestRef = useRef<{ tmdbId?: any; currentPath?: string; folderName?: string; requestKey?: string }>({});
   const tmdbDataFromNav = location.state?.tmdbData;
   const transitionTimeoutRef = useRef<number | null>(null);
-
-  const handleOpenArrSearch = useCallback((title: string, type: 'movie' | 'tv') => {
-    setArrSearchMediaType(type);
-    setArrSearchQuery(title);
-    setArrSearchOpen(true);
-  }, []);
 
   const handleOpenIndexerSearch = useCallback((title: string, type: 'movie' | 'tv') => {
     setIndexerSearchMediaType(type);
@@ -456,7 +450,6 @@ export default function MediaDetails() {
                     folderName={folderName || ''}
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
-                    onSearchMissing={handleOpenArrSearch}
                     onSearchIndexer={handleOpenIndexerSearch}
                     tmdbId={tmdbId}
                   />
@@ -467,7 +460,6 @@ export default function MediaDetails() {
                     folderName={folderName || ''}
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
-                    onSearchMissing={handleOpenArrSearch}
                     onSearchIndexer={handleOpenIndexerSearch}
                     tmdbId={tmdbId}
                   />

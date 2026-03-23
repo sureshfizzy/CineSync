@@ -17,14 +17,13 @@ interface ShowHeaderProps {
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
   seasonFolders?: any[];
-  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
   onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
   availableQualities?: string[];
   selectedQuality?: string | null;
   onQualityChange?: (quality: string | null) => void;
 }
 
-const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isLoadingFiles = false, seasonFolders = [], onSearchMissing, onSearchIndexer, availableQualities = [], selectedQuality = null, onQualityChange }) => {
+const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName, currentPath, onRename, onError, refreshTrigger, onNavigateBack, isLoadingFiles = false, seasonFolders = [], onSearchIndexer, availableQualities = [], selectedQuality = null, onQualityChange }) => {
   const firstAirYear = data.first_air_date?.slice(0, 4);
   const episodeRuntime = data.episode_run_time && data.episode_run_time[0];
   const creators = data.credits?.crew.filter((c: { job: string }) => c.job === 'Creator');

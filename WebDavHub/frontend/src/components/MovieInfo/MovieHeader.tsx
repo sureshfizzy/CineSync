@@ -20,7 +20,6 @@ interface MovieHeaderProps {
   onQualityChange?: (quality: string | null) => void;
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
-  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
   onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
 }
 
@@ -29,7 +28,7 @@ interface MovieHeaderProps {
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isLoadingFiles = false, onSearchMissing, onSearchIndexer }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isLoadingFiles = false, onSearchIndexer }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
