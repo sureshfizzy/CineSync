@@ -181,22 +181,16 @@ func isVideoFile(filename string) bool {
     return videoExtensions[ext]
 }
 
-// SaveAllTorrents writes placeholders using the current torrent list from DirectoryMap.
+// SaveAllTorrents writes placeholders using the full idToItemMap.
 func (tm *TorrentManager) SaveAllTorrents() {
-    allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-    if !ok {
-        logger.Warn("[CineSync] Directory map not initialized")
-        return
-    }
-    
-    keys := allTorrentsMap.Keys()
-    list := make([]TorrentItem, 0, len(keys))
-    for _, key := range keys {
-        if item, ok := allTorrentsMap.Get(key); ok && item != nil {
+    ids := tm.idToItemMap.Keys()
+    list := make([]TorrentItem, 0, len(ids))
+    for _, id := range ids {
+        if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
             list = append(list, *item)
         }
     }
-    
+
     tm.saveAllTorrents(list)
 }
 

@@ -106,23 +106,16 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		return
 	}
 	
-	keys := allTorrentsMap.Keys()
-	if len(keys) == 0 {
+	idKeys := tm.idToItemMap.Keys()
+	if len(idKeys) == 0 {
 		return
 	}
+	oldTorrents := make(map[string]TorrentItem, len(idKeys))
+	cachedTorrents := make([]TorrentItem, 0, len(idKeys))
 
-	oldTorrents := make(map[string]TorrentItem)
-	cachedTorrents := make([]TorrentItem, 0, len(keys))
-	
-	idKeys := tm.idToItemMap.Keys()
 	for _, id := range idKeys {
 		if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
 			oldTorrents[id] = *item
-		}
-	}
-	
-	for _, key := range keys {
-		if item, ok := allTorrentsMap.Get(key); ok && item != nil {
 			cachedTorrents = append(cachedTorrents, *item)
 		}
 	}
@@ -205,10 +198,6 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		item := &allTorrents[i]
 		accessKey := GetDirectoryName(item.Filename)
 		oldItem, existsInIDMap := tm.idToItemMap.Get(item.ID)
-		existingItem, existsInDirMap := allTorrentsMap.Get(accessKey)
-		if existsInDirMap && existingItem != nil && existingItem.ID != item.ID {
-			continue
-		}
 		if existsInIDMap && oldItem != nil && oldItem.ID == item.ID {
 			oldItem.Filename = item.Filename
 			oldItem.Bytes = item.Bytes
