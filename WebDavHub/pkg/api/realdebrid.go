@@ -508,6 +508,51 @@ func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleAddMagnet sends a magnet link or torrent URL to Real-Debrid
+func HandleAddMagnet(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := validateRealDebridConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Magnet string `json:"magnet"`
+		Title  string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Magnet) == "" {
+		http.Error(w, "magnet field is required", http.StatusBadRequest)
+		return
+	}
+
+	client := realdebrid.NewClient(cfg.APIKey)
+	result, err := client.AddMagnet(strings.TrimSpace(req.Magnet))
+	if err != nil {
+		http.Error(w, "Failed to add magnet: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":    result.ID,
+		"uri":   result.URI,
+		"title": req.Title,
+	})
+}
+
 // HandleRealDebridDownloads lists user's torrents from cache via REST API with pagination
 func HandleRealDebridDownloads(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")

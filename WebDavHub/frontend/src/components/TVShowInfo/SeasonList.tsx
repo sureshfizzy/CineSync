@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, Paper, Collapse, IconButton, alpha, useTheme, Tooltip } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import SearchIcon from '@mui/icons-material/Search';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { MediaDetailsData, SeasonFolderInfo } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,7 +16,7 @@ interface SeasonListProps {
   handleDeleted: any;
   handleError: any;
   isArrDashboardContext?: boolean;
-  onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
   selectedQuality?: string | null;
 }
 
@@ -28,7 +28,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
   handleDeleted,
   handleError,
   isArrDashboardContext = false,
-  onSearchMissing,
+  onSearchIndexer,
   selectedQuality = null,
 }) => {
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
@@ -330,15 +330,15 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                           ) : null;
                                         })()}
 
-                                        {!isAvailable && onSearchMissing && (
-                                          <Tooltip title="Search">
+                                        {!isAvailable && onSearchIndexer && (
+                                          <Tooltip title="Search Indexers">
                                             <IconButton
                                               size="small"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 const showTitle = data.name || data.title || '';
                                                 const query = `${showTitle} S${String(season.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`.trim();
-                                                onSearchMissing(query, 'tv');
+                                                onSearchIndexer(query, 'tv');
                                               }}
                                               sx={{
                                                 bgcolor: alpha(theme.palette.primary.main, 0.12),
@@ -347,7 +347,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                                 mr: 0.5
                                               }}
                                             >
-                                              <SearchIcon fontSize="small" />
+                                              <TravelExploreIcon fontSize="small" />
                                             </IconButton>
                                           </Tooltip>
                                         )}

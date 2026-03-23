@@ -32,6 +32,7 @@ export interface IndexerSearchRequest {
   query: string;
   categories?: number[];
   limit?: number;
+  mediaType?: 'movie' | 'tv';
 }
 
 export interface IndexerSearchResult {
@@ -45,6 +46,9 @@ export interface IndexerSearchResult {
   leechers?: number;
   indexer: string;
   indexerId: number;
+  quality: string;
+  allowed: boolean;
+  rejectionReasons?: string[];
 }
 
 export interface TestResult {

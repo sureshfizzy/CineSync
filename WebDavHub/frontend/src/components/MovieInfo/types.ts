@@ -8,4 +8,5 @@ export interface MovieInfoProps {
   mediaType: 'movie' | 'tv';
   tmdbId?: string | number;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
 } 

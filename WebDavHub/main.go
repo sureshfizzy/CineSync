@@ -417,6 +417,7 @@ func main() {
 	apiMux.HandleFunc("/api/realdebrid/refresh-control", api.HandleRealDebridRefreshControl)
 	apiMux.HandleFunc("/api/realdebrid/webdav/", api.HandleRealDebridWebDAV)
 	apiMux.HandleFunc("/api/realdebrid/downloads", api.HandleRealDebridDownloads)
+	apiMux.HandleFunc("/api/realdebrid/add-magnet", api.HandleAddMagnet)
 	apiMux.HandleFunc("/api/realdebrid/torrent-files", api.HandleRealDebridTorrentFiles)
 	apiMux.HandleFunc("/api/realdebrid/unrestrict-file", api.HandleRealDebridUnrestrictFile)
 	apiMux.HandleFunc("/api/realdebrid/rclone/mount", api.HandleRcloneMount)

@@ -8,7 +8,7 @@ import CastList from './CastList';
 import MediaPathInfo from '../FileBrowser/MediaPathInfo';
 import { MovieInfoProps } from './types';
 
-export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: MovieInfoProps) {
+export default function MovieInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing, onSearchIndexer }: MovieInfoProps) {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
@@ -155,6 +155,7 @@ export default function MovieInfo({ data, getPosterUrl, folderName, currentPath,
                 isArrDashboardContext={isArrDashboardContext}
                 isLoadingFiles={isLoadingFiles}
                 onSearchMissing={onSearchMissing}
+                onSearchIndexer={onSearchIndexer}
               />
             </Box>
           </Box>

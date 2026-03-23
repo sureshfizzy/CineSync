@@ -9,6 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSymlinkCreatedListener } from '../hooks/useMediaHubUpdates';
 import MediaSearchModal from '../components/MediaDashboard/MediaSearchModal';
+import IndexerSearchModal from '../components/MediaDashboard/IndexerSearchModal';
 import { NotFound } from '../App';
 
 function getPosterUrl(path: string | null, size = 'w500') {
@@ -46,6 +47,9 @@ export default function MediaDetails() {
   const [arrSearchOpen, setArrSearchOpen] = useState(false);
   const [arrSearchMediaType, setArrSearchMediaType] = useState<'movie' | 'tv'>('movie');
   const [arrSearchQuery, setArrSearchQuery] = useState('');
+  const [indexerSearchOpen, setIndexerSearchOpen] = useState(false);
+  const [indexerSearchQuery, setIndexerSearchQuery] = useState('');
+  const [indexerSearchMediaType, setIndexerSearchMediaType] = useState<'movie' | 'tv'>('movie');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const mediaType = mediaTypeFromUrl || location.state?.mediaType || 'movie';
@@ -58,6 +62,12 @@ export default function MediaDetails() {
     setArrSearchMediaType(type);
     setArrSearchQuery(title);
     setArrSearchOpen(true);
+  }, []);
+
+  const handleOpenIndexerSearch = useCallback((title: string, type: 'movie' | 'tv') => {
+    setIndexerSearchMediaType(type);
+    setIndexerSearchQuery(title);
+    setIndexerSearchOpen(true);
   }, []);
 
   // Function to handle smooth folder name transitions
@@ -323,6 +333,12 @@ export default function MediaDetails() {
         mediaType={arrSearchMediaType}
         initialQuery={arrSearchQuery}
       />
+      <IndexerSearchModal
+        open={indexerSearchOpen}
+        onClose={() => setIndexerSearchOpen(false)}
+        mediaType={indexerSearchMediaType}
+        initialQuery={indexerSearchQuery}
+      />
 
       {/* Main content area: animate only this */}
       <Box sx={{
@@ -441,6 +457,7 @@ export default function MediaDetails() {
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
                     onSearchMissing={handleOpenArrSearch}
+                    onSearchIndexer={handleOpenIndexerSearch}
                     tmdbId={tmdbId}
                   />
                 ) : (
@@ -451,6 +468,7 @@ export default function MediaDetails() {
                     currentPath={currentPath}
                     mediaType={mediaType as 'movie' | 'tv'}
                     onSearchMissing={handleOpenArrSearch}
+                    onSearchIndexer={handleOpenIndexerSearch}
                     tmdbId={tmdbId}
                   />
                 )}

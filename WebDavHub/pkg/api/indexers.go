@@ -47,20 +47,24 @@ type IndexerSearchRequest struct {
 	Query      string `json:"query"`
 	Categories []int  `json:"categories,omitempty"`
 	Limit      int    `json:"limit,omitempty"`
+	MediaType  string `json:"mediaType,omitempty"`
 }
 
 // IndexerSearchResult represents a search result
 type IndexerSearchResult struct {
-	Title       string  `json:"title"`
-	Size        int64   `json:"size"`
-	Category    string  `json:"category"`
-	PublishDate string  `json:"publishDate"`
-	Link        string  `json:"link"`
-	Magnet      string  `json:"magnet,omitempty"`
-	Seeders     int     `json:"seeders,omitempty"`
-	Leechers    int     `json:"leechers,omitempty"`
-	Indexer     string  `json:"indexer"`
-	IndexerID   int     `json:"indexerId"`
+	Title            string   `json:"title"`
+	Size             int64    `json:"size"`
+	Category         string   `json:"category"`
+	PublishDate      string   `json:"publishDate"`
+	Link             string   `json:"link"`
+	Magnet           string   `json:"magnet,omitempty"`
+	Seeders          int      `json:"seeders,omitempty"`
+	Leechers         int      `json:"leechers,omitempty"`
+	Indexer          string   `json:"indexer"`
+	IndexerID        int      `json:"indexerId"`
+	Quality          string   `json:"quality"`
+	Allowed          bool     `json:"allowed"`
+	RejectionReasons []string `json:"rejectionReasons,omitempty"`
 }
 
 // HandleIndexers handles indexer management requests
@@ -664,33 +668,87 @@ func testIndexerConnection(indexer Indexer) TestResult {
 	return TestIndexerConnection(indexer)
 }
 
-// searchIndexer performs a search on the indexer
+// searchIndexer performs a search and enriches results with quality/rejection info.
 func searchIndexer(indexer Indexer, req IndexerSearchRequest) ([]IndexerSearchResult, error) {
 	results, err := SearchIndexer(indexer, req.Query, req.Categories, req.Limit)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert SearchResult to IndexerSearchResult
+	profileName, allowedQualities := loadBestQualityProfile(req.MediaType)
+
 	searchResults := make([]IndexerSearchResult, len(results))
-	for i, result := range results {
+	for i, r := range results {
+		quality := DetectQuality(r.Title)
+		allowed, reasons := EvaluateQuality(quality, profileName, allowedQualities)
 		searchResults[i] = IndexerSearchResult{
-			Title:       result.Title,
-			Size:        result.Size,
-			Category:    result.Category,
-			PublishDate: result.PublishDate,
-			Link:        result.Link,
-			Magnet:      result.Magnet,
-			Seeders:     result.Seeders,
-			Leechers:    result.Leechers,
-			Indexer:     result.Indexer,
-			IndexerID:   result.IndexerID,
+			Title:            r.Title,
+			Size:             r.Size,
+			Category:         r.Category,
+			PublishDate:      r.PublishDate,
+			Link:             r.Link,
+			Magnet:           r.Magnet,
+			Seeders:          r.Seeders,
+			Leechers:         r.Leechers,
+			Indexer:          r.Indexer,
+			IndexerID:        r.IndexerID,
+			Quality:          quality,
+			Allowed:          allowed,
+			RejectionReasons: reasons,
 		}
 	}
-
 	return searchResults, nil
 }
 
+// loadBestQualityProfile fetches the most relevant profile for the given mediaType.
+func loadBestQualityProfile(mediaType string) (string, []string) {
+	mt := strings.ToLower(strings.TrimSpace(mediaType))
+	if mt != "movie" && mt != "tv" {
+		return "", nil
+	}
 
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		return "", nil
+	}
 
+	rows, err := database.Query(
+		`SELECT name, qualities FROM quality_profiles WHERE media_type = ? ORDER BY name`,
+		mt,
+	)
+	if err != nil {
+		return "", nil
+	}
+	defer rows.Close()
 
+	type row struct {
+		name      string
+		qualities []string
+	}
+	var profiles []row
+	for rows.Next() {
+		var name, qjson string
+		if err := rows.Scan(&name, &qjson); err != nil {
+			continue
+		}
+		var qs []string
+		_ = json.Unmarshal([]byte(qjson), &qs)
+		profiles = append(profiles, row{name, qs})
+	}
+	if len(profiles) == 0 {
+		return "", nil
+	}
+
+	// Prefer profile whose name contains "1080", else first non-Any, else first.
+	for _, p := range profiles {
+		if strings.Contains(strings.ToLower(p.name), "1080") {
+			return p.name, p.qualities
+		}
+	}
+	for _, p := range profiles {
+		if !strings.EqualFold(p.name, "any") {
+			return p.name, p.qualities
+		}
+	}
+	return profiles[0].name, profiles[0].qualities
+}

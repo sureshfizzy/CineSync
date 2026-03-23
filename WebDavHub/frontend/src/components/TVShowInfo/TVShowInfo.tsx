@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense, useCallback, useMemo, useEffect } from 'react';
 import { Box, Snackbar, Alert } from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import ShowHeader from './ShowHeader';
 import SeasonList from './SeasonList';
 import CastList from './CastList';
@@ -16,16 +16,16 @@ interface TVShowInfoProps {
   mediaType: 'movie' | 'tv';
   tmdbId?: string | number;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
-export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing }: TVShowInfoProps) {
+export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath, mediaType, tmdbId, onSearchMissing, onSearchIndexer }: TVShowInfoProps) {
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const navigate = useNavigate();
-  const location = useLocation();
   const isArrDashboardContext = !!tmdbId;
 
   // Function to trigger refresh of file actions
@@ -80,6 +80,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
               isLoadingFiles={loadingFiles}
               seasonFolders={seasonFolders}
               onSearchMissing={onSearchMissing}
+              onSearchIndexer={onSearchIndexer}
               availableQualities={availableQualities}
               selectedQuality={selectedQuality}
               onQualityChange={setSelectedQuality}
@@ -94,7 +95,7 @@ export default function TVShowInfo({ data, getPosterUrl, folderName, currentPath
           handleDeleted={handleDeleted}
           handleError={handleError}
           isArrDashboardContext={isArrDashboardContext}
-          onSearchMissing={onSearchMissing}
+          onSearchIndexer={onSearchIndexer}
           selectedQuality={selectedQuality}
         />
         <CastList data={data} getPosterUrl={getPosterUrl} />

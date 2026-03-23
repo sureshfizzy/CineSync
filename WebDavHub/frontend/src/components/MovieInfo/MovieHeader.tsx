@@ -3,7 +3,7 @@ import { Box, Typography, Chip, Paper, useTheme, useMediaQuery, alpha, IconButto
 import { motion } from 'framer-motion';
 import { MediaDetailsData } from '../../types/MediaTypes';
 import MovieFileActions from './MovieFileActions';
-import SearchIcon from '@mui/icons-material/Search';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 
 interface MovieHeaderProps {
   data: MediaDetailsData;
@@ -21,6 +21,7 @@ interface MovieHeaderProps {
   isArrDashboardContext?: boolean;
   isLoadingFiles?: boolean;
   onSearchMissing?: (title: string, type: 'movie' | 'tv') => void;
+  onSearchIndexer?: (title: string, type: 'movie' | 'tv') => void;
 }
 
 
@@ -28,7 +29,7 @@ interface MovieHeaderProps {
 
 
 
-const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isLoadingFiles = false, onSearchMissing }) => {
+const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo, filteredFiles, selectedFileIndex = 0, onFileIndexChange, folderName, currentPath, onNavigateBack, availableQualities = [], selectedQuality = null, onQualityChange, isLoadingFiles = false, onSearchMissing, onSearchIndexer }) => {
   const releaseYear = data.release_date?.slice(0, 4);
   const runtime = data.runtime;
   const director = data.credits?.crew.find((c: { job: string }) => c.job === 'Director');
@@ -42,7 +43,6 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
   const displayFiles = filteredFiles ?? files;
   const selectedFile = displayFiles[selectedFileIndex] ?? displayFiles[0] ?? files[0];
   const hasMultipleSameQuality = displayFiles.length > 1 && !!selectedQuality;
-  const canSearch = !isLoadingFiles && files.length === 0 && !!onSearchMissing;
 
 
 
@@ -102,18 +102,18 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             >
               {data.title} {releaseYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({releaseYear})</span>}
             </Typography>
-            {canSearch && (
-              <Tooltip title="Search">
+            {onSearchIndexer && (
+              <Tooltip title="Search Indexers">
                 <IconButton
-                  onClick={() => onSearchMissing?.(data.title, 'movie')}
+                  onClick={() => onSearchIndexer(data.title, 'movie')}
                   sx={{
-                    bgcolor: alpha(theme.palette.primary.main, 0.12),
-                    color: theme.palette.primary.main,
-                    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) }
+                    bgcolor: alpha(theme.palette.secondary.main, 0.12),
+                    color: theme.palette.secondary.main,
+                    '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.2) }
                   }}
                   size={isMobile ? 'small' : 'medium'}
                 >
-                  <SearchIcon fontSize={isMobile ? 'small' : 'medium'} />
+                  <TravelExploreIcon fontSize={isMobile ? 'small' : 'medium'} />
                 </IconButton>
               </Tooltip>
             )}
