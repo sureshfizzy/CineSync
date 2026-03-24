@@ -371,12 +371,59 @@ func GetRootFoldersFromDatabase() ([]RootFolder, error) {
 // MockData for spoof
 // getQualityProfilesFromDatabase retrieves quality profiles based on actual file qualities
 func getQualityProfilesFromDatabase() ([]QualityProfile, error) {
-	return []QualityProfile{
-		{ID: 1, Name: "HD-1080p"},
-		{ID: 2, Name: "HD-720p"},
-		{ID: 3, Name: "4K-2160p"},
-		{ID: 4, Name: "Any"},
-	}, nil
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		return []QualityProfile{
+			{ID: 1, Name: "HD-1080p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 2, Name: "HD-720p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 3, Name: "4K-2160p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 4, Name: "Any", Language: Language{ID: 2, Name: "Any"}},
+		}, err
+	}
+
+	rows, err := mediaHubDB.Query(`
+		SELECT
+			id,
+			name,
+			COALESCE(language_id, 2) AS language_id,
+			COALESCE(language_name, 'Any') AS language_name
+		FROM quality_profiles
+		ORDER BY name`,
+	)
+	if err != nil {
+		return []QualityProfile{
+			{ID: 1, Name: "HD-1080p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 2, Name: "HD-720p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 3, Name: "4K-2160p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 4, Name: "Any", Language: Language{ID: 2, Name: "Any"}},
+		}, nil
+	}
+	defer rows.Close()
+
+	var profiles []QualityProfile
+	for rows.Next() {
+		var p QualityProfile
+		var languageID int
+		var languageName string
+		if err := rows.Scan(&p.ID, &p.Name, &languageID, &languageName); err != nil {
+			continue
+		}
+		p.Language = Language{ID: languageID, Name: languageName}
+		profiles = append(profiles, p)
+	}
+	if rows.Err() != nil {
+		return profiles, rows.Err()
+	}
+	if len(profiles) == 0 {
+		return []QualityProfile{
+			{ID: 1, Name: "HD-1080p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 2, Name: "HD-720p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 3, Name: "4K-2160p", Language: Language{ID: 2, Name: "Any"}},
+			{ID: 4, Name: "Any", Language: Language{ID: 2, Name: "Any"}},
+		}, nil
+	}
+
+	return profiles, nil
 }
 
 // getLanguageProfilesFromDatabase retrieves language profiles

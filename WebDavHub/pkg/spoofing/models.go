@@ -168,6 +168,7 @@ type SeriesResource struct {
 type QualityProfile struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	Language Language `json:"language,omitempty"`
 }
 
 // LanguageProfile represents a language profile (Sonarr only)

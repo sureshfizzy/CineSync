@@ -1,4 +1,4 @@
-﻿package media
+package media
 
 import (
 	"cinesync/pkg/db"
@@ -15,8 +15,14 @@ type QualityProfile struct {
 	Qualities      []string `json:"qualities"`
 	Cutoff         string   `json:"cutoff"`
 	UpgradeAllowed bool     `json:"upgradeAllowed"`
+	Language       Language `json:"language"`
 	CreatedAt      string   `json:"createdAt,omitempty"`
 	UpdatedAt      string   `json:"updatedAt,omitempty"`
+}
+
+type Language struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type qualityProfileRequest struct {
@@ -25,6 +31,7 @@ type qualityProfileRequest struct {
 	Qualities      []string `json:"qualities"`
 	Cutoff         string   `json:"cutoff"`
 	UpgradeAllowed bool     `json:"upgradeAllowed"`
+	Language       Language `json:"language"`
 }
 
 func HandleQualityProfiles(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +111,10 @@ func handleCreateQualityProfile(w http.ResponseWriter, r *http.Request) {
 		cutoff = qualities[0]
 	}
 
+	if strings.TrimSpace(req.Language.Name) == "" {
+		req.Language = Language{ID: 2, Name: "Any"}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	mediaHubDB, err := db.GetDatabaseConnection()
@@ -114,9 +125,9 @@ func handleCreateQualityProfile(w http.ResponseWriter, r *http.Request) {
 
 	qjson, _ := json.Marshal(qualities)
 	res, err := mediaHubDB.Exec(
-		`INSERT INTO quality_profiles (name, media_type, qualities, cutoff, upgrade_allowed, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		req.Name, req.MediaType, string(qjson), cutoff, boolToInt(req.UpgradeAllowed), now, now,
+		`INSERT INTO quality_profiles (name, media_type, qualities, cutoff, language_id, language_name, upgrade_allowed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.Name, req.MediaType, string(qjson), cutoff, req.Language.ID, req.Language.Name, boolToInt(req.UpgradeAllowed), now, now,
 	)
 	if err != nil {
 		http.Error(w, "Failed to create quality profile", http.StatusInternalServerError)
@@ -131,6 +142,7 @@ func handleCreateQualityProfile(w http.ResponseWriter, r *http.Request) {
 		Qualities:      qualities,
 		Cutoff:         cutoff,
 		UpgradeAllowed: req.UpgradeAllowed,
+		Language:       req.Language,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -168,6 +180,10 @@ func UpdateQualityProfile(w http.ResponseWriter, r *http.Request) {
 		cutoff = qualities[0]
 	}
 
+	if strings.TrimSpace(req.Language.Name) == "" {
+		req.Language = Language{ID: 2, Name: "Any"}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 	qjson, _ := json.Marshal(qualities)
 
@@ -179,9 +195,9 @@ func UpdateQualityProfile(w http.ResponseWriter, r *http.Request) {
 
 	_, err = mediaHubDB.Exec(
 		`UPDATE quality_profiles
-         SET name = ?, media_type = ?, qualities = ?, cutoff = ?, upgrade_allowed = ?, updated_at = ?
+         SET name = ?, media_type = ?, qualities = ?, cutoff = ?, language_id = ?, language_name = ?, upgrade_allowed = ?, updated_at = ?
          WHERE id = ?`,
-		req.Name, req.MediaType, string(qjson), cutoff, boolToInt(req.UpgradeAllowed), now, id,
+		req.Name, req.MediaType, string(qjson), cutoff, req.Language.ID, req.Language.Name, boolToInt(req.UpgradeAllowed), now, id,
 	)
 	if err != nil {
 		http.Error(w, "Failed to update quality profile", http.StatusInternalServerError)
@@ -195,6 +211,7 @@ func UpdateQualityProfile(w http.ResponseWriter, r *http.Request) {
 		Qualities:      qualities,
 		Cutoff:         cutoff,
 		UpgradeAllowed: req.UpgradeAllowed,
+		Language:       req.Language,
 		UpdatedAt:      now,
 	}
 
@@ -229,7 +246,7 @@ func getQualityProfiles(mediaType string) ([]QualityProfile, error) {
 		return nil, err
 	}
 
-	query := `SELECT id, name, media_type, qualities, cutoff, upgrade_allowed, created_at, updated_at
+	query := `SELECT id, name, media_type, qualities, cutoff, language_id, language_name, upgrade_allowed, created_at, updated_at
               FROM quality_profiles`
 	args := []interface{}{}
 	if mediaType == "movie" || mediaType == "tv" {
@@ -249,14 +266,21 @@ func getQualityProfiles(mediaType string) ([]QualityProfile, error) {
 	for rows.Next() {
 		var p QualityProfile
 		var qualitiesJSON string
+		var languageID int
+		var languageName string
 		var upgradeAllowed int
-		if err := rows.Scan(&p.ID, &p.Name, &p.MediaType, &qualitiesJSON, &p.Cutoff, &upgradeAllowed, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&p.ID, &p.Name, &p.MediaType, &qualitiesJSON, &p.Cutoff,
+			&languageID, &languageName,
+			&upgradeAllowed, &p.CreatedAt, &p.UpdatedAt,
+		); err != nil {
 			continue
 		}
 		p.UpgradeAllowed = upgradeAllowed == 1
 		if qualitiesJSON != "" {
 			_ = json.Unmarshal([]byte(qualitiesJSON), &p.Qualities)
 		}
+		p.Language = Language{ID: languageID, Name: languageName}
 		key := p.MediaType + "::" + p.Name
 		if seen[key] {
 			continue
@@ -404,9 +428,9 @@ func DefaultQualityProfiles() error {
 			cutoff = qualities[0]
 		}
 		_, _ = mediaHubDB.Exec(
-			`INSERT OR IGNORE INTO quality_profiles (name, media_type, qualities, cutoff, upgrade_allowed, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			d.name, d.mediaType, string(qjson), cutoff, 1, now, now,
+			`INSERT OR IGNORE INTO quality_profiles (name, media_type, qualities, cutoff, language_id, language_name, upgrade_allowed, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			d.name, d.mediaType, string(qjson), cutoff, 2, "Any", 1, now, now,
 		)
 	}
 

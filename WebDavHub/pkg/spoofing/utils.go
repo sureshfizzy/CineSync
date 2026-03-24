@@ -371,8 +371,7 @@ func getDefaultLanguages() []Language {
 
 func getLanguagesFromDatabase(dbLanguage string) []Language {
 	if dbLanguage == "" {
-		// Fallback to English when language is empty
-		return []Language{{ID: 2, Name: "English"}}
+		return []Language{{ID: 2, Name: "Any"}}
 	}
 
 	// Map common language names to IDs
@@ -400,7 +399,7 @@ func getLanguagesFromDatabase(dbLanguage string) []Language {
 	}
 
 	// If language not found in map, fallback to English
-	return []Language{{ID: 2, Name: "English"}}
+	return []Language{{ID: 2, Name: "Any"}}
 }
 
 // Time parsing utilities
@@ -608,11 +607,10 @@ func BuildQualityFromDatabase(dbQuality, filePath string) Quality {
 
 // BuildLanguagesFromDatabase constructs a slice of Language objects from a database language string
 func BuildLanguagesFromDatabase(dbLanguage string) []Language {
-	// Default to English if not specified
 	languages := []Language{
 		{
-			ID:   2,
-			Name: "English",
+			ID:   1,
+			Name: "Any",
 		},
 	}
 
@@ -624,8 +622,10 @@ func BuildLanguagesFromDatabase(dbLanguage string) []Language {
 	
 	// Map common language strings to Language objects
 	languageMap := map[string]Language{
-		"english":     {ID: 2, Name: "English"},
-		"en":          {ID: 2, Name: "English"},
+		"english":     {ID: 1, Name: "English"},
+		"en":          {ID: 1, Name: "English"},
+		"any":         {ID: 2, Name: "Any"},
+		"und":         {ID: 2, Name: "Any"},
 		"spanish":     {ID: 1, Name: "Spanish"},
 		"es":          {ID: 1, Name: "Spanish"},
 		"french":      {ID: 3, Name: "French"},

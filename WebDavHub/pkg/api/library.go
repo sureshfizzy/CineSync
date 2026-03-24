@@ -656,7 +656,7 @@ func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
 }
 
 // upsertProcessedWithDetails writes fields available from TMDB into processed_files.
-func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, yearPtr *int, rootFolder string) {
+func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string, yearPtr *int, rootFolder string, preferredLanguage string) {
 	mediaHubDB, err := db.GetDatabaseConnection()
 	if err != nil {
 		return
@@ -680,6 +680,9 @@ func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string,
 	}
 	if rootFolder != "" {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET root_folder = ? WHERE tmdb_id = ?`, rootFolder, tmdbStr)
+	}
+	if strings.TrimSpace(preferredLanguage) != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET language = ? WHERE tmdb_id = ?`, strings.TrimSpace(preferredLanguage), tmdbStr)
 	}
 	_, _ = mediaHubDB.Exec(`UPDATE processed_files SET processed_at = COALESCE(processed_at, datetime('now')) WHERE tmdb_id = ? AND (processed_at IS NULL OR processed_at = '')`, tmdbStr)
 
@@ -724,6 +727,27 @@ func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string,
 	if v := details["total_episodes"]; v != "" {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET total_episodes = ? WHERE tmdb_id = ?`, v, tmdbStr)
 	}
+}
+
+func getPreferredLanguageFromQualityProfile(mediaType, profileName string) string {
+	if strings.TrimSpace(profileName) == "" {
+		return ""
+	}
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		return ""
+	}
+
+	var languageName string
+	err = database.QueryRow(
+		`SELECT COALESCE(language_name, '') FROM quality_profiles WHERE media_type = ? AND name = ? LIMIT 1`,
+		strings.ToLower(strings.TrimSpace(mediaType)),
+		strings.TrimSpace(profileName),
+	).Scan(&languageName)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(languageName)
 }
 
 // isAvailableInDestinationDB returns true if the processed_files database has a row
@@ -804,9 +828,10 @@ func HandleAddMovie(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Movie added to library: %s (TMDB ID: %d)", req.Title, req.TmdbID)
 
-	go func(tmdbID int, title string, yearPtr *int, rootFolder string) {
-		upsertProcessedWithDetails(tmdbID, "movie", title, yearPtr, rootFolder)
-	}(req.TmdbID, req.Title, req.Year, req.RootFolder)
+	preferredLanguage := getPreferredLanguageFromQualityProfile("movie", req.QualityProfile)
+	go func(tmdbID int, title string, yearPtr *int, rootFolder string, preferredLanguage string) {
+		upsertProcessedWithDetails(tmdbID, "movie", title, yearPtr, rootFolder, preferredLanguage)
+	}(req.TmdbID, req.Title, req.Year, req.RootFolder, preferredLanguage)
 
 	// Fetch TMDB data and save poster/fanart
 	go func() {
@@ -888,9 +913,10 @@ func HandleAddSeries(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Series added to library: %s (TMDB ID: %d)", req.Title, req.TmdbID)
 
 	// Placeholder processed_files entry (no source/destination yet)
-	go func(tmdbID int, title string, yearPtr *int, rootFolder string) {
-		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr, rootFolder)
-	}(req.TmdbID, req.Title, req.Year, req.RootFolder)
+	preferredLanguage := getPreferredLanguageFromQualityProfile("tv", req.QualityProfile)
+	go func(tmdbID int, title string, yearPtr *int, rootFolder string, preferredLanguage string) {
+		upsertProcessedWithDetails(tmdbID, "tv", title, yearPtr, rootFolder, preferredLanguage)
+	}(req.TmdbID, req.Title, req.Year, req.RootFolder, preferredLanguage)
 
 	// Populate tv_shows / tv_seasons / episodes from TMDB
 	go func(tmdbID int) {

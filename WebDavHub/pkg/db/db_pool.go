@@ -292,6 +292,8 @@ func initializeMediaHubTables(db *sql.DB) error {
 			media_type TEXT NOT NULL,
 			qualities TEXT NOT NULL,
 			cutoff TEXT NOT NULL,
+			language_id INTEGER NOT NULL DEFAULT 2,
+			language_name TEXT NOT NULL DEFAULT 'Any',
 			upgrade_allowed INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
@@ -361,6 +363,14 @@ func initializeMediaHubTables(db *sql.DB) error {
 			logger.Warn("Failed to create index: %v", err)
 		}
 	}
+
+	ensureTableColumns(db, "quality_profiles", []struct {
+		name     string
+		dataType string
+	}{
+		{"language_id", "INTEGER NOT NULL DEFAULT 2"},
+		{"language_name", "TEXT NOT NULL DEFAULT 'Any'"},
+	})
 
 	logger.Info("MediaHub database tables initialized successfully")
 	return nil

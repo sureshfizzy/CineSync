@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography, Card, CardContent, IconButton, Button, Stack, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControlLabel, Switch, FormControl, InputLabel, Select, MenuItem, Checkbox, ListItemText, CircularProgress, Alert, alpha, useTheme } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { getAuthHeaders } from '../../contexts/AuthContext';
@@ -10,11 +10,29 @@ interface QualityProfile {
   qualities: string[];
   cutoff: string;
   upgradeAllowed: boolean;
+  language?: { id: number; name: string };
 }
 
 const mediaTypes: Array<{ key: 'movie' | 'tv'; label: string }> = [
   { key: 'movie', label: 'Movies' },
   { key: 'tv', label: 'Series' },
+];
+
+const languageOptions: Array<{ id: number; name: string }> = [
+  { id: 1, name: 'Any' },
+  { id: 2, name: 'English' },
+  { id: 3, name: 'French' },
+  { id: 4, name: 'Spanish' },
+  { id: 5, name: 'German' },
+  { id: 6, name: 'Italian' },
+  { id: 7, name: 'Dutch' },
+  { id: 8, name: 'Japanese' },
+  { id: 9, name: 'Korean' },
+  { id: 10, name: 'Chinese' },
+  { id: 11, name: 'Portuguese' },
+  { id: 12, name: 'Russian' },
+  { id: 13, name: 'Arabic' },
+  { id: 14, name: 'Hindi' },
 ];
 
 const emptyForm: QualityProfile = {
@@ -24,6 +42,7 @@ const emptyForm: QualityProfile = {
   qualities: [],
   cutoff: '',
   upgradeAllowed: true,
+  language: { id: 2, name: 'Any' },
 };
 
 export default function QualityProfilesManagement() {
@@ -90,7 +109,11 @@ export default function QualityProfilesManagement() {
   };
 
   const openEditDialog = (profile: QualityProfile) => {
-    setForm({ ...profile, qualities: profile.qualities || [] });
+    setForm({
+      ...profile,
+      qualities: profile.qualities || [],
+      language: profile.language || emptyForm.language,
+    });
     setDialogOpen(true);
   };
 
@@ -118,6 +141,7 @@ export default function QualityProfilesManagement() {
         qualities: form.qualities,
         cutoff: form.cutoff || form.qualities[0],
         upgradeAllowed: form.upgradeAllowed,
+        language: form.language || emptyForm.language,
       };
       if (form.id) {
         const response = await fetch(`/api/quality-profiles?id=${form.id}`, {
@@ -193,6 +217,18 @@ export default function QualityProfilesManagement() {
           </Stack>
         </Box>
         <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+          {profile.language?.name && (
+            <Chip
+              label={`Lang: ${profile.language.name}`}
+              size="small"
+              sx={{
+                mb: 0.5,
+                bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.1),
+                color: theme.palette.text.primary,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`
+              }}
+            />
+          )}
           {profile.qualities.map((q) => (
             <Chip
               key={q}
@@ -352,6 +388,24 @@ export default function QualityProfilesManagement() {
             >
               {form.qualities.map((quality) => (
                 <MenuItem key={quality} value={quality}>{quality}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>Language</InputLabel>
+            <Select
+              value={String(form.language?.id ?? emptyForm.language?.id ?? 2)}
+              label="Language"
+              onChange={(e) => {
+                const id = Number(e.target.value);
+                const lang = languageOptions.find((l) => l.id === id) || emptyForm.language;
+                setForm({ ...form, language: lang });
+              }}
+            >
+              {languageOptions.map((lang) => (
+                <MenuItem key={lang.id} value={String(lang.id)}>
+                  {lang.name}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
