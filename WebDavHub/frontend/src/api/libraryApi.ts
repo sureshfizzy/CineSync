@@ -65,6 +65,49 @@ export interface WantedMovie {
 
 export type WantedMovieResponse = PagedResponse<WantedMovie>;
 
+// Download queue item
+export interface DownloadQueueItem {
+  id: number;
+  tmdbId: number;
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeTitle?: string;
+  quality: string;
+  indexer: string;
+  protocol: string;
+  downloadId?: string;
+  releaseTitle: string;
+  size: number;
+  status: 'queued' | 'downloading' | 'importing' | 'completed' | 'failed' | 'paused';
+  trackedDownloadStatus: 'ok' | 'warning' | 'error';
+  trackedDownloadState: 'downloading' | 'importPending' | 'importing' | 'downloaded' | 'ignored' | '';
+  statusMessages: string[];
+  eventType?: 'grabbed' | 'downloadFolderImported' | 'downloadFailed' | 'downloadIgnored' | '';
+  errorMessage?: string;
+  addedAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
+
+export type DownloadQueueResponse = PagedResponse<DownloadQueueItem>;
+
+export interface AddToQueueRequest {
+  tmdbId: number;
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeTitle?: string;
+  quality: string;
+  indexer: string;
+  releaseTitle: string;
+  size: number;
+}
+
 export interface AddMovieRequest {
   tmdbId: number;
   title: string;
@@ -162,5 +205,61 @@ export const libraryApi = {
   async deleteItem(id: number): Promise<{ success: boolean; message: string }> {
     const response = await axios.delete(`/api/library/${id}`);
     return response.data;
-  }
+  },
+
+  // Get download queue
+  async getDownloadQueue(
+    limit = 100,
+    offset = 0,
+    status?: string,
+    mediaType?: 'movie' | 'tv',
+  ): Promise<DownloadQueueResponse> {
+    const params: Record<string, string | number> = { limit, offset };
+    if (status) params.status = status;
+    if (mediaType) params.mediaType = mediaType;
+    const response = await axios.get('/api/library/queue', {
+      params,
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
+  // Get download history
+  async getDownloadHistory(
+    limit = 100,
+    offset = 0,
+    mediaType?: 'movie' | 'tv',
+  ): Promise<DownloadQueueResponse> {
+    const params: Record<string, string | number> = { limit, offset };
+    if (mediaType) params.mediaType = mediaType;
+    const response = await axios.get('/api/library/history', {
+      params,
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
+    return response.data;
+  },
+
+  // Add item to download queue
+  async addToQueue(data: AddToQueueRequest): Promise<{ success: boolean; id: number; message: string }> {
+    const response = await axios.post('/api/library/queue', data);
+    return response.data;
+  },
+
+  // Update queue item status
+  async updateQueueItem(id: number, status: string, errorMessage?: string): Promise<{ success: boolean; message: string }> {
+    const response = await axios.put(`/api/library/queue/${id}`, { status, errorMessage: errorMessage ?? '' });
+    return response.data;
+  },
+
+  // Delete queue item; removeFromClient=true (default) cancels the torrent on RD
+  async deleteQueueItem(id: number, removeFromClient = true): Promise<{ success: boolean; message: string }> {
+    const response = await axios.delete(`/api/library/queue/${id}`, { params: { removeFromClient: removeFromClient ? undefined : 'false' } });
+    return response.data;
+  },
+
+  // Clear queue/history/all
+  async clearQueue(scope: 'queue' | 'history' | 'all' = 'queue'): Promise<{ success: boolean; deleted: number; message: string }> {
+    const response = await axios.delete('/api/library/queue', { params: { scope } });
+    return response.data;
+  },
 };

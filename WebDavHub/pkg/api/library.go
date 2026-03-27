@@ -967,7 +967,7 @@ func HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 		mt = r.URL.Query().Get("mediaType")
 	}
 	mediaType := mt
-	status := r.URL.Query().Get("status")
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	tmdbIDFilter := r.URL.Query().Get("tmdbId")
 
 	// Build query

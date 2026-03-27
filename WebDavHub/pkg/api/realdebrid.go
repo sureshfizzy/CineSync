@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/realdebrid"
 )
@@ -508,7 +509,7 @@ func HandleRealDebridWebDAV(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleAddMagnet sends a magnet link or torrent URL to Real-Debrid
+// HandleAddMagnet sends a magnet link or torrent URL to Real-Debrid and records it in the download queue.
 func HandleAddMagnet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -530,20 +531,88 @@ func HandleAddMagnet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Magnet string `json:"magnet"`
-		Title  string `json:"title"`
+		Magnet    string `json:"magnet"`
+		Title     string `json:"title"`
+		TmdbID    int    `json:"tmdbId"`
+		MediaType string `json:"mediaType"`
+		Year      *int   `json:"year,omitempty"`
+		Quality   string `json:"quality"`
+		Indexer   string `json:"indexer"`
+		Size      int64  `json:"size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Magnet) == "" {
 		http.Error(w, "magnet field is required", http.StatusBadRequest)
 		return
 	}
 
+	magnet := strings.TrimSpace(req.Magnet)
 	client := realdebrid.NewClient(cfg.APIKey)
-	result, err := client.AddMagnet(strings.TrimSpace(req.Magnet))
+
+	var result *realdebrid.AddMagnetResponse
+	if strings.HasPrefix(magnet, "magnet:") {
+		result, err = client.AddMagnet(magnet)
+	} else {
+		result, err = client.AddTorrent(magnet)
+	}
 	if err != nil {
-		http.Error(w, "Failed to add magnet: "+err.Error(), http.StatusBadGateway)
+		logger.Error("[RealDebrid] HandleAddMagnet failed for %q: %v", req.Title, err)
+		http.Error(w, "Failed to add to Real-Debrid: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+
+	go func(torrentID, title string) {
+		mediaType := req.MediaType
+		if mediaType == "" {
+			mediaType = "movie"
+		}
+		now := time.Now().Unix()
+
+		database, _ := db.GetDatabaseConnection()
+		var queueID int64
+		if database != nil {
+			res, _ := database.Exec(`INSERT INTO download_queue
+				(tmdb_id, title, year, media_type, quality, indexer, release_title, size,
+				 status, tracked_download_status, tracked_download_state, event_type, protocol,
+				 rd_torrent_id, added_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 'ok', 'downloading', 'grabbed', 'torrent', ?, ?, ?)`,
+				req.TmdbID, title, req.Year, mediaType, req.Quality, req.Indexer, title, req.Size, torrentID, now, now)
+			queueID, _ = res.LastInsertId()
+		}
+		updateQueueState := func(s, trackedState, trackedStatus, eventType, e string) {
+			if database != nil && queueID != 0 {
+				_, _ = database.Exec(
+					`UPDATE download_queue SET status=?, tracked_download_state=?, tracked_download_status=?, event_type=?, error_message=?, updated_at=? WHERE id=?`,
+					s, trackedState, trackedStatus, eventType, e, time.Now().Unix(), queueID)
+			}
+		}
+
+		time.Sleep(2 * time.Second)
+		info, err := client.GetTorrentInfo(torrentID)
+		if err != nil {
+			logger.Warn("[RealDebrid] GetTorrentInfo failed for %s: %v", torrentID, err)
+			updateQueueState("failed", "downloading", "error", "downloadFailed", err.Error())
+			return
+		}
+		if info.Status == "waiting_files_selection" {
+			var ids []string
+			for _, f := range info.Files {
+				if realdebrid.IsVideoFile(f.Path) {
+					ids = append(ids, fmt.Sprintf("%d", f.ID))
+				}
+			}
+			if len(ids) == 0 {
+				for _, f := range info.Files {
+					ids = append(ids, fmt.Sprintf("%d", f.ID))
+				}
+			}
+			if err := client.SelectFiles(torrentID, ids); err != nil {
+				logger.Error("[RealDebrid] SelectFiles failed for %s: %v", torrentID, err)
+				updateQueueState("failed", "downloading", "error", "downloadFailed", err.Error())
+				return
+			}
+		}
+		updateQueueState("downloading", "downloading", "ok", "grabbed", "")
+	}(result.ID, req.Title)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

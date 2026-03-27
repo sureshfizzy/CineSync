@@ -3547,6 +3547,21 @@ func handleSymlinkCreated(data map[string]interface{}) {
 		return
 	}
 
+	if tmdbId != "" {
+		normalizedType := mediaType
+		if mediaType == "tvshow" {
+			normalizedType = "tv"
+		}
+		if database, err := db.GetDatabaseConnection(); err == nil {
+			now := time.Now().Unix()
+			_, _ = database.Exec(
+				`UPDATE download_queue SET status='completed', tracked_download_state='imported',
+				 event_type='downloadFolderImported', completed_at=COALESCE(completed_at,?), updated_at=?
+				 WHERE tmdb_id=? AND media_type=? AND status IN ('importing','downloading','queued')`,
+				now, now, tmdbId, normalizedType)
+		}
+	}
+
 	// Handle cache updates for force mode
 	if forceMode {
 		handleForceModeSymlinkCreated(data, tmdbId)

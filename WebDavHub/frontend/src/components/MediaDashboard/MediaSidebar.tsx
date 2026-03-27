@@ -3,6 +3,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import TvIcon from '@mui/icons-material/Tv';
 import SearchIcon from '@mui/icons-material/Search';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FolderIcon from '@mui/icons-material/Folder';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -21,10 +22,11 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
   const location = useLocation();
   
   // Determine current filter from URL
-  const getCurrentFilter = (): 'all' | 'movies' | 'series' | 'wanted' | 'settings' => {
+  const getCurrentFilter = (): 'all' | 'movies' | 'series' | 'queue' | 'wanted' | 'settings' => {
     const path = location.pathname;
     if (path === '/Mediadashboard/movies') return 'movies';
     if (path === '/Mediadashboard/series') return 'series';
+    if (path === '/Mediadashboard/queue' || path === '/Mediadashboard/history') return 'queue';
     if (path === '/Mediadashboard/wanted') return 'wanted';
     if (path.startsWith('/Mediadashboard/settings')) return 'settings';
     return 'all';
@@ -49,7 +51,7 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
     setSettingsExpanded(filter === 'settings');
   }, [filter]);
 
-  const handleMainClick = (value: 'movies' | 'series' | 'wanted' | 'settings') => {
+  const handleMainClick = (value: 'movies' | 'series' | 'queue' | 'wanted' | 'settings') => {
     // Auto-expand clicked section and collapse the other, but don't toggle closed when re-clicking
     if (value === 'movies') {
       setMoviesExpanded(true);
@@ -61,6 +63,11 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
       setMoviesExpanded(false);
       setSettingsExpanded(false);
       navigate('/Mediadashboard/series');
+    } else if (value === 'queue') {
+      setMoviesExpanded(false);
+      setSeriesExpanded(false);
+      setSettingsExpanded(false);
+      navigate('/Mediadashboard/queue');
     } else if (value === 'wanted') {
       setMoviesExpanded(false);
       setSeriesExpanded(false);
@@ -194,6 +201,31 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
             </ListItemButton>
           </Box>
         </Collapse>
+
+        {/* Queue Section */}
+        <ListItemButton
+          selected={filter === 'queue'}
+          onClick={() => handleMainClick('queue')}
+          sx={{
+            borderRadius: 1,
+            mx: 0.5,
+            mb: 0.5,
+            '&.Mui-selected': {
+              bgcolor: (t) => alpha(t.palette.primary.main, 0.12),
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34 }}>
+            <CloudDownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography variant="body2" fontWeight={700}>
+                Queue
+              </Typography>
+            }
+          />
+        </ListItemButton>
 
         {/* Wanted Section */}
         <ListItemButton 

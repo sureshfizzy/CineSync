@@ -30,6 +30,8 @@ interface IndexerSearchModalProps {
   onClose: () => void;
   initialQuery?: string;
   mediaType: 'movie' | 'tv';
+  tmdbId?: number;
+  year?: number;
 }
 
 type SortField = 'seeders' | 'size' | 'age' | 'title' | 'quality' | 'rejection';
@@ -88,7 +90,7 @@ function getSourceLabel(category: string): string {
   return 'torrent';
 }
 
-export default function IndexerSearchModal({ open, onClose, initialQuery, mediaType }: IndexerSearchModalProps) {
+export default function IndexerSearchModal({ open, onClose, initialQuery, mediaType, tmdbId, year }: IndexerSearchModalProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const amoledBg = isDark ? '#000000' : theme.palette.background.paper;
@@ -165,7 +167,16 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
       if (grabTarget) {
         const resp = await fetch('/api/realdebrid/add-magnet', {
           method: 'POST', headers,
-          body: JSON.stringify({ magnet: grabTarget, title: result.title }),
+          body: JSON.stringify({
+            magnet: grabTarget,
+            title: result.title,
+            tmdbId: tmdbId ?? 0,
+            mediaType,
+            year,
+            quality: result.quality,
+            indexer: result.indexer,
+            size: result.size,
+          }),
         });
         if (!resp.ok) window.open(grabTarget, '_blank');
         setGrabbed((prev) => new Set(prev).add(key));

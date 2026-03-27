@@ -298,6 +298,24 @@ func initializeMediaHubTables(db *sql.DB) error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS download_queue (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			tmdb_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			year INTEGER,
+			media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'tv')),
+			season_number INTEGER,
+			episode_number INTEGER,
+			episode_title TEXT,
+			quality TEXT NOT NULL DEFAULT '',
+			indexer TEXT NOT NULL DEFAULT '',
+			release_title TEXT NOT NULL DEFAULT '',
+			size INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'downloading', 'importing', 'completed', 'failed', 'paused')),
+			error_message TEXT,
+			added_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+		)`,
 	}
 
 	indexes := []string{
@@ -323,6 +341,10 @@ func initializeMediaHubTables(db *sql.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_indexer_id ON indexer_tests(indexer_id)",
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_tested_at ON indexer_tests(tested_at)",
 		"CREATE INDEX IF NOT EXISTS idx_indexer_tests_status ON indexer_tests(status)",
+		"CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status)",
+		"CREATE INDEX IF NOT EXISTS idx_download_queue_tmdb_id ON download_queue(tmdb_id)",
+		"CREATE INDEX IF NOT EXISTS idx_download_queue_media_type ON download_queue(media_type)",
+		"CREATE INDEX IF NOT EXISTS idx_download_queue_added_at ON download_queue(added_at DESC)",
 	}
 
 	for _, table := range tables {
@@ -363,6 +385,20 @@ func initializeMediaHubTables(db *sql.DB) error {
 			logger.Warn("Failed to create index: %v", err)
 		}
 	}
+
+	ensureTableColumns(db, "download_queue", []struct {
+		name     string
+		dataType string
+	}{
+		{"rd_torrent_id", "TEXT"},
+		{"torrent_filename", "TEXT"},
+		{"completed_at", "INTEGER"},
+		{"tracked_download_state", "TEXT"},
+		{"tracked_download_status", "TEXT NOT NULL DEFAULT 'ok'"},
+		{"status_messages", "TEXT"},
+		{"protocol", "TEXT NOT NULL DEFAULT 'torrent'"},
+		{"event_type", "TEXT"},
+	})
 
 	ensureTableColumns(db, "quality_profiles", []struct {
 		name     string

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cinesync/pkg/logger"
@@ -276,7 +277,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 	
 	if len(newTorrents) > 0 {
 		logger.Info("[Refresh] Processing %d new torrents", len(newTorrents))
-		
+
 		for i, torrent := range newTorrents {
 			if i < 3 {
 				logger.Info("[Refresh] New file added: %s", truncateFilename(torrent.Filename))
@@ -394,6 +395,8 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		freshIDs[allTorrents[i].ID] = struct{}{}
 	}
 
+	go notifyQueueSnapshot(allTorrents)
+
 	go func() {
 		if tm.store == nil {
 			return
@@ -432,4 +435,36 @@ func (tm *TorrentManager) GetCurrentState() *LibraryState {
 		FirstTorrentName: state.FirstTorrentName,
 		LastUpdated:      state.LastUpdated,
 	}
+}
+
+// TorrentSnapshot carries id, status and filename for queue reconciliation.
+type TorrentSnapshot struct {
+	Status   string
+	Filename string
+}
+
+// GetTorrentFilename returns the Filename for a given RD torrent ID from the in-memory map.
+func GetTorrentFilename(apiKey, torrentID string) string {
+	tm := GetTorrentManager(apiKey)
+	if item, ok := tm.idToItemMap.Get(torrentID); ok && item != nil {
+		return item.Filename
+	}
+	return ""
+}
+
+// OnQueueSnapshot is set by main to avoid an import cycle.
+var OnQueueSnapshot func(activeTorrents map[string]TorrentSnapshot)
+
+func notifyQueueSnapshot(torrents []TorrentItem) {
+	if OnQueueSnapshot == nil {
+		return
+	}
+	snapshot := make(map[string]TorrentSnapshot, len(torrents))
+	for i := range torrents {
+		snapshot[torrents[i].ID] = TorrentSnapshot{
+			Status:   strings.ToLower(strings.TrimSpace(torrents[i].Status)),
+			Filename: torrents[i].Filename,
+		}
+	}
+	OnQueueSnapshot(snapshot)
 }

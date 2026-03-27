@@ -1159,6 +1159,39 @@ func (c *Client) AddMagnet(magnet string) (*AddMagnetResponse, error) {
 	return &result, nil
 }
 
+// AddTorrent fetches a .torrent file from torrentURL and uploads it to Real-Debrid.
+func (c *Client) AddTorrent(torrentURL string) (*AddMagnetResponse, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+	httpResp, err := http.Get(torrentURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch torrent file: %w", err)
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read torrent file: %w", err)
+	}
+	req, err := http.NewRequest("PUT", c.baseURL+"/torrents/addTorrent", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req = req.WithContext(context.WithValue(req.Context(), repairModeContextKey, true))
+	resp, err := c.doRequestWithRetry(req, 3, "AddTorrent")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result AddMagnetResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // InstantAvailabilityResponse represents the response from instant availability check
 type InstantAvailabilityResponse map[string]struct {
 	Rd []interface{} `json:"rd"`

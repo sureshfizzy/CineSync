@@ -332,6 +332,8 @@ export default function MediaDetails() {
         onClose={() => setIndexerSearchOpen(false)}
         mediaType={indexerSearchMediaType}
         initialQuery={indexerSearchQuery}
+        tmdbId={tmdbId ? Number(tmdbId) : data?.id}
+        year={parseInt((data?.release_date || data?.first_air_date || '').slice(0, 4)) || undefined}
       />
 
       {/* Main content area: animate only this */}

@@ -46,7 +46,7 @@ export interface SearchResult {
 }
 
 export interface MediaSidebarFilter {
-  type: 'all' | 'movies' | 'series' | 'wanted' | 'settings';
+  type: 'all' | 'movies' | 'series' | 'queue' | 'wanted' | 'settings';
   searchOpen: boolean;
 }
 

@@ -12,6 +12,7 @@ import (
     "sync"
     "time"
 
+	"cinesync/pkg/db"
     "cinesync/pkg/logger"
 	media "cinesync/pkg/api/Media"
     "github.com/gorilla/websocket"
@@ -894,13 +895,63 @@ func HandleSpoofedImportList(w http.ResponseWriter, r *http.Request) {
 // HandleSpoofedQueue handles the /api/v3/queue endpoint for both Radarr and Sonarr
 func HandleSpoofedQueue(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"page":          1,
+			"pageSize":      20,
+			"sortKey":       "timeleft",
+			"sortDirection": "ascending",
+			"totalRecords":  0,
+			"records":       []map[string]interface{}{},
+		})
+		return
+	}
+
+	rows, err := database.Query(`
+		SELECT id, title, status, added_at
+		FROM download_queue
+		WHERE status IN ('queued','downloading','importing','failed','paused')
+		ORDER BY added_at DESC
+		LIMIT 200`)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"page":          1,
+			"pageSize":      20,
+			"sortKey":       "timeleft",
+			"sortDirection": "ascending",
+			"totalRecords":  0,
+			"records":       []map[string]interface{}{},
+		})
+		return
+	}
+	defer rows.Close()
+
+	records := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id int
+		var title, status string
+		var addedAt int64
+		if err := rows.Scan(&id, &title, &status, &addedAt); err != nil {
+			continue
+		}
+		records = append(records, map[string]interface{}{
+			"id":             id,
+			"title":          title,
+			"status":         status,
+			"timeleft":       nil,
+			"estimatedCompletionTime": nil,
+			"added":          time.Unix(addedAt, 0).UTC().Format(time.RFC3339),
+		})
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"page":          1,
 		"pageSize":      20,
 		"sortKey":       "timeleft",
 		"sortDirection": "ascending",
-		"totalRecords":  0,
-		"records":       []map[string]interface{}{},
+		"totalRecords":  len(records),
+		"records":       records,
 	})
 }
 

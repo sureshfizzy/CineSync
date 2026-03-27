@@ -81,6 +81,22 @@ func getNetworkIP() string {
 	return localAddr.IP.String()
 }
 
+func awaitMountReady(waitReason, readyReason string) {
+	if !realdebrid.IsMountConfigured() {
+		return
+	}
+
+	if waitReason != "" {
+		logger.Info(waitReason)
+	}
+	for !realdebrid.IsMountReady() {
+		time.Sleep(1 * time.Second)
+	}
+	if readyReason != "" {
+		logger.Info(readyReason)
+	}
+}
+
 // handleMediaCover serves poster and fanart images from the MediaCover directory
 func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/MediaCover/")
@@ -104,9 +120,9 @@ func handleMediaCover(w http.ResponseWriter, r *http.Request) {
 		if len(parts) == 2 {
 			var tmdbID int
 			if _, scanErr := fmt.Sscanf(parts[0], "%d", &tmdbID); scanErr == nil && tmdbID > 0 {
-			if dlErr := media.FetchAndSave(tmdbID, "movie"); dlErr != nil {
-				media.FetchAndSave(tmdbID, "tv")
-			}
+				if dlErr := media.FetchAndSave(tmdbID, "movie"); dlErr != nil {
+					media.FetchAndSave(tmdbID, "tv")
+				}
 			}
 		}
 		if _, err2 := os.Stat(filePath); os.IsNotExist(err2) {
@@ -268,6 +284,68 @@ func main() {
 		logger.Warn("Skipping job manager initialization until configuration is completed in /setup")
 	}
 
+	// On startup, resume any imports that were in-progress when the server last shut down.
+	go func() {
+		awaitMountReady("", "")
+		database, err := db.GetDatabaseConnection()
+		if err != nil {
+			return
+		}
+		rows, err := database.Query(
+			`SELECT id, tmdb_id, media_type, title, COALESCE(torrent_filename,''), rd_torrent_id FROM download_queue WHERE status='importing'`)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		apiKey := realdebrid.GetConfigManager().GetAPIKey()
+		for rows.Next() {
+			var id, tmdbID int64
+			var mediaType, title, filename, rdID string
+			if rows.Scan(&id, &tmdbID, &mediaType, &title, &filename, &rdID) != nil {
+				continue
+			}
+
+			if filename == "" && rdID != "" {
+				filename = realdebrid.GetTorrentFilename(apiKey, rdID)
+			}
+			go api.ImportQueueItem(tmdbID, mediaType, title, filename, id)
+		}
+	}()
+
+	// Wire RD torrent snapshot and direct symlink import.
+	realdebrid.OnQueueSnapshot = func(active map[string]realdebrid.TorrentSnapshot) {
+		database, err := db.GetDatabaseConnection()
+		if err != nil {
+			return
+		}
+		rows, err := database.Query(
+			`SELECT id, rd_torrent_id, tmdb_id, media_type, title FROM download_queue WHERE status IN ('queued','downloading','importing') AND rd_torrent_id != ''`)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		now := time.Now().Unix()
+		for rows.Next() {
+			var id, tmdbID int64
+			var rdID, mediaType, title string
+			if rows.Scan(&id, &rdID, &tmdbID, &mediaType, &title) != nil {
+				continue
+			}
+			snap, inActive := active[rdID]
+			switch {
+			case !inActive || snap.Status == "downloaded":
+				_, _ = database.Exec(
+					`UPDATE download_queue SET status='importing', tracked_download_state='importPending', torrent_filename=?, updated_at=? WHERE id=?`,
+					snap.Filename, now, id)
+				go api.ImportQueueItem(tmdbID, mediaType, title, snap.Filename, id)
+			case snap.Status == "error" || snap.Status == "dead":
+				_, _ = database.Exec(
+					`UPDATE download_queue SET status='failed', tracked_download_status='error', updated_at=? WHERE id=?`,
+					now, id)
+			}
+		}
+	}
+
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/health", api.HandleHealth)
@@ -331,6 +409,8 @@ func main() {
 	apiMux.HandleFunc("/api/library/tv", api.HandleGetLibraryTv)
 	apiMux.HandleFunc("/api/library/series", api.HandleAddSeries)
 	apiMux.HandleFunc("/api/library/wanted", api.HandleGetLibraryWantedFast)
+	apiMux.HandleFunc("/api/library/queue/", api.HandleDownloadQueue)
+	apiMux.HandleFunc("/api/library/history", api.HandleDownloadHistory)
 	apiMux.HandleFunc("/api/library", api.HandleGetLibrary)
 	apiMux.HandleFunc("/api/library/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
@@ -514,15 +594,10 @@ func main() {
 			// Wait longer for the server to fully initialize and startup summary to display
 			time.Sleep(10 * time.Second)
 
-			// If inbuilt mount is configured, wait for it to be ready before starting MediaHub
-			if realdebrid.IsMountConfigured() {
-				logger.Info("Inbuilt mount is configured, waiting for mount to be ready before starting MediaHub...")
-
-				for !realdebrid.IsMountReady() {
-					time.Sleep(1 * time.Second)
-				}
-				logger.Info("Mount is ready, proceeding with MediaHub auto-start")
-			}
+			awaitMountReady(
+				"Inbuilt mount is configured, waiting for mount to be ready before starting MediaHub...",
+				"Mount is ready, proceeding with MediaHub auto-start",
+			)
 
 			logger.Info("Auto-starting MediaHub service (includes built-in RTM)...")
 
@@ -552,12 +627,10 @@ func main() {
 			// Wait for server initialization
 			time.Sleep(10 * time.Second)
 
-			// Wait for mount to be ready if configured
-			if realdebrid.IsMountConfigured() {
-				for !realdebrid.IsMountReady() {
-					time.Sleep(1 * time.Second)
-				}
-			}
+			awaitMountReady(
+				"Standalone RTM is waiting for the inbuilt mount to be ready...",
+				"Mount is ready, proceeding with standalone RTM auto-start",
+			)
 
 			status, err := api.GetMediaHubStatus()
 			if err != nil {
@@ -639,4 +712,3 @@ func main() {
 
 	log.Fatal(server.ListenAndServe())
 }
-
