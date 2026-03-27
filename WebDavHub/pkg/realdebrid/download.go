@@ -308,7 +308,7 @@ func (tm *TorrentManager) repairTorrentFiles(ctx context.Context, torrentID stri
 
 	var videoFiles []TorrentFile
 	for _, file := range info.Files {
-		if file.Selected == 1 && isVideoFile(file.Path) {
+		if file.Selected == 1 && IsVideoFile(file.Path) {
 			videoFiles = append(videoFiles, file)
 		}
 	}
@@ -474,7 +474,7 @@ func (tm *TorrentManager) reInsertTorrent(info *TorrentInfo) (*TorrentInfo, erro
 		if status == "waiting_files_selection" {
 			selectedFileIDs := make([]string, 0)
 			for _, file := range checkInfo.Files {
-				if isVideoFile(file.Path) {
+				if IsVideoFile(file.Path) {
 					selectedFileIDs = append(selectedFileIDs, fmt.Sprintf("%d", file.ID))
 				}
 			}

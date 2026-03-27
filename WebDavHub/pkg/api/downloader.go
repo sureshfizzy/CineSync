@@ -16,15 +16,6 @@ import (
 	"cinesync/pkg/realdebrid"
 )
 
-var videoExts = map[string]bool{
-	".mkv": true, ".mp4": true, ".avi": true, ".mov": true,
-	".wmv": true, ".m4v": true, ".ts": true,
-}
-
-func isVideoFile(name string) bool {
-	return videoExts[strings.ToLower(filepath.Ext(name))]
-}
-
 type DownloadQueueItem struct {
 	ID                    int      `json:"id"`
 	TmdbID                int      `json:"tmdbId"`
@@ -421,7 +412,7 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 		if info, statErr := os.Stat(candidate); statErr == nil {
 			if info.IsDir() {
 				srcDir = candidate
-			} else if isVideoFile(info.Name()) {
+			} else if realdebrid.IsVideoFile(info.Name()) {
 				singleFile = candidate
 			}
 			break
@@ -475,7 +466,7 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 		}
 	} else {
 		_ = filepath.Walk(srcDir, func(srcPath string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !isVideoFile(info.Name()) {
+			if err != nil || info.IsDir() || !realdebrid.IsVideoFile(info.Name()) {
 				return nil
 			}
 			doSymlink(srcPath, info.Size())
