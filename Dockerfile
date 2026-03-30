@@ -1,5 +1,5 @@
 # ---- STAGE 1: Build WebDavHub ----
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -37,7 +37,7 @@ WORKDIR /app/WebDavHub
 RUN python3 scripts/build-prod.py
 
 # ---- STAGE 2: Final Runtime Image ----
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Install required system packages
 RUN apt-get update && \
