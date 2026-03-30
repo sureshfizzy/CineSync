@@ -42,7 +42,7 @@
     "path": "^0.12.7",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.0",
     "vite": "^8.0.3"
   }
 }
