@@ -12,7 +12,7 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Go (Dynamic architecture detection)
-ENV GO_VERSION=1.21.0
+ENV GO_VERSION=1.25.0
 RUN ARCH=$(dpkg --print-architecture) && \
     case "$ARCH" in \
       amd64) GOARCH="linux-amd64";; \

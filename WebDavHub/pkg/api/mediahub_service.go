@@ -588,7 +588,7 @@ func HandleMediaHubStop(w http.ResponseWriter, r *http.Request) {
 		successMsg += " (monitor stop had issues but main service stopped)"
 	}
 
-	logger.Info(successMsg)
+	logger.Info("%s", successMsg)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

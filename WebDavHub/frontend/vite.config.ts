@@ -49,6 +49,33 @@ function getTmdbApiKey(): string {
 
 const tmdbApiKey = getTmdbApiKey();
 
+const chunkGroups = [
+  { name: 'vendor-react', packages: ['react', 'react-dom'] },
+  { name: 'vendor-mui', packages: ['@mui/material', '@mui/icons-material'] },
+  { name: 'vendor-router', packages: ['react-router-dom'] },
+  { name: 'vendor-utils', packages: ['axios', 'date-fns'] },
+  { name: 'vendor-media', packages: ['video.js', 'react-player'] },
+  { name: 'vendor-animation', packages: ['framer-motion'] },
+];
+
+function getManualChunk(id: string): string | undefined {
+  const normalizedId = id.replace(/\\/g, '/');
+
+  if (!normalizedId.includes('/node_modules/')) {
+    return undefined;
+  }
+
+  for (const chunkGroup of chunkGroups) {
+    for (const pkg of chunkGroup.packages) {
+      if (normalizedId.includes(`/node_modules/${pkg}/`)) {
+        return chunkGroup.name;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 const getAllowedHosts = (): true | string[] => {
   const envHosts = process.env.VITE_ALLOWED_HOSTS;
   if (envHosts) {
@@ -86,15 +113,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Vendor chunks
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-mui': ['@mui/material', '@mui/icons-material'],
-          'vendor-router': ['react-router-dom'],
-          'vendor-utils': ['axios', 'date-fns'],
-          'vendor-media': ['video.js', 'react-player'],
-          'vendor-animation': ['framer-motion'],
-        },
+        manualChunks: getManualChunk,
       },
     },
     chunkSizeWarningLimit: 1000,

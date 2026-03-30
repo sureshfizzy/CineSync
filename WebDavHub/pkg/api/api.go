@@ -3727,7 +3727,7 @@ func handleFileDeleted(data map[string]interface{}) {
 
 	// Track the deletion in file_deletions table for UI display
 	if err := db.TrackFileDeletion(sourcePath, destinationPath, tmdbID, seasonNumber, reason); err != nil {
-		logger.Warn("Failed to track file deletion", "error", err)
+		logger.Warn("Failed to track file deletion: %v", err)
 	}
 
 	// Broadcast SignalR events for external file deletion to notify Bazarr

@@ -286,7 +286,7 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	} else {
 		if !rm.isMountPoint(config.MountPath) {
 			errorMsg := "rclone mount failed - mount point not accessible"
-			logger.Error(errorMsg)
+			logger.Error("%s", errorMsg)
 			return &MountStatus{Error: errorMsg}, fmt.Errorf("mount verification failed")
 		}
 		logger.Info("Mount point verified: %s", config.MountPath)

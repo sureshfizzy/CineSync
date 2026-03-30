@@ -1,5 +1,5 @@
-beautifulsoup4==4.12.3
-python-dotenv==1.0.1
-Requests==2.32.3
-setuptools==70.0.0
-psutil==6.0.0
+beautifulsoup4==4.14.3
+python-dotenv==1.2.2
+requests==2.33.0
+setuptools==82.0.1
+psutil==7.2.2

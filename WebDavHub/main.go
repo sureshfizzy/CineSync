@@ -87,13 +87,13 @@ func awaitMountReady(waitReason, readyReason string) {
 	}
 
 	if waitReason != "" {
-		logger.Info(waitReason)
+		logger.Info("%s", waitReason)
 	}
 	for !realdebrid.IsMountReady() {
 		time.Sleep(1 * time.Second)
 	}
 	if readyReason != "" {
-		logger.Info(readyReason)
+		logger.Info("%s", readyReason)
 	}
 }
 
