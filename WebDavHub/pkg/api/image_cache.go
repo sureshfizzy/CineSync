@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	IMAGE_CACHE_DIR     = "db/cache/images"
-	MAX_IMAGE_SIZE      = 2 * 1024 * 1024  // 2MB max per image (reduced from 10MB)
-	MAX_CACHE_SIZE_MB   = 1024              // 1GB total cache limit
-	MAX_CACHE_FILES     = 5000              // Maximum number of cached files
-	CLEANUP_THRESHOLD   = 0.8               // Cleanup when 80% of limit is reached
-	DEFAULT_IMAGE_SIZE  = "w342"            // Default size to cache
+	IMAGE_CACHE_DIR    = "db/cache/images"
+	MAX_IMAGE_SIZE     = 2 * 1024 * 1024 // 2MB max per image (reduced from 10MB)
+	MAX_CACHE_SIZE_MB  = 1024            // 1GB total cache limit
+	MAX_CACHE_FILES    = 5000            // Maximum number of cached files
+	CLEANUP_THRESHOLD  = 0.8             // Cleanup when 80% of limit is reached
+	DEFAULT_IMAGE_SIZE = "w342"          // Default size to cache
 )
 
 // HTTP client for faster poster loading
@@ -78,10 +78,10 @@ func windowsSafeRename(oldPath, newPath string) error {
 
 // ImageCacheService handles downloading and serving cached images
 type ImageCacheService struct {
-	cacheDir     string
-	enabled      bool
-	maxSizeMB    int
-	maxFiles     int
+	cacheDir      string
+	enabled       bool
+	maxSizeMB     int
+	maxFiles      int
 	downloadMutex sync.Map
 }
 
@@ -210,8 +210,6 @@ func (ics *ImageCacheService) DownloadAndCacheImage(posterPath string, size stri
 	}
 	return localPath, nil
 }
-
-
 
 // GetCacheStats returns current cache statistics
 func (ics *ImageCacheService) GetCacheStats() (int64, int, error) {

@@ -20,10 +20,10 @@ import (
 
 // CircuitBreaker implements a simple circuit breaker pattern
 type CircuitBreaker struct {
-	mutex         sync.RWMutex
-	failureCount  int
-	lastFailTime  time.Time
-	state         CircuitState
+	mutex            sync.RWMutex
+	failureCount     int
+	lastFailTime     time.Time
+	state            CircuitState
 	failureThreshold int
 	recoveryTimeout  time.Duration
 }
@@ -40,7 +40,7 @@ var (
 	dbCircuitBreaker = &CircuitBreaker{
 		failureThreshold: 5,
 		recoveryTimeout:  30 * time.Second,
-		state:           CircuitClosed,
+		state:            CircuitClosed,
 	}
 )
 
@@ -129,22 +129,22 @@ func executeWithRetry(operation func() error) error {
 			}
 
 			// Check if it's a SQLite busy error
-			if strings.Contains(err.Error(), "database is locked") || 
-			   strings.Contains(err.Error(), "SQLITE_BUSY") ||
-			   strings.Contains(err.Error(), "database table is locked") {
-				
+			if strings.Contains(err.Error(), "database is locked") ||
+				strings.Contains(err.Error(), "SQLITE_BUSY") ||
+				strings.Contains(err.Error(), "database table is locked") {
+
 				if attempt < maxRetries-1 {
 					delay := baseDelay * time.Duration(1<<uint(attempt))
 					if delay > 3*time.Second {
-						delay = 3*time.Second
+						delay = 3 * time.Second
 					}
 
 					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 					actualDelay := delay + jitter
-					
-					logger.Debug("Database busy (attempt %d/%d), retrying in %v", 
+
+					logger.Debug("Database busy (attempt %d/%d), retrying in %v",
 						attempt+1, maxRetries, actualDelay)
-					
+
 					time.Sleep(actualDelay)
 					continue
 				}
@@ -262,7 +262,6 @@ func generateUniqueMovieFileID(movieID int) int {
 	return movieID*10 + 1
 }
 
-
 // Image creation utilities
 func createMediaImages(tmdbID int, mediaType string) []interface{} {
 	if tmdbID <= 0 {
@@ -271,14 +270,14 @@ func createMediaImages(tmdbID int, mediaType string) []interface{} {
 
 	// Get poster path from database
 	posterPath := getPosterPathFromDatabase(tmdbID, mediaType)
-	
+
 	images := []interface{}{}
 
 	if posterPath != "" {
-		images = append(images, createImageEntry("poster", 
+		images = append(images, createImageEntry("poster",
 			fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
 			fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", posterPath)))
-		
+
 		images = append(images, createImageEntry("fanart",
 			fmt.Sprintf("/MediaCover/%d/fanart.jpg", tmdbID),
 			fmt.Sprintf("https://image.tmdb.org/t/p/w1280%s", posterPath)))
@@ -314,7 +313,7 @@ func checkLocalMediaExists(tmdbID int, mediaType string) bool {
 
 func getPosterPathFromDatabase(tmdbID int, mediaType string) string {
 	var posterPath string
-	
+
 	err := executeWithRetry(func() error {
 		dbPath := filepath.Join("../db", "cinesync.db")
 		cineSyncDB, err := db.OpenAndConfigureDatabase(dbPath)
@@ -325,7 +324,7 @@ func getPosterPathFromDatabase(tmdbID int, mediaType string) string {
 
 		query := `SELECT poster_path FROM tmdb_entities WHERE tmdb_id = ? AND media_type = ? LIMIT 1`
 		row := cineSyncDB.QueryRow(query, tmdbID, mediaType)
-		
+
 		err = row.Scan(&posterPath)
 		if err == sql.ErrNoRows {
 			posterPath = ""
@@ -333,7 +332,7 @@ func getPosterPathFromDatabase(tmdbID int, mediaType string) string {
 		}
 		return err
 	})
-	
+
 	if err != nil {
 		return ""
 	}
@@ -343,13 +342,13 @@ func getPosterPathFromDatabase(tmdbID int, mediaType string) string {
 // Text extraction utilities
 func extractEpisodeTitle(filePath string, season, episode int) string {
 	filename := filepath.Base(filePath)
-	
+
 	// Try to extract episode title from filename
 	pattern := fmt.Sprintf(`S%02dE%02d - (.+?)[\[\.]`, season, episode)
 	if matches := regexp.MustCompile(pattern).FindStringSubmatch(filename); len(matches) > 1 {
 		return strings.TrimSpace(matches[1])
 	}
-	
+
 	return fmt.Sprintf("S%02dE%02d", season, episode)
 }
 
@@ -376,19 +375,19 @@ func getLanguagesFromDatabase(dbLanguage string) []Language {
 
 	// Map common language names to IDs
 	languageMap := map[string]Language{
-		"english": {ID: 2, Name: "English"},
-		"hindi":   {ID: 14, Name: "Hindi"},
-		"french":  {ID: 3, Name: "French"},
-		"spanish": {ID: 4, Name: "Spanish"},
-		"german":  {ID: 5, Name: "German"},
-		"italian": {ID: 6, Name: "Italian"},
-		"dutch":   {ID: 7, Name: "Dutch"},
-		"japanese": {ID: 8, Name: "Japanese"},
-		"korean":  {ID: 9, Name: "Korean"},
-		"chinese": {ID: 10, Name: "Chinese"},
+		"english":    {ID: 2, Name: "English"},
+		"hindi":      {ID: 14, Name: "Hindi"},
+		"french":     {ID: 3, Name: "French"},
+		"spanish":    {ID: 4, Name: "Spanish"},
+		"german":     {ID: 5, Name: "German"},
+		"italian":    {ID: 6, Name: "Italian"},
+		"dutch":      {ID: 7, Name: "Dutch"},
+		"japanese":   {ID: 8, Name: "Japanese"},
+		"korean":     {ID: 9, Name: "Korean"},
+		"chinese":    {ID: 10, Name: "Chinese"},
 		"portuguese": {ID: 11, Name: "Portuguese"},
-		"russian": {ID: 12, Name: "Russian"},
-		"arabic":  {ID: 13, Name: "Arabic"},
+		"russian":    {ID: 12, Name: "Russian"},
+		"arabic":     {ID: 13, Name: "Arabic"},
 	}
 
 	// Normalize the language name
@@ -552,9 +551,9 @@ func BuildQualityFromDatabase(dbQuality, filePath string) Quality {
 			Resolution: 1080,
 		},
 		Revision: QualityRevision{
-			Version:   1,
-			Real:      0,
-			IsRepack:  false,
+			Version:  1,
+			Real:     0,
+			IsRepack: false,
 		},
 	}
 
@@ -619,31 +618,31 @@ func BuildLanguagesFromDatabase(dbLanguage string) []Language {
 	}
 
 	langStr := strings.ToLower(strings.TrimSpace(dbLanguage))
-	
+
 	// Map common language strings to Language objects
 	languageMap := map[string]Language{
-		"english":     {ID: 1, Name: "English"},
-		"en":          {ID: 1, Name: "English"},
-		"any":         {ID: 2, Name: "Any"},
-		"und":         {ID: 2, Name: "Any"},
-		"spanish":     {ID: 1, Name: "Spanish"},
-		"es":          {ID: 1, Name: "Spanish"},
-		"french":      {ID: 3, Name: "French"},
-		"fr":          {ID: 3, Name: "French"},
-		"german":      {ID: 4, Name: "German"},
-		"de":          {ID: 4, Name: "German"},
-		"italian":     {ID: 5, Name: "Italian"},
-		"it":          {ID: 5, Name: "Italian"},
-		"portuguese":  {ID: 6, Name: "Portuguese"},
-		"pt":          {ID: 6, Name: "Portuguese"},
-		"russian":     {ID: 7, Name: "Russian"},
-		"ru":          {ID: 7, Name: "Russian"},
-		"japanese":    {ID: 8, Name: "Japanese"},
-		"ja":          {ID: 8, Name: "Japanese"},
-		"korean":      {ID: 9, Name: "Korean"},
-		"ko":          {ID: 9, Name: "Korean"},
-		"chinese":     {ID: 10, Name: "Chinese"},
-		"zh":          {ID: 10, Name: "Chinese"},
+		"english":    {ID: 1, Name: "English"},
+		"en":         {ID: 1, Name: "English"},
+		"any":        {ID: 2, Name: "Any"},
+		"und":        {ID: 2, Name: "Any"},
+		"spanish":    {ID: 1, Name: "Spanish"},
+		"es":         {ID: 1, Name: "Spanish"},
+		"french":     {ID: 3, Name: "French"},
+		"fr":         {ID: 3, Name: "French"},
+		"german":     {ID: 4, Name: "German"},
+		"de":         {ID: 4, Name: "German"},
+		"italian":    {ID: 5, Name: "Italian"},
+		"it":         {ID: 5, Name: "Italian"},
+		"portuguese": {ID: 6, Name: "Portuguese"},
+		"pt":         {ID: 6, Name: "Portuguese"},
+		"russian":    {ID: 7, Name: "Russian"},
+		"ru":         {ID: 7, Name: "Russian"},
+		"japanese":   {ID: 8, Name: "Japanese"},
+		"ja":         {ID: 8, Name: "Japanese"},
+		"korean":     {ID: 9, Name: "Korean"},
+		"ko":         {ID: 9, Name: "Korean"},
+		"chinese":    {ID: 10, Name: "Chinese"},
+		"zh":         {ID: 10, Name: "Chinese"},
 	}
 
 	if lang, exists := languageMap[langStr]; exists {

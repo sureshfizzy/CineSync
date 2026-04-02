@@ -19,20 +19,20 @@ import (
 
 // RcloneMount represents a mounted rclone instance
 type RcloneMount struct {
-	ProcessID int
-	MountPath string
-	RemoteName string
-	StartTime time.Time
-	Config    RcloneSettings
-	Waiting   bool
+	ProcessID     int
+	MountPath     string
+	RemoteName    string
+	StartTime     time.Time
+	Config        RcloneSettings
+	Waiting       bool
 	WaitingReason string
-	APIKey   string
+	APIKey        string
 }
 
 // RcloneManager manages rclone mounts
 type RcloneManager struct {
-	mounts map[string]*RcloneMount
-	mutex  sync.RWMutex
+	mounts       map[string]*RcloneMount
+	mutex        sync.RWMutex
 	pendingMount *RcloneMount
 	pendingMutex sync.RWMutex
 }
@@ -90,15 +90,15 @@ func getBundledRclonePath() string {
 	if err != nil {
 		return ""
 	}
-	
+
 	exeDir := filepath.Dir(exePath)
 
 	bundledPath := filepath.Join(exeDir, "..", "utils", "rclone.exe")
-	
+
 	if _, err := os.Stat(bundledPath); err == nil {
 		return bundledPath
 	}
-	
+
 	return ""
 }
 
@@ -117,32 +117,31 @@ func getRcloneCommand() string {
 func (rm *RcloneManager) startCleanupRoutine() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		rm.CleanupStaleMounts()
 	}
 }
 
-
 // triggerPendingMount executes the pending mount when torrents are loaded
 func triggerPendingMount() {
 	rm := GetRcloneManager()
-	
+
 	rm.pendingMutex.RLock()
 	pendingMount := rm.pendingMount
 	rm.pendingMutex.RUnlock()
-	
+
 	if pendingMount == nil {
 		return
 	}
-	
+
 	logger.Info("[Rclone] Torrents loaded, executing pending mount for %s", pendingMount.MountPath)
-	
+
 	// Clear the pending mount
 	rm.pendingMutex.Lock()
 	rm.pendingMount = nil
 	rm.pendingMutex.Unlock()
-	
+
 	// Execute the mount in a goroutine to avoid blocking
 	go func() {
 		_, err := rm.Mount(pendingMount.Config, pendingMount.APIKey)
@@ -154,11 +153,11 @@ func triggerPendingMount() {
 
 // MountStatus represents the status of a mount
 type MountStatus struct {
-	Mounted  bool   `json:"mounted"`
-	MountPath string `json:"mountPath,omitempty"`
-	Error    string `json:"error,omitempty"`
-	ProcessID int   `json:"processId,omitempty"`
-	Waiting  bool   `json:"waiting,omitempty"`
+	Mounted       bool   `json:"mounted"`
+	MountPath     string `json:"mountPath,omitempty"`
+	Error         string `json:"error,omitempty"`
+	ProcessID     int    `json:"processId,omitempty"`
+	Waiting       bool   `json:"waiting,omitempty"`
 	WaitingReason string `json:"waitingReason,omitempty"`
 }
 
@@ -174,15 +173,15 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 		if rm.isProcessRunning(mount.ProcessID) {
 			SetMountReady()
 			return &MountStatus{
-				Mounted:    true,
-				MountPath:  mount.MountPath,
-				ProcessID:  mount.ProcessID,
+				Mounted:   true,
+				MountPath: mount.MountPath,
+				ProcessID: mount.ProcessID,
 			}, nil
 		}
 		// If it's a waiting mount, return waiting status
 		if mount.Waiting {
 			return &MountStatus{
-				Waiting: true,
+				Waiting:       true,
 				WaitingReason: mount.WaitingReason,
 			}, nil
 		}
@@ -196,22 +195,22 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 	if ok {
 		torrentCount = allTorrentsMap.Count()
 	}
-	
+
 	if torrentCount == 0 {
 		pendingMount := &RcloneMount{
-			MountPath: config.MountPath,
-			RemoteName: config.RemoteName,
-			Config: config,
-			Waiting: true,
+			MountPath:     config.MountPath,
+			RemoteName:    config.RemoteName,
+			Config:        config,
+			Waiting:       true,
 			WaitingReason: "Waiting for torrents to be loaded",
-			APIKey: apiKey,
+			APIKey:        apiKey,
 		}
 		rm.pendingMutex.Lock()
 		rm.pendingMount = pendingMount
 		rm.pendingMutex.Unlock()
 
 		return &MountStatus{
-			Waiting: true,
+			Waiting:       true,
 			WaitingReason: "Waiting for torrents to be loaded",
 		}, nil
 	}
@@ -278,7 +277,7 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 			errorMsg := "rclone process exited immediately. Check if WinFsp is installed and the mount path is valid."
 			return &MountStatus{Error: errorMsg}, fmt.Errorf("rclone process exited")
 		}
-		
+
 		// Check if the mount point is accessible
 		if _, err := os.Stat(config.MountPath); err != nil {
 			logger.Debug("Mount point not yet accessible: %v", err)
@@ -300,13 +299,13 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 			logger.Info("Found rclone daemon PID: %d", daemonPid)
 		}
 	}
-	
+
 	mount := &RcloneMount{
-		ProcessID: actualPid,
-		MountPath: config.MountPath,
+		ProcessID:  actualPid,
+		MountPath:  config.MountPath,
 		RemoteName: config.RemoteName,
-		StartTime: time.Now(),
-		Config:    config,
+		StartTime:  time.Now(),
+		Config:     config,
 	}
 	rm.mounts[config.MountPath] = mount
 
@@ -486,12 +485,12 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--max-read-ahead", config.MaxReadAhead,
 	}
 
-    if config.LogLevel != "" {
-        args = append(args, "--log-level", config.LogLevel)
-    }
-    if config.LogFile != "" {
-        args = append(args, "--log-file", config.LogFile)
-    }
+	if config.LogLevel != "" {
+		args = append(args, "--log-level", config.LogLevel)
+	}
+	if config.LogFile != "" {
+		args = append(args, "--log-file", config.LogFile)
+	}
 
 	if config.CachePath != "" {
 		args = append(args, "--cache-dir", config.CachePath)
@@ -519,12 +518,12 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 func obscurePassword(password string) (string, error) {
 	rcloneCmd := getRcloneCommand()
 	cmd := exec.Command(rcloneCmd, "obscure", password)
-	
+
 	// Capture both stdout and stderr
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Run()
 	if err != nil {
 		logger.Error("Failed to run rclone obscure: %v", err)
@@ -532,14 +531,14 @@ func obscurePassword(password string) (string, error) {
 		logger.Error("Rclone stderr: %s", stderr.String())
 		return "", fmt.Errorf("failed to obscure password: %v", err)
 	}
-	
+
 	obscured := strings.TrimSpace(stdout.String())
 	if obscured == "" {
 		logger.Error("Empty obscured password from rclone")
 		logger.Error("Rclone stderr: %s", stderr.String())
 		return "", fmt.Errorf("empty obscured password")
 	}
-	
+
 	return obscured, nil
 }
 
@@ -563,7 +562,7 @@ func (rm *RcloneManager) isProcessRunning(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	
+
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -576,18 +575,18 @@ func (rm *RcloneManager) isMountPoint(path string) bool {
 	if runtime.GOOS == "windows" {
 		return false
 	}
-	
+
 	// Check if path exists and is accessible
 	if _, err := os.Stat(path); err != nil {
 		return false
 	}
-	
+
 	// Use mountpoint command if available
 	cmd := exec.Command("mountpoint", "-q", path)
 	if err := cmd.Run(); err == nil {
 		return true
 	}
-	
+
 	// Fallback: check /proc/mounts
 	cmd = exec.Command("grep", "-qs", path, "/proc/mounts")
 	return cmd.Run() == nil
@@ -598,20 +597,20 @@ func (rm *RcloneManager) findRcloneMountPid(mountPath string) int {
 	if runtime.GOOS == "windows" {
 		return 0
 	}
-	
+
 	// Use pgrep to find rclone processes
 	cmd := exec.Command("pgrep", "-f", "rclone mount.*"+mountPath)
 	output, err := cmd.Output()
 	if err != nil {
 		return 0
 	}
-	
+
 	// Parse the first PID
 	pidStr := strings.TrimSpace(string(output))
 	if pidStr == "" {
 		return 0
 	}
-	
+
 	// Get first line if multiple PIDs
 	lines := strings.Split(pidStr, "\n")
 	if len(lines) > 0 {
@@ -620,7 +619,7 @@ func (rm *RcloneManager) findRcloneMountPid(mountPath string) int {
 			return pid
 		}
 	}
-	
+
 	return 0
 }
 
@@ -677,7 +676,7 @@ func (rm *RcloneManager) isInProcMounts(mountPath string) bool {
 	if runtime.GOOS == "windows" {
 		return false
 	}
-	
+
 	cmd := exec.Command("grep", "-qs", mountPath, "/proc/mounts")
 	return cmd.Run() == nil
 }
@@ -713,7 +712,7 @@ func (rm *RcloneManager) CleanupStaleMounts() {
 
 	for path, mount := range rm.mounts {
 		shouldCleanup := false
-		
+
 		if runtime.GOOS != "windows" {
 			// On Unix, check if mount point is still active
 			if !rm.isMountPoint(mount.MountPath) {
@@ -733,7 +732,7 @@ func (rm *RcloneManager) CleanupStaleMounts() {
 				shouldCleanup = true
 			}
 		}
-		
+
 		if shouldCleanup {
 			logger.Info("Cleaning up stale mount: %s (PID: %d)", path, mount.ProcessID)
 			delete(rm.mounts, path)
@@ -745,7 +744,7 @@ func (rm *RcloneManager) CleanupStaleMounts() {
 func (rm *RcloneManager) CleanupAllMounts() {
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
-	
+
 	logger.Info("Cleaning up all rclone mounts...")
 	for path, mount := range rm.mounts {
 		logger.Info("Unmounting: Path=%s, PID=%d", path, mount.ProcessID)
@@ -753,7 +752,7 @@ func (rm *RcloneManager) CleanupAllMounts() {
 			rm.forceUnmountPath(mount.MountPath)
 			time.Sleep(500 * time.Millisecond)
 		}
-		
+
 		// Then kill the process if it's still running
 		if rm.isProcessRunning(mount.ProcessID) {
 			logger.Info("Killing rclone process: PID=%d", mount.ProcessID)
@@ -794,21 +793,21 @@ func CreateRcloneConfig(apiKey string) error {
 		return UpdateRcloneConfig(apiKey)
 	}
 
-    // Enforce default remote name
-    remoteName := "CineSync"
+	// Enforce default remote name
+	remoteName := "CineSync"
 
 	// Get CineSync credentials for authentication
 	username := env.GetString("CINESYNC_USERNAME", "admin")
 	password := env.GetString("CINESYNC_PASSWORD", "admin")
 	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
-	
+
 	obscuredPassword, err := obscurePassword(password)
 	if err != nil {
 		logger.Error("Failed to obscure password: %v", err)
 		logger.Warn("Using plain text password as fallback")
 		obscuredPassword = password
 	}
-	
+
 	config := fmt.Sprintf(`[%s]
 type = webdav
 url = http://localhost:%d/api/realdebrid/webdav/
@@ -830,8 +829,8 @@ func UpdateRcloneConfig(apiKey string) error {
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
-    // Enforce default remote name
-    remoteName := "CineSync"
+	// Enforce default remote name
+	remoteName := "CineSync"
 	// Ensure config directory exists
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
@@ -842,13 +841,13 @@ func UpdateRcloneConfig(apiKey string) error {
 	username := env.GetString("CINESYNC_USERNAME", "admin")
 	password := env.GetString("CINESYNC_PASSWORD", "admin")
 	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
-	
+
 	obscuredPassword, err := obscurePassword(password)
 	if err != nil {
 		logger.Error("Failed to obscure password: %v", err)
 		obscuredPassword = password
 	}
-	
+
 	config := fmt.Sprintf(`[%s]
 type = webdav
 url = http://localhost:%d/api/realdebrid/webdav/

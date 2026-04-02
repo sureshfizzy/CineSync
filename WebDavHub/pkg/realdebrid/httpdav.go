@@ -13,10 +13,10 @@ import (
 
 // HttpDavClientPool manages a pool of HTTP DAV clients for better resource utilization
 type HttpDavClientPool struct {
-	pool    sync.Pool
-	userID  string
+	pool     sync.Pool
+	userID   string
 	password string
-	baseURL string
+	baseURL  string
 }
 
 // NewHttpDavClientPool creates a new client pool
@@ -24,19 +24,19 @@ func NewHttpDavClientPool(userID, password, baseURL string) *HttpDavClientPool {
 	if baseURL == "" {
 		baseURL = "https://dav.real-debrid.com/"
 	}
-	
+
 	pool := &HttpDavClientPool{
-		userID:  userID,
+		userID:   userID,
 		password: password,
-		baseURL: baseURL,
+		baseURL:  baseURL,
 	}
-	
+
 	pool.pool.New = func() interface{} {
 		client := gowebdav.NewClient(baseURL, userID, password)
 		client.SetTimeout(15 * time.Second)
 		return client
 	}
-	
+
 	return pool
 }
 
@@ -83,14 +83,15 @@ type HttpDavFileInfo struct {
 	IsDir   bool      `json:"isDir"`
 	ModTime time.Time `json:"modTime"`
 }
+
 func NewHttpDavClient(userID, password, baseURL string) *HttpDavClient {
 	if baseURL == "" {
 		baseURL = "https://dav.real-debrid.com/"
 	}
-	
+
 	client := gowebdav.NewClient(baseURL, userID, password)
 	client.SetTimeout(15 * time.Second)
-	
+
 	return &HttpDavClient{
 		client:   client,
 		userID:   userID,
@@ -104,7 +105,7 @@ func (h *HttpDavClient) SetCredentials(userID, password, baseURL string) {
 	if baseURL == "" {
 		baseURL = "https://dav.real-debrid.com/"
 	}
-	
+
 	h.userID = userID
 	h.password = password
 	h.baseURL = baseURL

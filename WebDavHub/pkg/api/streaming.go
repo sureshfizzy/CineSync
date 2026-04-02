@@ -110,13 +110,13 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 	var initialChunkSize, defaultChunkSize int64
 	if isMobile {
 		// Smaller chunks for mobile browsers to reduce buffering
-		initialChunkSize = int64(256 * 1024)    // 256KB
-		defaultChunkSize = int64(512 * 1024)    // 512KB
+		initialChunkSize = int64(256 * 1024) // 256KB
+		defaultChunkSize = int64(512 * 1024) // 512KB
 		logger.Info("Mobile browser detected, using smaller chunk sizes")
 	} else {
 		// Larger chunks for desktop browsers
-		initialChunkSize = int64(2 * 1024 * 1024)    // 2MB
-		defaultChunkSize = int64(8 * 1024 * 1024)    // 8MB
+		initialChunkSize = int64(2 * 1024 * 1024) // 2MB
+		defaultChunkSize = int64(8 * 1024 * 1024) // 8MB
 	}
 
 	// Get the range header

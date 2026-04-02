@@ -10,13 +10,13 @@ import (
 
 // SpoofingConfigRequest represents a request to update the spoofing configuration
 type SpoofingConfigRequest struct {
-	Enabled        bool                      `json:"enabled"`
-	Version        string                    `json:"version"`
-	Branch         string                    `json:"branch"`
-	APIKey         string                    `json:"apiKey"`
-	ServiceType    string                    `json:"serviceType"`
-	FolderMode     bool                      `json:"folderMode"`
-	FolderMappings []spoofing.FolderMapping  `json:"folderMappings"`
+	Enabled        bool                     `json:"enabled"`
+	Version        string                   `json:"version"`
+	Branch         string                   `json:"branch"`
+	APIKey         string                   `json:"apiKey"`
+	ServiceType    string                   `json:"serviceType"`
+	FolderMode     bool                     `json:"folderMode"`
+	FolderMappings []spoofing.FolderMapping `json:"folderMappings"`
 }
 
 // HandleSpoofingConfig handles GET and POST requests for the spoofing configuration

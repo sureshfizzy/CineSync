@@ -46,9 +46,9 @@ func GetDebridDB() *DebridDB {
 			logger.Error("[DebridDB] Failed to create database directory %s: %v", dbDir, err)
 			panic(fmt.Sprintf("Failed to create database directory: %v", err))
 		}
-		
+
 		dbPath := filepath.Join(dbDir, "debrid.db")
-		
+
 		db, err := initializeDebridDB(dbPath)
 		if err != nil {
 			logger.Error("[DebridDB] Failed to initialize debrid database: %v", err)
@@ -83,10 +83,10 @@ func initializeDebridDB(dbPath string) (*DebridDB, error) {
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}
-	
+
 	connectionString := config.BuildConnectionString(dbPath)
 	logger.Debug("[DebridDB] Opening database with connection string: %s", dbPath)
-	
+
 	db, err := sql.Open("sqlite", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open debrid database: %w", err)
@@ -94,7 +94,7 @@ func initializeDebridDB(dbPath string) (*DebridDB, error) {
 
 	// Configure connection pool
 	config.ConfigureDatabase(db)
-	
+
 	// Test the connection
 	if err := db.Ping(); err != nil {
 		db.Close()

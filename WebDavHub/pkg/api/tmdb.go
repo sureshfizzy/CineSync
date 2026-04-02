@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	media "cinesync/pkg/api/Media"
 	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
-	media "cinesync/pkg/api/Media"
 )
 
 // WithTmdbValidation wraps TMDB handlers with common validation and queue management
@@ -207,7 +207,7 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 	mediaType := r.URL.Query().Get("mediaType") // optional: "movie" or "tv"
 	query := r.URL.Query().Get("query")
 	seasonNumber := r.URL.Query().Get("season")
-	episodeNumbers := r.URL.Query().Get("episodes") // comma-separated list of episode numbers
+	episodeNumbers := r.URL.Query().Get("episodes")       // comma-separated list of episode numbers
 	skipCache := r.URL.Query().Get("skipCache") == "true" // skip caching for temporary lookups
 
 	if id != "" {
@@ -272,9 +272,13 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 				if seasons, ok := details["seasons"].([]interface{}); ok {
 					for _, s := range seasons {
 						season, ok := s.(map[string]interface{})
-						if !ok { continue }
+						if !ok {
+							continue
+						}
 						sn, ok := season["season_number"].(float64)
-						if !ok { continue }
+						if !ok {
+							continue
+						}
 
 						// If season number is specified, only fetch that season
 						if seasonNumber != "" && fmt.Sprintf("%d", int(sn)) != seasonNumber {
@@ -446,9 +450,13 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 			if seasons, ok := details["seasons"].([]interface{}); ok {
 				for _, s := range seasons {
 					season, ok := s.(map[string]interface{})
-					if !ok { continue }
+					if !ok {
+						continue
+					}
 					sn, ok := season["season_number"].(float64)
-					if !ok { continue }
+					if !ok {
+						continue
+					}
 					seasonUrl := "https://api.themoviedb.org/3/tv/" + id + "/season/" + fmt.Sprintf("%d", int(sn)) + "?api_key=" + url.QueryEscape(tmdbApiKey)
 					seasonResp, err := tmdbHttpClient.Get(seasonUrl)
 					if err == nil && seasonResp.StatusCode == 200 {
@@ -505,20 +513,20 @@ func HandleTmdbCategoryContent(w http.ResponseWriter, r *http.Request, tmdbApiKe
 	case "anime_tv":
 		mediaType = "tv"
 		endpoint = "https://api.themoviedb.org/3/discover/tv"
-		params.Set("with_genres", "16") // Animation genre
+		params.Set("with_genres", "16")            // Animation genre
 		params.Set("with_original_language", "ja") // Japanese language
 		params.Set("sort_by", "vote_average.desc") // Sort by rating for quality anime
-		params.Set("vote_count.gte", "100") // Minimum votes for popular anime
-		params.Set("with_keywords", "210024") // Anime keyword
+		params.Set("vote_count.gte", "100")        // Minimum votes for popular anime
+		params.Set("with_keywords", "210024")      // Anime keyword
 
 	case "anime_movie":
 		mediaType = "movie"
 		endpoint = "https://api.themoviedb.org/3/discover/movie"
-		params.Set("with_genres", "16") // Animation genre
+		params.Set("with_genres", "16")            // Animation genre
 		params.Set("with_original_language", "ja") // Japanese language
 		params.Set("sort_by", "vote_average.desc") // Sort by rating for quality anime
-		params.Set("vote_count.gte", "50") // Minimum votes for popular anime movies
-		params.Set("with_keywords", "210024") // Anime keyword
+		params.Set("vote_count.gte", "50")         // Minimum votes for popular anime movies
+		params.Set("with_keywords", "210024")      // Anime keyword
 
 	case "tv":
 		mediaType = "tv"
@@ -698,22 +706,22 @@ func detectContentTypeFromDirectoryName(dirName string) string {
 
 	// Check for show/TV patterns
 	if strings.Contains(dirLower, "show") || strings.Contains(dirLower, "tv") ||
-	   strings.Contains(dirLower, "series") || strings.Contains(dirLower, "episode") {
+		strings.Contains(dirLower, "series") || strings.Contains(dirLower, "episode") {
 		return "tv"
 	}
 
 	// Check for movie patterns
 	if strings.Contains(dirLower, "movie") || strings.Contains(dirLower, "cinema") ||
-	   strings.Contains(dirLower, "film") {
+		strings.Contains(dirLower, "film") {
 		return "movie"
 	}
 
 	// Check resolution patterns and try to infer from context
 	if strings.Contains(dirLower, "4k") || strings.Contains(dirLower, "uhd") ||
-	   strings.Contains(dirLower, "hd") || strings.Contains(dirLower, "quality") {
+		strings.Contains(dirLower, "hd") || strings.Contains(dirLower, "quality") {
 		// If it contains show/series indicators, it's TV
 		if strings.Contains(dirLower, "show") || strings.Contains(dirLower, "series") ||
-		   strings.Contains(dirLower, "tv") {
+			strings.Contains(dirLower, "tv") {
 			return "tv"
 		}
 		// Otherwise assume movie for quality-based directories

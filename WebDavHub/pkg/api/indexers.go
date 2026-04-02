@@ -84,7 +84,7 @@ func HandleIndexerByID(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Indexer ID request: %s %s", r.Method, r.URL.Path)
 
 	parts := getPathSegments(r, "/api/indexers")
-		if len(parts) == 0 || parts[0] == "" {
+	if len(parts) == 0 || parts[0] == "" {
 		http.Error(w, "Indexer ID is required", http.StatusBadRequest)
 		return
 	}
@@ -115,7 +115,7 @@ func HandleIndexerTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := getPathSegments(r, "/api/indexers")
-		if len(parts) < 2 || parts[0] == "" || parts[1] != "test" {
+	if len(parts) < 2 || parts[0] == "" || parts[1] != "test" {
 		http.Error(w, "Invalid test endpoint", http.StatusBadRequest)
 		return
 	}
@@ -137,7 +137,7 @@ func HandleIndexerSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := getPathSegments(r, "/api/indexers")
-		if len(parts) < 2 || parts[0] == "" || parts[1] != "search" {
+	if len(parts) < 2 || parts[0] == "" || parts[1] != "search" {
 		http.Error(w, "Invalid search endpoint", http.StatusBadRequest)
 		return
 	}
@@ -153,67 +153,78 @@ func HandleIndexerSearch(w http.ResponseWriter, r *http.Request) {
 
 // HandleIndexerTestConfig handles testing an indexer configuration without saving
 func HandleIndexerTestConfig(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    var cfg Indexer
-    if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-        http.Error(w, "Invalid JSON", http.StatusBadRequest)
-        return
-    }
+	var cfg Indexer
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
 
-    // Minimal validation
-    if strings.TrimSpace(cfg.Protocol) == "" || strings.TrimSpace(cfg.URL) == "" {
-        http.Error(w, "Protocol and URL are required", http.StatusBadRequest)
-        return
-    }
+	// Minimal validation
+	if strings.TrimSpace(cfg.Protocol) == "" || strings.TrimSpace(cfg.URL) == "" {
+		http.Error(w, "Protocol and URL are required", http.StatusBadRequest)
+		return
+	}
 
-    result := testIndexerConnection(cfg)
+	result := testIndexerConnection(cfg)
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(result)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 // HandleIndexerCaps returns Torznab caps (categories) for an indexer or provided config
 func HandleIndexerCaps(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodGet && r.Method != http.MethodPost {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    // Allow POST with config, or GET /api/indexers/{id}/caps
-    var idx Indexer
-    if r.Method == http.MethodPost {
-        if err := json.NewDecoder(r.Body).Decode(&idx); err != nil {
-            http.Error(w, "Invalid JSON", http.StatusBadRequest)
-            return
-        }
-    } else {
+	// Allow POST with config, or GET /api/indexers/{id}/caps
+	var idx Indexer
+	if r.Method == http.MethodPost {
+		if err := json.NewDecoder(r.Body).Decode(&idx); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+	} else {
 		parts := getPathSegments(r, "/api/indexers")
 		if len(parts) < 2 || parts[0] == "" || parts[1] != "caps" {
-            http.Error(w, "Invalid caps endpoint", http.StatusBadRequest)
-            return
-        }
-        id, err := strconv.Atoi(parts[0])
-        if err != nil { http.Error(w, "Invalid indexer ID", http.StatusBadRequest); return }
+			http.Error(w, "Invalid caps endpoint", http.StatusBadRequest)
+			return
+		}
+		id, err := strconv.Atoi(parts[0])
+		if err != nil {
+			http.Error(w, "Invalid indexer ID", http.StatusBadRequest)
+			return
+		}
 
-        mediaHubDB, dberr := db.GetDatabaseConnection()
-        if dberr != nil { http.Error(w, "Database connection failed", http.StatusInternalServerError); return }
-        var apiKey sql.NullString
-        q := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ?`
-        if err := mediaHubDB.QueryRow(q, id).Scan(&idx.ID, &idx.Name, &idx.Protocol, &idx.URL, &apiKey, &idx.Timeout); err != nil {
-            http.Error(w, "Indexer not found", http.StatusNotFound)
-            return
-        }
-        if apiKey.Valid { idx.APIKey = apiKey.String }
-    }
+		mediaHubDB, dberr := db.GetDatabaseConnection()
+		if dberr != nil {
+			http.Error(w, "Database connection failed", http.StatusInternalServerError)
+			return
+		}
+		var apiKey sql.NullString
+		q := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ?`
+		if err := mediaHubDB.QueryRow(q, id).Scan(&idx.ID, &idx.Name, &idx.Protocol, &idx.URL, &apiKey, &idx.Timeout); err != nil {
+			http.Error(w, "Indexer not found", http.StatusNotFound)
+			return
+		}
+		if apiKey.Valid {
+			idx.APIKey = apiKey.String
+		}
+	}
 
-    caps, err := indexerService.GetIndexerCaps(idx)
-    if err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{"categories": caps})
+	caps, err := indexerService.GetIndexerCaps(idx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"categories": caps})
 }
 
 // handleGetIndexers retrieves all indexers
@@ -225,7 +236,7 @@ func handleGetIndexers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    query := `SELECT id, name, protocol, url, api_key, enabled, 
+	query := `SELECT id, name, protocol, url, api_key, enabled, 
         update_interval, categories, timeout, last_updated, last_tested, 
         test_status, test_message, created_at, updated_at 
         FROM indexers ORDER BY name`
@@ -240,13 +251,13 @@ func handleGetIndexers(w http.ResponseWriter, r *http.Request) {
 
 	var indexers []Indexer
 	for rows.Next() {
-    var indexer Indexer
-    var apiKey, categories, testMessage sql.NullString
+		var indexer Indexer
+		var apiKey, categories, testMessage sql.NullString
 		var lastUpdated, lastTested sql.NullInt64
 
 		err := rows.Scan(
 			&indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
-        &apiKey, &indexer.Enabled,
+			&apiKey, &indexer.Enabled,
 			&indexer.UpdateInterval, &categories, &indexer.Timeout,
 			&lastUpdated, &lastTested, &indexer.TestStatus,
 			&testMessage, &indexer.CreatedAt, &indexer.UpdatedAt,
@@ -294,22 +305,22 @@ func handleGetIndexer(w http.ResponseWriter, r *http.Request, indexerID int) {
 		return
 	}
 
-    query := `SELECT id, name, protocol, url, api_key, enabled, 
+	query := `SELECT id, name, protocol, url, api_key, enabled, 
         update_interval, categories, timeout, last_updated, last_tested, 
         test_status, test_message, created_at, updated_at 
         FROM indexers WHERE id = ?`
 
-    var indexer Indexer
-    var apiKey, categories, testMessage sql.NullString
+	var indexer Indexer
+	var apiKey, categories, testMessage sql.NullString
 	var lastUpdated, lastTested sql.NullInt64
 
-    err = mediaHubDB.QueryRow(query, indexerID).Scan(
-        &indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
-        &apiKey, &indexer.Enabled,
-        &indexer.UpdateInterval, &categories, &indexer.Timeout,
-        &lastUpdated, &lastTested, &indexer.TestStatus,
-        &testMessage, &indexer.CreatedAt, &indexer.UpdatedAt,
-    )
+	err = mediaHubDB.QueryRow(query, indexerID).Scan(
+		&indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
+		&apiKey, &indexer.Enabled,
+		&indexer.UpdateInterval, &categories, &indexer.Timeout,
+		&lastUpdated, &lastTested, &indexer.TestStatus,
+		&testMessage, &indexer.CreatedAt, &indexer.UpdatedAt,
+	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -355,11 +366,11 @@ func handleCreateIndexer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // Validate protocol
-    if req.Protocol == "jackett" || req.Protocol == "prowlarr" {
-        req.Protocol = "torznab"
-    }
-    validProtocols := []string{"torznab"}
+	// Validate protocol
+	if req.Protocol == "jackett" || req.Protocol == "prowlarr" {
+		req.Protocol = "torznab"
+	}
+	validProtocols := []string{"torznab"}
 	validProtocol := false
 	for _, protocol := range validProtocols {
 		if req.Protocol == protocol {
@@ -367,8 +378,8 @@ func handleCreateIndexer(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-    if !validProtocol {
-        http.Error(w, "Invalid protocol. Must be one of: torznab, jackett, prowlarr", http.StatusBadRequest)
+	if !validProtocol {
+		http.Error(w, "Invalid protocol. Must be one of: torznab, jackett, prowlarr", http.StatusBadRequest)
 		return
 	}
 
@@ -394,15 +405,15 @@ func handleCreateIndexer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().Unix()
-    query := `INSERT INTO indexers (name, protocol, url, api_key, enabled, 
+	query := `INSERT INTO indexers (name, protocol, url, api_key, enabled, 
         update_interval, categories, timeout, test_status, created_at, updated_at) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-    result, err := mediaHubDB.Exec(query,
-        req.Name, req.Protocol, req.URL, req.APIKey,
-        req.Enabled, req.UpdateInterval, req.Categories, req.Timeout,
-        "unknown", now, now,
-    )
+	result, err := mediaHubDB.Exec(query,
+		req.Name, req.Protocol, req.URL, req.APIKey,
+		req.Enabled, req.UpdateInterval, req.Categories, req.Timeout,
+		"unknown", now, now,
+	)
 
 	if err != nil {
 		logger.Error("Failed to insert indexer: %v", err)
@@ -441,11 +452,11 @@ func handleUpdateIndexer(w http.ResponseWriter, r *http.Request, indexerID int) 
 		return
 	}
 
-    // Validate protocol (normalize jackett/prowlarr under torznab umbrella)
-    if req.Protocol == "jackett" || req.Protocol == "prowlarr" {
-        req.Protocol = "torznab"
-    }
-    validProtocols := []string{"torznab"}
+	// Validate protocol (normalize jackett/prowlarr under torznab umbrella)
+	if req.Protocol == "jackett" || req.Protocol == "prowlarr" {
+		req.Protocol = "torznab"
+	}
+	validProtocols := []string{"torznab"}
 	validProtocol := false
 	for _, protocol := range validProtocols {
 		if req.Protocol == protocol {
@@ -453,8 +464,8 @@ func handleUpdateIndexer(w http.ResponseWriter, r *http.Request, indexerID int) 
 			break
 		}
 	}
-    if !validProtocol {
-        http.Error(w, "Invalid protocol. Must be one of: torznab, jackett, prowlarr", http.StatusBadRequest)
+	if !validProtocol {
+		http.Error(w, "Invalid protocol. Must be one of: torznab, jackett, prowlarr", http.StatusBadRequest)
 		return
 	}
 
@@ -480,13 +491,13 @@ func handleUpdateIndexer(w http.ResponseWriter, r *http.Request, indexerID int) 
 	}
 
 	now := time.Now().Unix()
-    query := `UPDATE indexers SET name=?, protocol=?, url=?, api_key=?, 
+	query := `UPDATE indexers SET name=?, protocol=?, url=?, api_key=?, 
         enabled=?, update_interval=?, categories=?, timeout=?, updated_at=? WHERE id=?`
 
-    result, err := mediaHubDB.Exec(query,
-        req.Name, req.Protocol, req.URL, req.APIKey,
-        req.Enabled, req.UpdateInterval, req.Categories, req.Timeout, now, indexerID,
-    )
+	result, err := mediaHubDB.Exec(query,
+		req.Name, req.Protocol, req.URL, req.APIKey,
+		req.Enabled, req.UpdateInterval, req.Categories, req.Timeout, now, indexerID,
+	)
 
 	if err != nil {
 		logger.Error("Failed to update indexer: %v", err)
@@ -554,14 +565,14 @@ func handleTestIndexer(w http.ResponseWriter, r *http.Request, indexerID int) {
 		return
 	}
 
-    var indexer Indexer
-    var apiKey sql.NullString
+	var indexer Indexer
+	var apiKey sql.NullString
 
-    query := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ?`
-    err = mediaHubDB.QueryRow(query, indexerID).Scan(
-        &indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
-        &apiKey, &indexer.Timeout,
-    )
+	query := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ?`
+	err = mediaHubDB.QueryRow(query, indexerID).Scan(
+		&indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
+		&apiKey, &indexer.Timeout,
+	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -627,14 +638,14 @@ func handleSearchIndexer(w http.ResponseWriter, r *http.Request, indexerID int) 
 		return
 	}
 
-    var indexer Indexer
-    var apiKey sql.NullString
+	var indexer Indexer
+	var apiKey sql.NullString
 
-    query := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ? AND enabled = 1`
-    err = mediaHubDB.QueryRow(query, indexerID).Scan(
-        &indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
-        &apiKey, &indexer.Timeout,
-    )
+	query := `SELECT id, name, protocol, url, api_key, timeout FROM indexers WHERE id = ? AND enabled = 1`
+	err = mediaHubDB.QueryRow(query, indexerID).Scan(
+		&indexer.ID, &indexer.Name, &indexer.Protocol, &indexer.URL,
+		&apiKey, &indexer.Timeout,
+	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -661,7 +672,6 @@ func handleSearchIndexer(w http.ResponseWriter, r *http.Request, indexerID int) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
-
 
 // testIndexerConnection tests the connection to an indexer
 func testIndexerConnection(indexer Indexer) TestResult {

@@ -2,41 +2,41 @@ package api
 
 import (
 	"bufio"
+	"cinesync/pkg/env"
+	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"strings"
+	"sync"
 	"time"
-	"io"
-	"cinesync/pkg/logger"
-	"cinesync/pkg/env"
-	"cinesync/pkg/mediahub"
 )
 
 // PythonBridgeRequest represents the request payload for running the python bridge
 type PythonBridgeRequest struct {
-	SourcePath string `json:"sourcePath"`
-	DisableMonitor bool `json:"disableMonitor"`
-	SelectedOption string `json:"selectedOption,omitempty"`
-	SelectedIds map[string]string `json:"selectedIds,omitempty"`
-	BatchApply bool `json:"batchApply,omitempty"`
-	ManualSearch bool `json:"manualSearch,omitempty"`
-	AutoSelect bool `json:"autoSelect,omitempty"`
-	BulkAutoProcess bool `json:"bulkAutoProcess,omitempty"`
+	SourcePath      string            `json:"sourcePath"`
+	DisableMonitor  bool              `json:"disableMonitor"`
+	SelectedOption  string            `json:"selectedOption,omitempty"`
+	SelectedIds     map[string]string `json:"selectedIds,omitempty"`
+	BatchApply      bool              `json:"batchApply,omitempty"`
+	ManualSearch    bool              `json:"manualSearch,omitempty"`
+	AutoSelect      bool              `json:"autoSelect,omitempty"`
+	BulkAutoProcess bool              `json:"bulkAutoProcess,omitempty"`
 }
 
 // PythonBridgeResponse represents a message sent to the client
 type PythonBridgeResponse struct {
-	Output           string                 `json:"output,omitempty"`
-	Error            string                 `json:"error,omitempty"`
-	Done             bool                   `json:"done,omitempty"`
-	StructuredData   *StructuredMessage     `json:"structuredData,omitempty"`
+	Output         string             `json:"output,omitempty"`
+	Error          string             `json:"error,omitempty"`
+	Done           bool               `json:"done,omitempty"`
+	StructuredData *StructuredMessage `json:"structuredData,omitempty"`
 }
 
 // StructuredMessage represents structured data from Python processors
@@ -48,14 +48,14 @@ type StructuredMessage struct {
 
 // SymlinkCreatedData represents the data structure for symlink creation events
 type SymlinkCreatedData struct {
-	SourceFile      string  `json:"source_file"`
-	DestinationFile string  `json:"destination_file"`
-	NewFolderName   string  `json:"new_folder_name"`
-	NewFilename     string  `json:"new_filename"`
-	NewPath         string  `json:"new_path"`
-	TmdbID          *int    `json:"tmdb_id,omitempty"`
-	SeasonNumber    *int    `json:"season_number,omitempty"`
-	ForceMode       bool    `json:"force_mode"`
+	SourceFile      string `json:"source_file"`
+	DestinationFile string `json:"destination_file"`
+	NewFolderName   string `json:"new_folder_name"`
+	NewFilename     string `json:"new_filename"`
+	NewPath         string `json:"new_path"`
+	TmdbID          *int   `json:"tmdb_id,omitempty"`
+	SeasonNumber    *int   `json:"season_number,omitempty"`
+	ForceMode       bool   `json:"force_mode"`
 }
 
 // PythonInputRequest represents input to send to the python process
@@ -65,9 +65,9 @@ type PythonInputRequest struct {
 
 // Global variables to manage the active python process
 var (
-	activePythonCmd    *exec.Cmd
-	activePythonStdin  io.WriteCloser
-	activePythonMutex  sync.Mutex
+	activePythonCmd            *exec.Cmd
+	activePythonStdin          io.WriteCloser
+	activePythonMutex          sync.Mutex
 	activePythonResponseWriter http.ResponseWriter
 	activePythonResponseMutex  sync.Mutex
 )
@@ -873,7 +873,7 @@ func HandlePythonBridgeTerminate(w http.ResponseWriter, r *http.Request) {
 		// No active process to terminate
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "success",
+			"status":  "success",
 			"message": "No active python process to terminate",
 		})
 		return
@@ -910,7 +910,7 @@ func HandlePythonBridgeTerminate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Python bridge process terminated",
 	})
 }

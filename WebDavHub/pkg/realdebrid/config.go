@@ -1,93 +1,93 @@
 package realdebrid
 
 import (
-    "os"
-    "path/filepath"
-    "sync"
+	"os"
+	"path/filepath"
+	"sync"
 
-    "cinesync/pkg/logger"
-    yaml "gopkg.in/yaml.v3"
+	"cinesync/pkg/logger"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // Config represents Real-Debrid configuration
 type Config struct {
-    Enabled bool   `json:"enabled" yaml:"enabled"`
-    APIKey  string `json:"apiKey" yaml:"apiKey"`
-    AdditionalAPIKeys []string `json:"additionalApiKeys" yaml:"additionalApiKeys"`
-    RcloneSettings RcloneSettings `json:"rcloneSettings" yaml:"rcloneSettings"`
-    HttpDavSettings HttpDavSettings `json:"httpDavSettings" yaml:"httpDavSettings"`
-    RateLimit RateLimitSettings `json:"rateLimit" yaml:"rateLimit"`
-    RepairSettings RepairSettings `json:"repairSettings" yaml:"repairSettings"`
+	Enabled           bool              `json:"enabled" yaml:"enabled"`
+	APIKey            string            `json:"apiKey" yaml:"apiKey"`
+	AdditionalAPIKeys []string          `json:"additionalApiKeys" yaml:"additionalApiKeys"`
+	RcloneSettings    RcloneSettings    `json:"rcloneSettings" yaml:"rcloneSettings"`
+	HttpDavSettings   HttpDavSettings   `json:"httpDavSettings" yaml:"httpDavSettings"`
+	RateLimit         RateLimitSettings `json:"rateLimit" yaml:"rateLimit"`
+	RepairSettings    RepairSettings    `json:"repairSettings" yaml:"repairSettings"`
 }
 
 // RcloneSettings represents rclone mount configuration
 type RcloneSettings struct {
-	Enabled              bool   `json:"enabled" yaml:"enabled"`
-	MountPath            string `json:"mountPath" yaml:"mountPath"`
-	RemoteName           string `json:"remoteName" yaml:"remoteName"`
-	VfsCacheMode         string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
-	VfsCacheMaxSize      string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
-	VfsCacheMaxAge       string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
-	CachePath            string `json:"CachePath" yaml:"CachePath"`
-	BufferSize           string `json:"bufferSize" yaml:"bufferSize"`
-	DirCacheTime         string `json:"dirCacheTime" yaml:"dirCacheTime"`
-	PollInterval         string `json:"pollInterval" yaml:"pollInterval"`
-	VfsReadChunkSize     string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
+	Enabled               bool   `json:"enabled" yaml:"enabled"`
+	MountPath             string `json:"mountPath" yaml:"mountPath"`
+	RemoteName            string `json:"remoteName" yaml:"remoteName"`
+	VfsCacheMode          string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
+	VfsCacheMaxSize       string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
+	VfsCacheMaxAge        string `json:"vfsCacheMaxAge" yaml:"vfsCacheMaxAge"`
+	CachePath             string `json:"CachePath" yaml:"CachePath"`
+	BufferSize            string `json:"bufferSize" yaml:"bufferSize"`
+	DirCacheTime          string `json:"dirCacheTime" yaml:"dirCacheTime"`
+	PollInterval          string `json:"pollInterval" yaml:"pollInterval"`
+	VfsReadChunkSize      string `json:"vfsReadChunkSize" yaml:"vfsReadChunkSize"`
 	VfsReadChunkSizeLimit string `json:"vfsReadChunkSizeLimit" yaml:"vfsReadChunkSizeLimit"`
-	StreamBufferSize     string `json:"streamBufferSize" yaml:"streamBufferSize"`
-	ServeFromRclone      bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
+	StreamBufferSize      string `json:"streamBufferSize" yaml:"streamBufferSize"`
+	ServeFromRclone       bool   `json:"serveFromRclone" yaml:"serveFromRclone"`
 	RetainFolderExtension bool   `json:"retainFolderExtension" yaml:"retainFolderExtension"`
-	AutoMountOnStart     bool   `json:"autoMountOnStart" yaml:"autoMountOnStart"`
-	AttrTimeout          string `json:"attrTimeout" yaml:"attrTimeout"`
-	VfsReadAhead         string `json:"vfsReadAhead" yaml:"vfsReadAhead"`
-	VfsCachePollInterval string `json:"vfsCachePollInterval" yaml:"vfsCachePollInterval"`
-	Timeout              string `json:"timeout" yaml:"timeout"`
-	Contimeout           string `json:"contimeout" yaml:"contimeout"`
-	LowLevelRetries      string `json:"lowLevelRetries" yaml:"lowLevelRetries"`
-	Retries              string `json:"retries" yaml:"retries"`
-	Transfers            string `json:"transfers" yaml:"transfers"`
-	VfsReadWait          string `json:"vfsReadWait" yaml:"vfsReadWait"`
-	VfsWriteWait         string `json:"vfsWriteWait" yaml:"vfsWriteWait"`
-	TpsLimit             string `json:"tpsLimit" yaml:"tpsLimit"`
-	TpsLimitBurst        string `json:"tpsLimitBurst" yaml:"tpsLimitBurst"`
-	DriveChunkSize       string `json:"driveChunkSize" yaml:"driveChunkSize"`
-	MaxReadAhead         string `json:"maxReadAhead" yaml:"maxReadAhead"`
-	LogLevel             string `json:"logLevel" yaml:"logLevel"`
-	LogFile              string `json:"logFile" yaml:"logFile"`
+	AutoMountOnStart      bool   `json:"autoMountOnStart" yaml:"autoMountOnStart"`
+	AttrTimeout           string `json:"attrTimeout" yaml:"attrTimeout"`
+	VfsReadAhead          string `json:"vfsReadAhead" yaml:"vfsReadAhead"`
+	VfsCachePollInterval  string `json:"vfsCachePollInterval" yaml:"vfsCachePollInterval"`
+	Timeout               string `json:"timeout" yaml:"timeout"`
+	Contimeout            string `json:"contimeout" yaml:"contimeout"`
+	LowLevelRetries       string `json:"lowLevelRetries" yaml:"lowLevelRetries"`
+	Retries               string `json:"retries" yaml:"retries"`
+	Transfers             string `json:"transfers" yaml:"transfers"`
+	VfsReadWait           string `json:"vfsReadWait" yaml:"vfsReadWait"`
+	VfsWriteWait          string `json:"vfsWriteWait" yaml:"vfsWriteWait"`
+	TpsLimit              string `json:"tpsLimit" yaml:"tpsLimit"`
+	TpsLimitBurst         string `json:"tpsLimitBurst" yaml:"tpsLimitBurst"`
+	DriveChunkSize        string `json:"driveChunkSize" yaml:"driveChunkSize"`
+	MaxReadAhead          string `json:"maxReadAhead" yaml:"maxReadAhead"`
+	LogLevel              string `json:"logLevel" yaml:"logLevel"`
+	LogFile               string `json:"logFile" yaml:"logFile"`
 }
 
 // HttpDavSettings represents HTTP DAV configuration
 type HttpDavSettings struct {
-    Enabled  bool   `json:"enabled" yaml:"enabled"`
-    UserID   string `json:"userId" yaml:"userId"`
-    Password string `json:"password" yaml:"password"`
-    BaseURL  string `json:"baseUrl" yaml:"baseUrl"`
+	Enabled  bool   `json:"enabled" yaml:"enabled"`
+	UserID   string `json:"userId" yaml:"userId"`
+	Password string `json:"password" yaml:"password"`
+	BaseURL  string `json:"baseUrl" yaml:"baseUrl"`
 }
 
 // RateLimitSettings controls API throttling and retry behavior
 type RateLimitSettings struct {
-    RequestsPerMinute int   `json:"requestsPerMinute" yaml:"requestsPerMinute"`
-    Burst             int   `json:"burst" yaml:"burst"`
-    MaxRetries        int   `json:"maxRetries" yaml:"maxRetries"`
-    BaseBackoffMs     int   `json:"baseBackoffMs" yaml:"baseBackoffMs"`
-    MaxBackoffMs      int   `json:"maxBackoffMs" yaml:"maxBackoffMs"`
-    Repair            RepairRateLimitSettings `json:"repair" yaml:"repair"`
+	RequestsPerMinute int                     `json:"requestsPerMinute" yaml:"requestsPerMinute"`
+	Burst             int                     `json:"burst" yaml:"burst"`
+	MaxRetries        int                     `json:"maxRetries" yaml:"maxRetries"`
+	BaseBackoffMs     int                     `json:"baseBackoffMs" yaml:"baseBackoffMs"`
+	MaxBackoffMs      int                     `json:"maxBackoffMs" yaml:"maxBackoffMs"`
+	Repair            RepairRateLimitSettings `json:"repair" yaml:"repair"`
 }
 
 type RepairRateLimitSettings struct {
-    RequestsPerMinute int `json:"requestsPerMinute" yaml:"requestsPerMinute"`
-    Burst             int `json:"burst" yaml:"burst"`
-    MaxRetries        int `json:"maxRetries" yaml:"maxRetries"`
-    BaseBackoffMs     int `json:"baseBackoffMs" yaml:"baseBackoffMs"`
-    MaxBackoffMs      int `json:"maxBackoffMs" yaml:"maxBackoffMs"`
+	RequestsPerMinute int `json:"requestsPerMinute" yaml:"requestsPerMinute"`
+	Burst             int `json:"burst" yaml:"burst"`
+	MaxRetries        int `json:"maxRetries" yaml:"maxRetries"`
+	BaseBackoffMs     int `json:"baseBackoffMs" yaml:"baseBackoffMs"`
+	MaxBackoffMs      int `json:"maxBackoffMs" yaml:"maxBackoffMs"`
 }
 
 // RepairSettings controls torrent repair behavior
 type RepairSettings struct {
-    Enabled         bool `json:"enabled" yaml:"enabled"`
-    AutoStartRepair bool `json:"autoStartRepair" yaml:"autoStartRepair"`
-    AutoFix         bool `json:"autoFix" yaml:"autoFix"`
-    ScanIntervalHours int `json:"scanIntervalHours" yaml:"scanIntervalHours"`
+	Enabled           bool `json:"enabled" yaml:"enabled"`
+	AutoStartRepair   bool `json:"autoStartRepair" yaml:"autoStartRepair"`
+	AutoFix           bool `json:"autoFix" yaml:"autoFix"`
+	ScanIntervalHours int  `json:"scanIntervalHours" yaml:"scanIntervalHours"`
 }
 
 // ConfigManager manages Real-Debrid configuration
@@ -105,72 +105,72 @@ var (
 // GetConfigManager returns the singleton config manager
 func GetConfigManager() *ConfigManager {
 	configOnce.Do(func() {
-        configManager = &ConfigManager{
-            config: &Config{
-                Enabled: false,
-                APIKey:  "",
-                AdditionalAPIKeys: []string{},
-                RcloneSettings: RcloneSettings{
-                    Enabled:              false,
-                    MountPath:            "",
-                    RemoteName:           "CineSync",
-                    VfsCacheMode:         "full",
-                    VfsCacheMaxSize:      "100G",
-                    VfsCacheMaxAge:       "24h",
-                    CachePath:            "",
-                    BufferSize:           "16M",
-                    DirCacheTime:         "15s",
-                    PollInterval:         "15s",
-                    VfsReadChunkSize:     "64M",
-                    VfsReadChunkSizeLimit: "128M",
-                    StreamBufferSize:     "10M",
-                    ServeFromRclone:      false,
-                    RetainFolderExtension: false,
-                    AutoMountOnStart:     true,
-                    AttrTimeout:          "1s",
-                    VfsReadAhead:         "128M",
-                    VfsCachePollInterval: "30s",
-                    Timeout:              "10m",
-                    Contimeout:           "60s",
-                    LowLevelRetries:      "3",
-					Retries:              "3",
-					Transfers:            "4",
-					VfsReadWait:          "20ms",
-					VfsWriteWait:         "1s",
-					TpsLimit:             "10",
-                    TpsLimitBurst:        "20",
-                    DriveChunkSize:       "64M",
-                    MaxReadAhead:         "256M",
-                },
-                HttpDavSettings: HttpDavSettings{
-                    Enabled:  false,
-                    UserID:   "",
-                    Password: "",
-                    BaseURL:  "https://dav.real-debrid.com/",
-                },
-                RateLimit: RateLimitSettings{
-                    RequestsPerMinute: 220,
-                    Burst:             50,
-                    MaxRetries:        5,
-                    BaseBackoffMs:     500,
-                    MaxBackoffMs:      8000,
-                    Repair: RepairRateLimitSettings{
-                        RequestsPerMinute: 60,
-                        Burst:             10,
-                        MaxRetries:        5,
-                        BaseBackoffMs:     500,
-                        MaxBackoffMs:      8000,
-                    },
-                },
-                RepairSettings: RepairSettings{
-                    Enabled:           false,
-                    AutoStartRepair:   false,
-                    AutoFix:           false,
-                    ScanIntervalHours: 48, // 2 days
-                },
-            },
-            configPath: filepath.Join("..", "db", "debrid.yml"),
-        }
+		configManager = &ConfigManager{
+			config: &Config{
+				Enabled:           false,
+				APIKey:            "",
+				AdditionalAPIKeys: []string{},
+				RcloneSettings: RcloneSettings{
+					Enabled:               false,
+					MountPath:             "",
+					RemoteName:            "CineSync",
+					VfsCacheMode:          "full",
+					VfsCacheMaxSize:       "100G",
+					VfsCacheMaxAge:        "24h",
+					CachePath:             "",
+					BufferSize:            "16M",
+					DirCacheTime:          "15s",
+					PollInterval:          "15s",
+					VfsReadChunkSize:      "64M",
+					VfsReadChunkSizeLimit: "128M",
+					StreamBufferSize:      "10M",
+					ServeFromRclone:       false,
+					RetainFolderExtension: false,
+					AutoMountOnStart:      true,
+					AttrTimeout:           "1s",
+					VfsReadAhead:          "128M",
+					VfsCachePollInterval:  "30s",
+					Timeout:               "10m",
+					Contimeout:            "60s",
+					LowLevelRetries:       "3",
+					Retries:               "3",
+					Transfers:             "4",
+					VfsReadWait:           "20ms",
+					VfsWriteWait:          "1s",
+					TpsLimit:              "10",
+					TpsLimitBurst:         "20",
+					DriveChunkSize:        "64M",
+					MaxReadAhead:          "256M",
+				},
+				HttpDavSettings: HttpDavSettings{
+					Enabled:  false,
+					UserID:   "",
+					Password: "",
+					BaseURL:  "https://dav.real-debrid.com/",
+				},
+				RateLimit: RateLimitSettings{
+					RequestsPerMinute: 220,
+					Burst:             50,
+					MaxRetries:        5,
+					BaseBackoffMs:     500,
+					MaxBackoffMs:      8000,
+					Repair: RepairRateLimitSettings{
+						RequestsPerMinute: 60,
+						Burst:             10,
+						MaxRetries:        5,
+						BaseBackoffMs:     500,
+						MaxBackoffMs:      8000,
+					},
+				},
+				RepairSettings: RepairSettings{
+					Enabled:           false,
+					AutoStartRepair:   false,
+					AutoFix:           false,
+					ScanIntervalHours: 48, // 2 days
+				},
+			},
+			configPath: filepath.Join("..", "db", "debrid.yml"),
+		}
 		configManager.loadConfig()
 	})
 	return configManager
@@ -180,10 +180,10 @@ func GetConfigManager() *ConfigManager {
 func (cm *ConfigManager) GetConfig() *Config {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	// Return a copy to prevent external modifications
 	configCopy := *cm.config
-	
+
 	// Ensure defaults are applied for rclone settings
 	if configCopy.RcloneSettings.RemoteName == "" {
 		configCopy.RcloneSettings.RemoteName = "CineSync"
@@ -248,7 +248,7 @@ func (cm *ConfigManager) GetConfig() *Config {
 	if configCopy.RcloneSettings.MaxReadAhead == "" {
 		configCopy.RcloneSettings.MaxReadAhead = "256M"
 	}
-	
+
 	return &configCopy
 }
 
@@ -256,7 +256,7 @@ func (cm *ConfigManager) GetConfig() *Config {
 func (cm *ConfigManager) SetConfig(config *Config) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	cm.config = config
 	return cm.saveConfig()
 }
@@ -265,8 +265,8 @@ func (cm *ConfigManager) SetConfig(config *Config) error {
 func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
-    // Apply updates (enabled, apiKey, rcloneSettings, and httpDavSettings)
+
+	// Apply updates (enabled, apiKey, rcloneSettings, and httpDavSettings)
 	for key, value := range updates {
 		switch key {
 		case "enabled":
@@ -293,7 +293,7 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 			if rcloneSettingsMap, ok := value.(map[string]interface{}); ok {
 				// Apply default values for empty fields
 				rcloneSettings := cm.config.RcloneSettings // Start with defaults
-				
+
 				if enabled, ok := rcloneSettingsMap["enabled"].(bool); ok {
 					rcloneSettings.Enabled = enabled
 				}
@@ -390,13 +390,13 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				if logFile, ok := rcloneSettingsMap["logFile"].(string); ok {
 					rcloneSettings.LogFile = logFile
 				}
-				
+
 				cm.config.RcloneSettings = rcloneSettings
 			}
 		case "httpDavSettings":
 			if httpDavSettingsMap, ok := value.(map[string]interface{}); ok {
 				httpDavSettings := cm.config.HttpDavSettings
-				
+
 				if enabled, ok := httpDavSettingsMap["enabled"].(bool); ok {
 					httpDavSettings.Enabled = enabled
 				}
@@ -407,56 +407,66 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 					httpDavSettings.Password = password
 				}
 				httpDavSettings.BaseURL = "https://dav.real-debrid.com/"
-				
+
 				cm.config.HttpDavSettings = httpDavSettings
 			}
-        case "rateLimit":
-            if rateLimitMap, ok := value.(map[string]interface{}); ok {
-                rl := cm.config.RateLimit
-                if rpm, ok := asInt(rateLimitMap["requestsPerMinute"]); ok && rpm > 0 { rl.RequestsPerMinute = rpm }
-                if burst, ok := asInt(rateLimitMap["burst"]); ok && burst >= 0 { rl.Burst = burst }
-                if maxRetries, ok := asInt(rateLimitMap["maxRetries"]); ok && maxRetries >= 0 { rl.MaxRetries = maxRetries }
-                if baseMs, ok := asInt(rateLimitMap["baseBackoffMs"]); ok && baseMs >= 0 { rl.BaseBackoffMs = baseMs }
-                if maxMs, ok := asInt(rateLimitMap["maxBackoffMs"]); ok && maxMs >= 0 { rl.MaxBackoffMs = maxMs }
-                cm.config.RateLimit = rl
-            }
-        case "repairSettings":
-            if repairSettingsMap, ok := value.(map[string]interface{}); ok {
-                rs := cm.config.RepairSettings
-                if enabled, ok := repairSettingsMap["enabled"].(bool); ok {
-                    rs.Enabled = enabled
-                }
-                if autoStartRepair, ok := repairSettingsMap["autoStartRepair"].(bool); ok {
-                    rs.AutoStartRepair = autoStartRepair
-                }
-                if autoFix, ok := repairSettingsMap["autoFix"].(bool); ok {
-                    rs.AutoFix = autoFix
-                }
-                if scanInterval, ok := asInt(repairSettingsMap["scanIntervalHours"]); ok && scanInterval > 0 {
-                    rs.ScanIntervalHours = scanInterval
-                }
-                cm.config.RepairSettings = rs
-            }
+		case "rateLimit":
+			if rateLimitMap, ok := value.(map[string]interface{}); ok {
+				rl := cm.config.RateLimit
+				if rpm, ok := asInt(rateLimitMap["requestsPerMinute"]); ok && rpm > 0 {
+					rl.RequestsPerMinute = rpm
+				}
+				if burst, ok := asInt(rateLimitMap["burst"]); ok && burst >= 0 {
+					rl.Burst = burst
+				}
+				if maxRetries, ok := asInt(rateLimitMap["maxRetries"]); ok && maxRetries >= 0 {
+					rl.MaxRetries = maxRetries
+				}
+				if baseMs, ok := asInt(rateLimitMap["baseBackoffMs"]); ok && baseMs >= 0 {
+					rl.BaseBackoffMs = baseMs
+				}
+				if maxMs, ok := asInt(rateLimitMap["maxBackoffMs"]); ok && maxMs >= 0 {
+					rl.MaxBackoffMs = maxMs
+				}
+				cm.config.RateLimit = rl
+			}
+		case "repairSettings":
+			if repairSettingsMap, ok := value.(map[string]interface{}); ok {
+				rs := cm.config.RepairSettings
+				if enabled, ok := repairSettingsMap["enabled"].(bool); ok {
+					rs.Enabled = enabled
+				}
+				if autoStartRepair, ok := repairSettingsMap["autoStartRepair"].(bool); ok {
+					rs.AutoStartRepair = autoStartRepair
+				}
+				if autoFix, ok := repairSettingsMap["autoFix"].(bool); ok {
+					rs.AutoFix = autoFix
+				}
+				if scanInterval, ok := asInt(repairSettingsMap["scanIntervalHours"]); ok && scanInterval > 0 {
+					rs.ScanIntervalHours = scanInterval
+				}
+				cm.config.RepairSettings = rs
+			}
 		}
 	}
-	
+
 	return cm.saveConfig()
 }
 
 // helper to coerce float64/json numbers to int safely
 func asInt(v interface{}) (int, bool) {
-    switch t := v.(type) {
-    case int:
-        return t, true
-    case int64:
-        return int(t), true
-    case float64:
-        return int(t), true
-    case float32:
-        return int(t), true
-    default:
-        return 0, false
-    }
+	switch t := v.(type) {
+	case int:
+		return t, true
+	case int64:
+		return int(t), true
+	case float64:
+		return int(t), true
+	case float32:
+		return int(t), true
+	default:
+		return 0, false
+	}
 }
 
 // IsEnabled returns whether Real-Debrid is enabled
@@ -477,7 +487,7 @@ func (cm *ConfigManager) GetAPIKey() string {
 func (cm *ConfigManager) SetAPIKey(apiKey string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	cm.config.APIKey = apiKey
 	return cm.saveConfig()
 }
@@ -489,7 +499,6 @@ func (cm *ConfigManager) IsServeFromRclone() bool {
 	return cm.config.RcloneSettings.ServeFromRclone
 }
 
-
 // loadConfig loads configuration from file
 func (cm *ConfigManager) loadConfig() error {
 	dir := filepath.Dir(cm.configPath)
@@ -497,108 +506,108 @@ func (cm *ConfigManager) loadConfig() error {
 		logger.Warn("Failed to create config directory %s: %v", dir, err)
 	}
 
-    data, err := os.ReadFile(cm.configPath)
-    if err != nil {
-        if os.IsNotExist(err) {
-            logger.Info("Real-Debrid config file not found, using defaults")
-            return cm.saveConfig()
-        }
-        return err
-    }
+	data, err := os.ReadFile(cm.configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Info("Real-Debrid config file not found, using defaults")
+			return cm.saveConfig()
+		}
+		return err
+	}
 
-    var config Config
-    if err := yaml.Unmarshal(data, &config); err != nil {
-        logger.Warn("Failed to parse Real-Debrid YAML config: %v", err)
-        return err
-    }
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		logger.Warn("Failed to parse Real-Debrid YAML config: %v", err)
+		return err
+	}
 
-    // Apply defaults for missing rclone settings
-    if config.RcloneSettings.RemoteName == "" {
-        config.RcloneSettings.RemoteName = "CineSync"
-    }
-    if config.RcloneSettings.VfsCacheMode == "" {
-        config.RcloneSettings.VfsCacheMode = "full"
-    }
-    if config.RcloneSettings.VfsCacheMaxSize == "" {
-        config.RcloneSettings.VfsCacheMaxSize = "100G"
-    }
-    if config.RcloneSettings.VfsCacheMaxAge == "" {
-        config.RcloneSettings.VfsCacheMaxAge = "24h"
-    }
-    if config.RcloneSettings.BufferSize == "" {
-        config.RcloneSettings.BufferSize = "16M"
-    }
-    if config.RcloneSettings.DirCacheTime == "" {
-        config.RcloneSettings.DirCacheTime = "15s"
-    }
-    if config.RcloneSettings.PollInterval == "" {
-        config.RcloneSettings.PollInterval = "15s"
-    }
-    if config.RcloneSettings.AttrTimeout == "" {
-        config.RcloneSettings.AttrTimeout = "1s"
-    }
-    if config.RcloneSettings.VfsReadAhead == "" {
-        config.RcloneSettings.VfsReadAhead = "128M"
-    }
-    if config.RcloneSettings.VfsCachePollInterval == "" {
-        config.RcloneSettings.VfsCachePollInterval = "30s"
-    }
-    if config.RcloneSettings.Timeout == "" {
-        config.RcloneSettings.Timeout = "10m"
-    }
-    if config.RcloneSettings.Contimeout == "" {
-        config.RcloneSettings.Contimeout = "60s"
-    }
-    if config.RcloneSettings.LowLevelRetries == "" {
-        config.RcloneSettings.LowLevelRetries = "3"
-    }
-    if config.RcloneSettings.Retries == "" {
-        config.RcloneSettings.Retries = "3"
-    }
-    if config.RcloneSettings.Transfers == "" {
-        config.RcloneSettings.Transfers = "4"
-    }
-    if config.RcloneSettings.VfsReadWait == "" {
-        config.RcloneSettings.VfsReadWait = "20ms"
-    }
+	// Apply defaults for missing rclone settings
+	if config.RcloneSettings.RemoteName == "" {
+		config.RcloneSettings.RemoteName = "CineSync"
+	}
+	if config.RcloneSettings.VfsCacheMode == "" {
+		config.RcloneSettings.VfsCacheMode = "full"
+	}
+	if config.RcloneSettings.VfsCacheMaxSize == "" {
+		config.RcloneSettings.VfsCacheMaxSize = "100G"
+	}
+	if config.RcloneSettings.VfsCacheMaxAge == "" {
+		config.RcloneSettings.VfsCacheMaxAge = "24h"
+	}
+	if config.RcloneSettings.BufferSize == "" {
+		config.RcloneSettings.BufferSize = "16M"
+	}
+	if config.RcloneSettings.DirCacheTime == "" {
+		config.RcloneSettings.DirCacheTime = "15s"
+	}
+	if config.RcloneSettings.PollInterval == "" {
+		config.RcloneSettings.PollInterval = "15s"
+	}
+	if config.RcloneSettings.AttrTimeout == "" {
+		config.RcloneSettings.AttrTimeout = "1s"
+	}
+	if config.RcloneSettings.VfsReadAhead == "" {
+		config.RcloneSettings.VfsReadAhead = "128M"
+	}
+	if config.RcloneSettings.VfsCachePollInterval == "" {
+		config.RcloneSettings.VfsCachePollInterval = "30s"
+	}
+	if config.RcloneSettings.Timeout == "" {
+		config.RcloneSettings.Timeout = "10m"
+	}
+	if config.RcloneSettings.Contimeout == "" {
+		config.RcloneSettings.Contimeout = "60s"
+	}
+	if config.RcloneSettings.LowLevelRetries == "" {
+		config.RcloneSettings.LowLevelRetries = "3"
+	}
+	if config.RcloneSettings.Retries == "" {
+		config.RcloneSettings.Retries = "3"
+	}
+	if config.RcloneSettings.Transfers == "" {
+		config.RcloneSettings.Transfers = "4"
+	}
+	if config.RcloneSettings.VfsReadWait == "" {
+		config.RcloneSettings.VfsReadWait = "20ms"
+	}
 	if config.RcloneSettings.VfsWriteWait == "" {
 		config.RcloneSettings.VfsWriteWait = "1s"
 	}
 	if config.RcloneSettings.TpsLimit == "" {
-        config.RcloneSettings.TpsLimit = "10"
-    }
-    if config.RcloneSettings.TpsLimitBurst == "" {
-        config.RcloneSettings.TpsLimitBurst = "20"
-    }
-    if config.RcloneSettings.DriveChunkSize == "" {
-        config.RcloneSettings.DriveChunkSize = "64M"
-    }
-    if config.RcloneSettings.MaxReadAhead == "" {
-        config.RcloneSettings.MaxReadAhead = "256M"
-    }
+		config.RcloneSettings.TpsLimit = "10"
+	}
+	if config.RcloneSettings.TpsLimitBurst == "" {
+		config.RcloneSettings.TpsLimitBurst = "20"
+	}
+	if config.RcloneSettings.DriveChunkSize == "" {
+		config.RcloneSettings.DriveChunkSize = "64M"
+	}
+	if config.RcloneSettings.MaxReadAhead == "" {
+		config.RcloneSettings.MaxReadAhead = "256M"
+	}
 
-    config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"
+	config.HttpDavSettings.BaseURL = "https://dav.real-debrid.com/"
 
-    // Apply defaults for rate limiting
-    if config.RateLimit.RequestsPerMinute <= 0 {
-        config.RateLimit.RequestsPerMinute = 220
-    }
-    if config.RateLimit.Burst <= 0 {
-        config.RateLimit.Burst = 50
-    }
-    if config.RateLimit.MaxRetries <= 0 {
-        config.RateLimit.MaxRetries = 5
-    }
-    if config.RateLimit.BaseBackoffMs <= 0 {
-        config.RateLimit.BaseBackoffMs = 500
-    }
-    if config.RateLimit.MaxBackoffMs <= 0 {
-        config.RateLimit.MaxBackoffMs = 8000
-    }
+	// Apply defaults for rate limiting
+	if config.RateLimit.RequestsPerMinute <= 0 {
+		config.RateLimit.RequestsPerMinute = 220
+	}
+	if config.RateLimit.Burst <= 0 {
+		config.RateLimit.Burst = 50
+	}
+	if config.RateLimit.MaxRetries <= 0 {
+		config.RateLimit.MaxRetries = 5
+	}
+	if config.RateLimit.BaseBackoffMs <= 0 {
+		config.RateLimit.BaseBackoffMs = 500
+	}
+	if config.RateLimit.MaxBackoffMs <= 0 {
+		config.RateLimit.MaxBackoffMs = 8000
+	}
 
-    cm.config = &config
-    logger.Info("Real-Debrid configuration loaded successfully")
-    return nil
+	cm.config = &config
+	logger.Info("Real-Debrid configuration loaded successfully")
+	return nil
 }
 
 // saveConfig saves configuration to file
@@ -609,12 +618,12 @@ func (cm *ConfigManager) saveConfig() error {
 		return err
 	}
 
-    data, err := yaml.Marshal(cm.config)
+	data, err := yaml.Marshal(cm.config)
 	if err != nil {
 		return err
 	}
 
-    if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
 		return err
 	}
 
@@ -626,36 +635,36 @@ func (cm *ConfigManager) saveConfig() error {
 func (cm *ConfigManager) ResetConfig() error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
-    cm.config = &Config{
-        Enabled: false,
-        APIKey:  "",
-        RcloneSettings: RcloneSettings{
-            Enabled:              false,
-            MountPath:            "",
-            RemoteName:           "realdebrid",
-            VfsCacheMode:         "writes",
-            VfsCacheMaxSize:      "100G",
-            VfsCacheMaxAge:       "24h",
-            CachePath:         "",
-            BufferSize:           "16M",
-            DirCacheTime:         "15s",
-            PollInterval:         "15s",
-            VfsReadChunkSize:     "64M",
-            VfsReadChunkSizeLimit: "128M",
-            StreamBufferSize:     "10M",
-            ServeFromRclone:      false,
-            RetainFolderExtension: false,
-            AutoMountOnStart:     false,
-        },
-        HttpDavSettings: HttpDavSettings{
-            Enabled:  false,
-            UserID:   "",
-            Password: "",
-            BaseURL:  "https://dav.real-debrid.com/",
-        },
-    }
-	
+
+	cm.config = &Config{
+		Enabled: false,
+		APIKey:  "",
+		RcloneSettings: RcloneSettings{
+			Enabled:               false,
+			MountPath:             "",
+			RemoteName:            "realdebrid",
+			VfsCacheMode:          "writes",
+			VfsCacheMaxSize:       "100G",
+			VfsCacheMaxAge:        "24h",
+			CachePath:             "",
+			BufferSize:            "16M",
+			DirCacheTime:          "15s",
+			PollInterval:          "15s",
+			VfsReadChunkSize:      "64M",
+			VfsReadChunkSizeLimit: "128M",
+			StreamBufferSize:      "10M",
+			ServeFromRclone:       false,
+			RetainFolderExtension: false,
+			AutoMountOnStart:      false,
+		},
+		HttpDavSettings: HttpDavSettings{
+			Enabled:  false,
+			UserID:   "",
+			Password: "",
+			BaseURL:  "https://dav.real-debrid.com/",
+		},
+	}
+
 	return cm.saveConfig()
 }
 
@@ -663,13 +672,13 @@ func (cm *ConfigManager) ResetConfig() error {
 func (cm *ConfigManager) ValidateConfig() []string {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	var errors []string
-	
+
 	if cm.config.Enabled && cm.config.APIKey == "" {
 		errors = append(errors, "API key is required when Real-Debrid is enabled")
 	}
-	
+
 	// Validate HTTP DAV settings if enabled
 	if cm.config.HttpDavSettings.Enabled {
 		if cm.config.HttpDavSettings.UserID == "" {
@@ -679,9 +688,9 @@ func (cm *ConfigManager) ValidateConfig() []string {
 			errors = append(errors, "HTTP DAV Password is required when HTTP DAV is enabled")
 		}
 	}
-	
-    // Only requires API key when enabled
-	
+
+	// Only requires API key when enabled
+
 	return errors
 }
 
@@ -689,28 +698,28 @@ func (cm *ConfigManager) ValidateConfig() []string {
 func (cm *ConfigManager) GetConfigStatus() map[string]interface{} {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
-    status := map[string]interface{}{
-        "enabled":   cm.config.Enabled,
-        "apiKeySet": cm.config.APIKey != "",
-        "valid":     len(cm.ValidateConfig()) == 0,
-        "errors":    cm.ValidateConfig(),
-    }
-	
+
+	status := map[string]interface{}{
+		"enabled":   cm.config.Enabled,
+		"apiKeySet": cm.config.APIKey != "",
+		"valid":     len(cm.ValidateConfig()) == 0,
+		"errors":    cm.ValidateConfig(),
+	}
+
 	// Test API key if it's set
 	if cm.config.APIKey != "" {
 		client := NewClient(cm.config.APIKey)
 		apiStatus := client.GetAPIKeyStatus()
 		status["apiStatus"] = apiStatus
 	}
-	
+
 	// Add rclone status if enabled
 	if cm.config.RcloneSettings.Enabled && cm.config.RcloneSettings.MountPath != "" {
 		rcloneManager := GetRcloneManager()
 		rcloneStatus := rcloneManager.GetStatus(cm.config.RcloneSettings.MountPath)
 		status["rcloneStatus"] = rcloneStatus
 	}
-	
+
 	// Add HTTP DAV status if enabled
 	if cm.config.HttpDavSettings.Enabled {
 		httpDavStatus := map[string]interface{}{
@@ -719,7 +728,7 @@ func (cm *ConfigManager) GetConfigStatus() map[string]interface{} {
 			"passwordSet": cm.config.HttpDavSettings.Password != "",
 			"baseUrl":     "https://dav.real-debrid.com/",
 		}
-		
+
 		// Test connection if credentials are set
 		if cm.config.HttpDavSettings.UserID != "" && cm.config.HttpDavSettings.Password != "" {
 			httpDavClient := NewHttpDavClient(
@@ -727,7 +736,7 @@ func (cm *ConfigManager) GetConfigStatus() map[string]interface{} {
 				cm.config.HttpDavSettings.Password,
 				"https://dav.real-debrid.com/",
 			)
-			
+
 			if err := httpDavClient.TestConnection(); err != nil {
 				httpDavStatus["connectionError"] = err.Error()
 				httpDavStatus["connected"] = false
@@ -737,10 +746,9 @@ func (cm *ConfigManager) GetConfigStatus() map[string]interface{} {
 		} else {
 			httpDavStatus["connected"] = false
 		}
-		
+
 		status["httpDavStatus"] = httpDavStatus
 	}
-	
+
 	return status
 }
-

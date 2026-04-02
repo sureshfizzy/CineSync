@@ -1,13 +1,13 @@
 package api
 
 import (
-	"crypto/subtle"
 	"cinesync/pkg/auth"
 	"cinesync/pkg/config"
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/spoofing"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -32,15 +32,14 @@ var lastStatsUpdate time.Time
 var statsCacheDuration = 30 * time.Second
 var statsScanInProgress bool
 var statsScanProgress struct {
-	CurrentPath string
-	FilesScanned int
+	CurrentPath    string
+	FilesScanned   int
 	FoldersScanned int
-	TotalSize int64
-	LastUpdate time.Time
+	TotalSize      int64
+	LastUpdate     time.Time
 }
 
 var isPlaceholderConfig bool
-
 
 func isAPIKeyOptionalPath(path string) bool {
 	optional := []string{
@@ -132,7 +131,6 @@ func APIKeyMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 
 // HTTP client for faster API requests
 var httpClientWithTimeout = &http.Client{
@@ -273,30 +271,30 @@ func InitializeImageCache(projectDir string) {
 }
 
 type FileInfo struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Size     string `json:"size,omitempty"`
-	Modified string `json:"modified,omitempty"`
-	Path     string `json:"path,omitempty"`
-	FullPath string `json:"fullPath,omitempty"`
-	Icon     string `json:"icon,omitempty"`
-	IsSeasonFolder bool `json:"isSeasonFolder,omitempty"`
-	HasSeasonFolders bool `json:"hasSeasonFolders,omitempty"`
-	IsCategoryFolder bool `json:"isCategoryFolder,omitempty"`
-	TmdbId   string `json:"tmdbId,omitempty"`
-	MediaType string `json:"mediaType,omitempty"`
-	PosterPath string `json:"posterPath,omitempty"`
-	Title    string `json:"title,omitempty"`
-	ReleaseDate string `json:"releaseDate,omitempty"`
-	FirstAirDate string `json:"firstAirDate,omitempty"`
-	SeasonNumber *int `json:"seasonNumber,omitempty"`
-	EpisodeNumber *int `json:"episodeNumber,omitempty"`
-	IsSourceRoot bool `json:"isSourceRoot,omitempty"`
-	IsSourceFile bool `json:"isSourceFile,omitempty"`
-	IsMediaFile  bool `json:"isMediaFile,omitempty"`
-	SourcePath   string `json:"sourcePath,omitempty"`
-	DestinationPath string `json:"destinationPath,omitempty"`
-    Quality string `json:"quality,omitempty"`
+	Name             string `json:"name"`
+	Type             string `json:"type"`
+	Size             string `json:"size,omitempty"`
+	Modified         string `json:"modified,omitempty"`
+	Path             string `json:"path,omitempty"`
+	FullPath         string `json:"fullPath,omitempty"`
+	Icon             string `json:"icon,omitempty"`
+	IsSeasonFolder   bool   `json:"isSeasonFolder,omitempty"`
+	HasSeasonFolders bool   `json:"hasSeasonFolders,omitempty"`
+	IsCategoryFolder bool   `json:"isCategoryFolder,omitempty"`
+	TmdbId           string `json:"tmdbId,omitempty"`
+	MediaType        string `json:"mediaType,omitempty"`
+	PosterPath       string `json:"posterPath,omitempty"`
+	Title            string `json:"title,omitempty"`
+	ReleaseDate      string `json:"releaseDate,omitempty"`
+	FirstAirDate     string `json:"firstAirDate,omitempty"`
+	SeasonNumber     *int   `json:"seasonNumber,omitempty"`
+	EpisodeNumber    *int   `json:"episodeNumber,omitempty"`
+	IsSourceRoot     bool   `json:"isSourceRoot,omitempty"`
+	IsSourceFile     bool   `json:"isSourceFile,omitempty"`
+	IsMediaFile      bool   `json:"isMediaFile,omitempty"`
+	SourcePath       string `json:"sourcePath,omitempty"`
+	DestinationPath  string `json:"destinationPath,omitempty"`
+	Quality          string `json:"quality,omitempty"`
 }
 
 type Stats struct {
@@ -412,7 +410,7 @@ func HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"status": "ok",
+		"status":    "ok",
 		"timestamp": time.Now().Unix(),
 	}
 
@@ -445,10 +443,10 @@ func HandleConfigStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"isPlaceholder":        currentIsPlaceholder,
-		"destinationDir":       currentDestDir,
-		"effectiveRootDir":     rootDir,
-		"needsConfiguration":   currentIsPlaceholder,
+		"isPlaceholder":      currentIsPlaceholder,
+		"destinationDir":     currentDestDir,
+		"effectiveRootDir":   rootDir,
+		"needsConfiguration": currentIsPlaceholder,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -481,7 +479,7 @@ func getTmdbDataFromCacheByID(tmdbID string, mediaType string) (string, string, 
 	// Try multiple media type variations to handle mixed database values
 	mediaTypeVariations := []string{
 		strings.ToLower(mediaType),
-		mediaType,                 
+		mediaType,
 		strings.ToUpper(mediaType),
 	}
 
@@ -674,7 +672,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	dir = actualDir
 
-
 	// Try database-first approach for folder listing with pagination
 	var dbFolders []db.FolderInfo
 	var totalDbFolders int
@@ -829,17 +826,17 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		for _, entry := range effectiveEntries {
 			if !entry.IsDir() {
 				ext := strings.ToLower(filepath.Ext(entry.Name()))
-						for _, allowed := range allowedExts {
-							if ext == allowed {
-								hasAllowed = true
-								break
-							}
-						}
-						if hasAllowed {
-							break
-						}
+				for _, allowed := range allowedExts {
+					if ext == allowed {
+						hasAllowed = true
+						break
 					}
 				}
+				if hasAllowed {
+					break
+				}
+			}
+		}
 	}
 
 	w.Header().Set("X-Has-Allowed-Extensions", fmt.Sprintf("%v", hasAllowed))
@@ -1073,7 +1070,6 @@ func HandleFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
 	w.Header().Set("X-Total-Count", fmt.Sprintf("%d", totalFiles))
 	w.Header().Set("X-Page", fmt.Sprintf("%d", page))
 	w.Header().Set("X-Limit", fmt.Sprintf("%d", limit))
@@ -1099,7 +1095,7 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Needs-Configuration", "true")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "No source directories configured",
-			"data": []FileInfo{},
+			"data":  []FileInfo{},
 		})
 		return
 	}
@@ -1147,12 +1143,12 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 				dirName := filepath.Base(sourceDir)
 
 				files = append(files, FileInfo{
-					Name:     dirName,
-					Type:     "directory",
-					Size:     "",
-					Modified: stat.ModTime().Format("2006-01-02 15:04:05"),
-					FullPath: fmt.Sprintf("/?source=%d", i),
-					Path:     sourceDir, // Store full path for reference
+					Name:         dirName,
+					Type:         "directory",
+					Size:         "",
+					Modified:     stat.ModTime().Format("2006-01-02 15:04:05"),
+					FullPath:     fmt.Sprintf("/?source=%d", i),
+					Path:         sourceDir, // Store full path for reference
 					IsSourceRoot: true,
 				})
 			} else {
@@ -1248,12 +1244,12 @@ func HandleSourceFiles(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fileInfo := FileInfo{
-			Name:     entry.Name(),
-			Type:     "file",
-			Size:     formatFileSize(info.Size()),
-			Modified: info.ModTime().Format("2006-01-02 15:04:05"),
-			FullPath: fmt.Sprintf("%s?source=%d", apiPath, sourceIndex),
-			Path:     apiPath,
+			Name:         entry.Name(),
+			Type:         "file",
+			Size:         formatFileSize(info.Size()),
+			Modified:     info.ModTime().Format("2006-01-02 15:04:05"),
+			FullPath:     fmt.Sprintf("%s?source=%d", apiPath, sourceIndex),
+			Path:         apiPath,
 			IsSourceFile: true,
 		}
 
@@ -1385,9 +1381,9 @@ func isCategoryFolder(folderName string) bool {
 
 // Cache for category folders to avoid repeated database queries
 var (
-	categoryFoldersCache map[string]bool
-	categoryFoldersMutex sync.RWMutex
-	categoryFoldersExpiry time.Time
+	categoryFoldersCache         map[string]bool
+	categoryFoldersMutex         sync.RWMutex
+	categoryFoldersExpiry        time.Time
 	categoryFoldersCacheDuration = 5 * time.Minute
 )
 
@@ -1524,14 +1520,14 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	// Start new scan
 	statsScanInProgress = true
 	statsScanProgress = struct {
-		CurrentPath string
-		FilesScanned int
+		CurrentPath    string
+		FilesScanned   int
 		FoldersScanned int
-		TotalSize int64
-		LastUpdate time.Time
+		TotalSize      int64
+		LastUpdate     time.Time
 	}{
 		CurrentPath: "Initializing database query...",
-		LastUpdate: time.Now(),
+		LastUpdate:  time.Now(),
 	}
 
 	// Get all stats from MediaHub database - no file system scanning needed
@@ -1710,120 +1706,124 @@ func HandleDelete(w http.ResponseWriter, r *http.Request) {
 
 // HandleRestoreSymlinks restores files by calling MediaHub's restore functionality
 func HandleRestoreSymlinks(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
-    
-    // Parse the request to get file IDs or paths
-    var req struct { 
-        Paths []string `json:"paths"` 
-        IDs   []string `json:"ids"`
-    }
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Invalid JSON", http.StatusBadRequest)
-        return
-    }
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    if len(req.Paths) == 0 && len(req.IDs) == 0 {
-        http.Error(w, "No paths or IDs provided", http.StatusBadRequest)
-        return
-    }
+	// Parse the request to get file IDs or paths
+	var req struct {
+		Paths []string `json:"paths"`
+		IDs   []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
 
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        http.Error(w, "Database connection failed", http.StatusInternalServerError)
-        return
-    }
+	if len(req.Paths) == 0 && len(req.IDs) == 0 {
+		http.Error(w, "No paths or IDs provided", http.StatusBadRequest)
+		return
+	}
 
-    restored := 0
-    var errors []string
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
 
-    // Handle restoration by file IDs (preferred method)
-    if len(req.IDs) > 0 {
-        for _, idStr := range req.IDs {
-            if idStr == "" { continue }
-            
-            // Call MediaHub's restore function by communicating with MediaHub API
-            success := restoreDeletedFileByID(idStr)
-            if success {
-                restored++
-            } else {
-                errors = append(errors, fmt.Sprintf("ID %s: restore failed", idStr))
-            }
-        }
-    } else {
-        // Handle restoration by destination paths (fallback method)
-        for _, p := range req.Paths {
-            if p == "" { continue }
-            
-            // Find the deleted file by destination path in MediaHub's deleted_files table
-            var deletedID int
-            err := mediaHubDB.QueryRow(`
+	restored := 0
+	var errors []string
+
+	// Handle restoration by file IDs (preferred method)
+	if len(req.IDs) > 0 {
+		for _, idStr := range req.IDs {
+			if idStr == "" {
+				continue
+			}
+
+			// Call MediaHub's restore function by communicating with MediaHub API
+			success := restoreDeletedFileByID(idStr)
+			if success {
+				restored++
+			} else {
+				errors = append(errors, fmt.Sprintf("ID %s: restore failed", idStr))
+			}
+		}
+	} else {
+		// Handle restoration by destination paths (fallback method)
+		for _, p := range req.Paths {
+			if p == "" {
+				continue
+			}
+
+			// Find the deleted file by destination path in MediaHub's deleted_files table
+			var deletedID int
+			err := mediaHubDB.QueryRow(`
                 SELECT id FROM deleted_files 
                 WHERE destination_path = ? OR destination_path LIKE ? 
                 ORDER BY deleted_at DESC LIMIT 1
             `, p, "%"+filepath.Base(p)+"%").Scan(&deletedID)
-            
-            if err != nil {
-                errors = append(errors, fmt.Sprintf("%s: not found in deleted files", p))
-                continue
-            }
-            
-            // Call MediaHub's restore function
-            success := restoreDeletedFileByID(fmt.Sprintf("%d", deletedID))
-            if success {
-                restored++
-            } else {
-                errors = append(errors, fmt.Sprintf("%s: restore failed", p))
-            }
-        }
-    }
 
-    // Return results
-    response := map[string]interface{}{
-        "success": true,
-        "restored": restored,
-        "restoredCount": restored,
-        "errors": errors,
-        "message": fmt.Sprintf("Restored %d file(s)", restored),
-    }
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("%s: not found in deleted files", p))
+				continue
+			}
 
-    if restored > 0 {
-        db.InvalidateFolderCache()
-        db.NotifyDashboardStatsChanged()
-    }
+			// Call MediaHub's restore function
+			success := restoreDeletedFileByID(fmt.Sprintf("%d", deletedID))
+			if success {
+				restored++
+			} else {
+				errors = append(errors, fmt.Sprintf("%s: restore failed", p))
+			}
+		}
+	}
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(response)
+	// Return results
+	response := map[string]interface{}{
+		"success":       true,
+		"restored":      restored,
+		"restoredCount": restored,
+		"errors":        errors,
+		"message":       fmt.Sprintf("Restored %d file(s)", restored),
+	}
+
+	if restored > 0 {
+		db.InvalidateFolderCache()
+		db.NotifyDashboardStatsChanged()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // restoreDeletedFileByID calls MediaHub's restore function by directly using the database
 func restoreDeletedFileByID(idStr string) bool {
-    // Convert string ID to integer
-    deletedID, err := strconv.Atoi(idStr)
-    if err != nil {
-        logger.Warn("Invalid deleted file ID: %s", idStr)
-        return false
-    }
+	// Convert string ID to integer
+	deletedID, err := strconv.Atoi(idStr)
+	if err != nil {
+		logger.Warn("Invalid deleted file ID: %s", idStr)
+		return false
+	}
 
-    // Get MediaHub database connection
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        logger.Warn("Failed to get MediaHub database connection: %v", err)
-        return false
-    }
+	// Get MediaHub database connection
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get MediaHub database connection: %v", err)
+		return false
+	}
 
-    // Get the deleted file record
-    var filePath, destinationPath, trashFileName string
-    var basePath, tmdbID, seasonNumber, reason, mediaType, properName, year, episodeNumber, imdbID sql.NullString
-    var isAnimeGenre sql.NullInt64
-    var language, quality, tvdbID, leagueID, sportsdbEventID, sportName, sportLocation, sportSession, sportVenue, sportDate sql.NullString
-    var sportRound sql.NullInt64
-    var fileSize sql.NullInt64
-    var processedAt sql.NullString
+	// Get the deleted file record
+	var filePath, destinationPath, trashFileName string
+	var basePath, tmdbID, seasonNumber, reason, mediaType, properName, year, episodeNumber, imdbID sql.NullString
+	var isAnimeGenre sql.NullInt64
+	var language, quality, tvdbID, leagueID, sportsdbEventID, sportName, sportLocation, sportSession, sportVenue, sportDate sql.NullString
+	var sportRound sql.NullInt64
+	var fileSize sql.NullInt64
+	var processedAt sql.NullString
 
-    err = mediaHubDB.QueryRow(`
+	err = mediaHubDB.QueryRow(`
         SELECT file_path, destination_path, base_path, tmdb_id, season_number, reason,
                media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
                language, quality, tvdb_id, league_id, sportsdb_event_id, sport_name,
@@ -1832,78 +1832,78 @@ func restoreDeletedFileByID(idStr string) bool {
         FROM deleted_files 
         WHERE id = ?
     `, deletedID).Scan(
-        &filePath, &destinationPath, &basePath, &tmdbID, &seasonNumber, &reason,
-        &mediaType, &properName, &year, &episodeNumber, &imdbID, &isAnimeGenre,
-        &language, &quality, &tvdbID, &leagueID, &sportsdbEventID, &sportName,
-        &sportRound, &sportLocation, &sportSession, &sportVenue, &sportDate,
-        &fileSize, &processedAt, &trashFileName,
-    )
+		&filePath, &destinationPath, &basePath, &tmdbID, &seasonNumber, &reason,
+		&mediaType, &properName, &year, &episodeNumber, &imdbID, &isAnimeGenre,
+		&language, &quality, &tvdbID, &leagueID, &sportsdbEventID, &sportName,
+		&sportRound, &sportLocation, &sportSession, &sportVenue, &sportDate,
+		&fileSize, &processedAt, &trashFileName,
+	)
 
-    if err != nil {
-        logger.Warn("Deleted file with ID %d not found: %v", deletedID, err)
-        return false
-    }
+	if err != nil {
+		logger.Warn("Deleted file with ID %d not found: %v", deletedID, err)
+		return false
+	}
 
-    // Check if the trash file still exists
-    if trashFileName != "" {
-        trashPath := filepath.Join("..", "db", "trash", trashFileName)
-        if _, err := os.Stat(trashPath); os.IsNotExist(err) {
-            logger.Warn("Trash file not found for restoration: %s", trashPath)
-            return false
-        }
+	// Check if the trash file still exists
+	if trashFileName != "" {
+		trashPath := filepath.Join("..", "db", "trash", trashFileName)
+		if _, err := os.Stat(trashPath); os.IsNotExist(err) {
+			logger.Warn("Trash file not found for restoration: %s", trashPath)
+			return false
+		}
 
-        // Ensure destination parent directory exists
-        if destinationPath != "" {
-            if err := os.MkdirAll(filepath.Dir(destinationPath), 0755); err != nil {
-                logger.Warn("Failed to create destination directory: %v", err)
-                return false
-            }
+		// Ensure destination parent directory exists
+		if destinationPath != "" {
+			if err := os.MkdirAll(filepath.Dir(destinationPath), 0755); err != nil {
+				logger.Warn("Failed to create destination directory: %v", err)
+				return false
+			}
 
-            if trashStat, err := os.Stat(trashPath); err == nil && trashStat.IsDir() {
-                destFileName := filepath.Base(destinationPath)
+			if trashStat, err := os.Stat(trashPath); err == nil && trashStat.IsDir() {
+				destFileName := filepath.Base(destinationPath)
 
-                var foundFile string
-                err := filepath.Walk(trashPath, func(walkPath string, info os.FileInfo, err error) error {
-                    if err != nil {
-                        return err
-                    }
-                    if filepath.Base(walkPath) == destFileName && info.Mode()&os.ModeSymlink != 0 {
-                        foundFile = walkPath
-                        return filepath.SkipDir
-                    }
-                    return nil
-                })
-                
-                if err != nil || foundFile == "" {
-                    logger.Warn("Could not find episode file %s in trash directory %s", destFileName, trashPath)
-                    return false
-                }
+				var foundFile string
+				err := filepath.Walk(trashPath, func(walkPath string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					if filepath.Base(walkPath) == destFileName && info.Mode()&os.ModeSymlink != 0 {
+						foundFile = walkPath
+						return filepath.SkipDir
+					}
+					return nil
+				})
 
-                if err := restoreFromTrash(foundFile, destinationPath); err != nil {
-                    logger.Warn("Failed to restore episode file from trash: %v", err)
-                    return false
-                }
-                
-                logger.Info("Restored episode file from trash: %s -> %s", foundFile, destinationPath)
+				if err != nil || foundFile == "" {
+					logger.Warn("Could not find episode file %s in trash directory %s", destFileName, trashPath)
+					return false
+				}
 
-                if isEmpty, err := isDirectoryEffectivelyEmpty(trashPath); err == nil && isEmpty {
-                    if err := os.RemoveAll(trashPath); err != nil {
-                        logger.Warn("Failed to remove empty trash folder: %v", err)
-                    } else {
-                        logger.Info("Successfully removed empty trash folder: %s", trashPath)
-                    }
-                }
-            } else {
-                if err := restoreFromTrash(trashPath, destinationPath); err != nil {
-                    logger.Warn("Failed to restore file from trash: %v", err)
-                    return false
-                }
-                logger.Info("Restored file from trash: %s -> %s", trashPath, destinationPath)
-            }
-        }
-    }
+				if err := restoreFromTrash(foundFile, destinationPath); err != nil {
+					logger.Warn("Failed to restore episode file from trash: %v", err)
+					return false
+				}
 
-    _, err = mediaHubDB.Exec(`
+				logger.Info("Restored episode file from trash: %s -> %s", foundFile, destinationPath)
+
+				if isEmpty, err := isDirectoryEffectivelyEmpty(trashPath); err == nil && isEmpty {
+					if err := os.RemoveAll(trashPath); err != nil {
+						logger.Warn("Failed to remove empty trash folder: %v", err)
+					} else {
+						logger.Info("Successfully removed empty trash folder: %s", trashPath)
+					}
+				}
+			} else {
+				if err := restoreFromTrash(trashPath, destinationPath); err != nil {
+					logger.Warn("Failed to restore file from trash: %v", err)
+					return false
+				}
+				logger.Info("Restored file from trash: %s -> %s", trashPath, destinationPath)
+			}
+		}
+	}
+
+	_, err = mediaHubDB.Exec(`
         INSERT OR REPLACE INTO processed_files (
             file_path, destination_path, base_path, tmdb_id, season_number, reason,
             media_type, proper_name, year, episode_number, imdb_id, is_anime_genre,
@@ -1912,24 +1912,24 @@ func restoreDeletedFileByID(idStr string) bool {
             file_size, processed_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, filePath, destinationPath, basePath, tmdbID, seasonNumber, reason,
-        mediaType, properName, year, episodeNumber, imdbID, isAnimeGenre,
-        language, quality, tvdbID, leagueID, sportsdbEventID, sportName,
-        sportRound, sportLocation, sportSession, sportVenue, sportDate,
-        fileSize, processedAt)
+		mediaType, properName, year, episodeNumber, imdbID, isAnimeGenre,
+		language, quality, tvdbID, leagueID, sportsdbEventID, sportName,
+		sportRound, sportLocation, sportSession, sportVenue, sportDate,
+		fileSize, processedAt)
 
-    if err != nil {
-        logger.Warn("Failed to restore to processed_files: %v", err)
-        return false
-    }
+	if err != nil {
+		logger.Warn("Failed to restore to processed_files: %v", err)
+		return false
+	}
 
-    _, err = mediaHubDB.Exec("DELETE FROM deleted_files WHERE id = ?", deletedID)
-    if err != nil {
-        logger.Warn("Failed to remove from deleted_files: %v", err)
-        return false
-    }
+	_, err = mediaHubDB.Exec("DELETE FROM deleted_files WHERE id = ?", deletedID)
+	if err != nil {
+		logger.Warn("Failed to remove from deleted_files: %v", err)
+		return false
+	}
 
-    logger.Info("Successfully restored deleted file: %s", destinationPath)
-    return true
+	logger.Info("Successfully restored deleted file: %s", destinationPath)
+	return true
 }
 
 // deleteLibraryItemByTmdbID removes a library_items row and its placeholder
@@ -2147,11 +2147,11 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string, tmdbID strin
 				}
 				return nil
 			})
-			
+
 			if err != nil {
 				logger.Warn("Error walking directory %s: %v", trashedPath, err)
 			}
-			
+
 			// Process each symlink individually
 			for _, originalSymlinkPath := range symlinkFiles {
 				_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
@@ -2167,9 +2167,9 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string, tmdbID strin
 					sport_round, sport_location, sport_session, sport_venue, sport_date,
 					file_size, processed_at, ?, ?
 				FROM processed_files 
-				WHERE destination_path = ?`, 
+				WHERE destination_path = ?`,
 					"Manual deletion via UI", filepath.Base(trashedPath), originalSymlinkPath)
-				
+
 				if err != nil {
 					logger.Warn("Failed to save deletion metadata for symlink %s: %v", originalSymlinkPath, err)
 				}
@@ -2188,9 +2188,9 @@ func handleSingleDelete(w http.ResponseWriter, relativePath string, tmdbID strin
 				sport_round, sport_location, sport_session, sport_venue, sport_date,
 				file_size, processed_at, ?, ?
 			FROM processed_files 
-			WHERE destination_path = ? OR file_path = ?`, 
+			WHERE destination_path = ? OR file_path = ?`,
 				"Manual deletion via UI", filepath.Base(trashedPath), path, path)
-			
+
 			if err != nil {
 				logger.Warn("Failed to save deletion metadata for file: %v", err)
 			}
@@ -2269,8 +2269,8 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 					deleteTarget = candidate
 				}
 
-			if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
-				if dbPath, found := findFileInDatabase(relativePath); found {
+				if _, statErr := os.Stat(deleteTarget); os.IsNotExist(statErr) {
+					if dbPath, found := findFileInDatabase(relativePath); found {
 						logger.Info("Found file in database (bulk), cleaning up entries: %s", dbPath)
 
 						var showDeletedCount int
@@ -2389,11 +2389,11 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 					}
 					return nil
 				})
-				
+
 				if err != nil {
 					logger.Warn("Error walking directory %s: %v", path, err)
 				}
-				
+
 				// Process each symlink individually
 				for _, symlinkPath := range symlinkFiles {
 					_, err := mediaHubDB.Exec(`INSERT INTO deleted_files (
@@ -2409,9 +2409,9 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 						sport_round, sport_location, sport_session, sport_venue, sport_date,
 						file_size, processed_at, ?, ?
 					FROM processed_files 
-					WHERE destination_path = ?`, 
+					WHERE destination_path = ?`,
 						"Manual bulk deletion via UI", filepath.Base(trashedPath), symlinkPath)
-					
+
 					if err != nil {
 						logger.Warn("Failed to save deletion metadata for symlink %s: %v", symlinkPath, err)
 					}
@@ -2430,9 +2430,9 @@ func handleBulkDelete(w http.ResponseWriter, paths []string) {
 					sport_round, sport_location, sport_session, sport_venue, sport_date,
 					file_size, processed_at, ?, ?
 				FROM processed_files 
-				WHERE destination_path = ? OR file_path = ?`, 
+				WHERE destination_path = ? OR file_path = ?`,
 					"Manual bulk deletion via UI", filepath.Base(trashedPath), path, path)
-				
+
 				if err != nil {
 					logger.Warn("Failed to save deletion metadata for file: %v", err)
 				}
@@ -2969,7 +2969,6 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	cleanSourcePath := filepath.Clean(req.SourcePath)
 	cleanTargetPath := filepath.Clean(req.TargetPath)
 
@@ -2986,7 +2985,7 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sourceFullPath := filepath.Join(rootDir, cleanSourcePath)
-	
+
 	// Extract filename from source path
 	sourceFileName := filepath.Base(cleanSourcePath)
 	targetFullPath := filepath.Join(rootDir, cleanTargetPath, sourceFileName)
@@ -3100,7 +3099,6 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(MoveResponse{Success: true})
 }
-
 
 // HandleMediaFiles returns media file entries from the database by TMDB ID
 func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
@@ -3706,9 +3704,9 @@ func handleSourceFileUpdate(data map[string]interface{}) {
 	BroadcastMediaHubEvent("source_file_updated", map[string]interface{}{
 		"file_path":         filePath,
 		"processing_status": processingStatus,
-		"tmdb_id":          tmdbId,
-		"season_number":    seasonNumber,
-		"timestamp":        time.Now().UnixMilli(),
+		"tmdb_id":           tmdbId,
+		"season_number":     seasonNumber,
+		"timestamp":         time.Now().UnixMilli(),
 	})
 }
 
@@ -3744,10 +3742,10 @@ func handleFileDeleted(data map[string]interface{}) {
 	BroadcastMediaHubEvent("file_deleted", map[string]interface{}{
 		"source_path":      sourcePath,
 		"destination_path": destinationPath,
-		"tmdb_id":         tmdbID,
-		"season_number":   seasonNumber,
-		"reason":          reason,
-		"timestamp":       time.Now().UnixMilli(),
+		"tmdb_id":          tmdbID,
+		"season_number":    seasonNumber,
+		"reason":           reason,
+		"timestamp":        time.Now().UnixMilli(),
 	})
 }
 
@@ -4034,9 +4032,13 @@ func HandleRestart(w http.ResponseWriter, r *http.Request) {
 // moveToTrash moves a file/dir under rootDir to the centralized MediaHub/db/trash folder
 func moveToTrash(fullPath string) (string, error) {
 	absRoot, err := filepath.Abs(rootDir)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	absPath, err := filepath.Abs(fullPath)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	if !strings.HasPrefix(absPath, absRoot) {
 		return "", fmt.Errorf("path outside root")
 	}
@@ -4203,18 +4205,17 @@ func restoreFromTrash(trashPath, destinationPath string) error {
 
 // broadcastFileRenameEvents broadcasts SignalR events when files are renamed
 func broadcastFileRenameEvents(oldPath, newPath string) {
-    if isMovieFile(oldPath) || isMovieFile(newPath) {
-        if movieFile := getMovieFileFromPath(newPath); movieFile != nil {
-            movieFile.ID = spoofing.GenerateUniqueMovieFileID(movieFile.MovieId)
-            spoofing.BroadcastMovieFileImported(movieFile)
-        }
-    } else if isTVFile(oldPath) || isTVFile(newPath) {
-        if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
-            spoofing.BroadcastEpisodeFileAdded(episodeFile)
-        }
-    }
+	if isMovieFile(oldPath) || isMovieFile(newPath) {
+		if movieFile := getMovieFileFromPath(newPath); movieFile != nil {
+			movieFile.ID = spoofing.GenerateUniqueMovieFileID(movieFile.MovieId)
+			spoofing.BroadcastMovieFileImported(movieFile)
+		}
+	} else if isTVFile(oldPath) || isTVFile(newPath) {
+		if episodeFile := getEpisodeFileFromPath(newPath); episodeFile != nil {
+			spoofing.BroadcastEpisodeFileAdded(episodeFile)
+		}
+	}
 }
-
 
 // moveDirectory moves a directory using copy-and-delete approach to avoid Windows "Access is denied" errors
 func moveDirectory(sourcePath, targetPath string) error {
@@ -4280,22 +4281,22 @@ func copyDirectory(src, dst string) error {
 func copyFile(src, dst string) error {
 	var err error
 	maxRetries := 3
-	
+
 	for i := 0; i < maxRetries; i++ {
 		err = copyFileOnce(src, dst)
 		if err == nil {
 			return nil
 		}
-		
+
 		// If it's a permission error and we have retries left, wait and try again
 		if i < maxRetries-1 && (os.IsPermission(err) || strings.Contains(err.Error(), "Access is denied")) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		
+
 		return err
 	}
-	
+
 	return err
 }
 
@@ -4329,114 +4330,114 @@ func copyFileOnce(src, dst string) error {
 
 // updateDatabaseForMovedFile updates database records when a file is moved
 func updateDatabaseForMovedFile(sourcePath, targetPath string) {
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        logger.Warn("Failed to get database connection for file move update: %v", err)
-        return
-    }
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for file move update: %v", err)
+		return
+	}
 
-    // Extract target base path for updating
-    targetDir := filepath.Dir(targetPath)
-    targetBasePath := filepath.Base(targetDir)
+	// Extract target base path for updating
+	targetDir := filepath.Dir(targetPath)
+	targetBasePath := filepath.Base(targetDir)
 
-    // Update destination_path and base_path for moved files
-    sourcePattern := sourcePath + "%"
-    query := `UPDATE processed_files SET 
+	// Update destination_path and base_path for moved files
+	sourcePattern := sourcePath + "%"
+	query := `UPDATE processed_files SET 
                 destination_path = REPLACE(destination_path, ?, ?),
                 base_path = ? 
               WHERE destination_path LIKE ?`
-    result, err := mediaHubDB.Exec(query, sourcePath, targetPath, targetBasePath, sourcePattern)
-    if err != nil {
-        logger.Warn("Failed to update processed_files for moved file: %v", err)
-    } else {
-        rowsAffected, _ := result.RowsAffected()
-        logger.Info("Updated processed_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected)
-    }
+	result, err := mediaHubDB.Exec(query, sourcePath, targetPath, targetBasePath, sourcePattern)
+	if err != nil {
+		logger.Warn("Failed to update processed_files for moved file: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		logger.Info("Updated processed_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected)
+	}
 
-    // Update source_files table if it exists
-    sourceQuery := `UPDATE source_files SET 
+	// Update source_files table if it exists
+	sourceQuery := `UPDATE source_files SET 
                       destination_path = REPLACE(destination_path, ?, ?),
                       base_path = ? 
                     WHERE destination_path LIKE ?`
-    result2, err := mediaHubDB.Exec(sourceQuery, sourcePath, targetPath, targetBasePath, sourcePattern)
-    if err != nil {
-        // Only log as warning if it's not a "table doesn't exist" error
-        if !strings.Contains(err.Error(), "no such table") {
-            logger.Warn("Failed to update source_files for moved file: %v", err)
-        }
-    } else {
-        rowsAffected2, _ := result2.RowsAffected()
-        if rowsAffected2 > 0 {
-            logger.Info("Updated source_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected2)
-        }
-    }
+	result2, err := mediaHubDB.Exec(sourceQuery, sourcePath, targetPath, targetBasePath, sourcePattern)
+	if err != nil {
+		// Only log as warning if it's not a "table doesn't exist" error
+		if !strings.Contains(err.Error(), "no such table") {
+			logger.Warn("Failed to update source_files for moved file: %v", err)
+		}
+	} else {
+		rowsAffected2, _ := result2.RowsAffected()
+		if rowsAffected2 > 0 {
+			logger.Info("Updated source_files for moved file: %s -> %s (rows affected: %d)", sourcePath, targetPath, rowsAffected2)
+		}
+	}
 }
 
 // updateDatabaseForRenamedFile updates database records when a file is renamed
 func updateDatabaseForRenamedFile(oldPath, newPath string) {
-    mediaHubDB, err := db.GetDatabaseConnection()
-    if err != nil {
-        logger.Warn("Failed to get database connection for file rename update: %v", err)
-        return
-    }
+	mediaHubDB, err := db.GetDatabaseConnection()
+	if err != nil {
+		logger.Warn("Failed to get database connection for file rename update: %v", err)
+		return
+	}
 
-    // Extract new base path for updating
-    newDir := filepath.Dir(newPath)
-    newBasePath := filepath.Base(newDir)
+	// Extract new base path for updating
+	newDir := filepath.Dir(newPath)
+	newBasePath := filepath.Base(newDir)
 
-    // Extract new proper name from the new folder name
-    newFolderName := filepath.Base(newPath)
-    newProperName := extractTitleFromFolderName(newFolderName)
+	// Extract new proper name from the new folder name
+	newFolderName := filepath.Base(newPath)
+	newProperName := extractTitleFromFolderName(newFolderName)
 
-    // Update destination_path, base_path, and proper_name for renamed files using pattern matching
-    oldPathPattern := oldPath + "%"
-    query := `UPDATE processed_files SET
+	// Update destination_path, base_path, and proper_name for renamed files using pattern matching
+	oldPathPattern := oldPath + "%"
+	query := `UPDATE processed_files SET
                 destination_path = REPLACE(destination_path, ?, ?),
                 base_path = ?,
                 proper_name = ?
               WHERE destination_path LIKE ?`
-    result, err := mediaHubDB.Exec(query, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
-    if err != nil {
-        logger.Warn("Failed to update processed_files for renamed file: %v", err)
-    } else {
-        rowsAffected, _ := result.RowsAffected()
-        logger.Info("Updated processed_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected)
-    }
+	result, err := mediaHubDB.Exec(query, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
+	if err != nil {
+		logger.Warn("Failed to update processed_files for renamed file: %v", err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		logger.Info("Updated processed_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected)
+	}
 
-    // Update source_files table if it exists
-    sourceQuery := `UPDATE source_files SET
+	// Update source_files table if it exists
+	sourceQuery := `UPDATE source_files SET
                       destination_path = REPLACE(destination_path, ?, ?),
                       base_path = ?,
                       proper_name = ?
                     WHERE destination_path LIKE ?`
-    result2, err := mediaHubDB.Exec(sourceQuery, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
-    if err != nil {
-        if !strings.Contains(err.Error(), "no such table") {
-            logger.Warn("Failed to update source_files for renamed file: %v", err)
-        }
-    } else {
-        rowsAffected2, _ := result2.RowsAffected()
-        if rowsAffected2 > 0 {
-            logger.Info("Updated source_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected2)
-        }
-    }
+	result2, err := mediaHubDB.Exec(sourceQuery, oldPath, newPath, newBasePath, newProperName, oldPathPattern)
+	if err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			logger.Warn("Failed to update source_files for renamed file: %v", err)
+		}
+	} else {
+		rowsAffected2, _ := result2.RowsAffected()
+		if rowsAffected2 > 0 {
+			logger.Info("Updated source_files for renamed file: %s -> %s (rows affected: %d)", oldPath, newPath, rowsAffected2)
+		}
+	}
 }
 
 // isMovieFile determines if a file path represents a movie file
 func isMovieFile(filePath string) bool {
 	pathLower := strings.ToLower(filePath)
 	return strings.Contains(pathLower, "movie") ||
-		   strings.Contains(pathLower, "film") ||
-		   (!strings.Contains(pathLower, "season") && !strings.Contains(pathLower, "episode"))
+		strings.Contains(pathLower, "film") ||
+		(!strings.Contains(pathLower, "season") && !strings.Contains(pathLower, "episode"))
 }
 
 // isTVFile determines if a file path represents a TV show file
 func isTVFile(filePath string) bool {
 	pathLower := strings.ToLower(filePath)
 	return strings.Contains(pathLower, "season") ||
-		   strings.Contains(pathLower, "episode") ||
-		   strings.Contains(pathLower, "tv") ||
-		   strings.Contains(pathLower, "show")
+		strings.Contains(pathLower, "episode") ||
+		strings.Contains(pathLower, "tv") ||
+		strings.Contains(pathLower, "show")
 }
 
 // getMovieFileFromPath creates a MovieFile object from a file path
@@ -4452,7 +4453,7 @@ func getMovieFileFromPath(filePath string) *spoofing.MovieFile {
 		return nil
 	}
 
-    var properName, tmdbIDStr, language, quality string
+	var properName, tmdbIDStr, language, quality string
 	var year int
 	var fileSize int64
 
@@ -4491,18 +4492,18 @@ func getMovieFileFromPath(filePath string) *spoofing.MovieFile {
 	}
 
 	// Create MovieFile with database information
-    movieFile := &spoofing.MovieFile{
-        ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
-        MovieId:      tmdbID,
-        RelativePath: fileName,
-        Path:         filePath,
-        Size:         fileSize,
-        DateAdded:    modTime,
-        Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
-        Languages:    spoofing.BuildLanguagesFromDatabase(language),
-        SceneName:    "",
-        ReleaseGroup: "",
-    }
+	movieFile := &spoofing.MovieFile{
+		ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
+		MovieId:      tmdbID,
+		RelativePath: fileName,
+		Path:         filePath,
+		Size:         fileSize,
+		DateAdded:    modTime,
+		Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
+		Languages:    spoofing.BuildLanguagesFromDatabase(language),
+		SceneName:    "",
+		ReleaseGroup: "",
+	}
 
 	return movieFile
 }
@@ -4549,7 +4550,6 @@ func getEpisodeFileFromPath(filePath string) map[string]interface{} {
 	seasonNum, _ := strconv.Atoi(seasonNumber)
 	episodeNum, _ := strconv.Atoi(episodeNumber)
 
-
 	if tmdbID == 0 || seasonNum == 0 || episodeNum == 0 {
 		return nil
 	}
@@ -4564,10 +4564,10 @@ func getEpisodeFileFromPath(filePath string) map[string]interface{} {
 		}
 	}
 
-    // Use TMDB ID directly for series ID
-    seriesID := tmdbID
-    episodeID := spoofing.GenerateUniqueEpisodeID(seriesID, seasonNum, episodeNum)
-    episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
+	// Use TMDB ID directly for series ID
+	seriesID := tmdbID
+	episodeID := spoofing.GenerateUniqueEpisodeID(seriesID, seasonNum, episodeNum)
+	episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
 
 	// Retrieve quality, language, and episode title from DB
 	var dbQuality, dbLanguage, dbEpisodeTitle string
@@ -4577,15 +4577,15 @@ func getEpisodeFileFromPath(filePath string) map[string]interface{} {
 	}
 
 	// Create episode file with database information
-    episodeFile := map[string]interface{}{
-        "id":            episodeFileID,
-        "seriesId":      seriesID,
-        "episodeId":     episodeID,
-        "seasonNumber":  seasonNum,
-        "episodeNumber": episodeNum,
-        "title":         dbEpisodeTitle,
-        "airDate":       "2023-01-01",
-        "relativePath":  fileName,
+	episodeFile := map[string]interface{}{
+		"id":            episodeFileID,
+		"seriesId":      seriesID,
+		"episodeId":     episodeID,
+		"seasonNumber":  seasonNum,
+		"episodeNumber": episodeNum,
+		"title":         dbEpisodeTitle,
+		"airDate":       "2023-01-01",
+		"relativePath":  fileName,
 		"path":          filePath,
 		"size":          fileSize,
 		"dateAdded":     modTime.Format("2006-01-02T15:04:05Z"),
@@ -4632,13 +4632,13 @@ func broadcastFileDeletionEvents(filePath string) {
 		return
 	}
 
-    if strings.ToUpper(mediaType) == "MOVIE" {
-        spoofing.BroadcastMovieFileDeleted(spoofing.GenerateUniqueMovieFileID(tmdbID), tmdbID, properName)
+	if strings.ToUpper(mediaType) == "MOVIE" {
+		spoofing.BroadcastMovieFileDeleted(spoofing.GenerateUniqueMovieFileID(tmdbID), tmdbID, properName)
 	} else if strings.ToUpper(mediaType) == "TV" {
 		seasonNum, _ := strconv.Atoi(seasonNumber)
 		episodeNum, _ := strconv.Atoi(episodeNumber)
 		seriesID := tmdbID * 1000
-        episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
+		episodeFileID := spoofing.GenerateUniqueEpisodeFileID(seriesID, seasonNum, episodeNum)
 		spoofing.BroadcastEpisodeFileDeleted(episodeFileID, seriesID, properName)
 	}
 }
@@ -4687,15 +4687,15 @@ func broadcastFileAdditionEvents(filePath string) {
 		return
 	}
 
-    if strings.ToUpper(mediaType) == "MOVIE" {
-        if movieFile := createMovieFileFromDB(filePath, tmdbID, properName, year); movieFile != nil {
-            spoofing.BroadcastMovieFileImported(movieFile)
-        }
-    } else if strings.ToUpper(mediaType) == "TV" {
-        if episodeFile := createEpisodeFileFromDB(filePath, tmdbID, properName, seasonNumber, episodeNumber); episodeFile != nil {
-            spoofing.BroadcastEpisodeFileAdded(episodeFile)
-        }
-    }
+	if strings.ToUpper(mediaType) == "MOVIE" {
+		if movieFile := createMovieFileFromDB(filePath, tmdbID, properName, year); movieFile != nil {
+			spoofing.BroadcastMovieFileImported(movieFile)
+		}
+	} else if strings.ToUpper(mediaType) == "TV" {
+		if episodeFile := createEpisodeFileFromDB(filePath, tmdbID, properName, seasonNumber, episodeNumber); episodeFile != nil {
+			spoofing.BroadcastEpisodeFileAdded(episodeFile)
+		}
+	}
 }
 
 func createMovieFileFromDB(filePath string, tmdbID int, properName string, year int) *spoofing.MovieFile {
@@ -4709,25 +4709,25 @@ func createMovieFileFromDB(filePath string, tmdbID int, properName string, year 
 		fileSize = fileInfo.Size()
 	}
 
-    // Query DB for language and quality to enrich payload
-    mediaHubDB, err := db.GetDatabaseConnection()
-    var language, quality string
-    if err == nil {
-        _ = mediaHubDB.QueryRow(`SELECT COALESCE(language,''), COALESCE(quality,'') FROM processed_files WHERE destination_path = ? AND UPPER(media_type) = 'MOVIE' LIMIT 1`, filePath).Scan(&language, &quality)
-    }
+	// Query DB for language and quality to enrich payload
+	mediaHubDB, err := db.GetDatabaseConnection()
+	var language, quality string
+	if err == nil {
+		_ = mediaHubDB.QueryRow(`SELECT COALESCE(language,''), COALESCE(quality,'') FROM processed_files WHERE destination_path = ? AND UPPER(media_type) = 'MOVIE' LIMIT 1`, filePath).Scan(&language, &quality)
+	}
 
-    return &spoofing.MovieFile{
-        ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
-        MovieId:      tmdbID,
-        RelativePath: fileName,
-        Path:         filePath,
-        Size:         fileSize,
-        DateAdded:    modTime,
-        Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
-        Languages:    spoofing.BuildLanguagesFromDatabase(language),
-        SceneName:    "",
-        ReleaseGroup: "",
-    }
+	return &spoofing.MovieFile{
+		ID:           spoofing.GenerateUniqueMovieFileID(tmdbID),
+		MovieId:      tmdbID,
+		RelativePath: fileName,
+		Path:         filePath,
+		Size:         fileSize,
+		DateAdded:    modTime,
+		Quality:      spoofing.BuildQualityFromDatabase(quality, filePath),
+		Languages:    spoofing.BuildLanguagesFromDatabase(language),
+		SceneName:    "",
+		ReleaseGroup: "",
+	}
 }
 
 func createEpisodeFileFromDB(filePath string, tmdbID int, properName string, seasonNumber, episodeNumber string) map[string]interface{} {

@@ -37,28 +37,28 @@ type FailedUnrestrictEntry struct {
 
 // Client represents a Real-Debrid API client
 type Client struct {
-	apiKey     string
-	tokenManager *TokenManager
-	baseURL    string
-	webdavURL  string
-	httpClient *http.Client
-	repairHTTPClient *http.Client
-	unrestrictCache cmap.ConcurrentMap[string, *DownloadCacheEntry]
+	apiKey                string
+	tokenManager          *TokenManager
+	baseURL               string
+	webdavURL             string
+	httpClient            *http.Client
+	repairHTTPClient      *http.Client
+	unrestrictCache       cmap.ConcurrentMap[string, *DownloadCacheEntry]
 	failedUnrestrictCache cmap.ConcurrentMap[string, *FailedUnrestrictEntry]
-	cacheMutex      sync.RWMutex
-    limiter         *rateLimiter
-	repairLimiter   *rateLimiter
+	cacheMutex            sync.RWMutex
+	limiter               *rateLimiter
+	repairLimiter         *rateLimiter
 }
 
 const repairModeContextKey contextKey = "repairMode"
 
 // UserInfo represents Real-Debrid user information
 type UserInfo struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Points   int    `json:"points"`
-	Type     string `json:"type"`
+	ID         int    `json:"id"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+	Points     int    `json:"points"`
+	Type       string `json:"type"`
 	Expiration string `json:"expiration"`
 }
 
@@ -79,39 +79,39 @@ type DownloadLink struct {
 
 // DownloadItem represents a single item from RD downloads
 type DownloadItem struct {
-    ID        string `json:"id"`
-    Filename  string `json:"filename"`
-    Filesize  int64  `json:"filesize"`
-    Host      string `json:"host"`
-    Status    string `json:"status"`
-    Download  string `json:"download"`
-    Link      string `json:"link"`
-    Created   string `json:"created"`
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	Filesize int64  `json:"filesize"`
+	Host     string `json:"host"`
+	Status   string `json:"status"`
+	Download string `json:"download"`
+	Link     string `json:"link"`
+	Created  string `json:"created"`
 }
 
 // TorrentItem represents a torrent from RD
 type TorrentItem struct {
-    ID       string        `json:"id"`
-    Filename string        `json:"filename"`
-    Bytes    int64         `json:"bytes"`
-    Files    int           `json:"files"`
-    Added    string        `json:"added"`
-    Status   string        `json:"status"`
-    FileList []TorrentFile `json:"file_list,omitempty"`
-    Links    []string      `json:"links,omitempty"`
-    Ended    string        `json:"ended,omitempty"`
-    CachedFiles []TorrentFile `json:"-"`
-    CachedLinks []string      `json:"-"`
+	ID          string        `json:"id"`
+	Filename    string        `json:"filename"`
+	Bytes       int64         `json:"bytes"`
+	Files       int           `json:"files"`
+	Added       string        `json:"added"`
+	Status      string        `json:"status"`
+	FileList    []TorrentFile `json:"file_list,omitempty"`
+	Links       []string      `json:"links,omitempty"`
+	Ended       string        `json:"ended,omitempty"`
+	CachedFiles []TorrentFile `json:"-"`
+	CachedLinks []string      `json:"-"`
 }
 
 // TrafficInfo represents current traffic information
 type TrafficInfo struct {
-    TodayBytes int64 `json:"today_bytes"`
+	TodayBytes int64 `json:"today_bytes"`
 }
 
 // TrafficDetailResponse represents the structure
 type TrafficDetailResponse struct {
-    Bytes int64 `json:"bytes"`
+	Bytes int64 `json:"bytes"`
 }
 
 // TrafficDetailsMap represents the full traffic details response
@@ -119,8 +119,8 @@ type TrafficDetailsMap map[string]TrafficDetailResponse
 
 // ErrorResponse represents an error response from Real-Debrid API
 type ErrorResponse struct {
-	Error   string `json:"error"`
-	ErrorCode int  `json:"error_code"`
+	Error     string `json:"error"`
+	ErrorCode int    `json:"error_code"`
 }
 
 // ErrTorrentNotFound is returned when a torrent doesn't exist (unknown_ressource, code 7)
@@ -182,13 +182,13 @@ func NewClient(apiKey string) *Client {
 	cfg := GetConfigManager().GetConfig()
 	tokens := []string{apiKey}
 	tokens = append(tokens, cfg.AdditionalAPIKeys...)
-	
-    client := &Client{
-		apiKey:    apiKey,
-		tokenManager: NewTokenManager(tokens),
-		baseURL:   "https://api.real-debrid.com/rest/1.0",
-		webdavURL: "https://webdav.debrid.it",
-		unrestrictCache: cmap.New[*DownloadCacheEntry](),
+
+	client := &Client{
+		apiKey:                apiKey,
+		tokenManager:          NewTokenManager(tokens),
+		baseURL:               "https://api.real-debrid.com/rest/1.0",
+		webdavURL:             "https://webdav.debrid.it",
+		unrestrictCache:       cmap.New[*DownloadCacheEntry](),
 		failedUnrestrictCache: cmap.New[*FailedUnrestrictEntry](),
 	}
 	client.httpClient = &http.Client{
@@ -235,153 +235,153 @@ func NewClient(apiKey string) *Client {
 
 // rateLimiter implements a token bucket with retry/backoff helpers
 type rateLimiter struct {
-    mu sync.Mutex
-    capacity int
-    tokens float64
-    refillRatePerSec float64
-    last time.Time
-    burst int
-    maxRetries int
-    baseBackoff time.Duration
-    maxBackoff time.Duration
+	mu               sync.Mutex
+	capacity         int
+	tokens           float64
+	refillRatePerSec float64
+	last             time.Time
+	burst            int
+	maxRetries       int
+	baseBackoff      time.Duration
+	maxBackoff       time.Duration
 }
 
 type RateLimitConfig struct {
-    RequestsPerMinute int
-    Burst             int
-    MaxRetries        int
-    BaseBackoffMs     int
-    MaxBackoffMs      int
+	RequestsPerMinute int
+	Burst             int
+	MaxRetries        int
+	BaseBackoffMs     int
+	MaxBackoffMs      int
 }
 
 func normalizeRateLimitConfig(cfg RateLimitConfig, fallback RateLimitConfig) RateLimitConfig {
-    if cfg.RequestsPerMinute <= 0 {
-        cfg.RequestsPerMinute = fallback.RequestsPerMinute
-    }
-    if cfg.RequestsPerMinute <= 0 {
-        cfg.RequestsPerMinute = 220
-    }
-    if cfg.Burst < 0 {
-        cfg.Burst = fallback.Burst
-    }
-    if cfg.Burst < 0 {
-        cfg.Burst = 0
-    }
-    if cfg.MaxRetries < 0 {
-        cfg.MaxRetries = fallback.MaxRetries
-    }
-    if cfg.MaxRetries < 0 {
-        cfg.MaxRetries = 0
-    }
-    if cfg.BaseBackoffMs <= 0 {
-        cfg.BaseBackoffMs = fallback.BaseBackoffMs
-    }
-    if cfg.BaseBackoffMs <= 0 {
-        cfg.BaseBackoffMs = 500
-    }
-    if cfg.MaxBackoffMs <= 0 {
-        cfg.MaxBackoffMs = fallback.MaxBackoffMs
-    }
-    if cfg.MaxBackoffMs <= 0 {
-        cfg.MaxBackoffMs = 8000
-    }
-    return cfg
+	if cfg.RequestsPerMinute <= 0 {
+		cfg.RequestsPerMinute = fallback.RequestsPerMinute
+	}
+	if cfg.RequestsPerMinute <= 0 {
+		cfg.RequestsPerMinute = 220
+	}
+	if cfg.Burst < 0 {
+		cfg.Burst = fallback.Burst
+	}
+	if cfg.Burst < 0 {
+		cfg.Burst = 0
+	}
+	if cfg.MaxRetries < 0 {
+		cfg.MaxRetries = fallback.MaxRetries
+	}
+	if cfg.MaxRetries < 0 {
+		cfg.MaxRetries = 0
+	}
+	if cfg.BaseBackoffMs <= 0 {
+		cfg.BaseBackoffMs = fallback.BaseBackoffMs
+	}
+	if cfg.BaseBackoffMs <= 0 {
+		cfg.BaseBackoffMs = 500
+	}
+	if cfg.MaxBackoffMs <= 0 {
+		cfg.MaxBackoffMs = fallback.MaxBackoffMs
+	}
+	if cfg.MaxBackoffMs <= 0 {
+		cfg.MaxBackoffMs = 8000
+	}
+	return cfg
 }
 
 func newRateLimiterFromConfig() *rateLimiter {
-    cfg := GetConfigManager().GetConfig()
-    general := RateLimitConfig{
-        RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
-        Burst:             cfg.RateLimit.Burst,
-        MaxRetries:        cfg.RateLimit.MaxRetries,
-        BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
-        MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
-    }
-    general = normalizeRateLimitConfig(general, RateLimitConfig{
-        RequestsPerMinute: 220,
-        Burst:             50,
-        MaxRetries:        5,
-        BaseBackoffMs:     500,
-        MaxBackoffMs:      8000,
-    })
-    return newRateLimiter(general)
+	cfg := GetConfigManager().GetConfig()
+	general := RateLimitConfig{
+		RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+		Burst:             cfg.RateLimit.Burst,
+		MaxRetries:        cfg.RateLimit.MaxRetries,
+		BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
+		MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
+	}
+	general = normalizeRateLimitConfig(general, RateLimitConfig{
+		RequestsPerMinute: 220,
+		Burst:             50,
+		MaxRetries:        5,
+		BaseBackoffMs:     500,
+		MaxBackoffMs:      8000,
+	})
+	return newRateLimiter(general)
 }
 
 func newRepairRateLimiterFromConfig() *rateLimiter {
-    cfg := GetConfigManager().GetConfig()
-    general := RateLimitConfig{
-        RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
-        Burst:             cfg.RateLimit.Burst,
-        MaxRetries:        cfg.RateLimit.MaxRetries,
-        BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
-        MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
-    }
-    general = normalizeRateLimitConfig(general, RateLimitConfig{
-        RequestsPerMinute: 220,
-        Burst:             50,
-        MaxRetries:        5,
-        BaseBackoffMs:     500,
-        MaxBackoffMs:      8000,
-    })
+	cfg := GetConfigManager().GetConfig()
+	general := RateLimitConfig{
+		RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+		Burst:             cfg.RateLimit.Burst,
+		MaxRetries:        cfg.RateLimit.MaxRetries,
+		BaseBackoffMs:     cfg.RateLimit.BaseBackoffMs,
+		MaxBackoffMs:      cfg.RateLimit.MaxBackoffMs,
+	}
+	general = normalizeRateLimitConfig(general, RateLimitConfig{
+		RequestsPerMinute: 220,
+		Burst:             50,
+		MaxRetries:        5,
+		BaseBackoffMs:     500,
+		MaxBackoffMs:      8000,
+	})
 
-    repair := RateLimitConfig{
-        RequestsPerMinute: cfg.RateLimit.Repair.RequestsPerMinute,
-        Burst:             cfg.RateLimit.Repair.Burst,
-        MaxRetries:        cfg.RateLimit.Repair.MaxRetries,
-        BaseBackoffMs:     cfg.RateLimit.Repair.BaseBackoffMs,
-        MaxBackoffMs:      cfg.RateLimit.Repair.MaxBackoffMs,
-    }
-    repair = normalizeRateLimitConfig(repair, RateLimitConfig{
-        RequestsPerMinute: general.RequestsPerMinute / 4,
-        Burst:             general.Burst / 2,
-        MaxRetries:        general.MaxRetries,
-        BaseBackoffMs:     general.BaseBackoffMs,
-        MaxBackoffMs:      general.MaxBackoffMs,
-    })
-    return newRateLimiter(repair)
+	repair := RateLimitConfig{
+		RequestsPerMinute: cfg.RateLimit.Repair.RequestsPerMinute,
+		Burst:             cfg.RateLimit.Repair.Burst,
+		MaxRetries:        cfg.RateLimit.Repair.MaxRetries,
+		BaseBackoffMs:     cfg.RateLimit.Repair.BaseBackoffMs,
+		MaxBackoffMs:      cfg.RateLimit.Repair.MaxBackoffMs,
+	}
+	repair = normalizeRateLimitConfig(repair, RateLimitConfig{
+		RequestsPerMinute: general.RequestsPerMinute / 4,
+		Burst:             general.Burst / 2,
+		MaxRetries:        general.MaxRetries,
+		BaseBackoffMs:     general.BaseBackoffMs,
+		MaxBackoffMs:      general.MaxBackoffMs,
+	})
+	return newRateLimiter(repair)
 }
 
 func newRateLimiter(cfg RateLimitConfig) *rateLimiter {
-    if cfg.Burst < 0 {
-        cfg.Burst = 0
-    }
-    return &rateLimiter{
-        capacity:        cfg.Burst + 1,
-        tokens:          float64(cfg.Burst + 1),
-        refillRatePerSec: float64(cfg.RequestsPerMinute) / 60.0,
-        last:            time.Now(),
-        burst:           cfg.Burst,
-        maxRetries:      cfg.MaxRetries,
-        baseBackoff:     time.Duration(cfg.BaseBackoffMs) * time.Millisecond,
-        maxBackoff:      time.Duration(cfg.MaxBackoffMs) * time.Millisecond,
-    }
+	if cfg.Burst < 0 {
+		cfg.Burst = 0
+	}
+	return &rateLimiter{
+		capacity:         cfg.Burst + 1,
+		tokens:           float64(cfg.Burst + 1),
+		refillRatePerSec: float64(cfg.RequestsPerMinute) / 60.0,
+		last:             time.Now(),
+		burst:            cfg.Burst,
+		maxRetries:       cfg.MaxRetries,
+		baseBackoff:      time.Duration(cfg.BaseBackoffMs) * time.Millisecond,
+		maxBackoff:       time.Duration(cfg.MaxBackoffMs) * time.Millisecond,
+	}
 }
 
 func (r *rateLimiter) waitToken(ctxDone <-chan struct{}) bool {
-    if r == nil {
-        return true
-    }
-    for {
-        r.mu.Lock()
-        now := time.Now()
-        elapsed := now.Sub(r.last).Seconds()
-        r.last = now
-        r.tokens += elapsed * r.refillRatePerSec
-        if r.tokens > float64(r.capacity) {
-            r.tokens = float64(r.capacity)
-        }
-        if r.tokens >= 1.0 {
-            r.tokens -= 1.0
-            r.mu.Unlock()
-            return true
-        }
-        r.mu.Unlock()
-        select {
-        case <-time.After(10 * time.Millisecond):
-        case <-ctxDone:
-            return false
-        }
-    }
+	if r == nil {
+		return true
+	}
+	for {
+		r.mu.Lock()
+		now := time.Now()
+		elapsed := now.Sub(r.last).Seconds()
+		r.last = now
+		r.tokens += elapsed * r.refillRatePerSec
+		if r.tokens > float64(r.capacity) {
+			r.tokens = float64(r.capacity)
+		}
+		if r.tokens >= 1.0 {
+			r.tokens -= 1.0
+			r.mu.Unlock()
+			return true
+		}
+		r.mu.Unlock()
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-ctxDone:
+			return false
+		}
+	}
 }
 
 func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
@@ -441,61 +441,61 @@ func (c *Client) doWithLimit(req *http.Request) (*http.Response, error) {
 		httpClient = c.httpClient
 	}
 
-    attempt := 0
+	attempt := 0
 
-    filename := req.URL.Path
-    if ctxFilename, ok := req.Context().Value(filenameContextKey).(string); ok && ctxFilename != "" {
-        filename = ctxFilename
-    }
+	filename := req.URL.Path
+	if ctxFilename, ok := req.Context().Value(filenameContextKey).(string); ok && ctxFilename != "" {
+		filename = ctxFilename
+	}
 
-    for {
-        if ok := limiter.waitToken(req.Context().Done()); !ok {
-            return nil, fmt.Errorf("request canceled")
-        }
+	for {
+		if ok := limiter.waitToken(req.Context().Done()); !ok {
+			return nil, fmt.Errorf("request canceled")
+		}
 
-        resp, err := httpClient.Do(req)
-        if err != nil {
-            return nil, err
-        }
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
 
-        if resp.StatusCode >= 400 {
-            bodyBytes, _ := io.ReadAll(resp.Body)
-            resp.Body.Close()
-            var errorResp ErrorResponse
-            if json.Unmarshal(bodyBytes, &errorResp) == nil && (errorResp.ErrorCode == 36 || errorResp.ErrorCode == 34 || errorResp.ErrorCode == 5) {
-                baseBackoff := 1
-                backoff := time.Duration(baseBackoff * (1 << uint(attempt))) * time.Second
-                if backoff > 60*time.Second {
-                    backoff = 60 * time.Second
-                }
-                jitter := time.Duration(rand.Float64() * float64(backoff) * 0.2)
-                backoff += jitter
-                time.Sleep(backoff)
-                attempt++
-                continue
-            }
-            resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-        }
+		if resp.StatusCode >= 400 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			var errorResp ErrorResponse
+			if json.Unmarshal(bodyBytes, &errorResp) == nil && (errorResp.ErrorCode == 36 || errorResp.ErrorCode == 34 || errorResp.ErrorCode == 5) {
+				baseBackoff := 1
+				backoff := time.Duration(baseBackoff*(1<<uint(attempt))) * time.Second
+				if backoff > 60*time.Second {
+					backoff = 60 * time.Second
+				}
+				jitter := time.Duration(rand.Float64() * float64(backoff) * 0.2)
+				backoff += jitter
+				time.Sleep(backoff)
+				attempt++
+				continue
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
 
-        if resp.StatusCode != http.StatusTooManyRequests {
-            if attempt > 0 && resp.StatusCode < 400 {
-                logger.Info("[RealDebrid] Request for '%s' succeeded after %d attempts", filename, attempt+1)
-            }
-            return resp, nil
-        }
+		if resp.StatusCode != http.StatusTooManyRequests {
+			if attempt > 0 && resp.StatusCode < 400 {
+				logger.Info("[RealDebrid] Request for '%s' succeeded after %d attempts", filename, attempt+1)
+			}
+			return resp, nil
+		}
 
-        if attempt >= limiter.maxRetries {
-            return nil, fmt.Errorf("rate limited (429) for %s after %d retries", filename, attempt)
-        }
+		if attempt >= limiter.maxRetries {
+			return nil, fmt.Errorf("rate limited (429) for %s after %d retries", filename, attempt)
+		}
 
-        resp.Body.Close()
-        backoff := limiter.baseBackoff * time.Duration(1<<uint(attempt))
-        if backoff > limiter.maxBackoff {
-            backoff = limiter.maxBackoff
-        }
-        time.Sleep(backoff)
-        attempt++
-    }
+		resp.Body.Close()
+		backoff := limiter.baseBackoff * time.Duration(1<<uint(attempt))
+		if backoff > limiter.maxBackoff {
+			backoff = limiter.maxBackoff
+		}
+		time.Sleep(backoff)
+		attempt++
+	}
 }
 
 // doRequestWithRetry performs an HTTP request with retry logic, status code checking, and HTML detection
@@ -503,9 +503,9 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operation
 	if maxRetries <= 0 {
 		maxRetries = 3
 	}
-	
+
 	attempt := 0
-	
+
 	for attempt < maxRetries {
 		resp, err := c.doWithLimit(req)
 		if err != nil {
@@ -535,25 +535,25 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operation
 				if attempt >= maxRetries {
 					return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
 				}
-				logger.Warn("[RealDebrid] %s API error (attempt %d/%d): %s (code: %d)", 
+				logger.Warn("[RealDebrid] %s API error (attempt %d/%d): %s (code: %d)",
 					operationName, attempt, maxRetries, errorResp.Error, errorResp.ErrorCode)
 			} else {
 				bodyPreview := string(body)
 				if len(bodyPreview) > 200 {
 					bodyPreview = bodyPreview[:200] + "..."
 				}
-				
+
 				if strings.HasPrefix(strings.TrimSpace(bodyPreview), "<") {
 					if attempt >= maxRetries {
 						return nil, fmt.Errorf("Real-Debrid returned HTML instead of JSON (status %d), likely maintenance or error page", resp.StatusCode)
 					}
-					logger.Warn("[RealDebrid] %s received HTML response (attempt %d/%d, status %d), likely maintenance page", 
+					logger.Warn("[RealDebrid] %s received HTML response (attempt %d/%d, status %d), likely maintenance page",
 						operationName, attempt, maxRetries, resp.StatusCode)
 				} else {
 					if attempt >= maxRetries {
 						return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
 					}
-					logger.Warn("[RealDebrid] %s unexpected status code (attempt %d/%d): %d", 
+					logger.Warn("[RealDebrid] %s unexpected status code (attempt %d/%d): %d",
 						operationName, attempt, maxRetries, resp.StatusCode)
 				}
 			}
@@ -567,15 +567,15 @@ func (c *Client) doRequestWithRetry(req *http.Request, maxRetries int, operation
 		}
 		return resp, nil
 	}
-	
+
 	return nil, fmt.Errorf("%s failed after %d attempts", operationName, maxRetries)
 }
 
 // SetAPIKey updates the API key
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
-    c.limiter = nil
-    c.repairLimiter = nil
+	c.limiter = nil
+	c.repairLimiter = nil
 }
 
 // GetUserInfo retrieves user information from Real-Debrid
@@ -707,7 +707,7 @@ func (c *Client) UnrestrictLink(link string, filename ...string) (*DownloadLink,
 	if len(filename) > 0 && filename[0] != "" {
 		ctx = context.WithValue(ctx, filenameContextKey, filename[0])
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/unrestrict/link", strings.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -792,7 +792,7 @@ func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "timeout") ||
 		strings.Contains(errStr, "deadline exceeded") ||
@@ -816,213 +816,234 @@ func isNetworkError(err error) bool {
 
 // GetDownloads retrieves the user's downloads list
 func (c *Client) GetDownloads() ([]DownloadItem, error) {
-    if c.apiKey == "" {
-        return nil, fmt.Errorf("API key not set")
-    }
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
 
-    req, err := http.NewRequest("GET", c.baseURL+"/downloads", nil)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create request: %w", err)
-    }
-    req.Header.Set("Authorization", "Bearer "+c.apiKey)
-    req.Header.Set("Content-Type", "application/json")
+	req, err := http.NewRequest("GET", c.baseURL+"/downloads", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
-    resp, err := c.doWithLimit(req)
-    if err != nil {
-        return nil, fmt.Errorf("failed to make request: %w", err)
-    }
-    defer resp.Body.Close()
+	resp, err := c.doWithLimit(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        var errorResp ErrorResponse
-        if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
-            return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-        }
-        return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-    }
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
 
-    var items []DownloadItem
-    if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-        return nil, fmt.Errorf("failed to decode response: %w", err)
-    }
-    return items, nil
+	var items []DownloadItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return items, nil
 }
 
 // GetDownloadsBatch attempts to fetch a specific window using common pagination params
 func (c *Client) GetDownloadsBatch(limit, offset int) ([]DownloadItem, error) {
-    if c.apiKey == "" {
-        return nil, fmt.Errorf("API key not set")
-    }
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
 
-    if limit <= 0 { limit = 1000 }
-    if offset < 0 { offset = 0 }
+	if limit <= 0 {
+		limit = 1000
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
-    url := fmt.Sprintf("%s/downloads?limit=%d&offset=%d", c.baseURL, limit, offset)
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create request: %w", err)
-    }
-    req.Header.Set("Authorization", "Bearer "+c.apiKey)
-    req.Header.Set("Content-Type", "application/json")
+	url := fmt.Sprintf("%s/downloads?limit=%d&offset=%d", c.baseURL, limit, offset)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
-    resp, err := c.doWithLimit(req)
-    if err != nil {
-        return nil, fmt.Errorf("failed to make request: %w", err)
-    }
-    defer resp.Body.Close()
+	resp, err := c.doWithLimit(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        var errorResp ErrorResponse
-        if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
-            return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
-        }
-        return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
-    }
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil && errorResp.Error != "" {
+			return nil, fmt.Errorf("API error: %s (code: %d)", errorResp.Error, errorResp.ErrorCode)
+		}
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
 
-    var items []DownloadItem
-    if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-        return nil, fmt.Errorf("failed to decode response: %w", err)
-    }
-    return items, nil
+	var items []DownloadItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return items, nil
 }
 
 // GetAllDownloads fetches all downloads in batches, using limit/offset pagination when supported
 func (c *Client) GetAllDownloads(limitPerPage int) ([]DownloadItem, error) {
-    if limitPerPage <= 0 { limitPerPage = 1000 }
-    var all []DownloadItem
-    offset := 0
-    for {
-        items, err := c.GetDownloadsBatch(limitPerPage, offset)
-        if err != nil {
-            // Fallback: if pagination not supported, return the default window
-            if offset == 0 {
-                return c.GetDownloads()
-            }
-            return all, nil
-        }
-        if len(items) == 0 {
-            break
-        }
-        all = append(all, items...)
-        if len(items) < limitPerPage {
-            break
-        }
-        offset += limitPerPage
-        if offset > 5_000_000 {
-            break
-        }
-    }
-    return all, nil
+	if limitPerPage <= 0 {
+		limitPerPage = 1000
+	}
+	var all []DownloadItem
+	offset := 0
+	for {
+		items, err := c.GetDownloadsBatch(limitPerPage, offset)
+		if err != nil {
+			// Fallback: if pagination not supported, return the default window
+			if offset == 0 {
+				return c.GetDownloads()
+			}
+			return all, nil
+		}
+		if len(items) == 0 {
+			break
+		}
+		all = append(all, items...)
+		if len(items) < limitPerPage {
+			break
+		}
+		offset += limitPerPage
+		if offset > 5_000_000 {
+			break
+		}
+	}
+	return all, nil
 }
-
 
 // GetTorrentsBatch tries common pagination patterns for torrents
 func (c *Client) GetTorrentsBatch(limit, offset int) ([]TorrentItem, error) {
-    if c.apiKey == "" {
-        return nil, fmt.Errorf("API key not set")
-    }
-    if limit <= 0 { limit = 1000 }
-    if offset < 0 { offset = 0 }
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
-    url := fmt.Sprintf("%s/torrents?limit=%d&offset=%d", c.baseURL, limit, offset)
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create request: %w", err)
-    }
-    req.Header.Set("Authorization", "Bearer "+c.apiKey)
-    req.Header.Set("Content-Type", "application/json")
-    resp, err := c.doWithLimit(req)
-    if err != nil {
-        return nil, fmt.Errorf("failed to make request: %w", err)
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        var er ErrorResponse
-        _ = json.Unmarshal(body, &er)
-        return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-    }
-    var items []TorrentItem
-    if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-        return nil, fmt.Errorf("failed to decode response: %w", err)
-    }
-    return items, nil
+	url := fmt.Sprintf("%s/torrents?limit=%d&offset=%d", c.baseURL, limit, offset)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.doWithLimit(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var er ErrorResponse
+		_ = json.Unmarshal(body, &er)
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	var items []TorrentItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return items, nil
 }
 
 // GetAllTorrents fetches all torrents in batches
 func (c *Client) GetAllTorrents(limitPerPage int, progressCallback func(int, int)) ([]TorrentItem, error) {
-    if limitPerPage <= 0 { limitPerPage = 1000 }
-    all := make([]TorrentItem, 0, limitPerPage)
-    seen := make(map[string]struct{})
+	if limitPerPage <= 0 {
+		limitPerPage = 1000
+	}
+	all := make([]TorrentItem, 0, limitPerPage)
+	seen := make(map[string]struct{})
 
-    // Strategy 1: limit/offset
-    offset := 0
-    for i := 0; i < 10000; i++ {
-        items, err := c.GetTorrentsBatch(limitPerPage, offset)
-        if err != nil {
-            break
-        }
-        if len(items) == 0 {
-            return all, nil
-        }
-        added := 0
-        for _, it := range items {
-            if _, ok := seen[it.ID]; ok {
-                continue
-            }
-            seen[it.ID] = struct{}{}
-            all = append(all, it)
-            added++
-        }
+	// Strategy 1: limit/offset
+	offset := 0
+	for i := 0; i < 10000; i++ {
+		items, err := c.GetTorrentsBatch(limitPerPage, offset)
+		if err != nil {
+			break
+		}
+		if len(items) == 0 {
+			return all, nil
+		}
+		added := 0
+		for _, it := range items {
+			if _, ok := seen[it.ID]; ok {
+				continue
+			}
+			seen[it.ID] = struct{}{}
+			all = append(all, it)
+			added++
+		}
 
-        if progressCallback != nil {
-            progressCallback(len(all), len(all))
-        }
-        
-        if len(items) < limitPerPage || added == 0 {
-            return all, nil
-        }
-        offset += limitPerPage
-        if offset > 10_000_000 {
-            return all, nil
-        }
-    }
+		if progressCallback != nil {
+			progressCallback(len(all), len(all))
+		}
 
-    // Strategy 2: page param
-    page := 1
-    for i := 0; i < 100000; i++ {
-        url := fmt.Sprintf("%s/torrents?limit=%d&page=%d", c.baseURL, limitPerPage, page)
-        req, err := http.NewRequest("GET", url, nil)
-        if err != nil { break }
-        req.Header.Set("Authorization", "Bearer "+c.apiKey)
-        req.Header.Set("Content-Type", "application/json")
-    resp, err := c.doWithLimit(req)
-        if err != nil { break }
-        if resp.StatusCode != http.StatusOK {
-            resp.Body.Close()
-            break
-        }
-        var items []TorrentItem
-        if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-            resp.Body.Close()
-            break
-        }
-        resp.Body.Close()
-        if len(items) == 0 { break }
-        added := 0
-        for _, it := range items {
-            if _, ok := seen[it.ID]; ok { continue }
-            seen[it.ID] = struct{}{}
-            all = append(all, it)
-            added++
-        }
-        if len(items) < limitPerPage || added == 0 { break }
-        page++
-    }
+		if len(items) < limitPerPage || added == 0 {
+			return all, nil
+		}
+		offset += limitPerPage
+		if offset > 10_000_000 {
+			return all, nil
+		}
+	}
 
-    return all, nil
+	// Strategy 2: page param
+	page := 1
+	for i := 0; i < 100000; i++ {
+		url := fmt.Sprintf("%s/torrents?limit=%d&page=%d", c.baseURL, limitPerPage, page)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			break
+		}
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := c.doWithLimit(req)
+		if err != nil {
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			break
+		}
+		var items []TorrentItem
+		if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+			resp.Body.Close()
+			break
+		}
+		resp.Body.Close()
+		if len(items) == 0 {
+			break
+		}
+		added := 0
+		for _, it := range items {
+			if _, ok := seen[it.ID]; ok {
+				continue
+			}
+			seen[it.ID] = struct{}{}
+			all = append(all, it)
+			added++
+		}
+		if len(items) < limitPerPage || added == 0 {
+			break
+		}
+		page++
+	}
+
+	return all, nil
 }
 
 // TorrentFile represents a file within a torrent
@@ -1036,23 +1057,23 @@ type TorrentFile struct {
 
 // TorrentInfo represents detailed information about a torrent
 type TorrentInfo struct {
-	ID           string         `json:"id"`
-	Filename     string         `json:"filename"`
-	OriginalFilename string     `json:"original_filename,omitempty"`
-	Hash         string         `json:"hash"`
-	Bytes        int64          `json:"bytes"`
-	OriginalBytes int64         `json:"original_bytes,omitempty"`
-	Host         string         `json:"host"`
-	Split        int            `json:"split"`
-	Progress     float64        `json:"progress"`
-	Status       string         `json:"status"`
-	Added        string         `json:"added"`
-	Files        []TorrentFile  `json:"files"`
-	Links        []string       `json:"links"`
-	Ended        string         `json:"ended,omitempty"`
-	Speed        int64          `json:"speed,omitempty"`
-	Seeders      int            `json:"seeders,omitempty"`
-	OriginalID   string         `json:"-"`
+	ID               string        `json:"id"`
+	Filename         string        `json:"filename"`
+	OriginalFilename string        `json:"original_filename,omitempty"`
+	Hash             string        `json:"hash"`
+	Bytes            int64         `json:"bytes"`
+	OriginalBytes    int64         `json:"original_bytes,omitempty"`
+	Host             string        `json:"host"`
+	Split            int           `json:"split"`
+	Progress         float64       `json:"progress"`
+	Status           string        `json:"status"`
+	Added            string        `json:"added"`
+	Files            []TorrentFile `json:"files"`
+	Links            []string      `json:"links"`
+	Ended            string        `json:"ended,omitempty"`
+	Speed            int64         `json:"speed,omitempty"`
+	Seeders          int           `json:"seeders,omitempty"`
+	OriginalID       string        `json:"-"`
 }
 
 func (c *Client) getTorrentInfoInternal(torrentID string, repair bool) (*TorrentInfo, error) {
@@ -1224,7 +1245,7 @@ func (c *Client) CheckInstantAvailability(hashes []string) (map[string]bool, err
 
 		hashStr := strings.Join(validHashes, "/")
 		url := fmt.Sprintf("%s/torrents/instantAvailability/%s", c.baseURL, hashStr)
-		
+
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
@@ -1444,20 +1465,20 @@ func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
 	if c.apiKey == "" {
 		return nil, 0, fmt.Errorf("API key not set")
 	}
-	
+
 	if limit <= 0 {
 		limit = 1
 	}
-	
+
 	url := fmt.Sprintf("%s/torrents?limit=%d", c.baseURL, limit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := c.doRequestWithRetry(req, 3, "GetTorrentsLightweight")
 	if err != nil {
 		return nil, 0, err
@@ -1474,7 +1495,7 @@ func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
 			totalCount = count
 		}
 	}
-	
+
 	var items []TorrentItem
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, 0, fmt.Errorf("failed to decode response: %w", err)
@@ -1483,6 +1504,6 @@ func (c *Client) GetTorrentsLightweight(limit int) ([]TorrentItem, int, error) {
 	if totalCount == 0 {
 		totalCount = len(items)
 	}
-	
+
 	return items, totalCount, nil
 }

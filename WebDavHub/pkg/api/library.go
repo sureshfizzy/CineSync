@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	media "cinesync/pkg/api/Media"
 	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
-	media "cinesync/pkg/api/Media"
 )
 
 // LibraryItem represents a movie or series in the user's library

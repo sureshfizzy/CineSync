@@ -38,11 +38,11 @@ type SystemStatusResponse struct {
 
 // FolderMapping represents a folder mapping for spoofing
 type FolderMapping struct {
-	FolderPath   string `json:"folderPath"`
-	DisplayName  string `json:"displayName"`
-	ServiceType  string `json:"serviceType"`
-	APIKey       string `json:"apiKey"`
-	Enabled      bool   `json:"enabled"`
+	FolderPath  string `json:"folderPath"`
+	DisplayName string `json:"displayName"`
+	ServiceType string `json:"serviceType"`
+	APIKey      string `json:"apiKey"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // AvailableFolder represents a folder available for mapping
@@ -54,16 +54,16 @@ type AvailableFolder struct {
 
 // MovieFile represents a movie file in Radarr
 type MovieFile struct {
-	ID           int       `json:"id"`
-	MovieId      int       `json:"movieId"`
-	RelativePath string    `json:"relativePath"`
-	Path         string    `json:"path"`
-	Size         int64     `json:"size"`
-	DateAdded    time.Time `json:"dateAdded"`
-	Quality      Quality   `json:"quality"`
+	ID           int        `json:"id"`
+	MovieId      int        `json:"movieId"`
+	RelativePath string     `json:"relativePath"`
+	Path         string     `json:"path"`
+	Size         int64      `json:"size"`
+	DateAdded    time.Time  `json:"dateAdded"`
+	Quality      Quality    `json:"quality"`
 	Languages    []Language `json:"languages"`
-	SceneName    string    `json:"sceneName"`
-	ReleaseGroup string    `json:"releaseGroup"`
+	SceneName    string     `json:"sceneName"`
+	ReleaseGroup string     `json:"releaseGroup"`
 }
 
 // Quality represents quality information
@@ -166,8 +166,8 @@ type SeriesResource struct {
 
 // QualityProfile represents a quality profile
 type QualityProfile struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID       int      `json:"id"`
+	Name     string   `json:"name"`
 	Language Language `json:"language,omitempty"`
 }
 

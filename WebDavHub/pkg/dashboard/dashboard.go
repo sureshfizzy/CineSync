@@ -1,12 +1,12 @@
 package dashboard
 
 import (
+	"cinesync/pkg/logger"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-	"cinesync/pkg/logger"
 )
 
 // DashboardData holds the data needed for rendering the dashboard template
@@ -28,11 +28,11 @@ type DashboardStats struct {
 
 // RecentUpdate represents a recently updated item for the dashboard
 type RecentUpdate struct {
-	Name      string
-	Path      string
+	Name       string
+	Path       string
 	FolderName string
-	UpdatedAt time.Time
-	Type      string
+	UpdatedAt  time.Time
+	Type       string
 }
 
 // MediaFolder represents a media folder displayed on the dashboard

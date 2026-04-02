@@ -92,7 +92,7 @@ func handleGetRootFolders(w http.ResponseWriter, r *http.Request) {
 		WHERE root_folder IS NOT NULL 
 		AND root_folder != '' 
 		ORDER BY root_folder`
-	
+
 	processedRows, err := mediaHubDB.Query(processedQuery)
 	if err != nil {
 		logger.Error("Failed to query processed_files root folders: %v", err)
@@ -105,13 +105,13 @@ func handleGetRootFolders(w http.ResponseWriter, r *http.Request) {
 				logger.Warn("Failed to scan processed_files root folder row: %v", err)
 				continue
 			}
-			
+
 			// Only add if not already in the map
 			if _, exists := folderMap[folderPath]; !exists {
 				folderMap[folderPath] = RootFolder{
-					ID:               idCounter,
-					Path:             folderPath,
-					IsSystemManaged:  true,
+					ID:              idCounter,
+					Path:            folderPath,
+					IsSystemManaged: true,
 				}
 				idCounter++
 			}
@@ -133,7 +133,6 @@ func handleGetRootFolders(w http.ResponseWriter, r *http.Request) {
 		return folders[i].Path < folders[j].Path
 	})
 
-	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(folders)
 }
@@ -185,7 +184,6 @@ func handleAddRootFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	
 	newFolder := RootFolder{
 		ID:              int(id),
 		Path:            req.Path,
@@ -284,7 +282,3 @@ func getFolderNameFromPath(path string) string {
 	}
 	return cleanPath
 }
-
-
-
-

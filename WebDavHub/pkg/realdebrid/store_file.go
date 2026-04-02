@@ -158,7 +158,7 @@ func (s *CineSyncStore) SaveItem(item TorrentItem) error {
 	}
 
 	accessKey := GetDirectoryName(item.Filename)
-	
+
 	csi := CineSyncItem{
 		ID:       item.ID,
 		Filename: accessKey,
@@ -334,7 +334,7 @@ func (s *CineSyncStore) LoadAllInfoParallel() (map[string]*TorrentInfo, error) {
 			for filePath := range jobs {
 				base := filepath.Base(filePath)
 				id := strings.TrimSuffix(base, CineSyncDataExt)
-				
+
 				var data CineSyncData
 				if err := s.readJSON(filePath, &data); err != nil {
 					continue // Skip failed reads
@@ -509,7 +509,7 @@ func isWindowsFileLockError(err error) bool {
 	if runtime.GOOS != "windows" {
 		return false
 	}
-	return err != nil && (errors.Is(err, os.ErrPermission) || 
+	return err != nil && (errors.Is(err, os.ErrPermission) ||
 		strings.Contains(err.Error(), "being used by another process") ||
 		strings.Contains(err.Error(), "Access is denied"))
 }

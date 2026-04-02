@@ -9,24 +9,24 @@ import (
 
 // Minimal Prowlarr system status (v1)
 func HandleProwlarrSystemStatus(w http.ResponseWriter, r *http.Request) {
-    // minimal config replacement to avoid cross-package deps
-    config := struct {
-        InstanceName string
-        Version      string
-        Branch       string
-    }{
-        InstanceName: "CineSync",
-        Version:      "1.0.0",
-        Branch:       "stable",
-    }
+	// minimal config replacement to avoid cross-package deps
+	config := struct {
+		InstanceName string
+		Version      string
+		Branch       string
+	}{
+		InstanceName: "CineSync",
+		Version:      "1.0.0",
+		Branch:       "stable",
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"appName":       "Prowlarr",
-		"instanceName":  config.InstanceName,
-		"version":       config.Version,
-        "buildTime":     "",
-		"branch":        config.Branch,
-        "startTime":     "",
+		"appName":      "Prowlarr",
+		"instanceName": config.InstanceName,
+		"version":      config.Version,
+		"buildTime":    "",
+		"branch":       config.Branch,
+		"startTime":    "",
 	})
 }
 
@@ -50,7 +50,10 @@ func HandleProwlarrApplications(w http.ResponseWriter, r *http.Request) {
 
 // Minimal Prowlarr application test (v1)
 func HandleProwlarrApplicationTest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost { http.Error(w, "Method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	// Accept anything and return valid=true to keep integration flowing
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

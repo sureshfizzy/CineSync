@@ -49,7 +49,6 @@ var (
 
 	basePathColumnExists sync.Once
 	hasBasePathColumn    bool
-
 )
 
 var invalidPathChars = regexp.MustCompile(`[\\/:*?"<>|]`)
@@ -59,7 +58,6 @@ func sanitizeFolderName(name string) string {
 	if name == "" {
 		return "sanitized_filename"
 	}
-
 
 	// Base replacements for all OS
 	replacements := map[string]string{
@@ -96,7 +94,6 @@ func normalizeCategoryPath(category string) (string, string) {
 	api := filepath.ToSlash(normalized)
 	return normalized, api
 }
-
 
 // checkFileSizeColumnExists checks if the file_size column exists in processed_files table
 func checkFileSizeColumnExists() bool {
@@ -167,12 +164,12 @@ type DatabaseSearchResponse struct {
 
 // FolderCache represents a cache for folder structure similar to Jellyfin's approach
 type FolderCache struct {
-	mu           sync.RWMutex
-	rootFolders  map[string][]FolderInfo
-	pathFolders  map[string][]FolderInfo
-	totalCounts  map[string]int
-	lastUpdated  time.Time
-	initialized  bool
+	mu          sync.RWMutex
+	rootFolders map[string][]FolderInfo
+	pathFolders map[string][]FolderInfo
+	totalCounts map[string]int
+	lastUpdated time.Time
+	initialized bool
 }
 
 var (
@@ -828,18 +825,18 @@ func GetFileSizeFromDatabase(filePath string) (int64, bool) {
 
 // FolderInfo represents folder information from database
 type FolderInfo struct {
-	FolderName    string   `json:"folder_name"`
-	FolderPath    string   `json:"folder_path"`
-	TmdbID        string   `json:"tmdb_id,omitempty"`
-	MediaType     string   `json:"media_type,omitempty"`
-	Year          string   `json:"year,omitempty"`
-	ProperName    string   `json:"proper_name,omitempty"`
-	SeasonNumber  int      `json:"season_number,omitempty"`
-	FileCount     int      `json:"file_count"`
-	EpisodeCount  int      `json:"episode_count"`
-	Modified      string   `json:"modified,omitempty"`
-	Quality       string   `json:"quality,omitempty"`  // kept for backward compat (first quality)
-	Qualities     []string `json:"qualities,omitempty"` // all distinct non-empty quality values
+	FolderName   string   `json:"folder_name"`
+	FolderPath   string   `json:"folder_path"`
+	TmdbID       string   `json:"tmdb_id,omitempty"`
+	MediaType    string   `json:"media_type,omitempty"`
+	Year         string   `json:"year,omitempty"`
+	ProperName   string   `json:"proper_name,omitempty"`
+	SeasonNumber int      `json:"season_number,omitempty"`
+	FileCount    int      `json:"file_count"`
+	EpisodeCount int      `json:"episode_count"`
+	Modified     string   `json:"modified,omitempty"`
+	Quality      string   `json:"quality,omitempty"`   // kept for backward compat (first quality)
+	Qualities    []string `json:"qualities,omitempty"` // all distinct non-empty quality values
 }
 
 func getDistinctEpisodeExpr() string {
@@ -867,8 +864,6 @@ func GetFoldersFromDatabasePaginated(basePath string, page, limit int, mediaType
 	result, total, err := getCategoryFoldersPaginated(mediaHubDB, cleanBasePath, page, limit, offset, mediaType, tmdbId)
 	return result, total, err
 }
-
-
 
 // getRootFoldersPaginated gets top-level category folders from base_path
 func getRootFoldersPaginated(db *sql.DB, page, limit, offset int, mediaType string, tmdbId string) ([]FolderInfo, int, error) {

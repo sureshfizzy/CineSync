@@ -163,7 +163,7 @@ func HandleJobRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := parts[0]
-	
+
 	if jobID == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
@@ -180,7 +180,7 @@ func HandleJobRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Job %s started manually", jobID)
-	
+
 	response := map[string]interface{}{
 		"success": true,
 		"message": fmt.Sprintf("Job %s started successfully", jobID),
@@ -208,7 +208,7 @@ func HandleJobCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := parts[0]
-	
+
 	if jobID == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
@@ -222,7 +222,7 @@ func HandleJobCancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("Job %s cancelled", jobID)
-	
+
 	response := map[string]interface{}{
 		"success": true,
 		"message": fmt.Sprintf("Job %s cancelled successfully", jobID),
@@ -250,7 +250,7 @@ func HandleJobExecutions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := parts[0]
-	
+
 	if jobID == "" {
 		http.Error(w, "Job ID is required", http.StatusBadRequest)
 		return
@@ -265,7 +265,7 @@ func HandleJobExecutions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	executions := jobManager.GetJobExecutions(jobID, limit)
-	
+
 	response := jobs.JobExecutionResponse{
 		Executions: executions,
 		Status:     "success",
@@ -298,7 +298,7 @@ func HandleJobsRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	// Handle /api/jobs/{id}/action
 	if len(parts) == 2 {
 		action := parts[1]
@@ -314,7 +314,7 @@ func HandleJobsRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	http.Error(w, "Invalid URL path", http.StatusBadRequest)
 }
 
@@ -377,4 +377,3 @@ func HandleJobEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-

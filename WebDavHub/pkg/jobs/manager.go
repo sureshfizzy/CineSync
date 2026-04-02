@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"cinesync/pkg/logger"
 	"cinesync/pkg/env"
+	"cinesync/pkg/logger"
+	"github.com/google/uuid"
 )
 
 // fileExists checks if a file or directory exists
@@ -44,13 +44,13 @@ func getMediaHubCommand(mediaHubDir string, pythonCmd string, jobType string, ac
 
 	if fileExists(mediaHubExe) {
 		flagMap := map[string]string{
-			"missing-files":                 "--missing-files",
-			"cleanup-missing-destinations":  "--cleanup-missing-destinations",
-			"optimize":                      "--optimize",
-			"verify":                        "--verify",
-			"vacuum":                        "--vacuum",
-			"status":                        "--status",
-			"source-scan":                   "--source-scan",
+			"missing-files":                "--missing-files",
+			"cleanup-missing-destinations": "--cleanup-missing-destinations",
+			"optimize":                     "--optimize",
+			"verify":                       "--verify",
+			"vacuum":                       "--vacuum",
+			"status":                       "--status",
+			"source-scan":                  "--source-scan",
 		}
 		if flag, ok := flagMap[jobType]; ok {
 			return mediaHubExe, []string{flag}
@@ -102,7 +102,7 @@ func NewManager() *Manager {
 	currentDir, _ := os.Getwd()
 	siblingPath := filepath.Join(currentDir, "MediaHub")
 	parentPath := filepath.Join(filepath.Dir(currentDir), "MediaHub")
-	
+
 	mediaHubDir := parentPath
 	if fileExists(siblingPath) {
 		mediaHubDir = siblingPath
@@ -202,23 +202,23 @@ func (m *Manager) initializeDefaultJobs() {
 		},
 
 		{
-			ID:           "source-files-scan",
-			Name:         "Source Files Scan",
-			Description:  "Scan source directories for new and updated media files",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeInterval,
+			ID:              "source-files-scan",
+			Name:            "Source Files Scan",
+			Description:     "Scan source directories for new and updated media files",
+			Type:            JobTypeProcess,
+			Status:          JobStatusIdle,
+			ScheduleType:    ScheduleTypeInterval,
 			IntervalSeconds: 24 * 60 * 60, // 24 hours
-			Command:      sourceScanCmd,
-			Arguments:    sourceScanArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Files",
-			Tags:         []string{"source", "scan", "files", "discovery"},
-			MaxRetries:   3,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			Command:         sourceScanCmd,
+			Arguments:       sourceScanArgs,
+			WorkingDir:      m.mediaHubDir,
+			Enabled:         true,
+			Category:        "Files",
+			Tags:            []string{"source", "scan", "files", "discovery"},
+			MaxRetries:      3,
+			LogOutput:       true,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
 		},
 	}
 
@@ -260,23 +260,23 @@ func (m *Manager) addMissingDefaultJobs() {
 			UpdatedAt:    time.Now(),
 		},
 		"source-files-scan": {
-			ID:           "source-files-scan",
-			Name:         "Source Files Scan",
-			Description:  "Scan source directories for new and updated media files",
-			Type:         JobTypeProcess,
-			Status:       JobStatusIdle,
-			ScheduleType: ScheduleTypeInterval,
+			ID:              "source-files-scan",
+			Name:            "Source Files Scan",
+			Description:     "Scan source directories for new and updated media files",
+			Type:            JobTypeProcess,
+			Status:          JobStatusIdle,
+			ScheduleType:    ScheduleTypeInterval,
 			IntervalSeconds: 24 * 60 * 60, // 24 hours
-			Command:      sourceScanCmd,
-			Arguments:    sourceScanArgs,
-			WorkingDir:   m.mediaHubDir,
-			Enabled:      true,
-			Category:     "Files",
-			Tags:         []string{"source", "scan", "files", "discovery"},
-			MaxRetries:   3,
-			LogOutput:    true,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			Command:         sourceScanCmd,
+			Arguments:       sourceScanArgs,
+			WorkingDir:      m.mediaHubDir,
+			Enabled:         true,
+			Category:        "Files",
+			Tags:            []string{"source", "scan", "files", "discovery"},
+			MaxRetries:      3,
+			LogOutput:       true,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
 		},
 	}
 
@@ -296,7 +296,7 @@ func (m *Manager) addMissingDefaultJobs() {
 			}
 		} else {
 			needsUpdate := existingJob.Command != defaultJob.Command
-			
+
 			if !needsUpdate && len(existingJob.Arguments) == len(defaultJob.Arguments) {
 				for i, arg := range existingJob.Arguments {
 					if arg != defaultJob.Arguments[i] {
@@ -307,7 +307,7 @@ func (m *Manager) addMissingDefaultJobs() {
 			} else if !needsUpdate {
 				needsUpdate = true
 			}
-			
+
 			if needsUpdate {
 				existingJob.Command = defaultJob.Command
 				existingJob.Arguments = defaultJob.Arguments

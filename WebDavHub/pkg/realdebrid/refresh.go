@@ -18,13 +18,13 @@ func (tm *TorrentManager) performSmartRefresh(ctx context.Context) {
 		logger.Warn("[Refresh] Failed to get library state for change detection: %v", err)
 		return
 	}
-	
+
 	currentState := tm.currentState.Load()
 
 	if currentState.Eq(newState) {
 		return
 	}
-	
+
 	needsFullRefresh := false
 	if currentState.LastUpdated.IsZero() || time.Since(currentState.LastUpdated) > time.Hour {
 		needsFullRefresh = true
@@ -33,18 +33,18 @@ func (tm *TorrentManager) performSmartRefresh(ctx context.Context) {
 		needsFullRefresh = true
 		logger.Info("[Refresh] Changes detected (count: %d -> %d)", currentState.TotalCount, newState.TotalCount)
 	}
-	
+
 	if needsFullRefresh {
-	tm.performFullRefresh(ctx)
+		tm.performFullRefresh(ctx)
 	}
-	
+
 	tm.updateCurrentState(newState)
 }
 
 func (tm *TorrentManager) getCurrentLibraryState(ctx context.Context) (*LibraryState, error) {
 	ctx, cancel := context.WithTimeout(ctx, CHECKSUM_TIMEOUT)
 	defer cancel()
-	
+
 	state := &LibraryState{
 		LastUpdated: time.Now(),
 	}
@@ -53,51 +53,51 @@ func (tm *TorrentManager) getCurrentLibraryState(ctx context.Context) (*LibraryS
 	if err != nil {
 		return nil, fmt.Errorf("failed to get lightweight torrents for state: %w", err)
 	}
-	
+
 	state.TotalCount = totalCount
 	if len(torrents) > 0 {
 		state.FirstTorrentID = torrents[0].ID
 		state.FirstTorrentName = torrents[0].Filename
 	}
-	
+
 	return state, nil
 }
 
 func (tm *TorrentManager) fetchFirstPageWithTotal(ctx context.Context, pageSize int) ([]TorrentItem, int, error) {
-    url := fmt.Sprintf("%s/torrents?_t=%d&page=1&limit=%d", tm.client.baseURL, time.Now().Unix(), pageSize)
+	url := fmt.Sprintf("%s/torrents?_t=%d&page=1&limit=%d", tm.client.baseURL, time.Now().Unix(), pageSize)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+tm.client.apiKey)
-	
+
 	resp, err := tm.client.doWithLimit(req)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	
-    totalCount := 0
-    if totalHeader := resp.Header.Get("X-Total-Count"); totalHeader != "" {
-        if count, convErr := strconv.Atoi(totalHeader); convErr == nil {
-            totalCount = count
-        }
-    }
 
-    if resp.StatusCode == http.StatusNoContent {
-        return []TorrentItem{}, totalCount, nil
+	totalCount := 0
+	if totalHeader := resp.Header.Get("X-Total-Count"); totalHeader != "" {
+		if count, convErr := strconv.Atoi(totalHeader); convErr == nil {
+			totalCount = count
+		}
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return []TorrentItem{}, totalCount, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	
+
 	var items []TorrentItem
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, 0, err
 	}
-    if totalCount == 0 {
-        totalCount = len(items)
-    }
+	if totalCount == 0 {
+		totalCount = len(items)
+	}
 	return items, totalCount, nil
 }
 
@@ -106,7 +106,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 	if !ok {
 		return
 	}
-	
+
 	idKeys := tm.idToItemMap.Keys()
 	if len(idKeys) == 0 {
 		return
@@ -120,7 +120,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			cachedTorrents = append(cachedTorrents, *item)
 		}
 	}
-	
+
 	firstPage, totalCount, err := tm.fetchFirstPageWithTotal(ctx, 1000)
 	if err != nil || len(firstPage) == 0 {
 		if err != nil {
@@ -131,11 +131,11 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 
 	currentState := tm.currentState.Load()
 	oldTotalCount := currentState.TotalCount
-	
+
 	var allTorrents []TorrentItem
 	newTorrents := make([]TorrentItem, 0, 10)
 	removedTorrents := make([]TorrentItem, 0, 10)
-	
+
 	if totalCount < oldTotalCount {
 		logger.Info("[Refresh] Count decreased (%d -> %d), fetching all torrents", oldTotalCount, totalCount)
 		allTorrents, err = tm.client.GetAllTorrents(1000, nil)
@@ -143,7 +143,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			logger.Error("[Refresh] Failed to fetch all torrents: %v", err)
 			return
 		}
-		
+
 		if len(allTorrents) < oldTotalCount/2 && oldTotalCount > 100 {
 			return
 		}
@@ -173,7 +173,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		for id := range oldTorrents {
 			existingIDs[id] = true
 		}
-		
+
 		allTorrents = make([]TorrentItem, 0, totalCount)
 		allTorrents = append(allTorrents, firstPage...)
 		for i := range cachedTorrents {
@@ -181,7 +181,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 				allTorrents = append(allTorrents, cachedTorrents[i])
 			}
 		}
-		
+
 		if totalCount > oldTotalCount {
 			for i := range firstPage {
 				if _, exists := oldTorrents[firstPage[i].ID]; !exists {
@@ -222,8 +222,8 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 					item.CachedLinks = oldItem.CachedLinks
 				}
 			}
-		allTorrentsMap.Set(accessKey, item)
-		tm.idToItemMap.Set(item.ID, item)
+			allTorrentsMap.Set(accessKey, item)
+			tm.idToItemMap.Set(item.ID, item)
 		}
 	}
 
@@ -272,9 +272,9 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 	} else if totalCount < oldTotalCount {
 		logger.Warn("[Refresh] Count decreased but no removed torrents detected")
 	}
-	
+
 	go tm.SaveAllTorrents()
-	
+
 	if len(newTorrents) > 0 {
 		logger.Info("[Refresh] Processing %d new torrents", len(newTorrents))
 
@@ -293,14 +293,14 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			item  *TorrentItem
 		}
 		resultChan := make(chan loadResult, len(newTorrents))
-		
+
 		// Semaphore to limit concurrent API calls
 		const maxConcurrent = 50
 		sem := make(chan struct{}, maxConcurrent)
-		
+
 		for i := range newTorrents {
 			sem <- struct{}{}
-			
+
 			go func(idx int, torrent *TorrentItem) {
 				defer func() { <-sem }()
 				if len(torrent.CachedFiles) > 0 {
@@ -308,7 +308,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 					return
 				}
 				if tm.store != nil {
-				if cached, err := tm.store.LoadInfo(torrent.ID); err == nil && cached != nil {
+					if cached, err := tm.store.LoadInfo(torrent.ID); err == nil && cached != nil {
 						torrent.CachedFiles = cached.Files
 						torrent.CachedLinks = cached.Links
 						torrent.Ended = cached.Ended
@@ -325,12 +325,12 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 						tm.initializeFileStates(info)
 						_ = tm.store.SaveInfo(info)
 					}
-					
+
 					logger.Debug("[Refresh] Loaded %d files for new torrent %s", len(info.Files), torrent.ID[:8])
 				} else {
 					logger.Warn("[Refresh] Failed to load files for new torrent %s: %v", torrent.ID[:8], err)
 				}
-				
+
 				resultChan <- loadResult{index: idx, item: torrent}
 			}(i, &newTorrents[i])
 		}
@@ -367,13 +367,13 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 				goto done
 			}
 		}
-		done:
+	done:
 		logger.Debug("[Refresh] File lists loaded for %d new torrents (unrestrict on-demand)", len(newTorrents))
 	}
-	
+
 	if len(removedTorrents) > 0 {
 		logger.Info("[Refresh] Processing %d removed torrents", len(removedTorrents))
-		
+
 		for i, torrent := range removedTorrents {
 			if i < 3 {
 				logger.Info("[Refresh] File removed: %s", truncateFilename(torrent.Filename))
@@ -382,11 +382,11 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 				break
 			}
 		}
-		
+
 		for i := range removedTorrents {
 			tm.DeleteFromDBByID(removedTorrents[i].ID)
 		}
-		
+
 		logger.Debug("[Refresh] Cleanup complete for removed torrents")
 	}
 
@@ -414,8 +414,8 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 	}()
 
 	triggerPendingMount()
-	
-	logger.Info("[Refresh] Full refresh complete - New: %d, Removed: %d, Total: %d", 
+
+	logger.Info("[Refresh] Full refresh complete - New: %d, Removed: %d, Total: %d",
 		len(newTorrents), len(removedTorrents), len(allTorrents))
 }
 

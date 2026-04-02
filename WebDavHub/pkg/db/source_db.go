@@ -1,26 +1,26 @@
 package db
 
 import (
+	"cinesync/pkg/env"
+	"cinesync/pkg/logger"
 	"database/sql"
 	"fmt"
 	"math/rand"
+	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-	"cinesync/pkg/logger"
-	"cinesync/pkg/env"
-	_ "modernc.org/sqlite"
 )
 
 var (
-	sourceDBPool     *sql.DB
-	sourceDBPoolOnce sync.Once
-	sourceDBPoolMux  sync.RWMutex
-	sourceDBReadSemaphore chan struct{}
+	sourceDBPool           *sql.DB
+	sourceDBPoolOnce       sync.Once
+	sourceDBPoolMux        sync.RWMutex
+	sourceDBReadSemaphore  chan struct{}
 	sourceDBWriteSemaphore chan struct{}
-	sourceDBWriteQueue chan func()
+	sourceDBWriteQueue     chan func()
 	sourceDBWriteQueueOnce sync.Once
 )
 
@@ -144,7 +144,7 @@ func executeReadOperation(operation func(*sql.DB) error) error {
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt))
 				if delay > 2*time.Second {
-					delay = 2*time.Second
+					delay = 2 * time.Second
 				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
@@ -182,7 +182,7 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 				if attempt < maxRetries-1 {
 					delay := baseDelay * time.Duration(1<<uint(attempt))
 					if delay > 2*time.Second {
-						delay = 2*time.Second
+						delay = 2 * time.Second
 					}
 					jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 					time.Sleep(delay + jitter)
@@ -198,8 +198,6 @@ func executeWriteOperationSync(operation func(*sql.DB) error) error {
 
 	return <-resultChan
 }
-
-
 
 // InitSourceDB initializes the source files database
 func InitSourceDB() error {
@@ -526,7 +524,7 @@ func executeWithRetry(operation func() error) error {
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt))
 				if delay > 2*time.Second {
-					delay = 2*time.Second
+					delay = 2 * time.Second
 				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
@@ -575,5 +573,3 @@ func IsNewDatabase() bool {
 	err = db.QueryRow("SELECT COUNT(*) FROM source_scans").Scan(&scanCount)
 	return err == nil && scanCount == 0
 }
-
-

@@ -9,10 +9,10 @@ import (
 
 // MediaHubExecutable
 type MediaHubExecutable struct {
-	Path      string
-	Args      []string
+	Path       string
+	Args       []string
 	IsCompiled bool
-	WorkDir   string
+	WorkDir    string
 }
 
 // GetMediaHubExecutable returns the appropriate MediaHub executable configuration
@@ -24,7 +24,7 @@ func GetMediaHubExecutable() (*MediaHubExecutable, error) {
 
 	var mediaHubDir string
 	basename := filepath.Base(cwd)
-	
+
 	if basename == "WebDavHub" {
 		parentDir := filepath.Dir(cwd)
 		mediaHubDir = filepath.Join(parentDir, "MediaHub")

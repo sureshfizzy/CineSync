@@ -30,7 +30,7 @@ type FileInfo struct {
 func NewWebDAVClient(apiKey string) *WebDAVClient {
 	client := gowebdav.NewClient("https://webdav.debrid.it", apiKey, "eeeeee")
 	client.SetTimeout(30 * time.Second)
-	
+
 	return &WebDAVClient{
 		client: client,
 		apiKey: apiKey,

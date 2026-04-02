@@ -47,11 +47,11 @@ type ScanImportFile struct {
 
 // ScanImportResponse represents the response from scanning a directory for import
 type ScanImportResponse struct {
-	Files []ScanImportFile `json:"files,omitempty"`
-	File  *ScanImportFile  `json:"file,omitempty"`
-	Progress *ScanProgress `json:"progress,omitempty"`
-	Error string           `json:"error,omitempty"`
-	Done  bool             `json:"done,omitempty"`
+	Files    []ScanImportFile `json:"files,omitempty"`
+	File     *ScanImportFile  `json:"file,omitempty"`
+	Progress *ScanProgress    `json:"progress,omitempty"`
+	Error    string           `json:"error,omitempty"`
+	Done     bool             `json:"done,omitempty"`
 }
 
 // ScanProgress represents the current scanning progress
@@ -105,7 +105,6 @@ func HandleScanForImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-
 
 	initialProgress := ScanImportResponse{
 		Progress: &ScanProgress{
@@ -326,18 +325,18 @@ type IndexedResult struct {
 
 // MediaHubParsedData represents the result from MediaHub's parse_media_file()
 type MediaHubParsedData struct {
-	Title        string   `json:"title"`
-	Year         int      `json:"year"`
-	Season       int      `json:"season"`
-	Episode      int      `json:"episode"`
-	EpisodeTitle string   `json:"episode_title"`
-	Quality      string   `json:"resolution"`
-	QualitySource string  `json:"quality_source"`
-	ReleaseGroup string   `json:"release_group"`
-	Language     string   `json:"language"`
-	Languages    []string `json:"languages"`
-	IsAnime      bool     `json:"is_anime"`
-	Container    string   `json:"container"`
+	Title         string   `json:"title"`
+	Year          int      `json:"year"`
+	Season        int      `json:"season"`
+	Episode       int      `json:"episode"`
+	EpisodeTitle  string   `json:"episode_title"`
+	Quality       string   `json:"resolution"`
+	QualitySource string   `json:"quality_source"`
+	ReleaseGroup  string   `json:"release_group"`
+	Language      string   `json:"language"`
+	Languages     []string `json:"languages"`
+	IsAnime       bool     `json:"is_anime"`
+	Container     string   `json:"container"`
 }
 
 // MediaHubTMDBData represents enhanced data from TMDB API
@@ -352,7 +351,7 @@ type MediaHubTMDBData struct {
 func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 	var videoFiles []VideoFileInfo
 	videoExtensions := []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".3gp", ".ogv", ".ts", ".m2ts", ".mts", ".strm"}
-	
+
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		logger.Error("Failed to read directory %s: %v", dirPath, err)
@@ -360,7 +359,7 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 	}
 
 	var totalFiles, videoFileCount, skippedDirs int
-	
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			skippedDirs++
@@ -370,7 +369,7 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 		totalFiles++
 		name := entry.Name()
 		ext := strings.ToLower(filepath.Ext(name))
-		
+
 		// Check if it's a video file
 		isVideo := false
 		for _, videoExt := range videoExtensions {
@@ -385,7 +384,7 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 		}
 
 		fullPath := filepath.Join(dirPath, name)
-		
+
 		// Get file size
 		var size int64
 		if info, err := os.Stat(fullPath); err == nil {
@@ -399,7 +398,7 @@ func getVideoFilesFromDirectory(dirPath string) ([]VideoFileInfo, error) {
 			Path: fullPath,
 			Size: size,
 		})
-		
+
 		videoFileCount++
 	}
 
@@ -411,7 +410,7 @@ func streamVideoFilesFromDirectory(ctx context.Context, dirPath string, skip int
 	defer close(jobs)
 
 	videoExtensions := map[string]struct{}{
-		".mkv":  {}, ".mp4": {}, ".avi": {}, ".mov": {}, ".wmv": {}, ".flv": {},
+		".mkv": {}, ".mp4": {}, ".avi": {}, ".mov": {}, ".wmv": {}, ".flv": {},
 		".webm": {}, ".m4v": {}, ".mpg": {}, ".mpeg": {}, ".3gp": {}, ".ogv": {},
 		".ts": {}, ".m2ts": {}, ".mts": {}, ".strm": {},
 	}
@@ -790,7 +789,7 @@ func callMediaHubCleanQuery(filename string) (map[string]interface{}, error) {
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err = cmd.Run()
 	if err != nil {
 		return nil, fmt.Errorf("MediaHub execution failed: %v, stderr: %s", err, stderr.String())
@@ -802,7 +801,7 @@ func callMediaHubCleanQuery(filename string) (map[string]interface{}, error) {
 	if jsonStart == -1 {
 		return nil, fmt.Errorf("no JSON found in MediaHub output: %s", output)
 	}
-	
+
 	jsonOutput := output[jsonStart:]
 
 	var result map[string]interface{}
@@ -852,7 +851,7 @@ func callMediaHubParser(filename string) (*MediaHubParsedData, error) {
 			}
 		}
 	}
-	
+
 	if parsedData.Episode == 0 {
 		if episodeStr := getStringValue(result, "episode_number"); episodeStr != "" {
 			if episode, err := strconv.Atoi(episodeStr); err == nil {
@@ -889,7 +888,7 @@ func callMediaHubParser(filename string) (*MediaHubParsedData, error) {
 
 // callMediaHubTMDB calls TMDB API for series and episode information
 func callMediaHubTMDB(seriesTitle string, year, season, episode int) (*MediaHubTMDBData, error) {
-	
+
 	client := &http.Client{Timeout: 15 * time.Second}
 	searchURL := fmt.Sprintf("http://localhost:8082/api/tmdb/search?type=tv&query=%s", url.QueryEscape(seriesTitle))
 	if year > 0 {
@@ -936,7 +935,7 @@ func callMediaHubTMDB(seriesTitle string, year, season, episode int) (*MediaHubT
 	if bestMatch.Name == "" {
 		bestMatch.Name = seriesTitle
 	}
-	
+
 	result := &MediaHubTMDBData{
 		SeriesName:   bestMatch.Name,
 		EpisodeTitle: "",
@@ -945,10 +944,10 @@ func callMediaHubTMDB(seriesTitle string, year, season, episode int) (*MediaHubT
 	}
 
 	if season > 0 && episode > 0 && bestMatch.ID > 0 {
-		
-		episodeURL := fmt.Sprintf("http://localhost:8082/api/tmdb/details?type=tv&id=%d&season=%d&episode=%d", 
+
+		episodeURL := fmt.Sprintf("http://localhost:8082/api/tmdb/details?type=tv&id=%d&season=%d&episode=%d",
 			bestMatch.ID, season, episode)
-		
+
 		episodeResp, err := client.Get(episodeURL)
 		if err != nil {
 			logger.Warn("Failed to get episode details: %v", err)

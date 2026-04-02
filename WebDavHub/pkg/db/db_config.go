@@ -23,7 +23,7 @@ type DatabaseConfig struct {
 func GetDefaultDatabaseConfig() DatabaseConfig {
 	// For concurrent access across multiple applications (MediaHub + Spoofing)
 	// We need to allow multiple readers but manage write contention carefully
-	
+
 	// SQLite in WAL mode supports multiple concurrent readers + 1 writer
 	// Keep connections low to reduce contention
 	maxConnections := 3
@@ -33,17 +33,16 @@ func GetDefaultDatabaseConfig() DatabaseConfig {
 
 	return DatabaseConfig{
 		MaxOpenConns:    maxConnections, // Allow multiple readers
-		MaxIdleConns:    1, // Keep minimal idle connections
-		ConnMaxLifetime: time.Hour * 2, // Shorter lifetime to prevent stale connections
-		BusyTimeout:     "60000", // 60 seconds - reasonable for concurrent access
-		JournalMode:     "WAL", // WAL mode is essential for concurrent readers
-		Synchronous:     "NORMAL", // Balance between safety and performance
-		CacheSize:       "-16000", // 16MB cache (negative means KB)
+		MaxIdleConns:    1,              // Keep minimal idle connections
+		ConnMaxLifetime: time.Hour * 2,  // Shorter lifetime to prevent stale connections
+		BusyTimeout:     "60000",        // 60 seconds - reasonable for concurrent access
+		JournalMode:     "WAL",          // WAL mode is essential for concurrent readers
+		Synchronous:     "NORMAL",       // Balance between safety and performance
+		CacheSize:       "-16000",       // 16MB cache (negative means KB)
 		ForeignKeys:     "ON",
 		TempStore:       "MEMORY",
 	}
 }
-
 
 func (config DatabaseConfig) BuildConnectionString(dbPath string) string {
 	return dbPath + "?" +
@@ -63,17 +62,15 @@ func (config DatabaseConfig) BuildConnectionString(dbPath string) string {
 		"&_optimize" // Optimize on connection
 }
 
-
 func (config DatabaseConfig) ConfigureDatabase(db *sql.DB) {
 	db.SetMaxOpenConns(config.MaxOpenConns)
 	db.SetMaxIdleConns(config.MaxIdleConns)
 	db.SetConnMaxLifetime(config.ConnMaxLifetime)
 }
 
-
 func OpenAndConfigureDatabase(dbPath string) (*sql.DB, error) {
 	config := GetDefaultDatabaseConfig()
-	
+
 	db, err := sql.Open("sqlite", config.BuildConnectionString(dbPath))
 	if err != nil {
 		return nil, err

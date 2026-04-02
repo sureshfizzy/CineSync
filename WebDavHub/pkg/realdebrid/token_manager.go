@@ -113,7 +113,7 @@ func (tm *TokenManager) ResetAllTokens() {
 		tm.tokens[i].Expired = false
 	}
 	tm.current = 0
-	
+
 	if expiredCount > 0 {
 		logger.Info("Daily bandwidth reset: %d token(s) restored", expiredCount)
 	}
@@ -190,4 +190,3 @@ func maskToken(token string) string {
 	}
 	return token[:4] + "****" + token[len(token)-4:]
 }
-

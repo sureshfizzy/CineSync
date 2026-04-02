@@ -1,17 +1,17 @@
 package spoofing
 
 import (
+	"cinesync/pkg/logger"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-	"gopkg.in/yaml.v3"
-	"cinesync/pkg/logger"
 )
 
 // SpoofingConfig holds the configuration for spoofing services
@@ -112,8 +112,8 @@ func (c *SpoofingConfig) Validate() error {
 
 // Global configuration instance and mutex for thread safety
 var (
-	config     *SpoofingConfig
-	configMux  sync.RWMutex
+	config    *SpoofingConfig
+	configMux sync.RWMutex
 )
 
 // getConfigPath returns the path to the configuration file

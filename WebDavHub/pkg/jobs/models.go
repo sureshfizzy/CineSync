@@ -38,31 +38,31 @@ const (
 
 // Job represents a scheduled job
 type Job struct {
-	ID              string        `json:"id"`
-	Name            string        `json:"name"`
-	Description     string        `json:"description"`
-	Type            JobType       `json:"type"`
-	Status          JobStatus     `json:"status"`
-	ScheduleType    ScheduleType  `json:"scheduleType"`
-	IntervalSeconds int           `json:"intervalSeconds,omitempty"`
-	CronExpression  string        `json:"cronExpression,omitempty"`
-	Command         string        `json:"command"`
-	Arguments       []string      `json:"arguments"`
-	WorkingDir      string        `json:"workingDir"`
-	Enabled         bool          `json:"enabled"`
-	Category        string        `json:"category"`
-	Tags            []string      `json:"tags"`
-	Dependencies    []string      `json:"dependencies,omitempty"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Description     string         `json:"description"`
+	Type            JobType        `json:"type"`
+	Status          JobStatus      `json:"status"`
+	ScheduleType    ScheduleType   `json:"scheduleType"`
+	IntervalSeconds int            `json:"intervalSeconds,omitempty"`
+	CronExpression  string         `json:"cronExpression,omitempty"`
+	Command         string         `json:"command"`
+	Arguments       []string       `json:"arguments"`
+	WorkingDir      string         `json:"workingDir"`
+	Enabled         bool           `json:"enabled"`
+	Category        string         `json:"category"`
+	Tags            []string       `json:"tags"`
+	Dependencies    []string       `json:"dependencies,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
-	MaxRetries      int           `json:"maxRetries"`
-	LogOutput       bool          `json:"logOutput"`
-	NotifyOnFailure bool          `json:"notifyOnFailure,omitempty"`
-	CreatedAt       time.Time     `json:"createdAt"`
-	UpdatedAt       time.Time     `json:"updatedAt"`
-	LastExecution   *time.Time    `json:"lastExecution,omitempty"`
+	MaxRetries      int            `json:"maxRetries"`
+	LogOutput       bool           `json:"logOutput"`
+	NotifyOnFailure bool           `json:"notifyOnFailure,omitempty"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
+	LastExecution   *time.Time     `json:"lastExecution,omitempty"`
 	LastDuration    *time.Duration `json:"lastDuration,omitempty"`
-	NextExecution   *time.Time    `json:"nextExecution,omitempty"`
-	LastError       error         `json:"lastError,omitempty"`
+	NextExecution   *time.Time     `json:"nextExecution,omitempty"`
+	LastError       error          `json:"lastError,omitempty"`
 }
 
 // JobExecution represents a single execution of a job
@@ -80,23 +80,23 @@ type JobExecution struct {
 
 // UpdateJobRequest represents a request to update a job
 type UpdateJobRequest struct {
-	Name            string        `json:"name"`
-	Description     string        `json:"description"`
-	Type            JobType       `json:"type"`
-	ScheduleType    ScheduleType  `json:"scheduleType"`
-	IntervalSeconds int           `json:"intervalSeconds,omitempty"`
-	CronExpression  string        `json:"cronExpression,omitempty"`
-	Command         string        `json:"command"`
-	Arguments       []string      `json:"arguments"`
-	WorkingDir      string        `json:"workingDir"`
-	Enabled         bool          `json:"enabled"`
-	Category        string        `json:"category"`
-	Tags            []string      `json:"tags"`
-	Dependencies    []string      `json:"dependencies,omitempty"`
+	Name            string         `json:"name"`
+	Description     string         `json:"description"`
+	Type            JobType        `json:"type"`
+	ScheduleType    ScheduleType   `json:"scheduleType"`
+	IntervalSeconds int            `json:"intervalSeconds,omitempty"`
+	CronExpression  string         `json:"cronExpression,omitempty"`
+	Command         string         `json:"command"`
+	Arguments       []string       `json:"arguments"`
+	WorkingDir      string         `json:"workingDir"`
+	Enabled         bool           `json:"enabled"`
+	Category        string         `json:"category"`
+	Tags            []string       `json:"tags"`
+	Dependencies    []string       `json:"dependencies,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
-	MaxRetries      int           `json:"maxRetries"`
-	LogOutput       bool          `json:"logOutput"`
-	NotifyOnFailure bool          `json:"notifyOnFailure,omitempty"`
+	MaxRetries      int            `json:"maxRetries"`
+	LogOutput       bool           `json:"logOutput"`
+	NotifyOnFailure bool           `json:"notifyOnFailure,omitempty"`
 }
 
 // IsRunning returns true if the job is currently running

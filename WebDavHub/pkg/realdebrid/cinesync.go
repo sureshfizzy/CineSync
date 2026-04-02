@@ -1,23 +1,23 @@
 package realdebrid
 
 import (
-    "strings"
-    "sync"
-    "sync/atomic"
+	"strings"
+	"sync"
+	"sync/atomic"
 
-    "cinesync/pkg/logger"
+	"cinesync/pkg/logger"
 )
 
 // CineSync worker configuration (exported for API/metrics)
 var (
-    CineSyncIOWorkers  = 32
-    CineSyncAPIWorkers = 50
-    CineSyncIOInUse    atomic.Int64
-    CineSyncAPIInUse   atomic.Int64
-    EnrichTotal        atomic.Int64
-    EnrichProcessed    atomic.Int64
-    EnrichSaved        atomic.Int64
-    enrichRunning      atomic.Bool
+	CineSyncIOWorkers  = 32
+	CineSyncAPIWorkers = 50
+	CineSyncIOInUse    atomic.Int64
+	CineSyncAPIInUse   atomic.Int64
+	EnrichTotal        atomic.Int64
+	EnrichProcessed    atomic.Int64
+	EnrichSaved        atomic.Int64
+	enrichRunning      atomic.Bool
 )
 
 // saveCineSync writes full TorrentInfo to the file-based store
@@ -53,7 +53,9 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 
 	if existingIDs, err := tm.store.GetAllIDs(); err == nil {
 		exist := make(map[string]struct{}, len(existingIDs))
-		for _, id := range existingIDs { exist[id] = struct{}{} }
+		for _, id := range existingIDs {
+			exist[id] = struct{}{}
+		}
 		missing := make([]TorrentItem, 0, len(list))
 		for i := range list {
 			if _, ok := exist[list[i].ID]; !ok {
@@ -105,7 +107,9 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 		EnrichSaved.Store(0)
 
 		idToItem := make(map[string]TorrentItem, len(items))
-		for i := range items { idToItem[items[i].ID] = items[i] }
+		for i := range items {
+			idToItem[items[i].ID] = items[i]
+		}
 		toUpdate := make([]TorrentItem, 0, len(ids))
 		for _, id := range ids {
 			if it, ok := idToItem[id]; ok {
@@ -114,7 +118,9 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 				toUpdate = append(toUpdate, TorrentItem{ID: id})
 			}
 		}
-		if len(toUpdate) == 0 { return }
+		if len(toUpdate) == 0 {
+			return
+		}
 
 		apiWorkers := CineSyncAPIWorkers
 		apiJobs := make(chan TorrentItem, len(toUpdate))
@@ -154,8 +160,13 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 			}
 		}
 
-		for i := 0; i < apiWorkers; i++ { apiWg.Add(1); go worker() }
-		for _, it := range toUpdate { apiJobs <- it }
+		for i := 0; i < apiWorkers; i++ {
+			apiWg.Add(1)
+			go worker()
+		}
+		for _, it := range toUpdate {
+			apiJobs <- it
+		}
 		close(apiJobs)
 		apiWg.Wait()
 		logger.Info("[CineSync] Enrich complete: processed %d, saved %d", processed, saved)
@@ -164,34 +175,34 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 
 // IsVideoFile checks if a file is a video file based on its extension
 func IsVideoFile(filename string) bool {
-    videoExtensions := map[string]bool{
-        ".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".wmv": true,
-        ".flv": true, ".webm": true, ".m4v": true, ".mpg": true, ".mpeg": true,
-        ".3gp": true, ".ogv": true, ".ts": true, ".m2ts": true, ".mts": true,
-    }
+	videoExtensions := map[string]bool{
+		".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".wmv": true,
+		".flv": true, ".webm": true, ".m4v": true, ".mpg": true, ".mpeg": true,
+		".3gp": true, ".ogv": true, ".ts": true, ".m2ts": true, ".mts": true,
+	}
 
-    ext := ""
-    for i := len(filename) - 1; i >= 0; i-- {
-        if filename[i] == '.' {
-            ext = strings.ToLower(filename[i:])
-            break
-        }
-    }
-    
-    return videoExtensions[ext]
+	ext := ""
+	for i := len(filename) - 1; i >= 0; i-- {
+		if filename[i] == '.' {
+			ext = strings.ToLower(filename[i:])
+			break
+		}
+	}
+
+	return videoExtensions[ext]
 }
 
 // SaveAllTorrents writes placeholders using the full idToItemMap.
 func (tm *TorrentManager) SaveAllTorrents() {
-    ids := tm.idToItemMap.Keys()
-    list := make([]TorrentItem, 0, len(ids))
-    for _, id := range ids {
-        if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
-            list = append(list, *item)
-        }
-    }
+	ids := tm.idToItemMap.Keys()
+	list := make([]TorrentItem, 0, len(ids))
+	for _, id := range ids {
+		if item, ok := tm.idToItemMap.Get(id); ok && item != nil {
+			list = append(list, *item)
+		}
+	}
 
-    tm.saveAllTorrents(list)
+	tm.saveAllTorrents(list)
 }
 
 // GetDirs returns directory entries from in-memory cache
@@ -199,21 +210,21 @@ func (tm *TorrentManager) GetDirs(readyOnly bool) []DirEntry {
 	if tm == nil {
 		return nil
 	}
-	
+
 	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
 	if !ok {
 		return nil
 	}
-	
+
 	keys := allTorrents.Keys()
 	dirs := make([]DirEntry, 0, len(keys))
-	
+
 	for _, key := range keys {
 		if item, ok := allTorrents.Get(key); ok && item != nil {
 			if readyOnly && len(item.CachedLinks) == 0 {
 				continue
 			}
-			
+
 			dirs = append(dirs, DirEntry{
 				ID:       item.ID,
 				Filename: item.Filename,
@@ -224,14 +235,15 @@ func (tm *TorrentManager) GetDirs(readyOnly bool) []DirEntry {
 			})
 		}
 	}
-	
+
 	return dirs
 }
 
-
 // DeleteFromDBByID removes a torrent by ID from file-based store
 func (tm *TorrentManager) DeleteFromDBByID(id string) {
-	if tm == nil || tm.store == nil { return }
+	if tm == nil || tm.store == nil {
+		return
+	}
 	_ = tm.store.DeleteByID(id)
 	tm.InfoMap.Remove(id)
 }
@@ -241,16 +253,16 @@ func (tm *TorrentManager) deleteTorrentFromCache(torrentID string) {
 	if tm == nil {
 		return
 	}
-	
+
 	// Delete from file-based store
 	if tm.store != nil {
 		_ = tm.store.DeleteByID(torrentID)
 	}
-	
+
 	// Remove from in-memory caches
 	tm.InfoMap.Remove(torrentID)
 	tm.idToItemMap.Remove(torrentID)
-	
+
 	// Remove from directory maps
 	allTorrents, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
 	if ok {
@@ -263,14 +275,14 @@ func (tm *TorrentManager) deleteTorrentFromCache(torrentID string) {
 			}
 		}
 	}
-	
+
 	// Remove from download link cache (keys contain torrentID)
 	tm.downloadLinkCache.IterCb(func(key string, val *DownloadLinkEntry) {
 		if strings.Contains(key, torrentID) {
 			tm.downloadLinkCache.Remove(key)
 		}
 	})
-	
+
 	// Remove from failed file cache
 	tm.failedFileCache.IterCb(func(key string, val *FailedFileEntry) {
 		if strings.Contains(key, torrentID) {

@@ -16,14 +16,14 @@ import (
 
 // BrowseItem represents a file or directory in the file system
 type BrowseItem struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	IsDirectory bool   `json:"isDirectory"`
-	Size        int64  `json:"size"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	IsDirectory   bool   `json:"isDirectory"`
+	Size          int64  `json:"size"`
 	SizeFormatted string `json:"sizeFormatted"`
-	Modified    string `json:"modified"`
-	IsMediaFile bool   `json:"isMediaFile"`
-	Extension   string `json:"extension"`
+	Modified      string `json:"modified"`
+	IsMediaFile   bool   `json:"isMediaFile"`
+	Extension     string `json:"extension"`
 }
 
 // BrowseResponse represents the response from the browse API
@@ -56,7 +56,7 @@ func isMediaFile(filename string) bool {
 		".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v",
 		".mpg", ".mpeg", ".3gp", ".ogv", ".ts", ".m2ts", ".mts", ".strm",
 	}
-	
+
 	for _, mediaExt := range mediaExtensions {
 		if ext == mediaExt {
 			return true
@@ -83,19 +83,19 @@ func getParentPath(path string) string {
 	if path == "" || path == "/" || (runtime.GOOS == "windows" && len(path) <= 3) {
 		return ""
 	}
-	
+
 	parent := filepath.Dir(path)
 	if parent == path {
 		return ""
 	}
-	
+
 	return parent
 }
 
 // HandleBrowse handles file system browsing requests
 func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Browse Request: %s %s", r.Method, r.URL.Path)
-	
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -171,15 +171,15 @@ func HandleBrowse(w http.ResponseWriter, r *http.Request) {
 		}
 
 		itemPath := filepath.Join(normalizedPath, entry.Name())
-		
+
 		item := BrowseItem{
-			Name:        entry.Name(),
-			Path:        itemPath,
-			IsDirectory: entry.IsDir(),
-			Size:        entryInfo.Size(),
+			Name:          entry.Name(),
+			Path:          itemPath,
+			IsDirectory:   entry.IsDir(),
+			Size:          entryInfo.Size(),
 			SizeFormatted: formatFileSize(entryInfo.Size()),
-			Modified:    entryInfo.ModTime().Format(time.RFC3339),
-			Extension:   strings.ToLower(filepath.Ext(entry.Name())),
+			Modified:      entryInfo.ModTime().Format(time.RFC3339),
+			Extension:     strings.ToLower(filepath.Ext(entry.Name())),
 		}
 
 		// Check if it's a media file

@@ -22,26 +22,26 @@ var BroadcastEventCallback func(eventType string, data map[string]interface{})
 
 // SourceFile represents a file in the source directories
 type SourceFile struct {
-	ID                  int    `json:"id"`
-	FilePath            string `json:"filePath"`
-	FileName            string `json:"fileName"`
-	FileSize            int64  `json:"fileSize"`
-	FileSizeFormatted   string `json:"fileSizeFormatted"`
-	ModifiedTime        int64  `json:"modifiedTime"`
-	IsMediaFile         bool   `json:"isMediaFile"`
-	MediaType           string `json:"mediaType,omitempty"`
-	SourceIndex         int    `json:"sourceIndex"`
-	SourceDirectory     string `json:"sourceDirectory"`
-	RelativePath        string `json:"relativePath"`
-	FileExtension       string `json:"fileExtension"`
-	DiscoveredAt        int64  `json:"discoveredAt"`
-	LastSeenAt          int64  `json:"lastSeenAt"`
-	IsActive            bool   `json:"isActive"`
-	ProcessingStatus    string `json:"processingStatus"`
-	LastProcessedAt     *int64 `json:"lastProcessedAt,omitempty"`
-	TmdbID              string `json:"tmdbId,omitempty"`
-	SeasonNumber        *int   `json:"seasonNumber,omitempty"`
-	EpisodeNumber       *int   `json:"episodeNumber,omitempty"`
+	ID                int    `json:"id"`
+	FilePath          string `json:"filePath"`
+	FileName          string `json:"fileName"`
+	FileSize          int64  `json:"fileSize"`
+	FileSizeFormatted string `json:"fileSizeFormatted"`
+	ModifiedTime      int64  `json:"modifiedTime"`
+	IsMediaFile       bool   `json:"isMediaFile"`
+	MediaType         string `json:"mediaType,omitempty"`
+	SourceIndex       int    `json:"sourceIndex"`
+	SourceDirectory   string `json:"sourceDirectory"`
+	RelativePath      string `json:"relativePath"`
+	FileExtension     string `json:"fileExtension"`
+	DiscoveredAt      int64  `json:"discoveredAt"`
+	LastSeenAt        int64  `json:"lastSeenAt"`
+	IsActive          bool   `json:"isActive"`
+	ProcessingStatus  string `json:"processingStatus"`
+	LastProcessedAt   *int64 `json:"lastProcessedAt,omitempty"`
+	TmdbID            string `json:"tmdbId,omitempty"`
+	SeasonNumber      *int   `json:"seasonNumber,omitempty"`
+	EpisodeNumber     *int   `json:"episodeNumber,omitempty"`
 }
 
 // SourceScan represents a source directory scan operation
@@ -280,13 +280,13 @@ func handleGetSourceFiles(w http.ResponseWriter, r *http.Request) {
 	currentPage := (offset / limit) + 1
 
 	response := map[string]interface{}{
-		"files":       files,
-		"total":       total,
-		"page":        currentPage,
-		"limit":       limit,
-		"totalPages":  totalPages,
-		"hasNext":     currentPage < totalPages,
-		"hasPrev":     currentPage > 1,
+		"files":      files,
+		"total":      total,
+		"page":       currentPage,
+		"limit":      limit,
+		"totalPages": totalPages,
+		"hasNext":    currentPage < totalPages,
+		"hasPrev":    currentPage > 1,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

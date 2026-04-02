@@ -1,22 +1,22 @@
 package spoofing
 
 import (
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "os"
-    "path/filepath"
-    "runtime"
-    "strconv"
-    "strings"
-    "sync"
-    "time"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
-	"cinesync/pkg/db"
-    "cinesync/pkg/logger"
 	media "cinesync/pkg/api/Media"
-    "github.com/gorilla/websocket"
-    prowlarrapi "cinesync/pkg/api/Media/prowlarr"
+	prowlarrapi "cinesync/pkg/api/Media/prowlarr"
+	"cinesync/pkg/db"
+	"cinesync/pkg/logger"
+	"github.com/gorilla/websocket"
 )
 
 var processStartTime = time.Now()
@@ -527,9 +527,9 @@ func HandleMediaCover(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		var id int
 		if _, scanErr := fmt.Sscanf(tmdbID, "%d", &id); scanErr == nil && id > 0 {
-		if dlErr := media.FetchAndSave(id, "movie"); dlErr != nil {
-			media.FetchAndSave(id, "tv")
-		}
+			if dlErr := media.FetchAndSave(id, "movie"); dlErr != nil {
+				media.FetchAndSave(id, "tv")
+			}
 		}
 		if _, err2 := os.Stat(filePath); os.IsNotExist(err2) {
 			http.NotFound(w, r)
@@ -766,7 +766,7 @@ func HandleSpoofedIndexer(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-    prowlarrapi.HandleSpoofedIndexerCRUD(w, r)
+	prowlarrapi.HandleSpoofedIndexerCRUD(w, r)
 }
 
 // HandleSpoofedIndexerSchema handles the /api/v3/indexer/schema endpoint that Prowlarr calls
@@ -781,12 +781,12 @@ func HandleSpoofedIndexerSchema(w http.ResponseWriter, r *http.Request) {
 	// It needs to return Newznab and Torznab schemas with proper fields
 	schemas := []map[string]interface{}{
 		{
-			"id":               0,
-			"name":             "Newznab",
-			"Implementation":   "Newznab",
-			"configContract":   "NewznabSettings",
-			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
-			"tags":             []int{},
+			"id":             0,
+			"name":           "Newznab",
+			"Implementation": "Newznab",
+			"configContract": "NewznabSettings",
+			"infoLink":       "https://github.com/Prowlarr/Prowlarr",
+			"tags":           []int{},
 			"fields": []map[string]interface{}{
 				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
 				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
@@ -806,12 +806,12 @@ func HandleSpoofedIndexerSchema(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		{
-			"id":               0,
-			"name":             "Torznab",
-			"Implementation":   "Torznab",
-			"configContract":   "TorznabSettings",
-			"infoLink":         "https://github.com/Prowlarr/Prowlarr",
-			"tags":             []int{},
+			"id":             0,
+			"name":           "Torznab",
+			"Implementation": "Torznab",
+			"configContract": "TorznabSettings",
+			"infoLink":       "https://github.com/Prowlarr/Prowlarr",
+			"tags":           []int{},
 			"fields": []map[string]interface{}{
 				{"name": "baseUrl", "label": "URL", "type": "textbox", "value": ""},
 				{"name": "apiPath", "label": "API Path", "type": "textbox", "value": "/api"},
@@ -936,12 +936,12 @@ func HandleSpoofedQueue(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		records = append(records, map[string]interface{}{
-			"id":             id,
-			"title":          title,
-			"status":         status,
-			"timeleft":       nil,
+			"id":                      id,
+			"title":                   title,
+			"status":                  status,
+			"timeleft":                nil,
 			"estimatedCompletionTime": nil,
-			"added":          time.Unix(addedAt, 0).UTC().Format(time.RFC3339),
+			"added":                   time.Unix(addedAt, 0).UTC().Format(time.RFC3339),
 		})
 	}
 
@@ -1016,9 +1016,9 @@ func HandleSignalRNegotiate(w http.ResponseWriter, r *http.Request) {
 
 	// ASP.NET Core SignalR negotiation response format
 	response := map[string]interface{}{
-		"connectionId":        connectionId,
-		"connectionToken":     connectionId,
-		"negotiateVersion":    1,
+		"connectionId":     connectionId,
+		"connectionToken":  connectionId,
+		"negotiateVersion": 1,
 		"availableTransports": []map[string]interface{}{
 			{
 				"transport":       "WebSockets",
@@ -1178,7 +1178,7 @@ func handleSignalRSSE(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker.C:
-			pingMessage := `{"type":6}`+"\x1e"
+			pingMessage := `{"type":6}` + "\x1e"
 			if _, err := w.Write([]byte(pingMessage)); err != nil {
 				return
 			}
@@ -1224,32 +1224,32 @@ func HandleConfigHost(w http.ResponseWriter, r *http.Request) {
 	config := GetConfig()
 
 	response := map[string]interface{}{
-		"bindAddress":        "*",
-		"port":               8989,
-		"sslPort":            443,
-		"enableSsl":          true,
-		"launchBrowser":      false,
-		"authenticationMethod": "none",
-		"analyticsEnabled":   false,
-		"username":           "",
-		"password":           "",
-		"logLevel":           "info",
-		"consoleLogLevel":    "info",
-		"branch":             config.Branch,
-		"apiKey":             config.APIKey,
-		"sslCertPath":        "",
-		"sslCertPassword":    "",
-		"urlBase":            "",
-		"updateAutomatically": false,
-		"updateMechanism":    "docker",
-		"updateScriptPath":   "",
-		"proxyEnabled":       false,
-		"proxyType":          "http",
-		"proxyHostname":      "",
-		"proxyPort":          8080,
-		"proxyUsername":      "",
-		"proxyPassword":      "",
-		"proxyBypassFilter":  "",
+		"bindAddress":               "*",
+		"port":                      8989,
+		"sslPort":                   443,
+		"enableSsl":                 true,
+		"launchBrowser":             false,
+		"authenticationMethod":      "none",
+		"analyticsEnabled":          false,
+		"username":                  "",
+		"password":                  "",
+		"logLevel":                  "info",
+		"consoleLogLevel":           "info",
+		"branch":                    config.Branch,
+		"apiKey":                    config.APIKey,
+		"sslCertPath":               "",
+		"sslCertPassword":           "",
+		"urlBase":                   "",
+		"updateAutomatically":       false,
+		"updateMechanism":           "docker",
+		"updateScriptPath":          "",
+		"proxyEnabled":              false,
+		"proxyType":                 "http",
+		"proxyHostname":             "",
+		"proxyPort":                 8080,
+		"proxyUsername":             "",
+		"proxyPassword":             "",
+		"proxyBypassFilter":         "",
 		"proxyBypassLocalAddresses": true,
 	}
 
@@ -1457,52 +1457,52 @@ func BroadcastMovieFileUpdated(movieFile *MovieFile) {
 
 // BroadcastMovieFileImported broadcasts a movie file imported event
 func BroadcastMovieFileImported(movieFile *MovieFile) {
-    if movieFile == nil {
-        return
-    }
+	if movieFile == nil {
+		return
+	}
 
-    movie := getMovieDetailsForSignalR(movieFile.MovieId)
-    movieForAdded := make(map[string]interface{})
-    for k, v := range movie {
-        movieForAdded[k] = v
-    }
-    movieForAdded["hasFile"] = false
-    movieForAdded["movieFileId"] = 0
-    
-    movieAddedMessage := map[string]interface{}{
-        "name": "movie",
-        "body": map[string]interface{}{
-            "resource": movieForAdded,
-            "action":   "added",
-        },
-    }
-    broadcastSignalRMessage(movieAddedMessage)
-    time.Sleep(1000 * time.Millisecond)
+	movie := getMovieDetailsForSignalR(movieFile.MovieId)
+	movieForAdded := make(map[string]interface{})
+	for k, v := range movie {
+		movieForAdded[k] = v
+	}
+	movieForAdded["hasFile"] = false
+	movieForAdded["movieFileId"] = 0
 
-    // Then broadcast the movie updated with file
-    movieUpdatedMessage := map[string]interface{}{
-        "name": "movie",
-        "body": map[string]interface{}{
-            "resource": movie,
-            "action":   "updated",
-        },
-    }
-    broadcastSignalRMessage(movieUpdatedMessage)
+	movieAddedMessage := map[string]interface{}{
+		"name": "movie",
+		"body": map[string]interface{}{
+			"resource": movieForAdded,
+			"action":   "added",
+		},
+	}
+	broadcastSignalRMessage(movieAddedMessage)
+	time.Sleep(1000 * time.Millisecond)
+
+	// Then broadcast the movie updated with file
+	movieUpdatedMessage := map[string]interface{}{
+		"name": "movie",
+		"body": map[string]interface{}{
+			"resource": movie,
+			"action":   "updated",
+		},
+	}
+	broadcastSignalRMessage(movieUpdatedMessage)
 }
 
 // BroadcastMovieAdded broadcasts a movie added event to all connected SignalR clients
 func BroadcastMovieAdded(movieID int) {
-    movie := getMovieDetailsForSignalR(movieID)
+	movie := getMovieDetailsForSignalR(movieID)
 
-    message := map[string]interface{}{
-        "name": "movie",
-        "body": map[string]interface{}{
-            "resource": movie,
-            "action":   "added",
-        },
-    }
+	message := map[string]interface{}{
+		"name": "movie",
+		"body": map[string]interface{}{
+			"resource": movie,
+			"action":   "added",
+		},
+	}
 
-    broadcastSignalRMessage(message)
+	broadcastSignalRMessage(message)
 }
 
 // BroadcastMovieFileDeleted broadcasts a movie file deleted event to all connected SignalR clients
@@ -1533,8 +1533,7 @@ func BroadcastEpisodeFileUpdated(episodeFile map[string]interface{}) {
 	// Extract series ID and episode ID for proper event structure
 	seriesID, _ := episodeFile["seriesId"].(int)
 	episodeID, _ := episodeFile["episodeId"].(int)
-	
-	
+
 	if seriesID == 0 || episodeID == 0 {
 		logger.Warn("Missing seriesId or episodeId in episodeFile, skipping broadcast")
 		return
@@ -1548,7 +1547,7 @@ func BroadcastEpisodeFileUpdated(episodeFile map[string]interface{}) {
 		seriesForAdded[k] = v
 	}
 	seriesForAdded["hasFile"] = false
-	
+
 	seriesAddedMessage := map[string]interface{}{
 		"name": "series",
 		"body": map[string]interface{}{
@@ -1583,14 +1582,13 @@ func BroadcastEpisodeFileUpdated(episodeFile map[string]interface{}) {
 
 // BroadcastEpisodeFileAdded broadcasts an episode file added event
 func BroadcastEpisodeFileAdded(episodeFile map[string]interface{}) {
-    if episodeFile == nil {
-        return
-    }
+	if episodeFile == nil {
+		return
+	}
 
 	seriesID, _ := episodeFile["seriesId"].(int)
 	episodeID, _ := episodeFile["episodeId"].(int)
-	
-	
+
 	if seriesID == 0 || episodeID == 0 {
 		logger.Warn("Missing seriesId or episodeId in episodeFile, skipping broadcast")
 		return
@@ -1598,43 +1596,43 @@ func BroadcastEpisodeFileAdded(episodeFile map[string]interface{}) {
 
 	series := getSeriesDetailsForSignalR(seriesID)
 
-    seriesForAdded := make(map[string]interface{})
-    for k, v := range series {
-        seriesForAdded[k] = v
-    }
-    seriesForAdded["hasFile"] = false
-    
-    seriesAddedMessage := map[string]interface{}{
-        "name": "series",
-        "body": map[string]interface{}{
-            "resource": seriesForAdded,
-            "action":   "added",
-        },
-    }
-    broadcastSignalRMessage(seriesAddedMessage)
+	seriesForAdded := make(map[string]interface{})
+	for k, v := range series {
+		seriesForAdded[k] = v
+	}
+	seriesForAdded["hasFile"] = false
 
-    time.Sleep(3000 * time.Millisecond)
+	seriesAddedMessage := map[string]interface{}{
+		"name": "series",
+		"body": map[string]interface{}{
+			"resource": seriesForAdded,
+			"action":   "added",
+		},
+	}
+	broadcastSignalRMessage(seriesAddedMessage)
 
-    // Then broadcast the series updated with file
-    seriesUpdatedMessage := map[string]interface{}{
-        "name": "series",
-        "body": map[string]interface{}{
-            "resource": series,
-            "action":   "updated",
-        },
-    }
-    broadcastSignalRMessage(seriesUpdatedMessage)
+	time.Sleep(3000 * time.Millisecond)
 
-    time.Sleep(2000 * time.Millisecond)
+	// Then broadcast the series updated with file
+	seriesUpdatedMessage := map[string]interface{}{
+		"name": "series",
+		"body": map[string]interface{}{
+			"resource": series,
+			"action":   "updated",
+		},
+	}
+	broadcastSignalRMessage(seriesUpdatedMessage)
 
-    episodeFileMessage := map[string]interface{}{
-        "name": "episodeFile",
-        "body": map[string]interface{}{
-            "resource": episodeFile,
-            "action":   "added",
-        },
-    }
-    broadcastSignalRMessage(episodeFileMessage)
+	time.Sleep(2000 * time.Millisecond)
+
+	episodeFileMessage := map[string]interface{}{
+		"name": "episodeFile",
+		"body": map[string]interface{}{
+			"resource": episodeFile,
+			"action":   "added",
+		},
+	}
+	broadcastSignalRMessage(episodeFileMessage)
 }
 
 // BroadcastEpisodeFileDeleted broadcasts an episode file deleted event to all connected SignalR clients
@@ -1666,14 +1664,14 @@ func BroadcastEpisodeFileDeleted(episodeFileId int, seriesId int, seriesTitle st
 func getSeriesDetailsForSignalR(seriesID int) map[string]interface{} {
 
 	series, err := getSeriesByIDFromDatabase(seriesID)
-	
+
 	if err != nil {
 		logger.Error("Database error getting series ID %d: %v", seriesID, err)
 	}
 	if series == nil {
 		logger.Error("Series is nil for ID %d", seriesID)
 	}
-	
+
 	if err != nil || series == nil {
 		return map[string]interface{}{
 			"id":    seriesID,
@@ -1683,42 +1681,41 @@ func getSeriesDetailsForSignalR(seriesID int) map[string]interface{} {
 
 	// Convert to map for easier manipulation
 	seriesMap := map[string]interface{}{
-		"id":                   series.ID,
-		"title":               series.Title,
-		"sortTitle":           series.SortTitle,
-		"status":              series.Status,
-		"ended":               false,
-		"overview":            series.Overview,
-		"network":             series.Network,
-		"airTime":             series.AirTime,
-		"images":              series.Images,
-		"seasons":             series.Seasons,
-		"year":                series.Year,
-		"path":                series.Path,
-		"qualityProfileId":    series.QualityProfileId,
-		"languageProfileId":   series.LanguageProfileId,
-		"seasonFolder":        series.SeasonFolder,
-		"monitored":           series.Monitored,
-		"useSceneNumbering":   false,
-		"runtime":             series.Runtime,
-		"tvdbId":              series.TvdbId,
-		"tvRageId":            series.TvRageId,
-		"tvMazeId":            series.TvMazeId,
-		"firstAired":          "2023-01-01",
-		"seriesType":          "standard",
-		"cleanTitle":          strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
-		"imdbId":              "",
-		"titleSlug":           strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
-		"certification":       "",
-		"genres":              []string{},
-		"tags":                []int{},
-		"added":               time.Now().Format("2006-01-02T15:04:05Z"),
-		"ratings":             map[string]interface{}{},
-		"statistics":          map[string]interface{}{},
-		"hasFile":             true,
+		"id":                series.ID,
+		"title":             series.Title,
+		"sortTitle":         series.SortTitle,
+		"status":            series.Status,
+		"ended":             false,
+		"overview":          series.Overview,
+		"network":           series.Network,
+		"airTime":           series.AirTime,
+		"images":            series.Images,
+		"seasons":           series.Seasons,
+		"year":              series.Year,
+		"path":              series.Path,
+		"qualityProfileId":  series.QualityProfileId,
+		"languageProfileId": series.LanguageProfileId,
+		"seasonFolder":      series.SeasonFolder,
+		"monitored":         series.Monitored,
+		"useSceneNumbering": false,
+		"runtime":           series.Runtime,
+		"tvdbId":            series.TvdbId,
+		"tvRageId":          series.TvRageId,
+		"tvMazeId":          series.TvMazeId,
+		"firstAired":        "2023-01-01",
+		"seriesType":        "standard",
+		"cleanTitle":        strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
+		"imdbId":            "",
+		"titleSlug":         strings.ToLower(strings.ReplaceAll(series.Title, " ", "-")),
+		"certification":     "",
+		"genres":            []string{},
+		"tags":              []int{},
+		"added":             time.Now().Format("2006-01-02T15:04:05Z"),
+		"ratings":           map[string]interface{}{},
+		"statistics":        map[string]interface{}{},
+		"hasFile":           true,
 	}
 
-	
 	return seriesMap
 }
 
@@ -1770,13 +1767,13 @@ func broadcastSignalRMessage(message map[string]interface{}) {
 	// Send to all connected clients with per-connection mutex protection
 	for i, safeConn := range connectionSnapshot {
 		safeConn.mutex.Lock()
-		
+
 		// Set write deadline for each message
 		safeConn.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		
+
 		err := safeConn.conn.WriteMessage(websocket.TextMessage, []byte(messageData))
 		safeConn.mutex.Unlock()
-		
+
 		if err != nil {
 			logger.Warn("Failed to send SignalR message to client: %v", err)
 			failedConnections = append(failedConnections, connectionKeys[i])
@@ -1859,22 +1856,22 @@ func getMovieDetailsForSignalR(movieID int) map[string]interface{} {
 
 // ProwlarrApplicationTestRequest represents the test request for Prowlarr applications
 type ProwlarrApplicationTestRequest struct {
-	BaseURL          string                 `json:"baseUrl"`
-	APIKey           string                 `json:"apiKey"`
-	SyncCategories   []int                  `json:"syncCategories"`
-	AnimeSyncCategories []int               `json:"animeSyncCategories"`
-	Tags             []int                  `json:"tags"`
-	Name             string                 `json:"name"`
-	Implementation   string                 `json:"implementation"`
-	ConfigContract   string                 `json:"configContract"`
-	InfoLink         string                 `json:"infoLink"`
-	Fields           []interface{}          `json:"fields"`
+	BaseURL             string        `json:"baseUrl"`
+	APIKey              string        `json:"apiKey"`
+	SyncCategories      []int         `json:"syncCategories"`
+	AnimeSyncCategories []int         `json:"animeSyncCategories"`
+	Tags                []int         `json:"tags"`
+	Name                string        `json:"name"`
+	Implementation      string        `json:"implementation"`
+	ConfigContract      string        `json:"configContract"`
+	InfoLink            string        `json:"infoLink"`
+	Fields              []interface{} `json:"fields"`
 }
 
 // ProwlarrApplicationTestResponse represents the response for application tests
 type ProwlarrApplicationTestResponse struct {
-	IsValid      bool                   `json:"isValid"`
-	Errors       []ProwlarrValidationFailure    `json:"errors"`
+	IsValid bool                        `json:"isValid"`
+	Errors  []ProwlarrValidationFailure `json:"errors"`
 }
 
 // ProwlarrValidationFailure represents validation errors
@@ -1899,7 +1896,7 @@ func validateProwlarrApplication(req ProwlarrApplicationTestRequest) ProwlarrApp
 
 	if req.APIKey == "" {
 		errors = append(errors, ProwlarrValidationFailure{
-			PropertyName: "ApiKey", 
+			PropertyName: "ApiKey",
 			ErrorMessage: "API Key is required",
 			Severity:     "error",
 		})

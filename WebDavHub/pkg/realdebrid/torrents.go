@@ -241,7 +241,7 @@ func ResetTorrentManager() {
 		if tm.refreshCancel != nil {
 			tm.refreshCancel()
 		}
-		
+
 		if repairCtxCancel != nil {
 			repairCtxCancel()
 		}

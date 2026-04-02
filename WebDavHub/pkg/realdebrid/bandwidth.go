@@ -136,7 +136,7 @@ func (c *Client) StartResetBandwidthJob() {
 			tomorrow := now.Add(24 * time.Hour)
 			nextMidnight := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 5, 0, 0, cetLocation)
 			duration := nextMidnight.Sub(now)
-			
+
 			time.Sleep(duration)
 
 			c.tokenManager.ResetAllTokens()
@@ -186,13 +186,13 @@ func (c *Client) StartTokenRecoveryJob() {
 					if !ok || cachedEntry == nil || cachedEntry.Download == nil {
 						continue
 					}
-					
+
 					// Try to verify the cached download link with HEAD request
 					req, err := http.NewRequest("HEAD", cachedEntry.Download.Download, nil)
 					if err != nil {
 						continue
 					}
-					
+
 					resp, err := c.httpClient.Do(req)
 					if err != nil || resp == nil {
 						continue
@@ -220,7 +220,7 @@ func (c *Client) StartTokenRecoveryJob() {
 
 					req.Header.Set("Authorization", "Bearer "+token)
 					resp, err := c.httpClient.Do(req)
-					
+
 					if err != nil || resp == nil {
 						continue
 					}
@@ -246,4 +246,3 @@ func (c *Client) StartTokenRecoveryJob() {
 func (c *Client) GetTokenManager() *TokenManager {
 	return c.tokenManager
 }
-

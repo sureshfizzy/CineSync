@@ -148,66 +148,76 @@ func EvaluateQuality(quality string, profileName string, allowedQualities []stri
 
 // Torznab caps XML structures (minimal)
 type torznabCaps struct {
-    XMLName   xml.Name        `xml:"caps"`
-    Categories torznabCategories `xml:"categories"`
+	XMLName    xml.Name          `xml:"caps"`
+	Categories torznabCategories `xml:"categories"`
 }
 type torznabCategories struct {
-    Category []torznabCategory `xml:"category"`
+	Category []torznabCategory `xml:"category"`
 }
 type torznabCategory struct {
-    ID   int               `xml:"id,attr"`
-    Name string            `xml:"name,attr"`
-    Sub  []torznabSubCat   `xml:"subcat"`
+	ID   int             `xml:"id,attr"`
+	Name string          `xml:"name,attr"`
+	Sub  []torznabSubCat `xml:"subcat"`
 }
 type torznabSubCat struct {
-    ID   int    `xml:"id,attr"`
-    Name string `xml:"name,attr"`
+	ID   int    `xml:"id,attr"`
+	Name string `xml:"name,attr"`
 }
 
 // Public DTOs for caps
 type IndexerCategory struct {
-    ID   int               `json:"id"`
-    Name string            `json:"name"`
-    Subs []IndexerSubCat   `json:"subs,omitempty"`
+	ID   int             `json:"id"`
+	Name string          `json:"name"`
+	Subs []IndexerSubCat `json:"subs,omitempty"`
 }
 type IndexerSubCat struct {
-    ID   int    `json:"id"`
-    Name string `json:"name"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 // GetIndexerCaps fetches and parses Torznab/Newznab caps
 func (s *IndexerService) GetIndexerCaps(indexer Indexer) ([]IndexerCategory, error) {
-    capsURL := s.buildTorznabURL(indexer, "caps")
+	capsURL := s.buildTorznabURL(indexer, "caps")
 
-    req, err := http.NewRequest("GET", capsURL, nil)
-    if err != nil { return nil, fmt.Errorf("caps request build failed: %w", err) }
-    if indexer.APIKey != "" { req.Header.Set("X-API-Key", indexer.APIKey) }
+	req, err := http.NewRequest("GET", capsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("caps request build failed: %w", err)
+	}
+	if indexer.APIKey != "" {
+		req.Header.Set("X-API-Key", indexer.APIKey)
+	}
 
-    resp, err := s.client.Do(req)
-    if err != nil { return nil, fmt.Errorf("caps request failed: %w", err) }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("caps HTTP %d", resp.StatusCode)
-    }
-    data, err := io.ReadAll(resp.Body)
-    if err != nil { return nil, fmt.Errorf("caps read failed: %w", err) }
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("caps request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("caps HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("caps read failed: %w", err)
+	}
 
-    var caps torznabCaps
-    if err := xml.Unmarshal(data, &caps); err != nil {
-        return nil, fmt.Errorf("caps parse failed: %w", err)
-    }
+	var caps torznabCaps
+	if err := xml.Unmarshal(data, &caps); err != nil {
+		return nil, fmt.Errorf("caps parse failed: %w", err)
+	}
 
-    out := make([]IndexerCategory, 0, len(caps.Categories.Category))
-    for _, c := range caps.Categories.Category {
-        cat := IndexerCategory{ ID: c.ID, Name: c.Name }
-        if len(c.Sub) > 0 {
-            subs := make([]IndexerSubCat, 0, len(c.Sub))
-            for _, sc := range c.Sub { subs = append(subs, IndexerSubCat{ ID: sc.ID, Name: sc.Name }) }
-            cat.Subs = subs
-        }
-        out = append(out, cat)
-    }
-    return out, nil
+	out := make([]IndexerCategory, 0, len(caps.Categories.Category))
+	for _, c := range caps.Categories.Category {
+		cat := IndexerCategory{ID: c.ID, Name: c.Name}
+		if len(c.Sub) > 0 {
+			subs := make([]IndexerSubCat, 0, len(c.Sub))
+			for _, sc := range c.Sub {
+				subs = append(subs, IndexerSubCat{ID: sc.ID, Name: sc.Name})
+			}
+			cat.Subs = subs
+		}
+		out = append(out, cat)
+	}
+	return out, nil
 }
 
 // torznabAttr represents a single torznab:attr element
@@ -218,12 +228,12 @@ type torznabAttr struct {
 
 // TorznabItem represents a single result item in a Torznab RSS feed
 type TorznabItem struct {
-	Title     string        `xml:"title"`
-	Link      string        `xml:"link"`
-	Comments  string        `xml:"comments"`
-	PubDate   string        `xml:"pubDate"`
-	Size      string        `xml:"size"`
-	Category  string        `xml:"category"`
+	Title     string `xml:"title"`
+	Link      string `xml:"link"`
+	Comments  string `xml:"comments"`
+	PubDate   string `xml:"pubDate"`
+	Size      string `xml:"size"`
+	Category  string `xml:"category"`
 	Enclosure struct {
 		URL    string `xml:"url,attr"`
 		Type   string `xml:"type,attr"`
@@ -242,20 +252,20 @@ type TorznabResponse struct {
 
 // TestIndexerConnection tests the connection to an indexer
 func (s *IndexerService) TestIndexerConnection(indexer Indexer) TestResult {
-    start := time.Now()
+	start := time.Now()
 
-    // Validate URL
-    if _, err := url.Parse(indexer.URL); err != nil {
-        return TestResult{ Status: "failed", Message: "Invalid URL format: " + err.Error(), ResponseTime: 0 }
-    }
+	// Validate URL
+	if _, err := url.Parse(indexer.URL); err != nil {
+		return TestResult{Status: "failed", Message: "Invalid URL format: " + err.Error(), ResponseTime: 0}
+	}
 
-    return s.testTorznabConnection(indexer, start)
+	return s.testTorznabConnection(indexer, start)
 }
 
 // testTorznabConnection tests a Torznab indexer
 func (s *IndexerService) testTorznabConnection(indexer Indexer, start time.Time) TestResult {
 	testURL := s.buildTorznabURL(indexer, "caps")
-	
+
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil {
 		return TestResult{
@@ -282,13 +292,13 @@ func (s *IndexerService) testTorznabConnection(indexer Indexer, start time.Time)
 
 	responseTime := int(time.Since(start).Milliseconds())
 
-    if resp.StatusCode == http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        content := strings.ToLower(string(body))
-        if strings.Contains(content, "<error") || strings.Contains(content, "unauthorized") || strings.Contains(content, "invalid api") || strings.Contains(content, "apikey") {
-            return TestResult{ Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime }
-        }
-        return TestResult{ Status: "success", Message: "Connection successful", ResponseTime: responseTime }
+	if resp.StatusCode == http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		content := strings.ToLower(string(body))
+		if strings.Contains(content, "<error") || strings.Contains(content, "unauthorized") || strings.Contains(content, "invalid api") || strings.Contains(content, "apikey") {
+			return TestResult{Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime}
+		}
+		return TestResult{Status: "success", Message: "Connection successful", ResponseTime: responseTime}
 	} else if resp.StatusCode == http.StatusUnauthorized {
 		return TestResult{
 			Status:       "failed",
@@ -307,7 +317,7 @@ func (s *IndexerService) testTorznabConnection(indexer Indexer, start time.Time)
 // testJackettConnection tests a Jackett indexer
 func (s *IndexerService) testJackettConnection(indexer Indexer, start time.Time) TestResult {
 	testURL := strings.TrimSuffix(indexer.URL, "/") + "/api/v2.0/indexers"
-	
+
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil {
 		return TestResult{
@@ -336,21 +346,23 @@ func (s *IndexerService) testJackettConnection(indexer Indexer, start time.Time)
 
 	responseTime := int(time.Since(start).Milliseconds())
 
-    if resp.StatusCode == http.StatusOK {
-        var data interface{}
-        if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-            return TestResult{ Status: "failed", Message: "Unexpected response from Jackett", ResponseTime: responseTime }
-        }
-        if m, ok := data.(map[string]interface{}); ok {
-            if _, hasErr := m["Error"]; hasErr { return TestResult{ Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime } }
-            if msg, hasMsg := m["Message"]; hasMsg {
-                msgStr := strings.ToLower(fmt.Sprint(msg))
-                if strings.Contains(msgStr, "unauthor") || strings.Contains(msgStr, "apikey") {
-                    return TestResult{ Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime }
-                }
-            }
-        }
-        return TestResult{ Status: "success", Message: "Connection successful", ResponseTime: responseTime }
+	if resp.StatusCode == http.StatusOK {
+		var data interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return TestResult{Status: "failed", Message: "Unexpected response from Jackett", ResponseTime: responseTime}
+		}
+		if m, ok := data.(map[string]interface{}); ok {
+			if _, hasErr := m["Error"]; hasErr {
+				return TestResult{Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime}
+			}
+			if msg, hasMsg := m["Message"]; hasMsg {
+				msgStr := strings.ToLower(fmt.Sprint(msg))
+				if strings.Contains(msgStr, "unauthor") || strings.Contains(msgStr, "apikey") {
+					return TestResult{Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime}
+				}
+			}
+		}
+		return TestResult{Status: "success", Message: "Connection successful", ResponseTime: responseTime}
 	} else if resp.StatusCode == http.StatusUnauthorized {
 		return TestResult{
 			Status:       "failed",
@@ -369,7 +381,7 @@ func (s *IndexerService) testJackettConnection(indexer Indexer, start time.Time)
 // testProwlarrConnection tests a Prowlarr indexer
 func (s *IndexerService) testProwlarrConnection(indexer Indexer, start time.Time) TestResult {
 	testURL := strings.TrimSuffix(indexer.URL, "/") + "/api/v1/indexer"
-	
+
 	req, err := http.NewRequest("GET", testURL, nil)
 	if err != nil {
 		return TestResult{
@@ -396,16 +408,16 @@ func (s *IndexerService) testProwlarrConnection(indexer Indexer, start time.Time
 
 	responseTime := int(time.Since(start).Milliseconds())
 
-    if resp.StatusCode == http.StatusOK {
-        var data interface{}
-        if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
-            if m, ok := data.(map[string]interface{}); ok {
-                if errVal, hasErr := m["error"]; hasErr && errVal != nil {
-                    return TestResult{ Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime }
-                }
-            }
-        }
-        return TestResult{ Status: "success", Message: "Connection successful", ResponseTime: responseTime }
+	if resp.StatusCode == http.StatusOK {
+		var data interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+			if m, ok := data.(map[string]interface{}); ok {
+				if errVal, hasErr := m["error"]; hasErr && errVal != nil {
+					return TestResult{Status: "failed", Message: "Authentication failed - check API key", ResponseTime: responseTime}
+				}
+			}
+		}
+		return TestResult{Status: "success", Message: "Connection successful", ResponseTime: responseTime}
 	} else if resp.StatusCode == http.StatusUnauthorized {
 		return TestResult{
 			Status:       "failed",
@@ -543,15 +555,15 @@ func (s *IndexerService) searchTorznab(indexer Indexer, query string, categories
 // searchJackett performs a search on a Jackett indexer
 func (s *IndexerService) searchJackett(indexer Indexer, query string, categories []int, limit int) ([]SearchResult, error) {
 	searchURL := strings.TrimSuffix(indexer.URL, "/") + "/api/v2.0/indexers/all/results"
-	
+
 	params := url.Values{}
 	params.Add("Query", query)
 	params.Add("Limit", strconv.Itoa(limit))
-	
+
 	if indexer.APIKey != "" {
 		params.Add("apikey", indexer.APIKey)
 	}
-	
+
 	searchURL += "?" + params.Encode()
 
 	req, err := http.NewRequest("GET", searchURL, nil)
@@ -610,13 +622,13 @@ func (s *IndexerService) searchJackett(indexer Indexer, query string, categories
 // searchProwlarr performs a search on a Prowlarr indexer
 func (s *IndexerService) searchProwlarr(indexer Indexer, query string, categories []int, limit int) ([]SearchResult, error) {
 	searchURL := strings.TrimSuffix(indexer.URL, "/") + "/api/v1/search"
-	
+
 	searchParams := map[string]interface{}{
 		"query":  query,
 		"limit":  limit,
 		"offset": 0,
 	}
-	
+
 	if len(categories) > 0 {
 		searchParams["categories"] = categories
 	}
@@ -690,14 +702,14 @@ func (s *IndexerService) buildTorznabURL(indexer Indexer, action string) string 
 	if !strings.HasSuffix(baseURL, "/api") {
 		baseURL += "/api"
 	}
-	
+
 	params := url.Values{}
 	params.Add("t", action)
-	
+
 	if indexer.APIKey != "" {
 		params.Add("apikey", indexer.APIKey)
 	}
-	
+
 	return baseURL + "?" + params.Encode()
 }
 

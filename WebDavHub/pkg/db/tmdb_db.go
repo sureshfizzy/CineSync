@@ -1,19 +1,19 @@
 package db
 
 import (
+	"cinesync/pkg/env"
+	"cinesync/pkg/logger"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	_ "modernc.org/sqlite"
-	"cinesync/pkg/logger"
-	"cinesync/pkg/env"
 )
 
 var db *sql.DB
@@ -642,7 +642,7 @@ func AddRecentMedia(media RecentMedia) error {
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt))
 				if delay > 2*time.Second {
-					delay = 2*time.Second
+					delay = 2 * time.Second
 				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)
@@ -822,7 +822,7 @@ func GetRecentMedia(limit int) ([]RecentMedia, error) {
 			if attempt < maxRetries-1 {
 				delay := baseDelay * time.Duration(1<<uint(attempt))
 				if delay > 2*time.Second {
-					delay = 2*time.Second
+					delay = 2 * time.Second
 				}
 				jitter := time.Duration(rand.Int63n(int64(delay / 2)))
 				time.Sleep(delay + jitter)

@@ -22,7 +22,7 @@ func DirectoryResponse(buf *bytes.Buffer, path, added string) {
 	}
 
 	escapedPath := pathEscape(path)
-	
+
 	buf.WriteString(`<d:response><d:href>`)
 	buf.WriteString(escapedPath)
 	buf.WriteString(`</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype><d:getlastmodified>`)
@@ -45,7 +45,7 @@ func FileResponse(buf *bytes.Buffer, path string, fileSize int64, added string) 
 
 	escapedPath := pathEscape(path)
 	sizeStr := strconv.FormatInt(fileSize, 10)
-	
+
 	buf.WriteString(`<d:response><d:href>`)
 	buf.WriteString(escapedPath)
 	buf.WriteString(`</d:href><d:propstat><d:prop><d:getcontentlength>`)
@@ -67,9 +67,9 @@ func pathEscape(path string) string {
 		escapedPart = strings.ReplaceAll(escapedPart, "PCTTAG", "%25")
 		parts[i] = escapedPart
 	}
-	
+
 	result := "/" + strings.Join(parts, "/")
-	
+
 	if strings.HasSuffix(path, "/") && !strings.HasSuffix(result, "/") {
 		result += "/"
 	}
@@ -78,6 +78,6 @@ func pathEscape(path string) string {
 	result = strings.ReplaceAll(result, "+", "%2B")
 	result = strings.ReplaceAll(result, ":", "%3A")
 	result = strings.ReplaceAll(result, "@", "%40")
-	
+
 	return result
 }
