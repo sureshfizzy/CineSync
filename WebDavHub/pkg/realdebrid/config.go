@@ -24,6 +24,15 @@ type Config struct {
 type RcloneSettings struct {
 	Enabled               bool   `json:"enabled" yaml:"enabled"`
 	MountPath             string `json:"mountPath" yaml:"mountPath"`
+	ExternalRcServerURL   string `json:"externalRcServerUrl" yaml:"externalRcServerUrl"`
+	ExternalRcPort        string `json:"externalRcPort" yaml:"externalRcPort"`
+	ExternalRcUsername    string `json:"externalRcUsername" yaml:"externalRcUsername"`
+	ExternalRcPassword    string `json:"externalRcPassword" yaml:"externalRcPassword"`
+	ExternalVfsMountName  string `json:"externalVfsMountName" yaml:"externalVfsMountName"`
+	InternalRcServerURL   string `json:"internalRcServerUrl" yaml:"internalRcServerUrl"`
+	InternalRcPort        string `json:"internalRcPort" yaml:"internalRcPort"`
+	InternalRcUsername    string `json:"internalRcUsername" yaml:"internalRcUsername"`
+	InternalRcPassword    string `json:"internalRcPassword" yaml:"internalRcPassword"`
 	RemoteName            string `json:"remoteName" yaml:"remoteName"`
 	VfsCacheMode          string `json:"vfsCacheMode" yaml:"vfsCacheMode"`
 	VfsCacheMaxSize       string `json:"vfsCacheMaxSize" yaml:"vfsCacheMaxSize"`
@@ -113,6 +122,15 @@ func GetConfigManager() *ConfigManager {
 				RcloneSettings: RcloneSettings{
 					Enabled:               false,
 					MountPath:             "",
+					ExternalRcServerURL:   "",
+					ExternalRcPort:        "",
+					ExternalRcUsername:    "",
+					ExternalRcPassword:    "",
+					ExternalVfsMountName:  "",
+					InternalRcServerURL:   "",
+					InternalRcPort:        "",
+					InternalRcUsername:    "",
+					InternalRcPassword:    "",
 					RemoteName:            "CineSync",
 					VfsCacheMode:          "full",
 					VfsCacheMaxSize:       "100G",
@@ -299,6 +317,33 @@ func (cm *ConfigManager) UpdateConfig(updates map[string]interface{}) error {
 				}
 				if mountPath, ok := rcloneSettingsMap["mountPath"].(string); ok && mountPath != "" {
 					rcloneSettings.MountPath = mountPath
+				}
+				if externalRcServerURL, ok := rcloneSettingsMap["externalRcServerUrl"].(string); ok {
+					rcloneSettings.ExternalRcServerURL = externalRcServerURL
+				}
+				if externalRcPort, ok := rcloneSettingsMap["externalRcPort"].(string); ok {
+					rcloneSettings.ExternalRcPort = externalRcPort
+				}
+				if externalRcUsername, ok := rcloneSettingsMap["externalRcUsername"].(string); ok {
+					rcloneSettings.ExternalRcUsername = externalRcUsername
+				}
+				if externalRcPassword, ok := rcloneSettingsMap["externalRcPassword"].(string); ok {
+					rcloneSettings.ExternalRcPassword = externalRcPassword
+				}
+				if externalVfsMountName, ok := rcloneSettingsMap["externalVfsMountName"].(string); ok {
+					rcloneSettings.ExternalVfsMountName = externalVfsMountName
+				}
+				if internalRcServerURL, ok := rcloneSettingsMap["internalRcServerUrl"].(string); ok {
+					rcloneSettings.InternalRcServerURL = internalRcServerURL
+				}
+				if internalRcPort, ok := rcloneSettingsMap["internalRcPort"].(string); ok {
+					rcloneSettings.InternalRcPort = internalRcPort
+				}
+				if internalRcUsername, ok := rcloneSettingsMap["internalRcUsername"].(string); ok {
+					rcloneSettings.InternalRcUsername = internalRcUsername
+				}
+				if internalRcPassword, ok := rcloneSettingsMap["internalRcPassword"].(string); ok {
+					rcloneSettings.InternalRcPassword = internalRcPassword
 				}
 				if remoteName, ok := rcloneSettingsMap["remoteName"].(string); ok && remoteName != "" {
 					rcloneSettings.RemoteName = remoteName
@@ -642,7 +687,16 @@ func (cm *ConfigManager) ResetConfig() error {
 		RcloneSettings: RcloneSettings{
 			Enabled:               false,
 			MountPath:             "",
-			RemoteName:            "realdebrid",
+			ExternalRcServerURL:   "",
+			ExternalRcPort:        "",
+			ExternalRcUsername:    "",
+			ExternalRcPassword:    "",
+			ExternalVfsMountName:  "",
+			InternalRcServerURL:   "",
+			InternalRcPort:        "",
+			InternalRcUsername:    "",
+			InternalRcPassword:    "",
+			RemoteName:            "CineSync",
 			VfsCacheMode:          "writes",
 			VfsCacheMaxSize:       "100G",
 			VfsCacheMaxAge:        "24h",

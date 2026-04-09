@@ -3,6 +3,8 @@ package realdebrid
 import (
 	"bytes"
 	"fmt"
+	"net"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -485,6 +487,26 @@ func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
 		"--max-read-ahead", config.MaxReadAhead,
 	}
 
+	if strings.TrimSpace(config.InternalRcServerURL) != "" ||
+		strings.TrimSpace(config.InternalRcPort) != "" ||
+		strings.TrimSpace(config.InternalRcUsername) != "" ||
+		strings.TrimSpace(config.InternalRcPassword) != "" {
+		args = append(args, "--rc")
+
+		rcAddr, err := internalRCAddress(config.InternalRcServerURL, config.InternalRcPort)
+		if err != nil {
+			logger.Warn("Invalid internal RC address configuration, falling back to default RC bind: %v", err)
+		} else if rcAddr != "" {
+			args = append(args, "--rc-addr", rcAddr)
+		}
+		if strings.TrimSpace(config.InternalRcUsername) != "" {
+			args = append(args, "--rc-user", strings.TrimSpace(config.InternalRcUsername))
+		}
+		if strings.TrimSpace(config.InternalRcPassword) != "" {
+			args = append(args, "--rc-pass", config.InternalRcPassword)
+		}
+	}
+
 	if config.LogLevel != "" {
 		args = append(args, "--log-level", config.LogLevel)
 	}
@@ -645,6 +667,38 @@ func (rm *RcloneManager) forceKill(pid int) error {
 	}
 }
 
+func internalRCAddress(serverURL, port string) (string, error) {
+	serverURL = strings.TrimSpace(serverURL)
+	port = strings.TrimSpace(port)
+
+	host := "127.0.0.1"
+	if serverURL != "" {
+		candidate := serverURL
+		if !strings.Contains(candidate, "://") {
+			candidate = "http://" + candidate
+		}
+
+		parsedURL, err := neturl.Parse(candidate)
+		if err != nil {
+			return "", fmt.Errorf("invalid internal RC server URL: %w", err)
+		}
+		if parsedURL.Hostname() == "" {
+			return "", fmt.Errorf("internal RC server URL must include a valid host")
+		}
+
+		host = parsedURL.Hostname()
+		if port == "" {
+			port = parsedURL.Port()
+		}
+	}
+
+	if port == "" {
+		port = "5572"
+	}
+
+	return net.JoinHostPort(host, port), nil
+}
+
 // cleanupStaleMountAtPath cleans up a stale mount at a specific path
 func (rm *RcloneManager) cleanupStaleMountAtPath(mountPath string) {
 	if runtime.GOOS == "windows" {
@@ -793,7 +847,6 @@ func CreateRcloneConfig(apiKey string) error {
 		return UpdateRcloneConfig(apiKey)
 	}
 
-	// Enforce default remote name
 	remoteName := "CineSync"
 
 	// Get CineSync credentials for authentication
@@ -829,7 +882,6 @@ func UpdateRcloneConfig(apiKey string) error {
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
-	// Enforce default remote name
 	remoteName := "CineSync"
 	// Ensure config directory exists
 	configDir := filepath.Dir(configPath)

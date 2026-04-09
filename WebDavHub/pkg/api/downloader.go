@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -54,6 +55,38 @@ type AddToQueueRequest struct {
 	Indexer       string `json:"indexer"`
 	ReleaseTitle  string `json:"releaseTitle"`
 	Size          int64  `json:"size"`
+}
+
+func importFolderExtensionEntryNames(cfg *realdebrid.Config, torrentFilename string) []string {
+	seen := make(map[string]struct{})
+	names := make([]string, 0, 2)
+
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if _, exists := seen[name]; exists {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+
+	normalizedName := realdebrid.GetDirectoryName(torrentFilename)
+	if cfg.RcloneSettings.RetainFolderExtension {
+		add(torrentFilename)
+		add(normalizedName)
+	} else {
+		add(normalizedName)
+		add(torrentFilename)
+	}
+
+	if len(names) == 0 {
+		add(torrentFilename)
+	}
+
+	return names
 }
 
 // HandleDownloadQueue handles all /api/library/queue requests.
@@ -387,20 +420,22 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 	if year.Valid && year.Int64 > 0 {
 		destFolderName = fmt.Sprintf("%s (%d)", cleanTitle, year.Int64)
 	}
+	destFolderName = realdebrid.SanitizeFilename(destFolderName)
 
 	if torrentFilename == "" {
 		logger.Warn("[Import] No torrent filename for queue item %d", queueID)
 		return
 	}
 
-	mountEntryName := torrentFilename
-	if !cfg.RcloneSettings.RetainFolderExtension {
-		if dirName := realdebrid.GetDirectoryName(torrentFilename); dirName != "" {
-			mountEntryName = dirName
-		}
+	mountEntryNames := importFolderExtensionEntryNames(cfg, torrentFilename)
+	candidatePaths := make([]string, 0, len(mountEntryNames))
+	refreshDirs := make([]string, 0, len(mountEntryNames))
+	for _, mountEntryName := range mountEntryNames {
+		candidatePaths = append(candidatePaths, filepath.Join(mountPath, realdebrid.ALL_TORRENTS, mountEntryName))
+		refreshDirs = append(refreshDirs, path.Join(realdebrid.ALL_TORRENTS, mountEntryName))
 	}
-
-	candidate := filepath.Join(mountPath, realdebrid.ALL_TORRENTS, mountEntryName)
+	importRefreshRecursive := false
+	importRefreshAsync := true
 
 	srcDir := ""
 	singleFile := ""
@@ -409,20 +444,48 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 		if dbErr := database.QueryRow(`SELECT status FROM download_queue WHERE id=?`, queueID).Scan(&currentStatus); dbErr != nil || currentStatus == "failed" {
 			return
 		}
-		if info, statErr := os.Stat(candidate); statErr == nil {
-			if info.IsDir() {
-				srcDir = candidate
-			} else if realdebrid.IsVideoFile(info.Name()) {
-				singleFile = candidate
+		foundCandidate := false
+		lastStatErr := error(nil)
+		for _, candidatePath := range candidatePaths {
+			if info, statErr := os.Stat(candidatePath); statErr == nil {
+				if info.IsDir() {
+					srcDir = candidatePath
+				} else if realdebrid.IsVideoFile(info.Name()) {
+					singleFile = candidatePath
+				}
+				foundCandidate = true
+				break
+			} else {
+				lastStatErr = statErr
 			}
+		}
+		if foundCandidate {
 			break
 		} else {
-			logger.Debug("[Import] Waiting for mount dir (attempt %d/10): %v", attempt+1, statErr)
+			lastCandidate := candidatePaths[0]
+			if len(candidatePaths) > 1 {
+				lastCandidate = strings.Join(candidatePaths, " | ")
+			}
+			logger.Debug("[Import] Waiting for mount dir (attempt %d/10): %s: %v", attempt+1, lastCandidate, lastStatErr)
+			if cfg.RcloneSettings.ServeFromRclone {
+				response, statusCode, refreshErr := refreshExternalRcloneVFS(externalRcloneRefreshRequest{
+					Dirs:      refreshDirs,
+					Recursive: &importRefreshRecursive,
+					Async:     &importRefreshAsync,
+				})
+				if refreshErr != nil {
+					logger.Warn("[Import] External RC refresh failed for %v: %v", refreshDirs, refreshErr)
+				} else if success, _ := response["success"].(bool); success {
+					logger.Debug("[Import] External RC refresh requested for %v (status %d)", refreshDirs, statusCode)
+				} else {
+					logger.Warn("[Import] External RC refresh rejected for %v: %v", refreshDirs, response["error"])
+				}
+			}
 			time.Sleep(5 * time.Second)
 		}
 	}
 	if srcDir == "" && singleFile == "" {
-		logger.Warn("[Import] Source not found on mount: %s", mountEntryName)
+		logger.Warn("[Import] Source not found on mount for any candidate: %v", mountEntryNames)
 		return
 	}
 
@@ -437,6 +500,7 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 	doSymlink := func(srcPath string, size int64) {
 		dest := filepath.Join(rootFolder, destFolderName, filepath.Base(srcPath))
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			logger.Warn("[Import] Failed to create destination dir for %s: %v", dest, err)
 			return
 		}
 		if _, err := os.Lstat(dest); err == nil {
@@ -460,18 +524,52 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 		)
 	}
 
-	if singleFile != "" {
-		if info, err := os.Stat(singleFile); err == nil {
-			doSymlink(singleFile, info.Size())
-		}
-	} else {
-		_ = filepath.Walk(srcDir, func(srcPath string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !realdebrid.IsVideoFile(info.Name()) {
+	symlinkVideoFilesFromDir := func(dir string) {
+		_ = filepath.Walk(dir, func(srcPath string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			if !realdebrid.IsVideoFile(info.Name()) {
 				return nil
 			}
 			doSymlink(srcPath, info.Size())
 			return nil
 		})
+	}
+
+	if singleFile != "" {
+		if info, err := os.Stat(singleFile); err == nil {
+			doSymlink(singleFile, info.Size())
+		} else {
+			logger.Warn("[Import] Single file candidate disappeared before import: %s: %v", singleFile, err)
+		}
+	} else {
+		symlinkVideoFilesFromDir(srcDir)
+		if symlinkCount == 0 && cfg.RcloneSettings.ServeFromRclone {
+			for attempt := 0; attempt < 3 && symlinkCount == 0; attempt++ {
+				logger.Debug("[Import] Retrying video scan in mount dir (attempt %d/3): %s", attempt+1, srcDir)
+				time.Sleep(2 * time.Second)
+				symlinkVideoFilesFromDir(srcDir)
+			}
+		}
+	}
+
+	if symlinkCount == 0 {
+		if entries, err := os.ReadDir(srcDir); err != nil {
+			logger.Warn("[Import] Failed to inspect mount dir %q after scan: %v", srcDir, err)
+		} else {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					symlinkVideoFilesFromDir(filepath.Join(srcDir, entry.Name()))
+				} else if realdebrid.IsVideoFile(entry.Name()) {
+					if info, infoErr := entry.Info(); infoErr != nil {
+						logger.Warn("[Import] Failed to stat visible entry %s: %v", filepath.Join(srcDir, entry.Name()), infoErr)
+					} else {
+						doSymlink(filepath.Join(srcDir, entry.Name()), info.Size())
+					}
+				}
+			}
+		}
 	}
 
 	if symlinkCount == 0 {

@@ -260,9 +260,11 @@ export default function SetupWizard() {
     autoMountOnStart: false,
     serveFromRclone: false,
   });
+  const rcloneMountConfigured = !!rcloneSummary.mountPath && (rcloneSummary.enabled || rcloneSummary.serveFromRclone);
+  const rcloneModeLabel = rcloneSummary.enabled ? 'Internal mount' : rcloneSummary.serveFromRclone ? 'External mount' : 'Disabled';
 
   useEffect(() => {
-    if (rcloneSummary.enabled && rcloneSummary.mountPath) {
+    if (rcloneMountConfigured) {
       setValues((prev) => {
         if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
           const mountPath = rcloneSummary.mountPath!;
@@ -275,7 +277,7 @@ export default function SetupWizard() {
         return prev;
       });
     }
-  }, [rcloneSummary.enabled, rcloneSummary.mountPath]);
+  }, [rcloneMountConfigured, rcloneSummary.mountPath]);
 
   useEffect(() => {
     const handleRcloneMountChange = async () => {
@@ -289,7 +291,7 @@ export default function SetupWizard() {
           serveFromRclone: !!cfg.serveFromRclone,
         });
 
-        if (cfg.enabled && cfg.mountPath) {
+        if ((cfg.enabled || cfg.serveFromRclone) && cfg.mountPath) {
           setValues((prev) => {
             if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
               const mountPath = cfg.mountPath!;
@@ -327,7 +329,7 @@ export default function SetupWizard() {
             serveFromRclone: !!cfg.serveFromRclone,
           });
 
-          if (cfg.enabled && cfg.mountPath) {
+          if ((cfg.enabled || cfg.serveFromRclone) && cfg.mountPath) {
             setValues((prev) => {
               if (!prev['SOURCE_DIR'] || prev['SOURCE_DIR'].trim() === '') {
                 const mountPath = cfg.mountPath!;
@@ -393,7 +395,7 @@ export default function SetupWizard() {
 
       const prefilled = { ...defaults, ...initial };
       
-      if (cfg.enabled && cfg.mountPath && !prefilled['SOURCE_DIR']) {
+      if ((cfg.enabled || cfg.serveFromRclone) && cfg.mountPath && !prefilled['SOURCE_DIR']) {
         const mountPath = cfg.mountPath!;
         const separator = mountPath.includes('\\') ? '\\' : '/';
         const normalizedPath = mountPath.endsWith('\\') || mountPath.endsWith('/') 
@@ -1027,19 +1029,19 @@ export default function SetupWizard() {
                             <Box sx={{ flexGrow: 1 }} />
                             <Stack direction="row" spacing={1} flexWrap="wrap">
                               <Chip
-                                label={rcloneSummary.enabled ? 'Enabled' : 'Disabled'}
-                                color={rcloneSummary.enabled ? 'success' : 'default'}
-                                variant={rcloneSummary.enabled ? 'filled' : 'outlined'}
+                                label={rcloneModeLabel}
+                                color={rcloneSummary.enabled ? 'success' : rcloneSummary.serveFromRclone ? 'info' : 'default'}
+                                variant={rcloneSummary.enabled || rcloneSummary.serveFromRclone ? 'filled' : 'outlined'}
                                 size="small"
                               />
                               {rcloneSummary.mountPath && (
                                 <Chip label={rcloneSummary.mountPath} variant="outlined" size="small" />
                               )}
-                              {rcloneSummary.autoMountOnStart && (
+                              {rcloneSummary.enabled && rcloneSummary.autoMountOnStart && (
                                 <Chip label="Auto-mount" color="primary" variant="outlined" size="small" />
                               )}
                               {rcloneSummary.serveFromRclone && (
-                                <Chip label="Serving from rclone" color="info" variant="outlined" size="small" />
+                                <Chip label={rcloneSummary.enabled ? 'Serving from rclone' : 'Using external mount'} color="info" variant="outlined" size="small" />
                               )}
                             </Stack>
                           </Stack>
@@ -1180,4 +1182,3 @@ export default function SetupWizard() {
       </Container>
   );
 }
-

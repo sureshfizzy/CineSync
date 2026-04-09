@@ -136,6 +136,8 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 		return
 	}
 
+	previousConfig := configManager.GetConfig()
+
 	// Validate API key if provided
 	if apiKey, ok := updates["apiKey"].(string); ok && apiKey != "" {
 		client := realdebrid.NewClient(apiKey)
@@ -149,6 +151,17 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 		logger.Warn("Failed to update Real-Debrid config: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	config := configManager.GetConfig()
+
+	if previousConfig.RcloneSettings.Enabled &&
+		!config.RcloneSettings.Enabled &&
+		previousConfig.RcloneSettings.MountPath != "" {
+		rcloneManager := realdebrid.GetRcloneManager()
+		if _, err := rcloneManager.Unmount(previousConfig.RcloneSettings.MountPath); err != nil && err.Error() != "mount not found" {
+			logger.Warn("Failed to stop internal rclone mount while updating config: %v", err)
+		}
 	}
 
 	_, hasAPIKey := updates["apiKey"]
@@ -171,7 +184,6 @@ func handleUpdateRealDebridConfig(w http.ResponseWriter, r *http.Request, config
 	}
 
 	// Return updated configuration
-	config := configManager.GetConfig()
 	status := configManager.GetConfigStatus()
 
 	// Get token statuses after update
@@ -904,7 +916,7 @@ func HandleRealDebridUnrestrictFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleRealDebridRefresh handles torrent refresh requests
+// HandleRealDebridRefresh handles torrent refresh and external rclone VFS refresh requests.
 func HandleRealDebridRefresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -921,11 +933,34 @@ func HandleRealDebridRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		TorrentID string `json:"torrentId"`
+		TorrentID      string   `json:"torrentId"`
+		ExternalRclone bool     `json:"externalRclone"`
+		Dir            string   `json:"dir"`
+		Dirs           []string `json:"dirs"`
+		Recursive      *bool    `json:"recursive"`
+		Async          *bool    `json:"async"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if request.ExternalRclone {
+		response, statusCode, refreshErr := refreshExternalRcloneVFS(externalRcloneRefreshRequest{
+			Dir:       request.Dir,
+			Dirs:      request.Dirs,
+			Recursive: request.Recursive,
+			Async:     request.Async,
+		})
+		if refreshErr != nil {
+			http.Error(w, refreshErr.Error(), statusCode)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
@@ -1019,6 +1054,18 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	}
 	if mountPath, ok := rcloneConfigMap["mountPath"].(string); ok && mountPath != "" {
 		rcloneConfig.MountPath = mountPath
+	}
+	if internalRcServerURL, ok := rcloneConfigMap["internalRcServerUrl"].(string); ok {
+		rcloneConfig.InternalRcServerURL = internalRcServerURL
+	}
+	if internalRcPort, ok := rcloneConfigMap["internalRcPort"].(string); ok {
+		rcloneConfig.InternalRcPort = internalRcPort
+	}
+	if internalRcUsername, ok := rcloneConfigMap["internalRcUsername"].(string); ok {
+		rcloneConfig.InternalRcUsername = internalRcUsername
+	}
+	if internalRcPassword, ok := rcloneConfigMap["internalRcPassword"].(string); ok {
+		rcloneConfig.InternalRcPassword = internalRcPassword
 	}
 
 	if vfsCacheMode, ok := rcloneConfigMap["vfsCacheMode"].(string); ok && vfsCacheMode != "" {
