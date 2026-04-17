@@ -743,6 +743,8 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
 
     for part in parsed.parts:
         clean_part = part.strip()
+        if re.match(r'^(?:cap(?:[ií]tulo)?)\.?\s*\d{3,4}$', clean_part, re.IGNORECASE):
+            return True
         if _is_season_bundle_token(clean_part):
             return True
         for pattern in episode_patterns:
@@ -757,6 +759,11 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
                     return True
 
     for i, part in enumerate(parsed.parts):
+        clean_part = part.strip().rstrip('.,;:')
+        if re.match(r'^(?:cap(?:[ií]tulo)?)$', clean_part, re.IGNORECASE) and i + 1 < len(parsed.parts):
+            next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
+            if re.match(r'^\d{3,4}$', next_part):
+                return True
         if part.lower() in ['season', 's'] and i + 1 < len(parsed.parts):
             next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
             if re.match(r'^\d{1,2}$', next_part):
@@ -1697,6 +1704,14 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     """Extract season number from parsed filename data."""
     for part in parsed.parts:
         clean_part = part.strip().rstrip('.')
+        cap_match = re.match(r'^(?:cap(?:[ií]tulo)?)\.?\s*(\d{3,4})$', clean_part.strip('[](){}'), re.IGNORECASE)
+        if cap_match:
+            encoded = cap_match.group(1)
+            season = int(encoded[:-2]) if len(encoded) == 4 else int(encoded[0])
+            episode = int(encoded[-2:])
+            if season >= 1 and episode >= 1:
+                return season
+
         bundle_match = re.match(
             r'^S(\d{1,2})(?:\s*-\s*S\d{1,2})?(?:\s*(?:\+|/|&)\s*(?:SP|SPECIALS?|OVA|OAD|ONA|MOVIES?|MOVIE|JUNIOR(?:\s*HIGH)?))*$',
             clean_part,
@@ -1750,6 +1765,24 @@ def _extract_season_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         match = re.match(r'^(\d{1,2})x\d{1,4}(?:-\d{1,4})?$', clean_part, re.IGNORECASE)
         if match:
             return int(match.group(1))
+
+    for i, part in enumerate(parsed.parts):
+        clean_part = part.strip().rstrip('.,;:')
+        if re.match(r'^(?:cap(?:[ií]tulo)?)$', clean_part, re.IGNORECASE) and i + 1 < len(parsed.parts):
+            next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
+            if re.match(r'^\d{3,4}$', next_part):
+                season = int(next_part[:-2]) if len(next_part) == 4 else int(next_part[0])
+                episode = int(next_part[-2:])
+                if season >= 1 and episode >= 1:
+                    return season
+
+    capitulo_match = re.search(r'\b(?:cap(?:[ií]tulo)?)\.?\s*(\d{3,4})\b', parsed.original, re.IGNORECASE)
+    if capitulo_match:
+        encoded = capitulo_match.group(1)
+        season = int(encoded[:-2]) if len(encoded) == 4 else int(encoded[0])
+        episode = int(encoded[-2:])
+        if season >= 1 and episode >= 1:
+            return season
 
     # Enhanced season patterns for anime and general content
     season_patterns = [
@@ -1812,6 +1845,13 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     # Standard TV show episode extraction
     for part in parsed.parts:
         clean_part = part.strip().rstrip('.')
+        cap_match = re.match(r'^(?:cap(?:[ií]tulo)?)\.?\s*(\d{3,4})$', clean_part.strip('[](){}'), re.IGNORECASE)
+        if cap_match:
+            encoded = cap_match.group(1)
+            season = int(encoded[:-2]) if len(encoded) == 4 else int(encoded[0])
+            episode = int(encoded[-2:])
+            if season >= 1 and episode >= 1:
+                return episode
 
         # Handle dot-separated season/episode format like S01.E01, S01.E1024
         match = re.search(r'S\d{1,2}\.E(\d{1,4})', clean_part, re.IGNORECASE)
@@ -1856,8 +1896,19 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         if match:
             return int(match.group(1))
 
+    for i, part in enumerate(parsed.parts):
+        clean_part = part.strip().rstrip('.,;:')
+        if re.match(r'^(?:cap(?:[ií]tulo)?)$', clean_part, re.IGNORECASE) and i + 1 < len(parsed.parts):
+            next_part = parsed.parts[i + 1].strip().rstrip('.,;:')
+            if re.match(r'^\d{3,4}$', next_part):
+                season = int(next_part[:-2]) if len(next_part) == 4 else int(next_part[0])
+                episode = int(next_part[-2:])
+                if season >= 1 and episode >= 1:
+                    return episode
+
     # Check for season x episode patterns in the original filename
     episode_patterns = [
+        r'\b(?:cap(?:[ií]tulo)?)\.?\s*(\d{3,4})\b',
         r'\b\d{1,2}x(\d{1,4})-\d{1,4}\b',  # "1x18-20", "1x1024-1026" (return first episode)
         r'\b\d{1,2}x(\d{1,4})\b',          # "1x18", "1x1024"
     ]
@@ -1865,9 +1916,16 @@ def _extract_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
     for pattern in episode_patterns:
         match = re.search(pattern, parsed.original, re.IGNORECASE)
         if match:
-            episode_num = int(match.group(1))
-            if 1 <= episode_num <= 4999:
-                return episode_num
+            if pattern.startswith(r'\b(?:cap'):
+                encoded = match.group(1)
+                season = int(encoded[:-2]) if len(encoded) == 4 else int(encoded[0])
+                episode = int(encoded[-2:])
+                if season >= 1 and episode >= 1:
+                    return episode
+            else:
+                episode_num = int(match.group(1))
+                if 1 <= episode_num <= 4999:
+                    return episode_num
 
     # Check for anime-style episode patterns in the original filename
     # Pattern: "Title - Additional Info - 01 - Episode Title"
