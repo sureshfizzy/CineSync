@@ -90,6 +90,69 @@ export const FormField: React.FC<FormFieldProps> = ({
 
       case 'array':
         const arrayValues = value ? value.split(',').map(v => v.trim()).filter(v => v) : [];
+        if (options && options.length > 0) {
+          const toggleOption = (option: string) => {
+            const exists = arrayValues.includes(option);
+            const nextValues = exists
+              ? arrayValues.filter((item) => item !== option)
+              : [...arrayValues, option];
+            onChange(nextValues.join(', '));
+          };
+          const dummyTagValues: Record<string, string> = {
+            'Resolution': '1080p',
+            'Quality Full': 'Bluray-1080p Proper',
+            'Quality Title': 'Bluray-1080p',
+            'Custom Formats': 'iNTERNAL',
+            'TMDB': '{tmdb-603}',
+            'IMDB': '{imdb-tt0133093}',
+            'MediaInfo VideoCodec': 'x264',
+            'MediaInfo AudioCodec': 'DTS',
+            'MediaInfo AudioChannels': '5.1',
+            'MediaInfo Dynamic Range': 'HDR'
+          };
+          const dummyBaseName = 'The Matrix (1999)';
+          const selectedTagValues = arrayValues
+            .map((tag) => dummyTagValues[tag] || tag)
+            .filter(Boolean);
+          const exampleFilename = selectedTagValues.length > 0
+            ? `${dummyBaseName} ${selectedTagValues.join(' ')}.mkv`
+            : `${dummyBaseName}.mkv`;
+
+          return (
+            <Box>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {options.map((option) => {
+                  const isSelected = arrayValues.includes(option);
+                  return (
+                    <Chip
+                      key={option}
+                      label={option}
+                      clickable
+                      disabled={isFieldDisabled}
+                      onClick={() => toggleOption(option)}
+                      color={isSelected ? 'primary' : 'default'}
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      sx={{
+                        transition: 'all 0.15s ease',
+                        '&:hover': {
+                          transform: isFieldDisabled ? 'none' : 'translateY(-1px)',
+                        },
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+              {(error || description) && (
+                <Typography variant="caption" color={error ? 'error' : 'text.secondary'} sx={{ mt: 0.5, display: 'block' }}>
+                  {error || description}
+                </Typography>
+              )}
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+                Example filename: {exampleFilename}
+              </Typography>
+            </Box>
+          );
+        }
         return (
           <Box>
             <TextField

@@ -412,6 +412,20 @@ const Settings: React.FC = () => {
     if (item.options && item.options.length > 0) {
       return item.options;
     }
+    if (item.key === 'RENAME_TAGS') {
+      return [
+        'Resolution',
+        'Quality Full',
+        'Quality Title',
+        'Custom Formats',
+        'TMDB',
+        'IMDB',
+        'MediaInfo VideoCodec',
+        'MediaInfo AudioCodec',
+        'MediaInfo AudioChannels',
+        'MediaInfo Dynamic Range'
+      ];
+    }
     if (item.key === 'SHOW_RESOLUTION_STRUCTURE' || item.key === 'MOVIE_RESOLUTION_STRUCTURE') {
       return ['none', 'year', 'resolution', 'year_resolution'];
     }
@@ -1346,11 +1360,11 @@ const Settings: React.FC = () => {
             const isMediainfoParserEnabled = mediainfoParserValue.toLowerCase() === 'true';
 
             const basicSettings = items.filter(item =>
-              item.key === 'RENAME_ENABLED' || item.key === 'RENAME_TAGS'
+              item.key === 'RENAME_ENABLED' || item.key === 'RENAME_TAGS' || item.key === 'MEDIAINFO_PARSER'
             );
 
             let advancedSettings = items.filter(item =>
-              item.key !== 'RENAME_ENABLED' && item.key !== 'RENAME_TAGS'
+              item.key !== 'RENAME_ENABLED' && item.key !== 'RENAME_TAGS' && item.key !== 'MEDIAINFO_PARSER'
             );
 
             if (!isMediainfoParserEnabled) {
@@ -1481,35 +1495,6 @@ const Settings: React.FC = () => {
                         Configure MediaInfo parsing and Sonarr-compatible naming formats
                       </Typography>
                     </Box>
-
-                    {/* MediaInfo Parser Notice */}
-                    {!isMediainfoParserEnabled && (
-                      <Box
-                        sx={{
-                          p: 3,
-                          bgcolor: alpha(theme.palette.warning.main, 0.1),
-                          border: '1px solid',
-                          borderColor: alpha(theme.palette.warning.main, 0.3),
-                          borderRadius: 3,
-                          mb: 3,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          color="warning.main"
-                          sx={{ fontWeight: 600, mb: 1 }}
-                        >
-                          📋 MediaInfo Parser Required
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ lineHeight: 1.4 }}
-                        >
-                          Enable "MediaInfo Parser" above to access Sonarr&Radarr-compatible naming formats and MediaInfo tags.
-                        </Typography>
-                      </Box>
-                    )}
 
                     {advancedSettings.length > 0 && (
                     <Grid container spacing={3}>
