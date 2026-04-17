@@ -1,8 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography, Card, CardContent, List, ListItem, IconButton, Button, Alert, CircularProgress, Avatar, alpha, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, Stack, Tooltip } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Folder as FolderIcon, Warning as WarningIcon } from '@mui/icons-material';
 import FolderSelector from '../FileOperations/FolderSelector';
 import { getAuthHeaders } from '../../contexts/AuthContext';
+import RenameSettings from './RenameSettings';
 
 interface RootFolder {
   id: number;
@@ -178,6 +179,8 @@ export default function RootFoldersManagement() {
   return (
     <Box sx={{ bgcolor: 'background.default', py: { xs: 1.5, sm: 2.5 } }}>
       <Box sx={{ maxWidth: 920, mx: 'auto', px: { xs: 1.5, sm: 2.5 } }}>
+        <RenameSettings />
+
         <Stack
           direction={{ xs: 'column', sm: 'row' }}
           spacing={1.5}
