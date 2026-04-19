@@ -17,34 +17,51 @@ from MediaHub.utils.plex_utils import update_plex_after_deletion
 from MediaHub.config.config import is_skip_versions_enabled, is_jellyfin_multi_version_enabled
 import re
 
-def _extract_version_label(filepath):
-	"""Extract a version label (resolution or edition) from a file path for Jellyfin multi-version naming.
+def _extract_version_parts(filepath):
+	"""Extract all version parts (resolution, quality source, edition) from a file path.
 	
-	Returns a label string like '2160p', '1080p', '720p', 'Remux', etc.
-	Falls back to a generic label if nothing can be extracted.
+	Returns a list of matched parts in priority order, e.g. ['1080p', 'BluRay'] or ['Extended'].
 	"""
 	basename = os.path.basename(filepath)
+	parts = []
 	
-	# Try to extract resolution (e.g., 2160p, 1080p, 720p, 480p)
+	# Resolution (e.g., 2160p, 1080p, 720p, 480p)
 	res_match = re.search(r'\b(2160p|1080p|720p|480p|360p|4K)\b', basename, re.IGNORECASE)
 	if res_match:
 		label = res_match.group(1)
-		# Normalize 4K to 2160p for consistent sorting
 		if label.upper() == '4K':
 			label = '2160p'
-		return label
+		parts.append(label)
 	
-	# Try to extract quality source (e.g., Remux, BluRay, WEB-DL, HDTV)
+	# Quality source (e.g., Remux, BluRay, WEB-DL, HDTV)
 	quality_match = re.search(r'\b(Remux|BluRay|Blu-Ray|WEB-DL|WEBRip|HDTV|HDRip|DVDRip|BDRip|BRRip)\b', basename, re.IGNORECASE)
 	if quality_match:
-		return quality_match.group(1)
+		parts.append(quality_match.group(1))
 	
-	# Try edition tags (e.g., Directors Cut, Extended, Theatrical)
+	# Edition tags (e.g., Directors Cut, Extended, Theatrical)
 	edition_match = re.search(r"\b(Director'?s?[\s.]?Cut|Extended|Theatrical|Unrated|Uncut|Remastered|IMAX)\b", basename, re.IGNORECASE)
 	if edition_match:
-		# Normalize dots/underscores to spaces in the label
-		return edition_match.group(1).replace('.', ' ').replace('_', ' ')
+		parts.append(edition_match.group(1).replace('.', ' ').replace('_', ' '))
 	
+	return parts
+
+def _extract_version_label(filepath):
+	"""Extract the best single version label from a file path.
+	
+	Returns the first matched part (resolution > quality > edition), or None.
+	"""
+	parts = _extract_version_parts(filepath)
+	return parts[0] if parts else None
+
+def _extract_detailed_version_label(filepath):
+	"""Extract a detailed version label combining all matched parts.
+	
+	Used as a fallback when the short label causes a conflict.
+	Returns e.g. '1080p BluRay', '1080p WEB-DL', or None if only one part (or none) matched.
+	"""
+	parts = _extract_version_parts(filepath)
+	if len(parts) > 1:
+		return ' '.join(parts)
 	return None
 
 def _jellyfin_version_name(folder_name, label, ext):

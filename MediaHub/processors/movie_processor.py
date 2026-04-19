@@ -8,7 +8,7 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo_extractor import *
 from MediaHub.api.tmdb_api_helpers import get_movie_data
-from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file, _extract_version_label
+from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file, _extract_version_label, _extract_detailed_version_label
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 from MediaHub.processors.db_utils import track_file_failure
 
@@ -592,6 +592,12 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             version_label = ext.lstrip('.').upper()
 
         dest_file = os.path.join(dest_path, f"{clean_movie_folder} - {version_label}{ext}")
+
+        # If short label conflicts, try a more detailed label (e.g. "1080p BluRay" vs "1080p WEB-DL")
+        if os.path.exists(dest_file):
+            detailed_label = _extract_detailed_version_label(file)
+            if detailed_label and detailed_label != version_label:
+                dest_file = os.path.join(dest_path, f"{clean_movie_folder} - {detailed_label}{ext}")
 
     # Extract clean name from proper_name which may include TMDB/IMDB IDs
     clean_name = proper_name
