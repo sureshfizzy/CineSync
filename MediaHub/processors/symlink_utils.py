@@ -17,31 +17,62 @@ from MediaHub.utils.plex_utils import update_plex_after_deletion
 from MediaHub.config.config import is_skip_versions_enabled, is_jellyfin_multi_version_enabled
 import re
 
+# Load keywords once at module level
+_KEYWORDS_FILE = os.path.join(os.path.dirname(__file__), '..', 'utils', 'keywords.json')
+_keywords_cache = None
+
+def _load_keywords():
+	global _keywords_cache
+	if _keywords_cache is None:
+		try:
+			with open(_KEYWORDS_FILE, 'r') as f:
+				_keywords_cache = json.load(f)
+		except (IOError, json.JSONDecodeError) as e:
+			log_message(f"Failed to load keywords.json: {e}", level="WARNING")
+			_keywords_cache = {}
+	return _keywords_cache
+
 def _extract_version_parts(filepath):
 	"""Extract all version parts (resolution, quality source, edition) from a file path.
 	
+	Uses editions and quality_sources from keywords.json for matching.
 	Returns a list of matched parts in priority order, e.g. ['1080p', 'BluRay'] or ['Extended'].
 	"""
 	basename = os.path.basename(filepath)
+	# Normalize separators for matching
+	normalized = basename.replace('.', ' ').replace('_', ' ')
 	parts = []
+	keywords = _load_keywords()
 	
-	# Resolution (e.g., 2160p, 1080p, 720p, 480p)
-	res_match = re.search(r'\b(2160p|1080p|720p|480p|360p|4K)\b', basename, re.IGNORECASE)
-	if res_match:
-		label = res_match.group(1)
-		if label.upper() == '4K':
-			label = '2160p'
-		parts.append(label)
+	# Resolution from keywords.json (e.g., 2160p, 1080p, 720p, 480p)
+	resolutions = keywords.get('resolutions', [])
+	if resolutions:
+		res_pattern = r'\b(' + '|'.join(re.escape(r) for r in resolutions) + r')\b'
+		res_match = re.search(res_pattern, basename, re.IGNORECASE)
+		if res_match:
+			label = res_match.group(1)
+			if label.upper() == '4K':
+				label = '2160p'
+			parts.append(label)
 	
-	# Quality source (e.g., Remux, BluRay, WEB-DL, HDTV)
-	quality_match = re.search(r'\b(Remux|BluRay|Blu-Ray|WEB-DL|WEBRip|HDTV|HDRip|DVDRip|BDRip|BRRip)\b', basename, re.IGNORECASE)
-	if quality_match:
-		parts.append(quality_match.group(1))
+	# Quality source from keywords.json
+	quality_sources = keywords.get('quality_sources', [])
+	if quality_sources:
+		# Sort by length descending so longer matches win (e.g. "WEB-DL" before "BD")
+		for qs in sorted(quality_sources, key=len, reverse=True):
+			if re.search(r'\b' + re.escape(qs) + r'\b', basename, re.IGNORECASE):
+				parts.append(qs)
+				break
 	
-	# Edition tags (e.g., Directors Cut, Extended, Theatrical)
-	edition_match = re.search(r"\b(Director'?s?[\s.]?Cut|Extended|Theatrical|Unrated|Uncut|Remastered|IMAX)\b", basename, re.IGNORECASE)
-	if edition_match:
-		parts.append(edition_match.group(1).replace('.', ' ').replace('_', ' '))
+	# Edition from keywords.json
+	editions = keywords.get('editions', [])
+	if editions:
+		for edition in sorted(editions, key=len, reverse=True):
+			# Normalize both sides: strip apostrophes/special chars for matching
+			norm_edition = edition.replace("'", "").replace("\u2019", "")
+			if re.search(r'\b' + re.escape(norm_edition) + r'\b', normalized.replace("'", ""), re.IGNORECASE):
+				parts.append(edition)
+				break
 	
 	return parts
 
