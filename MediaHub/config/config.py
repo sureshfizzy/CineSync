@@ -176,6 +176,12 @@ def is_skip_patterns_enabled():
 def is_skip_versions_enabled():
     return os.getenv('SKIP_VERSIONS', 'true').lower() in ['true', '1', 'yes']
 
+def is_jellyfin_multi_version_enabled():
+    """Check if Jellyfin multi-version naming is enabled.
+    When enabled, multiple versions of the same movie are named with a
+    ' - label' suffix (e.g. resolution) so Jellyfin groups them together."""
+    return os.getenv('JELLYFIN_MULTI_VERSION', 'false').lower() in ['true', '1', 'yes']
+
 def is_rclone_mount_enabled():
     return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
 

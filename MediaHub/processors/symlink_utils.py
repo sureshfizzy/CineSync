@@ -14,7 +14,44 @@ from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 from MediaHub.utils.plex_utils import update_plex_after_deletion
-from MediaHub.config.config import is_skip_versions_enabled
+from MediaHub.config.config import is_skip_versions_enabled, is_jellyfin_multi_version_enabled
+import re
+
+def _extract_version_label(filepath):
+	"""Extract a version label (resolution or edition) from a file path for Jellyfin multi-version naming.
+	
+	Returns a label string like '2160p', '1080p', '720p', 'Remux', etc.
+	Falls back to a generic label if nothing can be extracted.
+	"""
+	basename = os.path.basename(filepath)
+	
+	# Try to extract resolution (e.g., 2160p, 1080p, 720p, 480p)
+	res_match = re.search(r'\b(2160p|1080p|720p|480p|360p|4K)\b', basename, re.IGNORECASE)
+	if res_match:
+		label = res_match.group(1)
+		# Normalize 4K to 2160p for consistent sorting
+		if label.upper() == '4K':
+			label = '2160p'
+		return label
+	
+	# Try to extract quality source (e.g., Remux, BluRay, WEB-DL, HDTV)
+	quality_match = re.search(r'\b(Remux|BluRay|Blu-Ray|WEB-DL|WEBRip|HDTV|HDRip|DVDRip|BDRip|BRRip)\b', basename, re.IGNORECASE)
+	if quality_match:
+		return quality_match.group(1)
+	
+	# Try edition tags (e.g., Directors Cut, Extended, Theatrical)
+	edition_match = re.search(r"\b(Director'?s?[\s.]?Cut|Extended|Theatrical|Unrated|Uncut|Remastered|IMAX)\b", basename, re.IGNORECASE)
+	if edition_match:
+		# Normalize dots/underscores to spaces in the label
+		return edition_match.group(1).replace('.', ' ').replace('_', ' ')
+	
+	return None
+
+def _jellyfin_version_name(folder_name, label, ext):
+	"""Build a Jellyfin multi-version filename: 'FolderName - Label.ext'"""
+	if label:
+		return f"{folder_name} - {label}{ext}"
+	return f"{folder_name}{ext}"
 
 def generate_unique_filename(dest_file, src_file=None):
 	"""Generate a unique filename by adding version numbers if conflicts occur.
@@ -39,6 +76,48 @@ def generate_unique_filename(dest_file, src_file=None):
 				return dest_file
 		except (OSError, IOError):
 			pass
+	
+	# Jellyfin multi-version naming: use ' - label' suffix instead of [Version N]
+	if is_jellyfin_multi_version_enabled() and os.path.islink(dest_file):
+		dir_path = os.path.dirname(dest_file)
+		folder_name = os.path.basename(dir_path)
+		ext = os.path.splitext(dest_file)[1]
+		
+		# Extract version label for the NEW file from source path
+		new_label = None
+		if src_file:
+			new_label = _extract_version_label(src_file)
+		if not new_label:
+			new_label = _extract_version_label(dest_file)
+		
+		# Rename the EXISTING symlink to also have a version label if it doesn't already
+		existing_basename = os.path.basename(dest_file)
+		existing_name_no_ext = os.path.splitext(existing_basename)[0]
+		# Check if existing file already has a Jellyfin version label (contains ' - ')
+		if ' - ' not in existing_name_no_ext or existing_name_no_ext == folder_name:
+			existing_target = get_symlink_target_path(dest_file)
+			if existing_target:
+				existing_label = _extract_version_label(existing_target)
+				if not existing_label:
+					existing_label = _extract_version_label(existing_basename)
+				if existing_label:
+					renamed_existing = os.path.join(dir_path, _jellyfin_version_name(folder_name, existing_label, ext))
+					if renamed_existing != dest_file and not os.path.exists(renamed_existing):
+						try:
+							os.rename(dest_file, renamed_existing)
+							log_message(f"Renamed existing file for Jellyfin multi-version: {existing_basename} -> {os.path.basename(renamed_existing)}", level="INFO")
+						except OSError as e:
+							log_message(f"Failed to rename existing file for Jellyfin versioning: {e}", level="WARNING")
+		
+		# Build the new file path with its version label
+		if new_label:
+			new_path = os.path.join(dir_path, _jellyfin_version_name(folder_name, new_label, ext))
+			# Avoid collision if same label already exists
+			if not os.path.exists(new_path):
+				return new_path
+			# If same label exists, fall through to standard versioning
+		
+		# If we couldn't extract labels, fall through to standard behavior
 	
 	# Check if version skipping is enabled
 	if is_skip_versions_enabled():

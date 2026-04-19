@@ -91,6 +91,7 @@ def collect_defaults():
         "4K_SHOW_EXTRAS_SIZE_LIMIT": "800",
         "4K_MOVIE_EXTRAS_SIZE_LIMIT": "2048",
         "ALLOWED_EXTENSIONS": ".mp4,.mkv,.srt,.avi,.mov,.divx,.strm",
+        "JELLYFIN_MULTI_VERSION": "false",
         "SKIP_ADULT_PATTERNS": "true",
         "REPLACE_ILLEGAL_CHARACTERS": "true",
         "COLON_REPLACEMENT": "Smart Replace",

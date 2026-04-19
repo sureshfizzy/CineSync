@@ -8,7 +8,7 @@ from MediaHub.utils.logging_utils import log_message
 from MediaHub.config.config import *
 from MediaHub.utils.mediainfo_extractor import *
 from MediaHub.api.tmdb_api_helpers import get_movie_data
-from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file
+from MediaHub.processors.symlink_utils import load_skip_patterns, should_skip_file, _extract_version_label
 from MediaHub.utils.meta_extraction_engine import get_ffprobe_media_info
 from MediaHub.processors.db_utils import track_file_failure
 
@@ -578,6 +578,13 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         new_name = file
 
     dest_file = os.path.join(dest_path, new_name)
+
+    # Apply Jellyfin multi-version label if enabled
+    if is_jellyfin_multi_version_enabled():
+        version_label = _extract_version_label(file)
+        if version_label:
+            name_no_ext, ext = os.path.splitext(new_name)
+            dest_file = os.path.join(dest_path, f"{movie_folder} - {version_label}{ext}")
 
     # Extract clean name from proper_name which may include TMDB/IMDB IDs
     clean_name = proper_name
