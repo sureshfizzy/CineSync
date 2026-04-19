@@ -585,9 +585,13 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Apply Jellyfin multi-version label if enabled
     if is_jellyfin_multi_version_enabled():
         version_label = _extract_version_label(file)
-        if version_label:
-            name_no_ext, ext = os.path.splitext(new_name)
-            dest_file = os.path.join(dest_path, f"{clean_movie_folder} - {version_label}{ext}")
+        ext = os.path.splitext(new_name)[1]
+
+        # Fall back to container format (e.g. "MKV", "AVI") when no quality info in filename
+        if not version_label:
+            version_label = ext.lstrip('.').upper()
+
+        dest_file = os.path.join(dest_path, f"{clean_movie_folder} - {version_label}{ext}")
 
     # Extract clean name from proper_name which may include TMDB/IMDB IDs
     clean_name = proper_name
