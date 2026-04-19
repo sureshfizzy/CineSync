@@ -419,6 +419,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Extract media information for renaming
     media_info = extract_media_info(file, keywords)
 
+    # Save clean folder name before bracket tags are appended (used by Jellyfin multi-version naming)
+    clean_movie_folder = movie_folder
+
     # Optionally append extracted media information to movie folder name
     if media_info:
         if 'Resolution' in media_info:
@@ -584,7 +587,7 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         version_label = _extract_version_label(file)
         if version_label:
             name_no_ext, ext = os.path.splitext(new_name)
-            dest_file = os.path.join(dest_path, f"{movie_folder} - {version_label}{ext}")
+            dest_file = os.path.join(dest_path, f"{clean_movie_folder} - {version_label}{ext}")
 
     # Extract clean name from proper_name which may include TMDB/IMDB IDs
     clean_name = proper_name
