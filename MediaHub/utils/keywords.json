@@ -1,4 +1,7 @@
 {
+    "resolutions": [
+        "2160p", "1080p", "720p", "480p", "360p", "4K"
+    ],
     "quality_sources": [
         "BluRay", "Blu-ray", "BD", "BDRip", "BRRip", "WEB-DL", "WEBDL", "WebRip", "WEBRip",
         "HDTV", "DVDRip", "DVDRIP", "REMUX", "BDRemux", "HYBRID"

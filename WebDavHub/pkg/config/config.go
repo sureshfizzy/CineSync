@@ -286,6 +286,7 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "ALLOWED_EXTENSIONS", Category: "File Handling Configuration", Type: "array", Required: false, Description: "Allowed file extensions for processing"},
 		{Key: "SKIP_ADULT_PATTERNS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable or disable skipping of specific file patterns"},
 		{Key: "SKIP_VERSIONS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Skip creating extra versions for the same release (avoids Version 2/3 when the release group is the only difference)"},
+		{Key: "JELLYFIN_MULTI_VERSION", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Name multiple versions of the same movie with Jellyfin-compatible labels (e.g. ' - 1080p', ' - 2160p') so Jellyfin groups them as versions"},
 		{Key: "FILE_OPERATIONS_AUTO_MODE", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Enable auto-processing mode for file operations", Hidden: true},
 		{Key: "REPLACE_ILLEGAL_CHARACTERS", Category: "File Handling Configuration", Type: "boolean", Required: false, Description: "Replace illegal characters. If unchecked, MediaHub will remove them instead"},
 		{Key: "COLON_REPLACEMENT", Category: "File Handling Configuration", Type: "select", Required: false, Description: "Colon replacement format", Options: []string{"Delete", "Replace with Dash", "Replace with Space Dash", "Replace with Space Dash Space", "Smart Replace"}},
@@ -804,6 +805,7 @@ func getConfigDefaults() map[string]string {
 		"ALLOWED_EXTENSIONS":         ".mp4,.mkv,.srt,.avi,.mov,.divx,.strm",
 		"SKIP_ADULT_PATTERNS":        "true",
 		"SKIP_VERSIONS":              "true",
+		"JELLYFIN_MULTI_VERSION":     "false",
 		"REPLACE_ILLEGAL_CHARACTERS": "true",
 		"COLON_REPLACEMENT":          "Smart Replace",
 		// Monitoring

@@ -182,6 +182,7 @@ const wizardSteps: Step[] = [
       'ALLOWED_EXTENSIONS',
       'SKIP_ADULT_PATTERNS',
       'SKIP_VERSIONS',
+      'JELLYFIN_MULTI_VERSION',
     ],
   },
   {
@@ -653,6 +654,7 @@ export default function SetupWizard() {
     SKIP_EXTRAS_FOLDER: 'Skip processing extras folders.',
     SKIP_ADULT_PATTERNS: 'Skip files matching adult patterns.',
     SKIP_VERSIONS: 'Skip extra versions of the same release group (avoid Version 2/3 when only the group differs).',
+    JELLYFIN_MULTI_VERSION: 'Name multiple versions with Jellyfin-compatible labels (e.g. \' - 1080p\', \' - 2160p\') so Jellyfin groups them.',
     REPLACE_ILLEGAL_CHARACTERS: 'Replace illegal characters. If unchecked, MediaHub will remove them instead.',
     ENABLE_PLEX_UPDATE: 'Trigger Plex library updates after processing.',
     CINESYNC_AUTH_ENABLED: 'Require authentication for UI/API.',

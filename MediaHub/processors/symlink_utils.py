@@ -14,7 +14,92 @@ from MediaHub.utils.file_utils import get_symlink_target_path
 from MediaHub.utils.webdav_api import send_structured_message, send_file_deletion
 from MediaHub.api.media_cover import cleanup_tmdb_covers
 from MediaHub.utils.plex_utils import update_plex_after_deletion
-from MediaHub.config.config import is_skip_versions_enabled
+from MediaHub.config.config import is_skip_versions_enabled, is_jellyfin_multi_version_enabled
+import re
+
+# Load keywords once at module level
+_KEYWORDS_FILE = os.path.join(os.path.dirname(__file__), '..', 'utils', 'keywords.json')
+_keywords_cache = None
+
+def _load_keywords():
+	global _keywords_cache
+	if _keywords_cache is None:
+		try:
+			with open(_KEYWORDS_FILE, 'r') as f:
+				_keywords_cache = json.load(f)
+		except (IOError, json.JSONDecodeError) as e:
+			log_message(f"Failed to load keywords.json: {e}", level="WARNING")
+			_keywords_cache = {}
+	return _keywords_cache
+
+def _extract_version_parts(filepath):
+	"""Extract all version parts (resolution, quality source, edition) from a file path.
+	
+	Uses editions and quality_sources from keywords.json for matching.
+	Returns a list of matched parts in priority order, e.g. ['1080p', 'BluRay'] or ['Extended'].
+	"""
+	basename = os.path.basename(filepath)
+	# Normalize separators for matching
+	normalized = basename.replace('.', ' ').replace('_', ' ')
+	parts = []
+	keywords = _load_keywords()
+	
+	# Resolution from keywords.json (e.g., 2160p, 1080p, 720p, 480p)
+	resolutions = keywords.get('resolutions', [])
+	if resolutions:
+		res_pattern = r'\b(' + '|'.join(re.escape(r) for r in resolutions) + r')\b'
+		res_match = re.search(res_pattern, basename, re.IGNORECASE)
+		if res_match:
+			label = res_match.group(1)
+			if label.upper() == '4K':
+				label = '2160p'
+			parts.append(label)
+	
+	# Quality source from keywords.json
+	quality_sources = keywords.get('quality_sources', [])
+	if quality_sources:
+		# Sort by length descending so longer matches win (e.g. "WEB-DL" before "BD")
+		for qs in sorted(quality_sources, key=len, reverse=True):
+			if re.search(r'\b' + re.escape(qs) + r'\b', basename, re.IGNORECASE):
+				parts.append(qs)
+				break
+	
+	# Edition from keywords.json
+	editions = keywords.get('editions', [])
+	if editions:
+		for edition in sorted(editions, key=len, reverse=True):
+			# Normalize both sides: strip apostrophes/special chars for matching
+			norm_edition = edition.replace("'", "").replace("\u2019", "")
+			if re.search(r'\b' + re.escape(norm_edition) + r'\b', normalized.replace("'", ""), re.IGNORECASE):
+				parts.append(edition)
+				break
+	
+	return parts
+
+def _extract_version_label(filepath):
+	"""Extract the best single version label from a file path.
+	
+	Returns the first matched part (resolution > quality > edition), or None.
+	"""
+	parts = _extract_version_parts(filepath)
+	return parts[0] if parts else None
+
+def _extract_detailed_version_label(filepath):
+	"""Extract a detailed version label combining all matched parts.
+	
+	Used as a fallback when the short label causes a conflict.
+	Returns e.g. '1080p BluRay', '1080p WEB-DL', or None if only one part (or none) matched.
+	"""
+	parts = _extract_version_parts(filepath)
+	if len(parts) > 1:
+		return ' '.join(parts)
+	return None
+
+def _jellyfin_version_name(folder_name, label, ext):
+	"""Build a Jellyfin multi-version filename: 'FolderName - Label.ext'"""
+	if label:
+		return f"{folder_name} - {label}{ext}"
+	return f"{folder_name}{ext}"
 
 def generate_unique_filename(dest_file, src_file=None):
 	"""Generate a unique filename by adding version numbers if conflicts occur.
@@ -39,6 +124,48 @@ def generate_unique_filename(dest_file, src_file=None):
 				return dest_file
 		except (OSError, IOError):
 			pass
+	
+	# Jellyfin multi-version naming: use ' - label' suffix instead of [Version N]
+	if is_jellyfin_multi_version_enabled() and os.path.islink(dest_file):
+		dir_path = os.path.dirname(dest_file)
+		folder_name = os.path.basename(dir_path)
+		ext = os.path.splitext(dest_file)[1]
+		
+		# Extract version label for the NEW file from source path
+		new_label = None
+		if src_file:
+			new_label = _extract_version_label(src_file)
+		if not new_label:
+			new_label = _extract_version_label(dest_file)
+		
+		# Rename the EXISTING symlink to also have a version label if it doesn't already
+		existing_basename = os.path.basename(dest_file)
+		existing_name_no_ext = os.path.splitext(existing_basename)[0]
+		# Check if existing file already has a Jellyfin version label (contains ' - ')
+		if ' - ' not in existing_name_no_ext or existing_name_no_ext == folder_name:
+			existing_target = get_symlink_target_path(dest_file)
+			if existing_target:
+				existing_label = _extract_version_label(existing_target)
+				if not existing_label:
+					existing_label = _extract_version_label(existing_basename)
+				if existing_label:
+					renamed_existing = os.path.join(dir_path, _jellyfin_version_name(folder_name, existing_label, ext))
+					if renamed_existing != dest_file and not os.path.exists(renamed_existing):
+						try:
+							os.rename(dest_file, renamed_existing)
+							log_message(f"Renamed existing file for Jellyfin multi-version: {existing_basename} -> {os.path.basename(renamed_existing)}", level="INFO")
+						except OSError as e:
+							log_message(f"Failed to rename existing file for Jellyfin versioning: {e}", level="WARNING")
+		
+		# Build the new file path with its version label
+		if new_label:
+			new_path = os.path.join(dir_path, _jellyfin_version_name(folder_name, new_label, ext))
+			# Avoid collision if same label already exists
+			if not os.path.exists(new_path):
+				return new_path
+			# If same label exists, fall through to standard versioning
+		
+		# If we couldn't extract labels, fall through to standard behavior
 	
 	# Check if version skipping is enabled
 	if is_skip_versions_enabled():
