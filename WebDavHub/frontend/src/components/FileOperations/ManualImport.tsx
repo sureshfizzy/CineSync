@@ -117,7 +117,6 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{
         p: 3,
         bgcolor: theme.palette.background.paper,
@@ -157,7 +156,12 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles
               {processing ? 'Scanning...' : 'Start Interactive Import'}
             </Button>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mt: 2
+              }}>
               Review and manually select matches for each file
             </Typography>
           </Box>
@@ -189,7 +193,9 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', flex: 1, mr: 2 }}>
                   {folder.path}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{
+                  color: "text.secondary"
+                }}>
                   {folder.timestamp}
                 </Typography>
               </Box>
@@ -197,7 +203,6 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles
           </Box>
         )}
       </DialogContent>
-
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,
@@ -206,13 +211,11 @@ const ManualImport: React.FC<ManualImportProps> = ({ open, onClose, initialFiles
       }}>
         <Button onClick={onClose}>Cancel</Button>
       </DialogActions>
-
       <FolderSelector
         open={folderSelectorOpen}
         onClose={() => setFolderSelectorOpen(false)}
         onSelect={handleFolderSelect}
       />
-
       <InteractiveImportDialog
         open={interactiveImportOpen}
         onClose={() => setInteractiveImportOpen(false)}

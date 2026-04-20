@@ -127,7 +127,7 @@ export default function Header({
                   size="small"
                   variant="outlined"
                   fullWidth
-                  InputProps={{
+                  slotProps={{ input: {
                     startAdornment: (
                       <InputAdornment position="start">
                         {isSearching ? (
@@ -143,7 +143,7 @@ export default function Header({
                       </IconButton>
                     ),
                     sx: { borderRadius: 2, background: theme.palette.background.paper }
-                  }}
+                  } }}
                 />
               </Box>
               <Box sx={{ display: 'flex', gap: 1 }}>
@@ -208,7 +208,7 @@ export default function Header({
               size="small"
               variant="outlined"
               sx={{ flex: 1, maxWidth: '85%' }}
-              InputProps={{
+              slotProps={{ input: {
                 startAdornment: (
                   <InputAdornment position="start">
                     {isSearching ? (
@@ -224,7 +224,7 @@ export default function Header({
                   </IconButton>
                 ),
                 sx: { borderRadius: 2, background: theme.palette.background.paper }
-              }}
+              } }}
             />
             {onToggleSelectionMode && (
               <Tooltip title={isSelectionMode ? "Exit Selection Mode" : "Select Multiple Items"}>

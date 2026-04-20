@@ -267,9 +267,9 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="outlined"
-              InputProps={{
+              slotProps={{ input: {
                 endAdornment: loading ? <CircularProgress size={20} /> : <SearchIcon />
-              }}
+              } }}
               placeholder={`Enter ${mediaType === 'movie' ? 'movie' : 'series'} name...`}
             />
           </CardContent>
@@ -284,7 +284,12 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
             minHeight: '300px',
             textAlign: 'center'
           }}>
-            <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                color: "text.secondary",
+                maxWidth: 600
+              }}>
               It's easy to add a new {mediaType === 'movie' ? 'movie' : 'series'}, just start typing the name the {mediaType === 'movie' ? 'movie' : 'series'} you want to add.
             </Typography>
           </Box>
@@ -299,7 +304,9 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
             
             {searchResults.length === 0 && !loading && (
               <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'background.default' }}>
-                <Typography color="text.secondary">
+                <Typography sx={{
+                  color: "text.secondary"
+                }}>
                   No results found for "{searchQuery}"
                 </Typography>
               </Paper>
@@ -334,7 +341,9 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                       <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="h6" fontWeight={600}>
+                            <Typography variant="h6" sx={{
+                              fontWeight: 600
+                            }}>
                               {result.title || result.name}
                             </Typography>
                             <Chip
@@ -364,14 +373,13 @@ export default function MediaSearchPage({ mediaType, onBack }: MediaSearchPagePr
                         secondary={
                           <Typography
                             variant="body2"
-                            color="text.secondary"
                             sx={{
+                              color: "text.secondary",
                               display: '-webkit-box',
                               WebkitLineClamp: 3,
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden'
-                            }}
-                          >
+                            }}>
                             {result.overview || 'No overview available'}
                           </Typography>
                         }

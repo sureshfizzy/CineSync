@@ -93,12 +93,11 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, justifyContent: { xs: 'center', sm: 'center', md: 'flex-start' }, flexWrap: 'wrap' }}>
             <Typography
               variant="h3"
-              fontWeight={700}
               sx={{
+                fontWeight: 700,
                 textAlign: { xs: 'center', sm: 'center', md: 'left' },
                 fontSize: { xs: '1.8rem', sm: '2rem', md: '2.5rem' }
-              }}
-            >
+              }}>
               {data.title} {releaseYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({releaseYear})</span>}
             </Typography>
             {onSearchIndexer && (
@@ -194,17 +193,16 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
             {country && <Chip label={country} color="default" variant="outlined" size={isMobile ? "small" : "medium"} />}
           </Box>
           {data.tagline && (
-            <Typography 
-              variant="h5" 
-              color="text.secondary" 
-              fontStyle="italic" 
-              gutterBottom 
-              sx={{ 
-                mb: 1, 
+            <Typography
+              variant="h5"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+                fontStyle: "italic",
+                mb: 1,
                 textAlign: { xs: 'center', sm: 'center', md: 'left' },
                 fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' }
-              }}
-            >
+              }}>
               {data.tagline}
             </Typography>
           )}

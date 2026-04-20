@@ -3,6 +3,13 @@ import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableC
 import { Build as BuildIcon, Error as ErrorIcon, Warning as WarningIcon, Info as InfoIcon, PlayArrow as PlayIcon, Stop as StopIcon, Delete as DeleteIcon, ListAlt as ListAltIcon } from '@mui/icons-material';
 import { motion } from 'framer-motion'; import axios from 'axios'; import { formatDate } from '../FileBrowser/fileUtils';
 
+const SnackbarSlideUp = React.forwardRef(function SnackbarSlideUp(
+  props: React.ComponentProps<typeof Slide>,
+  ref: React.Ref<unknown>
+) {
+  return <Slide ref={ref} {...props} direction="up" />;
+});
+
 interface RepairEntry {
   torrent_id: string;
   filename: string;
@@ -150,7 +157,9 @@ const RepairTableRow = React.memo(({
       )}
       {isQueueView && (
         <TableCell sx={{ width: { sm: 90 } }}>
-          <Typography variant="body2" fontWeight={600}>
+          <Typography variant="body2" sx={{
+            fontWeight: 600
+          }}>
             {repairQueueEntry.position}
           </Typography>
         </TableCell>
@@ -201,7 +210,9 @@ const RepairTableRow = React.memo(({
         <Chip label={repair.status} size="small" variant="outlined" />
       </TableCell>
       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
-        <Typography variant="body2" fontWeight="600">
+        <Typography variant="body2" sx={{
+          fontWeight: "600"
+        }}>
           {repair.progress}%
         </Typography>
       </TableCell>
@@ -215,7 +226,9 @@ const RepairTableRow = React.memo(({
         />
       </TableCell>
       <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           {repair.updated_at ? formatDate(new Date(repair.updated_at * 1000).toISOString()) : '—'}
         </Typography>
       </TableCell>
@@ -860,23 +873,29 @@ export default function RepairQueue() {
       {/* Header */}
       <Box sx={{ mb: { xs: 2, md: 3 }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: { xs: 2, sm: 0 } }}>
         <Box>
-          <Typography 
-            variant="h4" 
-            fontWeight="700" 
-            sx={{ 
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: "700",
               mb: 1,
               fontSize: { xs: '1.75rem', sm: '2.125rem' },
+
               background: theme.palette.mode === 'dark' 
                 ? `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
                 : 'inherit',
+
               backgroundClip: theme.palette.mode === 'dark' ? 'text' : 'initial',
               WebkitBackgroundClip: theme.palette.mode === 'dark' ? 'text' : 'initial',
-              WebkitTextFillColor: theme.palette.mode === 'dark' ? 'transparent' : 'inherit',
-            }}
-          >
+              WebkitTextFillColor: theme.palette.mode === 'dark' ? 'transparent' : 'inherit'
+            }}>
             Repair Queue
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.8 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              opacity: 0.8
+            }}>
             Event-driven repair for broken torrents (auto-detected on file access)
           </Typography>
         </Box>
@@ -951,7 +970,6 @@ export default function RepairQueue() {
           )}
         </Box>
       </Box>
-
       {/* Repair Status/Progress Indicator and Quick Filter Cards */}
       {status && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
@@ -970,7 +988,9 @@ export default function RepairQueue() {
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 2, gap: { xs: 1, sm: 0 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {status.is_running && <CircularProgress size={20} />}
-                  <Typography variant="h6" fontWeight="600">
+                  <Typography variant="h6" sx={{
+                    fontWeight: "600"
+                  }}>
                     {status.is_running ? 'Repair in Progress' : 'Event-Driven Repair'}
                   </Typography>
                 </Box>
@@ -1024,10 +1044,14 @@ export default function RepairQueue() {
               {status.is_running && (
                 <Box sx={{ width: '100%', mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: "text.secondary"
+                    }}>
                       Progress
                     </Typography>
-                    <Typography variant="body2" fontWeight="600">
+                    <Typography variant="body2" sx={{
+                      fontWeight: "600"
+                    }}>
                       {status.progress_percentage.toFixed(1)}%
                     </Typography>
                   </Box>
@@ -1055,19 +1079,33 @@ export default function RepairQueue() {
 
               <Box sx={{ display: 'flex', gap: { xs: 2, sm: 3 }, flexWrap: 'wrap' }}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{
+                    color: "text.secondary"
+                  }}>
                     Processing
                   </Typography>
-                  <Typography variant="body1" fontWeight="600" color="info.main">
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontWeight: "600",
+                      color: "info.main"
+                    }}>
                     {status.processed_torrents}
                   </Typography>
                 </Box>
                 {status.queue_size > 0 && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Queue Size
                     </Typography>
-                    <Typography variant="body1" fontWeight="600" color="warning.main">
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontWeight: "600",
+                        color: "warning.main"
+                      }}>
                       {status.queue_size}
                     </Typography>
                   </Box>
@@ -1076,7 +1114,9 @@ export default function RepairQueue() {
 
               {status.current_torrent_id && status.is_running && (
                 <Box sx={{ mt: 2, p: 1, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{
+                    color: "text.secondary"
+                  }}>
                     Currently checking: {status.current_torrent_id}
                   </Typography>
                 </Box>
@@ -1085,7 +1125,6 @@ export default function RepairQueue() {
           </Card>
         </motion.div>
       )}
-
       {/* Stats Overview */}
       <Box sx={{ 
         display: 'flex', 
@@ -1108,11 +1147,24 @@ export default function RepairQueue() {
             m: 0 
           }}>
             <CardContent sx={{ p: 0.5, '&:last-child': { pb: 0.5 } }}>
-              <Stack direction="row" alignItems="center" spacing={1}>
+              <Stack direction="row" spacing={1} sx={{
+                alignItems: "center"
+              }}>
                 <BuildIcon sx={{ fontSize: 20, color: 'warning.main' }} />
                 <Box>
-                  <Typography variant="h4" fontWeight="700" color="warning.main" sx={{ fontSize: '1.1rem' }}>{total}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Needs Repair</Typography>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: "700",
+                      color: "warning.main",
+                      fontSize: '1.1rem'
+                    }}>{total}</Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: '0.7rem'
+                    }}>Needs Repair</Typography>
                 </Box>
               </Stack>
             </CardContent>
@@ -1132,12 +1184,26 @@ export default function RepairQueue() {
             m: 0 
           }}>
             <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.5, '&:last-child': { pb: 1 } }}>
-              <Typography variant="h4" fontWeight="700" color="info.main" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: "700",
+                  color: "info.main",
+                  fontSize: '1.1rem',
+                  lineHeight: 1.2
+                }}>
                 {2}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <PlayIcon sx={{ fontSize: 12, color: 'info.main' }} />
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, fontSize: '0.7rem', lineHeight: 1.2 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    fontWeight: 500,
+                    fontSize: '0.7rem',
+                    lineHeight: 1.2
+                  }}>
                   Available Workers
                 </Typography>
               </Box>
@@ -1171,17 +1237,30 @@ export default function RepairQueue() {
             }}
           >
             <CardContent sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5, '&:last-child': { pb: 1 } }}>
-              <Stack direction="row" alignItems="center" spacing={0.75}>
+              <Stack direction="row" spacing={0.75} sx={{
+                alignItems: "center"
+              }}>
                 {queueLoading ? (
                   <CircularProgress size={16} />
                 ) : (
                   <ListAltIcon sx={{ fontSize: 18, color: isQueueView ? 'primary.main' : 'text.secondary' }} />
                 )}
-                <Typography variant="h4" fontWeight="700" color={isQueueView ? 'primary.main' : 'text.primary'} sx={{ fontSize: '1.05rem' }}>
+                <Typography
+                  variant="h4"
+                  color={isQueueView ? 'primary.main' : 'text.primary'}
+                  sx={{
+                    fontWeight: "700",
+                    fontSize: '1.05rem'
+                  }}>
                   {isQueueView ? queueTotal : status?.queue_size ?? 0}
                 </Typography>
               </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  fontSize: '0.7rem'
+                }}>
                 Repair Queue
               </Typography>
               <Typography variant="caption" color={isQueueView ? 'primary.main' : 'text.secondary'} sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
@@ -1191,16 +1270,26 @@ export default function RepairQueue() {
           </Card>
         </Box>
       </Box>
-
       {tableRows.length === 0 ? (
         <Card sx={{ borderRadius: 2, boxShadow: 'none', mb: 2 }}>
           <CardContent sx={{ p: 2 }}>
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <BuildIcon sx={{ fontSize: 40, color: isQueueView ? 'info.main' : 'success.main', mb: 1 }} />
-              <Typography variant="h6" fontWeight="600" color={isQueueView ? 'info.main' : 'success.main'} sx={{ fontSize: '1rem' }}>
+              <Typography
+                variant="h6"
+                color={isQueueView ? 'info.main' : 'success.main'}
+                sx={{
+                  fontWeight: "600",
+                  fontSize: '1rem'
+                }}>
                 {isQueueView ? 'Queue Empty' : 'All Clear!'}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  fontSize: '0.9rem'
+                }}>
                 {isQueueView ? 'No torrents are waiting in the repair queue' : 'No broken torrents detected. Broken torrents are automatically added when file access fails.'}
               </Typography>
             </Box>
@@ -1267,7 +1356,12 @@ export default function RepairQueue() {
                           sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600, '& .MuiChip-icon': { fontSize: 12 } }} 
                         />
                       </Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          fontSize: '0.7rem'
+                        }}>
                         Progress: {repair.progress}% • ID: {repair.torrent_id.substring(0, 8)}...
                       </Typography>
                     </Box>
@@ -1343,7 +1437,6 @@ export default function RepairQueue() {
           </TableContainer>
         </>
       )}
-
       {/* Pagination */}
       {!isQueueView && total > 0 && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
@@ -1375,13 +1468,14 @@ export default function RepairQueue() {
           />
         </Box>
       )}
-
       {/* Action feedback */}
       <Backdrop
         open={repairing || deleting}
         sx={{ color: '#fff', zIndex: (th) => th.zIndex.drawer + 1, backdropFilter: 'blur(2px)' }}
       >
-        <Stack alignItems="center" spacing={2}>
+        <Stack spacing={2} sx={{
+          alignItems: "center"
+        }}>
           <CircularProgress color="inherit" />
           <Typography variant="body2">
             {repairing ? 'Queuing repair...' : isQueueView ? 'Removing from queue...' : 'Deleting...'}
@@ -1415,7 +1509,7 @@ export default function RepairQueue() {
         open={toastOpen}
         autoHideDuration={2500}
         onClose={() => setToastOpen(false)}
-        TransitionComponent={(props) => <Slide {...props} direction="up" />}
+        slots={{ transition: SnackbarSlideUp }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         message=""
       >
@@ -1426,7 +1520,9 @@ export default function RepairQueue() {
       {/* Footer Info */}
       {stats && (
         <Box sx={{ mt: 2, textAlign: 'right' }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: "text.secondary"
+          }}>
             Last updated: {formatDate(stats.lastUpdated)}
           </Typography>
         </Box>

@@ -104,10 +104,11 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             Current Path: {currentPath || 'Root'}
           </Typography>
           {currentPath && (
@@ -132,7 +133,9 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
               gap: 2
             }}>
               <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Loading...
               </Typography>
             </Box>
@@ -186,7 +189,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
                     slotProps={{
                       primary: {
                         variant: 'body2',
-                        fontStyle: 'italic'
+                        sx: { fontStyle: 'italic' }
                       }
                     }}
                   />
@@ -222,7 +225,9 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
 
               {folders.length === 0 && !loading && (
                 <Box sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     No folders found
                   </Typography>
                 </Box>
@@ -231,7 +236,6 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
           )}
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button

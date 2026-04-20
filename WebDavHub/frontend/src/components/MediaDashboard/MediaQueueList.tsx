@@ -75,45 +75,78 @@ function QueueTable({ items, onDelete, isHistory }: { items: DownloadQueueItem[]
                   <Stack spacing={0.25}>
                     <Typography
                       variant="body2"
-                      fontWeight={600}
                       noWrap
-                      sx={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}
-                    >
-                      {item.title}{item.year ? ` (${item.year})` : ''}{ep ? <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>{ep}</Typography> : null}
+                      sx={{
+                        fontWeight: 600,
+                        textOverflow: 'ellipsis',
+                        overflow: 'hidden',
+                        maxWidth: '100%'
+                      }}>
+                      {item.title}{item.year ? ` (${item.year})` : ''}{ep ? <Typography
+                      component="span"
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        ml: 0.75
+                      }}>{ep}</Typography> : null}
                     </Typography>
-                    {!isMobile && showRelease && <Typography variant="caption" color="text.secondary" noWrap>{item.releaseTitle}</Typography>}
-                    {item.errorMessage && <Typography variant="caption" color="error.main" noWrap>{item.errorMessage}</Typography>}
-                    {item.statusMessages?.length > 0 && <Typography variant="caption" color="warning.main" noWrap>{item.statusMessages[0]}</Typography>}
+                    {!isMobile && showRelease && <Typography variant="caption" noWrap sx={{
+                      color: "text.secondary"
+                    }}>{item.releaseTitle}</Typography>}
+                    {item.errorMessage && <Typography variant="caption" noWrap sx={{
+                      color: "error.main"
+                    }}>{item.errorMessage}</Typography>}
+                    {item.statusMessages?.length > 0 && <Typography variant="caption" noWrap sx={{
+                      color: "warning.main"
+                    }}>{item.statusMessages[0]}</Typography>}
                   </Stack>
                 </TableCell>
                 {!isMobile && (
                   <TableCell>
-                    <Typography variant="body2" color="text.secondary">{item.mediaType === 'movie' ? 'Movie' : 'Show'}</Typography>
+                    <Typography variant="body2" sx={{
+                      color: "text.secondary"
+                    }}>{item.mediaType === 'movie' ? 'Movie' : 'Show'}</Typography>
                   </TableCell>
                 )}
                 <TableCell>
-                  {item.quality ? <Chip label={item.quality} size="small" variant="outlined" /> : <Typography variant="body2" color="text.secondary">—</Typography>}
+                  {item.quality ? <Chip label={item.quality} size="small" variant="outlined" /> : <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>—</Typography>}
                 </TableCell>
-                {!isMobile && <TableCell><Typography variant="body2" color="text.secondary" noWrap>{formatBytes(item.size)}</Typography></TableCell>}
+                {!isMobile && <TableCell><Typography variant="body2" noWrap sx={{
+                  color: "text.secondary"
+                }}>{formatBytes(item.size)}</Typography></TableCell>}
                 <TableCell>
                   <Stack spacing={0.25}>
-                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: meta.color }}>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{
+                        alignItems: "center",
+                        color: meta.color
+                      }}>
                       {meta.icon}
                       <Typography variant="caption" sx={{ color: meta.color, fontWeight: 600 }}>
                         {isHistory ? (eventLabel ?? meta.label) : meta.label}
                       </Typography>
                     </Stack>
                     {trackedLabel && item.eventType !== 'downloadFolderImported' && (
-                      <Typography variant="caption" color="text.disabled">{trackedLabel}</Typography>
+                      <Typography variant="caption" sx={{
+                        color: "text.disabled"
+                      }}>{trackedLabel}</Typography>
                     )}
                   </Stack>
                 </TableCell>
                 {!isMobile && (
                   <TableCell sx={{ whiteSpace: 'nowrap', pr: 0.5 }}>
                     <Stack spacing={0.1}>
-                      <Typography variant="caption" color="text.secondary" noWrap>{formatDate(item.addedAt)}</Typography>
+                      <Typography variant="caption" noWrap sx={{
+                        color: "text.secondary"
+                      }}>{formatDate(item.addedAt)}</Typography>
                       {item.completedAt && item.completedAt - item.addedAt > 60 && (
-                        <Typography variant="caption" color="success.main" noWrap>✓ {formatDate(item.completedAt)}</Typography>
+                        <Typography variant="caption" noWrap sx={{
+                          color: "success.main"
+                        }}>✓ {formatDate(item.completedAt)}</Typography>
                       )}
                     </Stack>
                   </TableCell>
@@ -238,8 +271,15 @@ export default function MediaQueueList() {
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 1.5, sm: 2.5 }, pt: 2.5, pb: 1 }}>
       <CloudDownloadIcon sx={{ color: 'primary.main', fontSize: 28 }} />
       <Box>
-        <Typography variant="h6" fontWeight={700} lineHeight={1.2}>Downloads</Typography>
-        <Typography variant="caption" color="text.secondary">Queue &amp; history of grabbed releases</Typography>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+            lineHeight: 1.2
+          }}>Downloads</Typography>
+        <Typography variant="caption" sx={{
+          color: "text.secondary"
+        }}>Queue &amp; history of grabbed releases</Typography>
       </Box>
     </Box>
   );
@@ -254,7 +294,6 @@ export default function MediaQueueList() {
   return (
     <Box>
       {header}
-
       {/* Queue / History tabs */}
       <Box sx={{ px: { xs: 1.5, sm: 2.5 } }}>
         <Tabs
@@ -290,29 +329,39 @@ export default function MediaQueueList() {
           <Tab
             disableRipple
             value="queue"
-            label={<Stack direction="row" spacing={0.75} alignItems="center"><CloudDownloadIcon fontSize="small" /><span>Queue {activeCount > 0 ? `(${activeCount})` : ''}</span></Stack>}
+            label={<Stack direction="row" spacing={0.75} sx={{
+              alignItems: "center"
+            }}><CloudDownloadIcon fontSize="small" /><span>Queue {activeCount > 0 ? `(${activeCount})` : ''}</span></Stack>}
           />
           <Tab
             disableRipple
             value="history"
-            label={<Stack direction="row" spacing={0.75} alignItems="center"><HistoryIcon fontSize="small" /><span>History {historyCount > 0 ? `(${historyCount})` : ''}</span></Stack>}
+            label={<Stack direction="row" spacing={0.75} sx={{
+              alignItems: "center"
+            }}><HistoryIcon fontSize="small" /><span>History {historyCount > 0 ? `(${historyCount})` : ''}</span></Stack>}
           />
         </Tabs>
       </Box>
-
       <Divider sx={{ mb: 2 }} />
-
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mx: { xs: 1.5, sm: 2.5 }, mb: 2.5 }}>
         {/* Toolbar */}
         <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Typography variant="body2" fontWeight={600}>{totalCount} item{totalCount !== 1 ? 's' : ''}</Typography>
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
+            <Typography variant="body2" sx={{
+              fontWeight: 600
+            }}>{totalCount} item{totalCount !== 1 ? 's' : ''}</Typography>
             {polling && <CircularProgress size={14} thickness={5} />}
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{
+            alignItems: "center"
+          }}>
             {tab === 'queue' && (
               <>
-                <Typography variant="caption" color="text.secondary">Status</Typography>
+                <Typography variant="caption" sx={{
+                  color: "text.secondary"
+                }}>Status</Typography>
                 <Select size="small" value={statusFilter} onChange={e => { setStatusFilter(e.target.value as ActiveStatus); setActivePage(0); }} sx={{ minWidth: 130 }}>
                   <MenuItem value="all">All</MenuItem>
                   <MenuItem value="queued">Queued</MenuItem>
@@ -343,8 +392,16 @@ export default function MediaQueueList() {
           {items.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               {tab === 'queue'
-                ? <><CloudDownloadIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} /><Typography variant="h6" color="text.secondary">Queue is empty</Typography><Typography variant="body2" color="text.secondary">Grab a release to start downloading.</Typography></>
-                : <><HistoryIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} /><Typography variant="h6" color="text.secondary">No history yet</Typography><Typography variant="body2" color="text.secondary">Completed downloads will appear here.</Typography></>
+                ? <><CloudDownloadIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} /><Typography variant="h6" sx={{
+                color: "text.secondary"
+              }}>Queue is empty</Typography><Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Grab a release to start downloading.</Typography></>
+                : <><HistoryIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} /><Typography variant="h6" sx={{
+                color: "text.secondary"
+              }}>No history yet</Typography><Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Completed downloads will appear here.</Typography></>
               }
             </Box>
           ) : (
@@ -352,7 +409,9 @@ export default function MediaQueueList() {
               <QueueTable items={items} onDelete={handleDelete} isHistory={tab === 'history'} />
               {totalPages > 1 && (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 2, py: 1, borderTop: '1px solid', borderColor: 'divider', gap: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{
+                    color: "text.secondary"
+                  }}>
                     Page {page + 1} of {totalPages}
                   </Typography>
                   <IconButton size="small" disabled={page === 0} onClick={() => {

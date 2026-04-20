@@ -165,7 +165,7 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
       maxWidth="md"
       fullWidth
       fullScreen={false}
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: { xs: 0, sm: 3 },
           boxShadow: theme.palette.mode === 'dark'
@@ -184,7 +184,7 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
           display: 'flex',
           flexDirection: 'column'
         }
-      }}
+      } }}
     >
       <Fade in={open} timeout={300}>
         <Box>
@@ -212,10 +212,21 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                 <SearchIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
               </Avatar>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="h6" fontWeight={600} color="primary" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+                <Typography
+                  variant="h6"
+                  color="primary"
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                  }}>
                   {indexer ? 'Edit Indexer' : 'Add New Indexer'}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                  }}>
                   {indexer ? 'Update indexer configuration' : 'Configure a new indexer connection'}
                 </Typography>
               </Box>
@@ -284,7 +295,9 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
                     <LinkIcon sx={{ color: theme.palette.primary.main, fontSize: 22 }} />
-                    <Typography variant="h6" fontWeight={600}>
+                    <Typography variant="h6" sx={{
+                      fontWeight: 600
+                    }}>
                       Basic Information
                     </Typography>
                   </Box>
@@ -316,13 +329,13 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                         placeholder="https://indexer.example.com/api"
                         helperText="The base URL of your indexer API endpoint"
                         size="medium"
-                        InputProps={{
+                        slotProps={{ input: {
                           startAdornment: (
                             <InputAdornment position="start">
                               <LinkIcon sx={{ color: theme.palette.text.secondary }} />
                             </InputAdornment>
                           ),
-                        }}
+                        } }}
                       />
                     </Grid>
                   </Grid>
@@ -337,7 +350,9 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
                     <SecurityIcon sx={{ color: theme.palette.secondary.main, fontSize: 22 }} />
-                    <Typography variant="h6" fontWeight={600}>
+                    <Typography variant="h6" sx={{
+                      fontWeight: 600
+                    }}>
                       Authentication
                     </Typography>
                   </Box>
@@ -354,7 +369,7 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                         helperText="Required for most indexers"
                         type={showPassword ? 'text' : 'password'}
                         size="medium"
-                        InputProps={{
+                        slotProps={{ input: {
                           endAdornment: (
                             <InputAdornment position="end">
                               <IconButton
@@ -366,7 +381,7 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                               </IconButton>
                             </InputAdornment>
                           ),
-                        }}
+                        } }}
                       />
                     </Grid>
                   </Grid>
@@ -381,7 +396,9 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
                     <ScheduleIcon sx={{ color: theme.palette.success.main, fontSize: 22 }} />
-                    <Typography variant="h6" fontWeight={600}>
+                    <Typography variant="h6" sx={{
+                      fontWeight: 600
+                    }}>
                       Configuration
                     </Typography>
                   </Box>
@@ -406,10 +423,20 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                           }
                           label={
                             <Box>
-                              <Typography variant="body1" fontWeight={500} sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+                              <Typography
+                                variant="body1"
+                                sx={{
+                                  fontWeight: 500,
+                                  fontSize: { xs: '0.875rem', sm: '1rem' }
+                                }}>
                                 Enabled
                               </Typography>
-                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: "text.secondary",
+                                  fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                                }}>
                                 Enable this indexer for searches and updates
                               </Typography>
                             </Box>
@@ -426,15 +453,17 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                         onChange={handleInputChange('updateInterval')}
                         type="number"
                         disabled={submitting}
-                        inputProps={{ min: 1, max: 1440 }}
                         helperText="How often to check for updates (1-1440 minutes)"
                         size="medium"
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <TimerIcon sx={{ color: theme.palette.text.secondary }} />
-                            </InputAdornment>
-                          ),
+                        slotProps={{
+                          htmlInput: { min: 1, max: 1440 },
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <TimerIcon sx={{ color: theme.palette.text.secondary }} />
+                              </InputAdornment>
+                            ),
+                          },
                         }}
                       />
                     </Grid>
@@ -447,7 +476,7 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                         onChange={handleInputChange('timeout')}
                         type="number"
                         disabled={submitting}
-                        inputProps={{ min: 5, max: 300 }}
+                        slotProps={{ htmlInput: { min: 5, max: 300 } }}
                         helperText="Request timeout (5-300 seconds)"
                         size="medium"
                       />
@@ -481,14 +510,24 @@ export default function IndexerForm({ open, onClose, onSubmit, indexer, initialP
                           {availableCategories.map((category) => (
                             <MenuItem key={category.id} value={category.id}>
                               <Box>
-                                <Typography variant="body2" fontWeight={500}>{category.name}</Typography>
-                                <Typography variant="caption" color="text.secondary">ID: {category.id}</Typography>
+                                <Typography variant="body2" sx={{
+                                  fontWeight: 500
+                                }}>{category.name}</Typography>
+                                <Typography variant="caption" sx={{
+                                  color: "text.secondary"
+                                }}>ID: {category.id}</Typography>
                               </Box>
                             </MenuItem>
                           ))}
                         </Select>
                       </FormControl>
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          mt: 0.5,
+                          display: 'block'
+                        }}>
                         {loadingCategories ? 'Loading categories…' : 'Select categories this indexer supports (optional)'}
                       </Typography>
                     </Grid>

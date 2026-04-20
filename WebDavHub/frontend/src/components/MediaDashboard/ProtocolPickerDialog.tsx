@@ -15,7 +15,7 @@ export default function ProtocolPickerDialog({ open, onClose, onPick }: Protocol
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 2,
           boxShadow: (theme) => theme.palette.mode === 'dark'
@@ -23,7 +23,7 @@ export default function ProtocolPickerDialog({ open, onClose, onPick }: Protocol
             : '0 12px 28px rgba(15, 23, 42, 0.16)',
           border: (theme) => `1px solid ${theme.palette.divider}`
         }
-      }}
+      } }}
     >
       <DialogTitle>Select Indexer Type</DialogTitle>
       <DialogContent dividers>
@@ -33,10 +33,14 @@ export default function ProtocolPickerDialog({ open, onClose, onPick }: Protocol
               <Card variant="outlined" sx={{ borderRadius: 2 }}>
                 <CardActionArea onClick={() => onPick(p.value)} sx={{ p: 2 }}>
                   <Box>
-                    <Typography variant="subtitle1" fontWeight={600}>
+                    <Typography variant="subtitle1" sx={{
+                      fontWeight: 600
+                    }}>
                       {p.label}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: "text.secondary"
+                    }}>
                       {p.description}
                     </Typography>
                   </Box>

@@ -347,16 +347,15 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
   if (loading) {
     return (
       <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="200px"
         sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "200px",
           background: `linear-gradient(135deg, ${alpha('#000', 0.02)} 0%, ${alpha('#000', 0.05)} 100%)`,
           borderRadius: 3,
-          border: `1px solid ${alpha('#000', 0.08)}`,
-        }}
-      >
+          border: `1px solid ${alpha('#000', 0.08)}`
+        }}>
         <CircularProgress size={32} thickness={4} />
       </Box>
     );
@@ -408,20 +407,34 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         }}
       >
         {/* Header */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-          <Stack direction="row" alignItems="center" spacing={2}>
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            mb: 3
+          }}>
+          <Stack direction="row" spacing={2} sx={{
+            alignItems: "center"
+          }}>
             <Speed sx={{ fontSize: 24, color: 'primary.main' }} />
             <Box>
-              <Typography variant="h6" fontWeight="600">
+              <Typography variant="h6" sx={{
+                fontWeight: "600"
+              }}>
                 MediaHub Service
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Automated media processing & organization
               </Typography>
             </Box>
           </Stack>
 
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Tooltip title="Refresh status">
               <IconButton
                 onClick={() => fetchData(true)}
@@ -456,7 +469,9 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
 
         {/* Process Status Grid */}
         {status && (
-          <Grid container spacing={2} mb={3}>
+          <Grid container spacing={2} sx={{
+            mb: 3
+          }}>
             <Grid
               size={{
                 xs: 12,
@@ -476,18 +491,26 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   transition: 'all 0.4s ease-in-out',
                 }}
               >
-                <Stack direction="row" alignItems="center" spacing={2}>
+                <Stack direction="row" spacing={2} sx={{
+                  alignItems: "center"
+                }}>
                   <Speed
                     sx={{
                       fontSize: 20,
                       color: status.isRunning ? '#4CAF50' : '#EF4444'
                     }}
                   />
-                  <Box flex={1}>
-                    <Typography variant="subtitle2" fontWeight="600">
+                  <Box sx={{
+                    flex: 1
+                  }}>
+                    <Typography variant="subtitle2" sx={{
+                      fontWeight: "600"
+                    }}>
                       Main Process
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: "text.secondary"
+                    }}>
                       {status.isRunning ? 'Processing files' : 'Inactive'}
                     </Typography>
                   </Box>
@@ -524,18 +547,26 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   transition: 'all 0.4s ease-in-out',
                 }}
               >
-                <Stack direction="row" alignItems="center" spacing={2}>
+                <Stack direction="row" spacing={2} sx={{
+                  alignItems: "center"
+                }}>
                   <Visibility
                     sx={{
                       fontSize: 20,
                       color: status.monitorRunning ? '#4CAF50' : '#EF4444'
                     }}
                   />
-                  <Box flex={1}>
-                    <Typography variant="subtitle2" fontWeight="600">
+                  <Box sx={{
+                    flex: 1
+                  }}>
+                    <Typography variant="subtitle2" sx={{
+                      fontWeight: "600"
+                    }}>
                       Monitor
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: "text.secondary"
+                    }}>
                       {status.monitorRunning ? 'Watching directories' : 'Not monitoring'}
                     </Typography>
                   </Box>
@@ -557,8 +588,18 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
 
         {/* Directory Configuration */}
         {status && (status.sourceDir || status.destinationDir) && (
-          <Box mb={3}>
-            <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{
+            mb: 3
+          }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: "600",
+                mb: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}>
               <FolderOpen sx={{ fontSize: 18 }} />
               Directories
             </Typography>
@@ -573,21 +614,31 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     borderColor: alpha('#3B82F6', 0.2),
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={1.5} mb={1}>
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    sx={{
+                      alignItems: "center",
+                      mb: 1
+                    }}>
                     <Storage sx={{ fontSize: 16, color: '#3B82F6' }} />
-                    <Typography variant="body2" fontWeight="600" color="#3B82F6">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: "600",
+                        color: "#3B82F6"
+                      }}>
                       Source Directory
                     </Typography>
                   </Stack>
                   <Typography
                     variant="body2"
-                    fontFamily="monospace"
                     sx={{
+                      fontFamily: "monospace",
                       wordBreak: 'break-all',
                       fontSize: '0.875rem',
                       color: 'text.secondary'
-                    }}
-                  >
+                    }}>
                     {status.sourceDir}
                   </Typography>
                 </Box>
@@ -603,21 +654,31 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     borderColor: alpha('#8B5CF6', 0.2),
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={1.5} mb={1}>
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    sx={{
+                      alignItems: "center",
+                      mb: 1
+                    }}>
                     <Link sx={{ fontSize: 16, color: '#8B5CF6' }} />
-                    <Typography variant="body2" fontWeight="600" color="#8B5CF6">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: "600",
+                        color: "#8B5CF6"
+                      }}>
                       Destination Directory
                     </Typography>
                   </Stack>
                   <Typography
                     variant="body2"
-                    fontFamily="monospace"
                     sx={{
+                      fontFamily: "monospace",
                       wordBreak: 'break-all',
                       fontSize: '0.875rem',
                       color: 'text.secondary'
-                    }}
-                  >
+                    }}>
                     {status.destinationDir}
                   </Typography>
                 </Box>
@@ -627,7 +688,9 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
         )}
 
           {/* Control Panel */}
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{
+            mb: 3
+          }}>
             <LoadingButton
               variant="contained"
               startIcon={<PlayArrow />}
@@ -751,14 +814,22 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
             }
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" fontWeight="600">
+                <Typography variant="body2" sx={{
+                  fontWeight: "600"
+                }}>
                   Auto-Start MediaHub Service
                 </Typography>
                 {autoStartLoading && <CircularProgress size={16} />}
               </Box>
             }
           />
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              ml: 4,
+              display: 'block'
+            }}>
             Automatically start MediaHub service (includes built-in RTM) when CineSync starts
           </Typography>
         </Box>
@@ -783,14 +854,22 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
             }
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" fontWeight="600">
+                <Typography variant="body2" sx={{
+                  fontWeight: "600"
+                }}>
                   Auto-Start Standalone RTM
                 </Typography>
                 {rtmAutoStartLoading && <CircularProgress size={16} />}
               </Box>
             }
           />
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              ml: 4,
+              display: 'block'
+            }}>
             Automatically start standalone Real-Time Monitor when CineSync starts (only when MediaHub service is not running)
           </Typography>
 
@@ -834,7 +913,9 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               />
             }
             label={
-              <Typography variant="body2" fontWeight="600">
+              <Typography variant="body2" sx={{
+                fontWeight: "600"
+              }}>
                 Advanced Controls
               </Typography>
             }
@@ -853,11 +934,24 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               mb: 3,
             }}
           >
-            <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: "600",
+                mb: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}>
               <Visibility sx={{ fontSize: 18 }} />
               Monitor Controls
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 3
+              }}>
               Control the directory monitor independently from the main service.
             </Typography>
 
@@ -945,7 +1039,14 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               justifyContent: 'space-between',
             }}
           >
-            <Typography variant="subtitle2" fontWeight="600" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: "600",
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}>
               <Terminal sx={{ fontSize: 18 }} />
               System Logs
             </Typography>
@@ -1016,26 +1117,27 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           ) : (
             <Box sx={{ p: 4, textAlign: 'center' }}>
               <Terminal sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 No logs available
               </Typography>
             </Box>
           )}
         </Box>
       </Collapse>
-
       {/* Export Menu */}
       <Menu
         anchorEl={exportMenuAnchor}
         open={Boolean(exportMenuAnchor)}
         onClose={handleExportMenuClose}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 2,
             minWidth: 200,
             boxShadow: 3,
           },
-        }}
+        } }}
       >
         <MenuItem onClick={() => handleExportLogs('current')}>
           <Download sx={{ fontSize: 18, mr: 1 }} />

@@ -147,7 +147,13 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
 
   if (loading && jobs.length === 0) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: 400
+        }}>
         <CircularProgress />
       </Box>
     );
@@ -158,16 +164,28 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
       {/* Header */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <Box>
-          <Typography variant="h5" fontWeight="600" sx={{ mb: 1 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: "600",
+              mb: 1
+            }}>
             Jobs
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 2
+            }}>
             Maintenance tasks that run automatically or can be triggered manually
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastUpdated && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               Updated: {lastUpdated.toLocaleTimeString()}
             </Typography>
           )}
@@ -192,13 +210,11 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
           </Tooltip>
         </Box>
       </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
-
       {/* Jobs Table */}
       <TableContainer
         component={Paper}
@@ -244,24 +260,33 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
                 }}
               >
                 <TableCell>
-                  <Stack direction="row" alignItems="center" spacing={2}>
+                  <Stack direction="row" spacing={2} sx={{
+                    alignItems: "center"
+                  }}>
                     {getStatusIcon(job.status)}
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="body2" fontWeight="500" sx={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
                         {job.name}
                       </Typography>
                       {job.status === JobStatus.RUNNING && (
-                        <Typography variant="caption" color="primary.main">
+                        <Typography variant="caption" sx={{
+                          color: "primary.main"
+                        }}>
                           Running...
                         </Typography>
                       )}
                       {/* Show type and next execution on mobile */}
                       <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 0.5 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
+                        <Stack direction="row" spacing={1} sx={{
+                          alignItems: "center"
+                        }}>
                           <Chip
                             label={job.type.toUpperCase()}
                             size="small"
@@ -307,7 +332,9 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                  <Stack direction="row" spacing={0.5} sx={{
+                    justifyContent: "flex-end"
+                  }}>
                     <Tooltip title="Edit Schedule">
                       <IconButton
                         size="small"
@@ -373,7 +400,6 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
           </TableBody>
         </Table>
       </TableContainer>
-
       {jobs.length === 0 && !loading && (
         <Box
           sx={{
@@ -385,15 +411,21 @@ const JobsTable: React.FC<JobsTableProps> = ({ onRefresh: _ }) => {
             borderColor: 'divider',
           }}
         >
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              color: "text.secondary",
+              mb: 1
+            }}>
             No jobs found
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             Jobs will appear here once they are configured.
           </Typography>
         </Box>
       )}
-
       <JobEditDialog
         open={editDialogOpen}
         onClose={handleEditDialogClose}

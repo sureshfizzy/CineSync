@@ -40,7 +40,7 @@ export default function DebridSidebar() {
                   <ListItemIcon sx={{ color: isActive ? theme.palette.primary.main : theme.palette.text.primary, minWidth: 32, transition: 'color 0.2s ease-in-out' }}>
                     {item.icon}
                   </ListItemIcon>
-                  <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 500, color: isActive ? theme.palette.primary.main : 'inherit' }} />
+                  <ListItemText primary={item.text} slotProps={{ primary: { sx: { fontSize: '0.875rem', fontWeight: isActive ? 600 : 500, color: isActive ? theme.palette.primary.main : 'inherit' } } }} />
                 </ListItemButton>
               )}
             </NavLink>
@@ -61,7 +61,7 @@ export default function DebridSidebar() {
               </ListItemIcon>
               <ListItemText 
                 primary="Settings" 
-                primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                slotProps={{ primary: { sx: { fontSize: '0.875rem', fontWeight: 500 } } }}
               />
               {settingsExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </ListItemButton>

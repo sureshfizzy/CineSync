@@ -186,8 +186,8 @@ const MediaCard = React.memo(({
     <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
       <Typography
         variant="subtitle2"
-        fontWeight="600"
         sx={{
+          fontWeight: "600",
           fontSize: { xs: '0.8rem', sm: '0.875rem' },
           lineHeight: 1.2,
           mb: 0.5,
@@ -195,9 +195,8 @@ const MediaCard = React.memo(({
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
-          color: 'text.primary',
-        }}
-      >
+          color: 'text.primary'
+        }}>
         {displayTitle}
       </Typography>
 
@@ -696,7 +695,15 @@ const RecentlyAddedMedia: React.FC = () => {
   // Memoized loading skeleton to prevent unnecessary re-renders
   const loadingSkeleton = useMemo(() => (
     <Box>
-      <Typography variant="h5" fontWeight="700" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: "700",
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
         <TvIcon sx={{ color: 'primary.main' }} />
         Recently Added Media
       </Typography>
@@ -715,7 +722,15 @@ const RecentlyAddedMedia: React.FC = () => {
   // Memoized empty state to prevent unnecessary re-renders
   const emptyState = useMemo(() => (
     <Box>
-      <Typography variant="h5" fontWeight="700" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: "700",
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
         <TvIcon sx={{ color: 'primary.main' }} />
         Recently Added Media
       </Typography>
@@ -726,7 +741,9 @@ const RecentlyAddedMedia: React.FC = () => {
         border: '1px dashed',
         borderColor: alpha(theme.palette.divider, 0.5)
       }}>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" sx={{
+          color: "text.secondary"
+        }}>
           No recent media found
         </Typography>
       </Card>
@@ -766,15 +783,13 @@ const RecentlyAddedMedia: React.FC = () => {
         </Box>
         <Typography
           variant="h6"
-          fontWeight="600"
           sx={{
+            fontWeight: "600",
             fontSize: { xs: '1rem', sm: '1.25rem' }
-          }}
-        >
+          }}>
           Recently Added Media
         </Typography>
       </Box>
-
       {/* Navigation Container */}
       <Box sx={{ position: 'relative' }}>
         {/* Left Navigation Arrow - Desktop Only */}
@@ -915,7 +930,6 @@ const RecentlyAddedMedia: React.FC = () => {
         </AnimatePresence>
         </Box>
       </Box>
-
       {/* Episode Details Dialog */}
       <Dialog
         open={episodeDialogOpen}
@@ -938,7 +952,9 @@ const RecentlyAddedMedia: React.FC = () => {
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TvIcon sx={{ color: 'primary.main' }} />
-            <Typography variant="h6" fontWeight="600">
+            <Typography variant="h6" sx={{
+              fontWeight: "600"
+            }}>
               {selectedShowTitle}
             </Typography>
           </Box>
@@ -948,7 +964,12 @@ const RecentlyAddedMedia: React.FC = () => {
         </DialogTitle>
 
         <DialogContent sx={{ pt: 1 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 2
+            }}>
             Recently added episodes ({selectedShowEpisodes.length})
           </Typography>
 
@@ -994,13 +1015,17 @@ const RecentlyAddedMedia: React.FC = () => {
                               fontSize: '0.7rem'
                             }}
                           />
-                          <Typography variant="subtitle2" fontWeight="600">
+                          <Typography variant="subtitle2" sx={{
+                            fontWeight: "600"
+                          }}>
                             {episode.episodeTitle || (episode.seasonNumber && episode.episodeNumber ? 'Episode' : 'Special Content')}
                           </Typography>
                         </Box>
                       }
                       secondary={
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>
                           Added {formatTimeAgo(episode.updatedAt)}
                         </Typography>
                       }

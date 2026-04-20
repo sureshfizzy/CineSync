@@ -61,7 +61,6 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 3 }}>
           <Alert 
@@ -78,7 +77,9 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
             <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
               Permanent Deletion
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               You are about to permanently delete {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}. 
               This action cannot be undone and the files will be moved to trash.
             </Typography>
@@ -91,7 +92,12 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
             border: `1px solid ${theme.palette.divider}`,
             mb: 2
           }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 2
+              }}>
               Items to be deleted:
             </Typography>
             
@@ -130,7 +136,9 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
                         </Typography>
                       }
                       secondary={
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>
                           {item.type === 'directory' ? 'Folder' : 'File'}
                           {item.size && ` • ${item.size}`}
                         </Typography>
@@ -142,7 +150,12 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
                   <ListItem sx={{ py: 0.5, px: 0 }}>
                     <ListItemText
                       primary={
-                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                            fontStyle: 'italic'
+                          }}>
                           ... and {selectedItems.length - 10} more item{selectedItems.length - 10 !== 1 ? 's' : ''}
                         </Typography>
                       }
@@ -154,7 +167,6 @@ const BulkDeleteDialog: React.FC<BulkDeleteDialogProps> = ({
           </Box>
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ 
         p: 2, 
         borderTop: `1px solid ${theme.palette.divider}`,

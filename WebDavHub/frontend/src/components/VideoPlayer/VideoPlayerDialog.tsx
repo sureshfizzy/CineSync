@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Dialog, DialogContent, useMediaQuery, useTheme } from '@mui/material';
 import VideoPlayer from './VideoPlayer';
 
@@ -21,13 +21,14 @@ const VideoPlayerDialog: React.FC<VideoPlayerDialogProps> = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // For mobile, we'll handle the title in the VideoPlayer component
-  const dialogTitle = useMemo(() => (isMobile ? '' : title), [isMobile, title]);
-
   return (
     <Dialog
       fullScreen
       open={open}
-      onClose={onClose}
+      onClose={(_e, reason) => {
+        if (isMobile && reason === 'escapeKeyDown') return;
+        onClose();
+      }}
       sx={{
         '& .MuiDialog-paper': {
           bgcolor: '#000',
@@ -37,8 +38,6 @@ const VideoPlayerDialog: React.FC<VideoPlayerDialogProps> = ({
           borderRadius: 0,
         },
       }}
-      title={dialogTitle}
-      disableEscapeKeyDown={isMobile}
       disableScrollLock={true}
     >
       <DialogContent 

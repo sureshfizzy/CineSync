@@ -233,7 +233,7 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth
-      PaperProps={{ sx: { height: '85vh', maxHeight: '85vh', borderRadius: 2, bgcolor: amoledBg } }}
+      slotProps={{ paper: { sx: { height: '85vh', maxHeight: '85vh', borderRadius: 2, bgcolor: amoledBg } } }}
     >
       <DialogTitle sx={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -242,10 +242,18 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
         borderBottom: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-          <Typography variant="subtitle1" fontWeight={700}>
+          <Typography variant="subtitle1" sx={{
+            fontWeight: 700
+          }}>
             Interactive Search
             {initialQuery && (
-              <Typography component="span" variant="subtitle1" fontWeight={400} color="text.secondary">
+              <Typography
+                component="span"
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 400,
+                  color: "text.secondary"
+                }}>
                 {' — '}{initialQuery}
               </Typography>
             )}
@@ -276,12 +284,13 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
         </Box>
         <IconButton onClick={onClose} size="small"><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {loading && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 2 }}>
             <CircularProgress size={28} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Searching {indexers.length} indexer{indexers.length !== 1 ? 's' : ''}…
             </Typography>
           </Box>
@@ -377,13 +386,11 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                           color: sourceLabel === 'nzb' ? 'info.main' : 'success.main',
                         }} />
                       </TableCell>
-
                       <TableCell sx={{ py: 0.75, px: 1.5, whiteSpace: 'nowrap' }}>
                         <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
                           {ageDays !== null ? formatAge(result.publishDate) : '—'}
                         </Typography>
                       </TableCell>
-
                       <TableCell sx={{ py: 0.75, px: 1.5, maxWidth: 0, width: '100%' }}>
                         <Tooltip title={result.title} placement="top-start" enterDelay={300}>
                           <Typography component={hasLink ? 'a' : 'span'}
@@ -400,19 +407,16 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                           </Typography>
                         </Tooltip>
                       </TableCell>
-
                       <TableCell sx={{ py: 0.75, px: 1.5 }}>
                         <Typography variant="body2" sx={{ fontSize: '0.78rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>
                           {result.indexer || '—'}
                         </Typography>
                       </TableCell>
-
                       <TableCell align="right" sx={{ py: 0.75, px: 1.5, whiteSpace: 'nowrap' }}>
                         <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
                           {formatBytes(result.size)}
                         </Typography>
                       </TableCell>
-
                       <TableCell align="center" sx={{ py: 0.75, px: 1 }}>
                         {result.seeders != null ? (
                           <Typography variant="body2" sx={{
@@ -420,10 +424,14 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                             color: result.seeders > 10 ? 'success.main' : result.seeders > 0 ? 'warning.main' : 'error.main',
                           }}>+{result.seeders}</Typography>
                         ) : (
-                          <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.78rem' }}>—</Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.disabled",
+                              fontSize: '0.78rem'
+                            }}>—</Typography>
                         )}
                       </TableCell>
-
                       <TableCell align="center" sx={{ py: 0.75, px: 1 }}>
                         <Chip label={language} size="small" sx={{
                           height: 18, fontSize: '0.62rem', fontWeight: 600, borderRadius: '3px',
@@ -431,7 +439,6 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                           border: `1px solid ${alpha(theme.palette.divider, 0.4)}`,
                         }} />
                       </TableCell>
-
                       <TableCell sx={{ py: 0.75, px: 1.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           {quality && quality !== 'Unknown' ? (
@@ -446,7 +453,12 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                               }} />
                             </Tooltip>
                           ) : (
-                            <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>Unknown</Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.disabled",
+                                fontSize: '0.75rem'
+                              }}>Unknown</Typography>
                           )}
                           <Tooltip title={!allowed ? rejectionReason : 'Release Info'}>
                             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', p: 0.25, color: !allowed ? 'error.main' : 'text.disabled' }}>
@@ -455,7 +467,6 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
                           </Tooltip>
                         </Box>
                       </TableCell>
-
                       <TableCell align="right" sx={{ py: 0.75, px: 1, whiteSpace: 'nowrap' }}>
                         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center' }}>
                           <Tooltip title="Manual Import">
@@ -484,7 +495,6 @@ export default function IndexerSearchModal({ open, onClose, initialQuery, mediaT
           </TableContainer>
         )}
       </DialogContent>
-
       <DialogActions sx={{ px: 2.5, py: 1.5, bgcolor: isDark ? '#0d0d0d' : undefined, borderTop: `1px solid ${alpha(theme.palette.divider, 0.3)}` }}>
         <Button onClick={onClose} variant="outlined" size="small">Close</Button>
       </DialogActions>

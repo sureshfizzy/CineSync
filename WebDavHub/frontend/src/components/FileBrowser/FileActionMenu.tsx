@@ -424,7 +424,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
                 : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
             }
           }}
-          PaperProps={{
+          slotProps={{ paper: {
             sx: {
               bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
               backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -434,7 +434,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
                 ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
                 : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
             }
-          }}
+          } }}
         >
           <DialogTitle>Rename File</DialogTitle>
           <DialogContent>
@@ -460,7 +460,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
                 : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
             }
           }}
-          PaperProps={{
+          slotProps={{ paper: {
             sx: {
               bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
               backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -470,7 +470,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
                 ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
                 : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
             }
-          }}
+          } }}
         >
           <DialogTitle>Delete File</DialogTitle>
           <DialogContent>
@@ -496,7 +496,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               minWidth: 400,
             }
           }}
-          PaperProps={{
+          slotProps={{ paper: {
             sx: {
               bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
               backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -504,7 +504,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               borderRadius: 2,
               minWidth: 400,
             }
-          }}
+          } }}
         >
           <DialogTitle sx={{
             display: 'flex',
@@ -570,7 +570,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
         anchorEl={anchorEl}
         open={open}
         onClose={handleMenuClose}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             boxShadow: 6,
@@ -578,8 +578,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             mt: 1,
             p: 0.5,
           }
-        }}
-        MenuListProps={{ sx: { p: 0 } }}
+        }, list: { sx: { p: 0 } } }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
@@ -625,7 +624,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
             backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -635,7 +634,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
               : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
           }
-        }}
+        } }}
       >
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -662,14 +661,14 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             borderRadius: 2,
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
             backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
             backgroundImage: 'none',
             borderRadius: 2,
           }
-        }}
+        } }}
       >
         <DialogTitle>Rename File</DialogTitle>
         <DialogContent>
@@ -681,7 +680,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
             value={renameValue}
             onChange={e => setRenameValue(e.target.value)}
             disabled={renameLoading}
-            inputProps={{ maxLength: 255, style: { fontSize: '1.1rem' } }}
+            slotProps={{ htmlInput: { maxLength: 255, style: { fontSize: '1.1rem' } } }}
             sx={{ mb: 2, background: 'background.paper', borderRadius: 2 }}
             color="primary"
           />
@@ -732,7 +731,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
             backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -743,7 +742,7 @@ const FileActionMenu: React.FC<FileActionMenuProps> = ({ file, currentPath, onVi
               ? '0px 11px 15px -7px rgba(255,255,255,0.1), 0px 24px 38px 3px rgba(255,255,255,0.05), 0px 9px 46px 8px rgba(255,255,255,0.03)'
               : '0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)',
           }
-        }}
+        } }}
       >
         <DialogTitle sx={{
           display: 'flex',

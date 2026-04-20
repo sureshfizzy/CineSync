@@ -27,7 +27,7 @@ const DetailsDialog: React.FC<DetailsDialogProps> = ({ open, onClose, selectedFi
   }
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } }}>
+      slotProps={{ paper: { sx: { borderRadius: 3, boxShadow: theme => theme.palette.mode === 'light' ? '0 8px 32px 0 rgba(60,60,60,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' : theme.shadows[6] } } }}>
       <DialogTitle
         sx={{
           fontWeight: 700,

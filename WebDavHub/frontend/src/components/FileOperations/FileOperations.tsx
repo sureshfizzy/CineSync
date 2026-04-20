@@ -1632,12 +1632,15 @@ function FileOperations() {
                 {getStatusIcon(file.status)}
               </Box>
               <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography variant="body2" fontWeight="600" sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  color: 'text.primary',
-                }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: "600",
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: 'text.primary'
+                  }}>
                   {file.fileName}
                 </Typography>
                 <Box sx={{
@@ -1659,12 +1662,15 @@ function FileOperations() {
                       border: 'none',
                     }}
                   />
-                  <Typography variant="caption" color="text.secondary" sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    mt: isMobile ? 0.5 : 0,
-                  }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      mt: isMobile ? 0.5 : 0
+                    }}>
                     <ScheduleIcon sx={{ fontSize: 12 }} />
                     {formatTimestamp(file.timestamp)}
                   </Typography>
@@ -1811,7 +1817,12 @@ function FileOperations() {
                 <Divider sx={{ mb: 1.5 }} />
                 <Stack spacing={1.5}>
                   <Box>
-                    <Typography variant="caption" color="text.secondary" fontWeight="600">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        fontWeight: "600"
+                      }}>
                       Source Path
                     </Typography>
                     <Typography variant="body2" sx={{
@@ -1828,7 +1839,12 @@ function FileOperations() {
 
                   {file.destinationPath && (
                     <Box>
-                      <Typography variant="caption" color="text.secondary" fontWeight="600">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          fontWeight: "600"
+                        }}>
                         Destination Path
                       </Typography>
                       <Typography variant="body2" sx={{
@@ -1883,7 +1899,12 @@ function FileOperations() {
 
                   {(file.reason || file.error) && (
                     <Box>
-                      <Typography variant="caption" color="text.secondary" fontWeight="600">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          fontWeight: "600"
+                        }}>
                         {file.error ? 'Error' : 'Reason'}
                       </Typography>
                       <Typography variant="body2" color={file.error ? 'error.main' : 'warning.main'} sx={{
@@ -1921,15 +1942,21 @@ function FileOperations() {
             borderColor: 'divider',
           }}
         >
-          <Typography variant="h6" color="text.secondary" sx={{
-            mb: 1,
-            fontSize: { xs: '1rem', sm: '1.25rem' }
-          }}>
+          <Typography
+            variant="h6"
+            sx={{
+              color: "text.secondary",
+              mb: 1,
+              fontSize: { xs: '1rem', sm: '1.25rem' }
+            }}>
             {emptyMessage}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{
-            fontSize: { xs: '0.8rem', sm: '0.875rem' }
-          }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              fontSize: { xs: '0.8rem', sm: '0.875rem' }
+            }}>
             File operations will appear here as they are processed.
           </Typography>
         </Box>
@@ -1964,7 +1991,9 @@ function FileOperations() {
         }}
       >
         <CircularProgress size={40} />
-        <Typography variant="h6" color="text.secondary">
+        <Typography variant="h6" sx={{
+          color: "text.secondary"
+        }}>
           Loading file operations...
         </Typography>
       </Box>
@@ -2019,10 +2048,13 @@ function FileOperations() {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {lastUpdated && (
-            <Typography variant="caption" color="text.secondary" sx={{
-              display: { xs: 'none', sm: 'block' },
-              fontSize: { sm: '0.7rem', md: '0.75rem' }
-            }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                display: { xs: 'none', sm: 'block' },
+                fontSize: { sm: '0.7rem', md: '0.75rem' }
+              }}>
               Updated: {lastUpdated.toLocaleTimeString()}
             </Typography>
           )}
@@ -2039,7 +2071,6 @@ function FileOperations() {
           {error}
         </Alert>
       )}
-
       {/* Main Tab Navigation */}
       <Box sx={{ mb: 4 }}>
         <Box
@@ -2117,7 +2148,14 @@ function FileOperations() {
                   } : {},
                 }}
               >
-                <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
+                <Stack
+                  direction="row"
+                  spacing={{ xs: 1, sm: 1.5 }}
+                  sx={{
+                    alignItems: "center",
+                    minWidth: 0,
+                    justifyContent: 'center'
+                  }}>
                   <Box
                     sx={{
                       width: { xs: 20, sm: 24 },
@@ -2139,15 +2177,14 @@ function FileOperations() {
                   </Box>
                   <Typography
                     variant="body1"
-                    fontWeight="600"
                     sx={{
+                      fontWeight: "600",
                       fontSize: { xs: '0.9rem', sm: '1rem' },
                       letterSpacing: '0.02em',
                       flexShrink: 0,
                       minWidth: 0,
-                      textAlign: 'center',
-                    }}
-                  >
+                      textAlign: 'center'
+                    }}>
                     {tab.name}
                   </Typography>
                 </Stack>
@@ -2541,12 +2578,11 @@ function FileOperations() {
                       />
                       <Typography
                         variant="body2"
-                        fontWeight="600"
                         sx={{
+                          fontWeight: "600",
                           color: theme.palette.primary.main,
-                          fontSize: '0.875rem',
-                        }}
-                      >
+                          fontSize: '0.875rem'
+                        }}>
                         {tabValue === 0 ? (
                           selectedSourceFiles.size === sourceFiles.filter(f => f.isMediaFile).length && sourceFiles.filter(f => f.isMediaFile).length > 0
                             ? `All ${sourceFiles.filter(f => f.isMediaFile).length} selected`
@@ -2567,7 +2603,7 @@ function FileOperations() {
                   <Box sx={{ display: 'flex', gap: 1.5 }}>
                     {tabValue === 0 ? (
                       // Source Files Tab - Reprocess Action
-                      <Button
+                      (<Button
                         variant="contained"
                         size="medium"
                         startIcon={<PlayArrowIcon />}
@@ -2600,10 +2636,10 @@ function FileOperations() {
                         }}
                       >
                         {bulkActionLoading ? 'Processing...' : 'Reprocess Selected'}
-                      </Button>
+                      </Button>)
                     ) : tabValue === 4 ? (
                       // Deleted Tab - Delete and Restore Actions
-                      <>
+                      (<>
                         <Button
                           variant="outlined"
                           size="medium"
@@ -2692,10 +2728,10 @@ function FileOperations() {
                         >
                           Delete
                         </Button>
-                      </>
+                      </>)
                     ) : (
                       // Created/Failed/Skipped Tabs - Both Reprocess and Delete Actions
-                      <>
+                      (<>
                         <Button
                           variant="contained"
                           size="medium"
@@ -2761,7 +2797,7 @@ function FileOperations() {
                         >
                           Delete Selected
                         </Button>
-                      </>
+                      </>)
                     )}
                   </Box>
                 </Box>
@@ -2781,14 +2817,14 @@ function FileOperations() {
           <Box sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 0, sm: 0 } }}>
             {tabValue === 0 ? (
               // Source Files Search with Auto Mode Toggle
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              (<Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   size={isMobile ? "medium" : "small"}
                   placeholder={isMobile ? "🔍 Search files..." : "🔍 Search source files by name, path, or type..."}
                   value={sourceSearchQuery}
                   onChange={(e) => setSourceSearchQuery(e.target.value)}
-                  InputProps={{
+                  slotProps={{ input: {
                     startAdornment: (
                       <InputAdornment position="start">
                         {isSourceSearching ? (
@@ -2806,7 +2842,7 @@ function FileOperations() {
                       fontSize: { xs: '0.9rem', sm: '0.875rem' },
                       height: { xs: 48, sm: 40 },
                     }
-                  }}
+                  } }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: { xs: 2, sm: 3 },
@@ -2843,7 +2879,6 @@ function FileOperations() {
                     },
                   }}
                 />
-
                 {/* Auto Mode Toggle - Inline with search */}
                 <Box sx={{
                   display: 'flex',
@@ -2921,9 +2956,7 @@ function FileOperations() {
                     }}
                   />
                 </Box>
-
-
-              </Box>
+              </Box>)
             ) : (
               // File Operations Search
               (<TextField
@@ -2935,7 +2968,7 @@ function FileOperations() {
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                InputProps={{
+                slotProps={{ input: {
                   startAdornment: (
                     <InputAdornment position="start">
                       {isSearching ? (
@@ -2953,7 +2986,7 @@ function FileOperations() {
                     fontSize: { xs: '0.9rem', sm: '0.875rem' },
                     height: { xs: 48, sm: 40 },
                   }
-                }}
+                } }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: { xs: 2, sm: 3 },
@@ -3190,26 +3223,32 @@ function FileOperations() {
                           ? '🔧 No Source Directories Configured'
                           : '🎉 All Source Files Tracked & Symlinked!'}
                       </Typography>
-                      <Typography variant="body1" color="text.secondary" sx={{
-                        fontSize: { xs: '0.9rem', sm: '1rem' },
-                        lineHeight: 1.6,
-                        maxWidth: 500,
-                        mx: 'auto',
-                        mb: 1
-                      }}>
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          color: "text.secondary",
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          lineHeight: 1.6,
+                          maxWidth: 500,
+                          mx: 'auto',
+                          mb: 1
+                        }}>
                         {hasSourceDirectories === false
                           ? 'Please configure SOURCE_DIR in your environment settings to start organizing your media files.'
                           : 'Perfect! All media files in your source directories have been successfully tracked and symlinked to your organized media library.'}
                       </Typography>
                       {hasSourceDirectories !== false && (
-                        <Typography variant="body2" color="text.secondary" sx={{
-                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                          lineHeight: 1.5,
-                          maxWidth: 450,
-                          mx: 'auto',
-                          fontStyle: 'italic',
-                          opacity: 0.8
-                        }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                            fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                            lineHeight: 1.5,
+                            maxWidth: 450,
+                            mx: 'auto',
+                            fontStyle: 'italic',
+                            opacity: 0.8
+                          }}>
                           Your original files remain in the source directories, while organized symlinks are available in your media library.
                         </Typography>
                       )}
@@ -3226,20 +3265,26 @@ function FileOperations() {
                             border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
                           }}>
                             <LinkIcon sx={{ fontSize: 20, color: 'success.main' }} />
-                            <Typography variant="body1" color="success.main" sx={{
-                              fontSize: { xs: '0.9rem', sm: '1rem' },
-                              fontWeight: 600
-                            }}>
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                color: "success.main",
+                                fontSize: { xs: '0.9rem', sm: '1rem' },
+                                fontWeight: 600
+                              }}>
                               {sourceTotalFiles > 0
                                 ? `${sourceTotalFiles.toLocaleString()} files tracked & symlinked`
                                 : 'All source files tracked & symlinked'}
                             </Typography>
                           </Box>
-                          <Typography variant="body2" color="text.secondary" sx={{
-                            mt: 2,
-                            fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                            fontStyle: 'italic'
-                          }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                              mt: 2,
+                              fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                              fontStyle: 'italic'
+                            }}>
                             Your media library is fully organized and up to date!
                           </Typography>
                         </Box>
@@ -3339,14 +3384,17 @@ function FileOperations() {
                                     {getFileIcon(file)}
                                   </Box>
                                   <Box sx={{ minWidth: 0, flex: 1 }}>
-                                    <Typography variant="body2" fontWeight="600" sx={{
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap',
-                                      color: file.isSourceRoot ? 'primary.main' : 'text.primary',
-                                      mb: 0.5,
-                                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                                    }}>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        fontWeight: "600",
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        color: file.isSourceRoot ? 'primary.main' : 'text.primary',
+                                        mb: 0.5,
+                                        fontSize: { xs: '0.875rem', sm: '1rem' }
+                                      }}>
                                       {file.name}
                                     </Typography>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, flexWrap: 'wrap' }}>
@@ -3384,17 +3432,16 @@ function FileOperations() {
                                           <InfoIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary', flexShrink: 0 }} />
                                           <Typography
                                             variant="caption"
-                                            color="text.secondary"
+                                            title={file.fullPath}
                                             sx={{
+                                              color: "text.secondary",
                                               fontSize: { xs: '0.7rem', sm: '0.75rem' },
                                               fontFamily: 'monospace',
                                               overflow: 'hidden',
                                               textOverflow: 'ellipsis',
                                               whiteSpace: 'nowrap',
                                               maxWidth: '100%'
-                                            }}
-                                            title={file.fullPath}
-                                          >
+                                            }}>
                                             {file.fullPath}
                                           </Typography>
                                         </Box>
@@ -3402,20 +3449,37 @@ function FileOperations() {
                                       {file.size && (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                           <DatabaseIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'text.secondary' }} />
-                                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              color: "text.secondary",
+                                              fontWeight: 500,
+                                              fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                                            }}>
                                             {file.size}
                                           </Typography>
                                         </Box>
                                       )}
                                       {file.modified && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                        <Typography
+                                          variant="caption"
+                                          sx={{
+                                            color: "text.secondary",
+                                            fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                                          }}>
                                           Modified: {new Date(file.modified).toLocaleDateString()}
                                         </Typography>
                                       )}
                                       {file.isMediaFile && (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                           <PlayCircleIcon sx={{ fontSize: { xs: 10, sm: 12 }, color: 'success.main' }} />
-                                          <Typography variant="caption" color="success.main" sx={{ fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              color: "success.main",
+                                              fontWeight: 500,
+                                              fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                                            }}>
                                             Original Media File
                                           </Typography>
                                         </Box>
@@ -3444,7 +3508,12 @@ function FileOperations() {
                                             size={16}
                                             sx={{ color: 'success.main' }}
                                           />
-                                          <Typography variant="caption" color="success.main" sx={{ fontWeight: 600 }}>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              color: "success.main",
+                                              fontWeight: 600
+                                            }}>
                                             Auto
                                           </Typography>
                                         </Box>
@@ -3528,13 +3597,12 @@ function FileOperations() {
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
                   <Typography
                     variant="body2"
-                    color="text.secondary"
                     sx={{
+                      color: "text.secondary",
                       whiteSpace: { xs: 'normal', sm: 'nowrap' },
                       textAlign: 'center',
                       fontSize: { xs: '0.75rem', sm: '0.875rem' }
-                    }}
-                  >
+                    }}>
                     Showing {filteredSourceFiles.length} of {sourceTotalFiles.toLocaleString()} items
                     {sourceSearchQuery && ` (filtered)`}
                   </Typography>
@@ -3601,13 +3669,12 @@ function FileOperations() {
               )}
               <Typography
                 variant="body2"
-                color="text.secondary"
                 sx={{
+                  color: "text.secondary",
                   whiteSpace: { xs: 'normal', sm: 'nowrap' },
                   textAlign: 'center',
                   fontSize: { xs: '0.75rem', sm: '0.875rem' }
-                }}
-              >
+                }}>
                 Showing {operations.length} of {totalOperations.toLocaleString()} operations
                 {searchQuery && ` (filtered)`}
               </Typography>
@@ -3778,8 +3845,6 @@ function FileOperations() {
       {mainTabValue === 1 && (
         <DatabaseSearch />
       )}
-
-
       {/* ModifyDialog for file processing */}
       {modifyDialogOpen && (
         <ModifyDialog
@@ -3791,7 +3856,6 @@ function FileOperations() {
           }}
         />
       )}
-
       {/* ModifyDialog for bulk operations */}
       {bulkModifyDialogOpen && bulkModifyFilePaths.length > 0 && (
         <ModifyDialog
@@ -3804,15 +3868,13 @@ function FileOperations() {
           onNavigateBack={() => { }}
         />
       )}
-
-
       {/* Bulk Delete Confirmation Dialog */}
       <Dialog
         open={bulkDeleteDialogOpen}
         onClose={() => setBulkDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             backgroundColor: theme.palette.background.paper,
@@ -3827,8 +3889,7 @@ function FileOperations() {
               : 'none',
             backdropFilter: 'blur(10px)',
           }
-        }}
-        slotProps={{
+        },
           backdrop: {
             sx: {
               backgroundColor: theme.palette.mode === 'dark'
@@ -3836,8 +3897,7 @@ function FileOperations() {
                 : 'rgba(0, 0, 0, 0.5)',
               backdropFilter: 'blur(4px)',
             }
-          }
-        }}
+          } }}
       >
         <DialogTitle sx={{
           display: 'flex',
@@ -3927,14 +3987,13 @@ function FileOperations() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Clear All Failed Confirmation Dialog */}
       <Dialog
         open={clearFailedDialogOpen}
         onClose={() => setClearFailedDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             backgroundColor: theme.palette.background.paper,
@@ -3949,8 +4008,7 @@ function FileOperations() {
               : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
             backdropFilter: 'blur(10px)',
           }
-        }}
-        slotProps={{
+        },
           backdrop: {
             sx: {
               backgroundColor: theme.palette.mode === 'dark'
@@ -3958,8 +4016,7 @@ function FileOperations() {
                 : 'rgba(0, 0, 0, 0.5)',
               backdropFilter: 'blur(4px)',
             }
-          }
-        }}
+          } }}
       >
         <DialogTitle sx={{
           display: 'flex',
@@ -4046,14 +4103,13 @@ function FileOperations() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Bulk Action Confirmation Dialog */}
       <Dialog
         open={bulkDeleteDialogOpen}
         onClose={() => setBulkDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             backgroundColor: theme.palette.background.paper,
@@ -4068,8 +4124,7 @@ function FileOperations() {
               : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
             backdropFilter: 'blur(10px)',
           }
-        }}
-        slotProps={{
+        },
           backdrop: {
             sx: {
               backgroundColor: theme.palette.mode === 'dark'
@@ -4077,8 +4132,7 @@ function FileOperations() {
                 : 'rgba(0, 0, 0, 0.5)',
               backdropFilter: 'blur(4px)',
             }
-          }
-        }}
+          } }}
       >
         <DialogTitle sx={{
           display: 'flex',
@@ -4167,7 +4221,6 @@ function FileOperations() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Success Dialog */}
       <Dialog
         open={successDialogOpen}
@@ -4186,7 +4239,7 @@ function FileOperations() {
               : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             bgcolor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
             backgroundColor: theme.palette.mode === 'dark' ? '#000000' : theme.palette.background.paper,
@@ -4197,7 +4250,7 @@ function FileOperations() {
               ? '0 8px 32px rgba(0, 0, 0, 0.8)'
               : '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
           }
-        }}
+        } }}
       >
         <DialogTitle sx={{
           display: 'flex',
@@ -4243,7 +4296,6 @@ function FileOperations() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Manual Import Dialog */}
       <ManualImport
         open={manualImportOpen}
@@ -4251,7 +4303,6 @@ function FileOperations() {
         initialFiles={manualImport}
         initialTitle="Failed Entries"
       />
-
     </Box>
   );
 }

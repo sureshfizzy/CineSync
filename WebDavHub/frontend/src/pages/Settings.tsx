@@ -646,7 +646,9 @@ const Settings: React.FC = () => {
           justifyContent: 'center',
         }}
       >
-        <Typography variant="h6" color="text.secondary">
+        <Typography variant="h6" sx={{
+          color: "text.secondary"
+        }}>
           Loading configuration...
         </Typography>
       </Box>
@@ -665,22 +667,22 @@ const Settings: React.FC = () => {
         <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
           <Stack
             direction="row"
-            alignItems="flex-start"
-            justifyContent="space-between"
             spacing={1}
-            sx={{ mb: { xs: 1, sm: 4 } }}
-          >
+            sx={{
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: { xs: 1, sm: 4 }
+            }}>
             <Box sx={{ flex: 1, minWidth: 0, mr: 1 }}>
               <Typography
                 variant="h3"
-                fontWeight="600"
                 sx={{
+                  fontWeight: "600",
                   color: 'text.primary',
                   mb: 1,
                   letterSpacing: '-0.02em',
-                  fontSize: { xs: '2rem', sm: '3rem' },
-                }}
-              >
+                  fontSize: { xs: '2rem', sm: '3rem' }
+                }}>
                 Settings
               </Typography>
             </Box>
@@ -744,15 +746,14 @@ const Settings: React.FC = () => {
           {/* Subtitle on its own line */}
           <Typography
             variant="body1"
-            color="text.secondary"
             sx={{
+              color: "text.secondary",
               fontWeight: { xs: 400, sm: 500 },
               fontSize: { xs: '0.875rem', sm: '1.125rem' },
               lineHeight: { xs: 1.4, sm: 1.6 },
               mb: { xs: 2, sm: 3 },
               letterSpacing: { xs: 'normal', sm: '0.01em' }
-            }}
-          >
+            }}>
             Configure your CineSync environment variables
           </Typography>
 
@@ -926,7 +927,14 @@ const Settings: React.FC = () => {
                     } : {},
                   }}
                 >
-                  <Stack direction="row" alignItems="center" spacing={{ xs: 1, sm: 1.5 }} sx={{ minWidth: 0, justifyContent: 'center' }}>
+                  <Stack
+                    direction="row"
+                    spacing={{ xs: 1, sm: 1.5 }}
+                    sx={{
+                      alignItems: "center",
+                      minWidth: 0,
+                      justifyContent: 'center'
+                    }}>
                     <Box
                       sx={{
                         width: { xs: 20, sm: 24 },
@@ -949,15 +957,14 @@ const Settings: React.FC = () => {
                     </Box>
                     <Typography
                       variant="body1"
-                      fontWeight="600"
                       sx={{
+                        fontWeight: "600",
                         fontSize: { xs: '0.85rem', sm: '1rem' },
                         letterSpacing: '0.02em',
                         flexShrink: 0,
                         minWidth: 0,
-                        textAlign: 'center',
-                      }}
-                    >
+                        textAlign: 'center'
+                      }}>
                       {tab.name}
                     </Typography>
                   </Stack>
@@ -1028,7 +1035,9 @@ const Settings: React.FC = () => {
                       },
                     }}
                   >
-                    <Stack direction="row" alignItems="center" spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{
+                      alignItems: "center"
+                    }}>
                       <Box
                         sx={{
                           width: 20,
@@ -1046,12 +1055,10 @@ const Settings: React.FC = () => {
                       </Box>
                       <Typography
                         variant="body2"
-                        fontWeight="500"
                         sx={{
                           fontSize: '0.875rem',
-                          fontWeight: isSelected ? 600 : 500,
-                        }}
-                      >
+                          fontWeight: isSelected ? 600 : 500
+                        }}>
                         {categoryInfo.name}
                       </Typography>
                       {hasModifications && (
@@ -1160,7 +1167,9 @@ const Settings: React.FC = () => {
                       },
                     }}
                   >
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Stack direction="row" spacing={1.5} sx={{
+                      alignItems: "center"
+                    }}>
                       <Box
                         sx={{
                           width: 20,
@@ -1178,9 +1187,10 @@ const Settings: React.FC = () => {
                       </Box>
                       <Typography
                         variant="body2"
-                        fontWeight="600"
-                        sx={{ fontSize: '0.875rem' }}
-                      >
+                        sx={{
+                          fontWeight: "600",
+                          fontSize: '0.875rem'
+                        }}>
                         {categoryInfo.name}
                       </Typography>
                       {hasModifications && (
@@ -1266,7 +1276,9 @@ const Settings: React.FC = () => {
                       },
                     }}
                   >
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Stack direction="row" spacing={1.5} sx={{
+                      alignItems: "center"
+                    }}>
                       <Box
                         sx={{
                           width: 24,
@@ -1284,12 +1296,11 @@ const Settings: React.FC = () => {
                       </Box>
                       <Typography
                         variant="body2"
-                        fontWeight="600"
                         sx={{
+                          fontWeight: "600",
                           fontSize: '0.875rem',
-                          lineHeight: 1.2,
-                        }}
-                      >
+                          lineHeight: 1.2
+                        }}>
                         {categoryInfo.name.split(' ')[0]}
                       </Typography>
                       {hasModifications && (
@@ -1405,16 +1416,15 @@ const Settings: React.FC = () => {
                           <Box>
                             <Typography
                               variant="subtitle2"
-                              fontWeight="600"
                               sx={{
+                                fontWeight: "600",
                                 color: 'text.primary',
                                 mb: 0.5,
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 1,
-                                flexWrap: 'wrap',
-                              }}
-                            >
+                                flexWrap: 'wrap'
+                              }}>
                               {formatFieldLabel(item.key)}
                               {item.required && (
                                 <Chip
@@ -1436,9 +1446,11 @@ const Settings: React.FC = () => {
                             </Typography>
                             <Typography
                               variant="body2"
-                              color="text.secondary"
-                              sx={{ mb: 2, lineHeight: 1.4 }}
-                            >
+                              sx={{
+                                color: "text.secondary",
+                                mb: 2,
+                                lineHeight: 1.4
+                              }}>
                               {item.description}
                             </Typography>
                           </Box>
@@ -1460,7 +1472,6 @@ const Settings: React.FC = () => {
                     </Grid>
                   ))}
                 </Grid>
-
                 {/* Advanced Settings - Only show when RENAME_ENABLED is true */}
                 {isRenameEnabled && (
                   <Box sx={{ mt: 4 }}>
@@ -1476,22 +1487,22 @@ const Settings: React.FC = () => {
                     >
                       <Typography
                         variant="h6"
-                        fontWeight="600"
                         sx={{
+                          fontWeight: "600",
                           color: 'info.main',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1,
-                          mb: 1,
-                        }}
-                      >
+                          mb: 1
+                        }}>
                         ⚙️ Advanced Renaming Options
                       </Typography>
                       <Typography
                         variant="body2"
-                        color="text.secondary"
-                        sx={{ lineHeight: 1.4 }}
-                      >
+                        sx={{
+                          color: "text.secondary",
+                          lineHeight: 1.4
+                        }}>
                         Configure MediaInfo parsing and Sonarr-compatible naming formats
                       </Typography>
                     </Box>
@@ -1526,16 +1537,15 @@ const Settings: React.FC = () => {
                               <Box>
                                 <Typography
                                   variant="subtitle2"
-                                  fontWeight="600"
                                   sx={{
+                                    fontWeight: "600",
                                     color: 'text.primary',
                                     mb: 0.5,
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 1,
-                                    flexWrap: 'wrap',
-                                  }}
-                                >
+                                    flexWrap: 'wrap'
+                                  }}>
                                   {formatFieldLabel(item.key)}
                                   {item.required && (
                                     <Chip
@@ -1557,9 +1567,11 @@ const Settings: React.FC = () => {
                                 </Typography>
                                 <Typography
                                   variant="body2"
-                                  color="text.secondary"
-                                  sx={{ mb: 2, lineHeight: 1.4 }}
-                                >
+                                  sx={{
+                                    color: "text.secondary",
+                                    mb: 2,
+                                    lineHeight: 1.4
+                                  }}>
                                   {item.description}
                                 </Typography>
                               </Box>
@@ -1625,16 +1637,15 @@ const Settings: React.FC = () => {
                         <Box>
                           <Typography
                             variant="subtitle2"
-                            fontWeight="600"
                             sx={{
+                              fontWeight: "600",
                               color: 'text.primary',
                               mb: 0.5,
                               display: 'flex',
                               alignItems: 'center',
                               gap: 1,
-                              flexWrap: 'wrap',
-                            }}
-                          >
+                              flexWrap: 'wrap'
+                            }}>
                             {formatFieldLabel(apiKeyItem.key)}
                             {pendingChanges[apiKeyItem.key] !== undefined && (
                               <Chip
@@ -1647,21 +1658,27 @@ const Settings: React.FC = () => {
                           </Typography>
                           <Typography
                             variant="body2"
-                            color="text.secondary"
-                            sx={{ mb: 2, lineHeight: 1.4 }}
-                          >
+                            sx={{
+                              color: "text.secondary",
+                              mb: 2,
+                              lineHeight: 1.4
+                            }}>
                             {apiKeyItem.description}
                           </Typography>
                         </Box>
                         <TextField
                           fullWidth
                           value={regenLoading ? 'Generating API key...' : (apiKeyValue || '')}
-                          InputProps={{
+                          slotProps={{ input: {
                             readOnly: true,
                             style: { fontFamily: 'monospace', fontSize: '14px' },
                             endAdornment: (
                               <InputAdornment position="end">
-                                <Box display="flex" gap={0.5}>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    gap: 0.5
+                                  }}>
                                   <Tooltip title="Copy API key">
                                     <IconButton
                                       onClick={() => handleCopyApiKey(apiKeyValue)}
@@ -1691,7 +1708,7 @@ const Settings: React.FC = () => {
                                 </Box>
                               </InputAdornment>
                             ),
-                          }}
+                          } }}
                           error={!apiKeyValue && !regenLoading}
                           helperText='Use this API key for external integrations.'
                         />
@@ -1699,7 +1716,6 @@ const Settings: React.FC = () => {
                     </Box>
                   </Grid>
                 )}
-
                 {otherItems.map((item) => (
                   <Grid
                     key={item.key}
@@ -1728,16 +1744,15 @@ const Settings: React.FC = () => {
                         <Box>
                           <Typography
                             variant="subtitle2"
-                            fontWeight="600"
                             sx={{
+                              fontWeight: "600",
                               color: 'text.primary',
                               mb: 0.5,
                               display: 'flex',
                               alignItems: 'center',
                               gap: 1,
-                              flexWrap: 'wrap',
-                            }}
-                          >
+                              flexWrap: 'wrap'
+                            }}>
                             {formatFieldLabel(item.key)}
                             {item.required && (
                               <Chip
@@ -1759,9 +1774,11 @@ const Settings: React.FC = () => {
                           </Typography>
                           <Typography
                             variant="body2"
-                            color="text.secondary"
-                            sx={{ mb: 2, lineHeight: 1.4 }}
-                          >
+                            sx={{
+                              color: "text.secondary",
+                              mb: 2,
+                              lineHeight: 1.4
+                            }}>
                             {item.description}
                           </Typography>
                         </Box>
@@ -1806,9 +1823,11 @@ const Settings: React.FC = () => {
                   <Box sx={{ mb: 4 }}>
                     <Typography
                       variant="h6"
-                      fontWeight="600"
-                      sx={{ mb: 3, color: 'text.primary' }}
-                    >
+                      sx={{
+                        fontWeight: "600",
+                        mb: 3,
+                        color: 'text.primary'
+                      }}>
                       Resolution Structure Settings
                     </Typography>
                     <Grid container spacing={3}>
@@ -1840,16 +1859,15 @@ const Settings: React.FC = () => {
                               <Box>
                                 <Typography
                                   variant="subtitle2"
-                                  fontWeight="600"
                                   sx={{
+                                    fontWeight: "600",
                                     color: 'text.primary',
                                     mb: 0.5,
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 1,
-                                    flexWrap: 'wrap',
-                                  }}
-                                >
+                                    flexWrap: 'wrap'
+                                  }}>
                                   {formatFieldLabel(item.key)}
                                   {item.required && (
                                     <Chip
@@ -1871,9 +1889,11 @@ const Settings: React.FC = () => {
                                 </Typography>
                                 <Typography
                                   variant="body2"
-                                  color="text.secondary"
-                                  sx={{ mb: 2, lineHeight: 1.4 }}
-                                >
+                                  sx={{
+                                    color: "text.secondary",
+                                    mb: 2,
+                                    lineHeight: 1.4
+                                  }}>
                                   {item.description}
                                 </Typography>
                               </Box>
@@ -1917,22 +1937,22 @@ const Settings: React.FC = () => {
                     >
                       <Typography
                         variant="h6"
-                        fontWeight="600"
                         sx={{
+                          fontWeight: "600",
                           color: 'primary.main',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1,
-                          mb: 2,
-                        }}
-                      >
+                          mb: 2
+                        }}>
                         🎬 Movie Settings
                       </Typography>
                       <Typography
                         variant="body2"
-                        color="text.secondary"
-                        sx={{ lineHeight: 1.4 }}
-                      >
+                        sx={{
+                          color: "text.secondary",
+                          lineHeight: 1.4
+                        }}>
                         Configure resolution folder mappings for movies
                       </Typography>
                     </Box>
@@ -1960,16 +1980,15 @@ const Settings: React.FC = () => {
                             <Box>
                               <Typography
                                 variant="subtitle2"
-                                fontWeight="600"
                                 sx={{
+                                  fontWeight: "600",
                                   color: 'text.primary',
                                   mb: 0.5,
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: 1,
-                                  flexWrap: 'wrap',
-                                }}
-                              >
+                                  flexWrap: 'wrap'
+                                }}>
                                 {formatFieldLabel(item.key)}
                                 {item.required && (
                                   <Chip
@@ -1991,9 +2010,11 @@ const Settings: React.FC = () => {
                               </Typography>
                               <Typography
                                 variant="body2"
-                                color="text.secondary"
-                                sx={{ mb: 2, lineHeight: 1.4 }}
-                              >
+                                sx={{
+                                  color: "text.secondary",
+                                  mb: 2,
+                                  lineHeight: 1.4
+                                }}>
                                 {item.description}
                               </Typography>
                             </Box>
@@ -2034,22 +2055,22 @@ const Settings: React.FC = () => {
                     >
                       <Typography
                         variant="h6"
-                        fontWeight="600"
                         sx={{
+                          fontWeight: "600",
                           color: 'secondary.main',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1,
-                          mb: 2,
-                        }}
-                      >
+                          mb: 2
+                        }}>
                         📺 TV Show Settings
                       </Typography>
                       <Typography
                         variant="body2"
-                        color="text.secondary"
-                        sx={{ lineHeight: 1.4 }}
-                      >
+                        sx={{
+                          color: "text.secondary",
+                          lineHeight: 1.4
+                        }}>
                         Configure resolution folder mappings for TV shows
                       </Typography>
                     </Box>
@@ -2077,16 +2098,15 @@ const Settings: React.FC = () => {
                             <Box>
                               <Typography
                                 variant="subtitle2"
-                                fontWeight="600"
                                 sx={{
+                                  fontWeight: "600",
                                   color: 'text.primary',
                                   mb: 0.5,
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: 1,
-                                  flexWrap: 'wrap',
-                                }}
-                              >
+                                  flexWrap: 'wrap'
+                                }}>
                                 {formatFieldLabel(item.key)}
                                 {item.required && (
                                   <Chip
@@ -2108,9 +2128,11 @@ const Settings: React.FC = () => {
                               </Typography>
                               <Typography
                                 variant="body2"
-                                color="text.secondary"
-                                sx={{ mb: 2, lineHeight: 1.4 }}
-                              >
+                                sx={{
+                                  color: "text.secondary",
+                                  mb: 2,
+                                  lineHeight: 1.4
+                                }}>
                                 {item.description}
                               </Typography>
                             </Box>
@@ -2168,16 +2190,15 @@ const Settings: React.FC = () => {
                       <Box>
                         <Typography
                           variant="subtitle2"
-                          fontWeight="600"
                           sx={{
+                            fontWeight: "600",
                             color: 'text.primary',
                             mb: 0.5,
                             display: 'flex',
                             alignItems: 'center',
                             gap: 1,
-                            flexWrap: 'wrap',
-                          }}
-                        >
+                            flexWrap: 'wrap'
+                          }}>
                           {formatFieldLabel(item.key)}
                           {item.required && (
                             <Chip
@@ -2199,9 +2220,11 @@ const Settings: React.FC = () => {
                         </Typography>
                         <Typography
                           variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 2, lineHeight: 1.4 }}
-                        >
+                          sx={{
+                            color: "text.secondary",
+                            mb: 2,
+                            lineHeight: 1.4
+                          }}>
                           {item.description}
                         </Typography>
                       </Box>
@@ -2258,7 +2281,6 @@ const Settings: React.FC = () => {
         type="info"
         loading={saving}
       />
-
       {/* Sonarr Token Dialog */}
       <SonarrTokenDialog
         open={tokenDialog.open}
@@ -2268,7 +2290,6 @@ const Settings: React.FC = () => {
         currentValue={tokenDialog.currentValue}
         onValueChange={handleTokenValueChange}
       />
-
       {/* Radarr Token Dialog */}
       <RadarrTokenDialog
         open={radarrDialog.open}

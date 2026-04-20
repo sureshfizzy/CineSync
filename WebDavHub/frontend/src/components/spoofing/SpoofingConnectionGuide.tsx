@@ -95,7 +95,7 @@ const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
               label="Hostname"
               value={hostname}
               size="small"
-              InputProps={{
+              slotProps={{ input: {
                 readOnly: true,
                 endAdornment: (
                   <InputAdornment position="end">
@@ -109,13 +109,13 @@ const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
                     </Tooltip>
                   </InputAdornment>
                 ),
-              }}
+              } }}
             />
             <TextField
               label="Port"
               value={port}
               size="small"
-              InputProps={{
+              slotProps={{ input: {
                 readOnly: true,
                 endAdornment: (
                   <InputAdornment position="end">
@@ -129,14 +129,14 @@ const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
                     </Tooltip>
                   </InputAdornment>
                 ),
-              }}
+              } }}
             />
             <TextField
               label="API Key"
               value={apiKey}
               size="small"
               type="password"
-              InputProps={{
+              slotProps={{ input: {
                 readOnly: true,
                 endAdornment: (
                   <InputAdornment position="end">
@@ -150,7 +150,7 @@ const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
                     </Tooltip>
                   </InputAdornment>
                 ),
-              }}
+              } }}
             />
           </Box>
         </Box>
@@ -173,7 +173,9 @@ const SpoofingConnectionGuide: React.FC<ConnectionGuideProps> = ({
                 {step.icon}
                 <Box>
                   <Typography variant="subtitle1">{step.title}</Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     {step.description}
                   </Typography>
                 </Box>

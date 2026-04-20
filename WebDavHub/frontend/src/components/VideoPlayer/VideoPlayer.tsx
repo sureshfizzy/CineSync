@@ -308,7 +308,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
           />
         </Box>
       </Box>
-
       {/* Title Bar - Always show header with title and close button */}
       <Fade in={showControls || isLoading || isBuffering || !!error} timeout={200}>
         <Box
@@ -356,7 +355,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
           )}
         </Box>
       </Fade>
-
       {/* Loading Spinner */}
       <Fade in={(isLoading || isBuffering) && !error}>
         <Box
@@ -371,7 +369,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
           <CircularProgress size={60} thickness={4} sx={{ color: theme.palette.primary.main }} />
         </Box>
       </Fade>
-
       {/* Error Display */}
       {error && (
         <Box
@@ -388,12 +385,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
             textAlign: 'center',
           }}
         >
-          <Typography variant="h6" color="error.contrastText">
+          <Typography variant="h6" sx={{
+            color: "error.contrastText"
+          }}>
             {error}
           </Typography>
         </Box>
       )}
-
       {/* Controls Overlay (Bottom controls) */}
       <Fade in={showControls || isLoading || isBuffering || !!error} timeout={200}>
         <Box

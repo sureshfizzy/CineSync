@@ -90,7 +90,7 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
       onClose={handleClose}
       maxWidth={isMobile ? "xs" : "sm"}
       fullWidth={!isMobile}
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: { xs: 3, sm: 3 },
           background: theme.palette.mode === 'dark'
@@ -108,8 +108,8 @@ const RestartRequiredPopup: React.FC<RestartRequiredPopupProps> = ({
           minWidth: isMobile ? '320px' : '500px',
           overflow: 'visible',
         },
-      }}
-      TransitionComponent={SlideUpTransition}
+      } }}
+      slots={{ transition: SlideUpTransition }}
     >
       <DialogTitle
         sx={{

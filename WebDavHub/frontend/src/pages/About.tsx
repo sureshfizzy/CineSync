@@ -184,7 +184,9 @@ export default function About() {
         />
 
         <Stack spacing={2} sx={{ position: 'relative' }}>
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Box
               sx={{
                 width: 48,
@@ -225,9 +227,12 @@ export default function About() {
 
           <Typography
             variant="body1"
-            color="text.secondary"
-            sx={{ maxWidth: 760, fontSize: { xs: '1rem', md: '1.05rem' }, lineHeight: 1.7 }}
-          >
+            sx={{
+              color: "text.secondary",
+              maxWidth: 760,
+              fontSize: { xs: '1rem', md: '1.05rem' },
+              lineHeight: 1.7
+            }}>
             CineSync keeps your media organized—indexing, cleaning, and serving your library across WebDAV with a responsive, straightforward UI.
           </Typography>
 
@@ -267,7 +272,6 @@ export default function About() {
           </Stack>
         </Stack>
       </Paper>
-
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
@@ -290,7 +294,13 @@ export default function About() {
                 minWidth: 0,
               }}
             >
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ width: '100%' }}>
+              <Stack
+                direction="row"
+                spacing={2}
+                sx={{
+                  alignItems: "center",
+                  width: '100%'
+                }}>
                 <Box
                   sx={{
                     width: 42,
@@ -307,10 +317,17 @@ export default function About() {
                   {card.icon}
                 </Box>
                 <Box>
-                  <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1 }}>
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 700,
+                      lineHeight: 1
+                    }}>
                     {card.value}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     {card.label}
                   </Typography>
                 </Box>
@@ -319,7 +336,6 @@ export default function About() {
           </Grid>
         ))}
       </Grid>
-
       {ghStats.latestRelease && (
         <Box sx={{ mb: 3 }}>
           <Chip
@@ -331,7 +347,6 @@ export default function About() {
           />
         </Box>
       )}
-
       {/* ElfHosted */}
       <Paper
         sx={{
@@ -345,9 +360,13 @@ export default function About() {
         }}
       >
         <Stack spacing={2}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{
+            alignItems: "center"
+          }}>
             <CloudDoneRoundedIcon sx={{ color: theme.palette.success.dark }} />
-            <Typography variant="h6" fontWeight={700}>
+            <Typography variant="h6" sx={{
+              fontWeight: 700
+            }}>
               ElfHosted “Easy Mode”
             </Typography>
             <Chip
@@ -394,10 +413,17 @@ export default function About() {
               }}
             />
           </Stack>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             ElfHosted runs CineSync for you—managed hosting, updates, and support so you can just use the app. It’s the “easy mode” highlighted in the README.
           </Typography>
-          <Stack direction="row" flexWrap="wrap" gap={1}>
+          <Stack
+            direction="row"
+            sx={{
+              flexWrap: "wrap",
+              gap: 1
+            }}>
             <Chip
               label="7-day trial for $1"
               size="small"
@@ -456,7 +482,6 @@ export default function About() {
           </Stack>
         </Stack>
       </Paper>
-
       {/* Features */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {featureCards.map((feature) => (
@@ -487,17 +512,26 @@ export default function About() {
               >
                 {feature.icon}
               </Box>
-              <Typography variant="h6" fontWeight={700} sx={{ letterSpacing: '-0.01em' }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  letterSpacing: '-0.01em'
+                }}>
                 {feature.title}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  lineHeight: 1.6
+                }}>
                 {feature.description}
               </Typography>
             </Paper>
           </Grid>
         ))}
       </Grid>
-
       {/* Story + Stack */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 7 }}>
@@ -510,10 +544,20 @@ export default function About() {
             }}
           >
             <Stack spacing={2}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={1} justifyContent="space-between">
-                <Stack direction="row" alignItems="center" spacing={1}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  justifyContent: "space-between"
+                }}>
+                <Stack direction="row" spacing={1} sx={{
+                  alignItems: "center"
+                }}>
                   <TimelineRoundedIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="subtitle1" fontWeight={700}>
+                  <Typography variant="subtitle1" sx={{
+                    fontWeight: 700
+                  }}>
                     Our Story
                   </Typography>
                 </Stack>
@@ -531,13 +575,23 @@ export default function About() {
                   View Roadmap
                 </Button>
               </Stack>
-              <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+              <Typography
+                variant="body1"
+                sx={{
+                  color: "text.secondary",
+                  lineHeight: 1.7
+                }}>
                 CineSync focuses on simplifying media pipelines with automation, observability, and a clean interface,
                 so you spend more time watching and less time managing.
               </Typography>
               <Divider />
               <Stack spacing={1}>
-                <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    color: "text.secondary",
+                    fontWeight: 600
+                  }}>
                   Releases in motion
                 </Typography>
                 <Stack spacing={1}>
@@ -547,11 +601,20 @@ export default function About() {
                     { label: 'Observability + alerts', progress: 54 },
                   ].map((item) => (
                     <Fragment key={item.label}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="body2" fontWeight={600}>
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                        <Typography variant="body2" sx={{
+                          fontWeight: 600
+                        }}>
                           {item.label}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>
                           {item.progress}%
                         </Typography>
                       </Stack>
@@ -582,13 +645,22 @@ export default function About() {
             }}
           >
             <Stack spacing={2.5}>
-              <Stack direction="row" alignItems="center" spacing={1}>
+              <Stack direction="row" spacing={1} sx={{
+                alignItems: "center"
+              }}>
                 <CodeRoundedIcon sx={{ color: 'secondary.main' }} />
-                <Typography variant="subtitle1" fontWeight={700}>
+                <Typography variant="subtitle1" sx={{
+                  fontWeight: 700
+                }}>
                   Stack & Integrations
                 </Typography>
               </Stack>
-              <Stack direction="row" flexWrap="wrap" gap={1}>
+              <Stack
+                direction="row"
+                sx={{
+                  flexWrap: "wrap",
+                  gap: 1
+                }}>
                 {(techStack.length ? techStack.map((item) => item.name) : ['React', 'TypeScript', 'Go', 'Python']).map((item) => (
                   <Chip
                     key={item}
@@ -605,9 +677,16 @@ export default function About() {
               </Stack>
               <Divider />
               <Stack spacing={1}>
-                <Stack direction="row" alignItems="center" spacing={1}>
+                <Stack direction="row" spacing={1} sx={{
+                  alignItems: "center"
+                }}>
                   <GroupsRoundedIcon sx={{ color: 'text.secondary' }} />
-                  <Typography variant="subtitle2" color="text.secondary" fontWeight={700}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      color: "text.secondary",
+                      fontWeight: 700
+                    }}>
                     Contributors
                   </Typography>
                 </Stack>
@@ -641,7 +720,9 @@ export default function About() {
                   ))}
                 </AvatarGroup>
                 {!contributors.length && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     A distributed crew of media tinkerers, devs, and ops folks who love smooth libraries and crisp UX.
                   </Typography>
                 )}
@@ -650,7 +731,6 @@ export default function About() {
           </Paper>
         </Grid>
       </Grid>
-
       {/* Sponsors */}
       <Paper
         sx={{
@@ -662,13 +742,19 @@ export default function About() {
         }}
       >
         <Stack spacing={2}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{
+            alignItems: "center"
+          }}>
             <VolunteerActivismRoundedIcon sx={{ color: theme.palette.primary.main }} />
-            <Typography variant="h6" fontWeight={700}>
+            <Typography variant="h6" sx={{
+              fontWeight: 700
+            }}>
               Sponsor CineSync
             </Typography>
           </Stack>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             Support ongoing development and hosting.
           </Typography>
           <Grid container spacing={1.5}>

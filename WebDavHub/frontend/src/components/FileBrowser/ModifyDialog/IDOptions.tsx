@@ -19,7 +19,9 @@ const IDOptions: React.FC<IDOptionsProps> = ({
       {options.map((option) => (
         <Box key={option.value}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={600}>
+            <Typography variant="subtitle2" sx={{
+              fontWeight: 600
+            }}>
               {option.icon} {option.label}
             </Typography>
           </Box>
@@ -39,7 +41,9 @@ const IDOptions: React.FC<IDOptionsProps> = ({
               }
             }}
             helperText={
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 {option.helperText}
               </Typography>
             }

@@ -353,9 +353,9 @@ const TorrentRow: React.FC<{
           onClose={handleMenuClose}
           transformOrigin={{ horizontal: 'right', vertical: 'top' }}
           anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-          PaperProps={{
+          slotProps={{ paper: {
             className: 'rd-menu',
-          }}
+          } }}
         >
           {canPlay && (
             <MenuItem onClick={() => handleAction(() => onPlay(torrent))}>
@@ -931,7 +931,7 @@ export default function RealDebridBrowser() {
       <Dialog
         open={deleteDialog.open}
         onClose={() => !actionLoading && setDeleteDialog({ open: false, torrent: null })}
-        PaperProps={{ className: 'rd-dialog' }}
+        slotProps={{ paper: { className: 'rd-dialog' } }}
       >
         <DialogTitle sx={{ fontWeight: 700 }}>
           <DeleteIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'error.main' }} />
@@ -966,7 +966,7 @@ export default function RealDebridBrowser() {
       <Dialog
         open={reinsertDialog.open}
         onClose={() => !actionLoading && setReinsertDialog({ open: false, torrent: null })}
-        PaperProps={{ className: 'rd-dialog' }}
+        slotProps={{ paper: { className: 'rd-dialog' } }}
       >
         <DialogTitle sx={{ fontWeight: 700 }}>
           <RestartAlt sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
@@ -1001,8 +1001,7 @@ export default function RealDebridBrowser() {
       <Dialog
         open={filePickerDialog.open}
         onClose={() => !filePickerDialog.loading && setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' })}
-        PaperProps={{ className: 'rd-dialog', sx: { width: '100%', maxWidth: 760 } }}
-        BackdropProps={{ className: 'rd-dialog-backdrop' }}
+        slotProps={{ paper: { className: 'rd-dialog', sx: { width: '100%', maxWidth: 760 } }, backdrop: { className: 'rd-dialog-backdrop' } }}
         fullWidth
         maxWidth="sm"
       >

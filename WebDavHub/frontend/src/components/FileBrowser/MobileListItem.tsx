@@ -78,14 +78,13 @@ const MobileListItem: React.FC<MobileListItemProps> = ({ file, onItemClick, form
           </Typography>
           <Typography
             variant="caption"
-            color="text.secondary"
             sx={{
+              color: "text.secondary",
               display: 'block',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
+              whiteSpace: 'nowrap'
+            }}>
             {file.type === 'directory' ? 'Folder' : `${file.size} • ${formatDate(file.modified)}`}
           </Typography>
           {showArrBadges && (() => {

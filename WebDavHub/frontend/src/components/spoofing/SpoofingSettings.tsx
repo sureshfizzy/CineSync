@@ -267,7 +267,12 @@ const SpoofingSettings: React.FC = () => {
   return (
     <Card>
       <CardContent>
-        <Box display="flex" alignItems="center" mb={2}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            mb: 2
+          }}>
           <TvIcon sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
             Media Server Spoofing
@@ -288,10 +293,10 @@ const SpoofingSettings: React.FC = () => {
 
         <Box sx={{ mb: 3 }}>
           <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
             sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               mb: 3,
               p: 2,
               border: '1px solid',
@@ -299,9 +304,8 @@ const SpoofingSettings: React.FC = () => {
               borderRadius: 1,
               bgcolor: config.enabled ? 'success.main' : 'action.hover',
               color: config.enabled ? 'success.contrastText' : 'text.primary',
-              transition: 'all 0.3s ease',
-            }}
-          >
+              transition: 'all 0.3s ease'
+            }}>
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                 Enable Spoofing
@@ -310,7 +314,12 @@ const SpoofingSettings: React.FC = () => {
                 {config.enabled ? 'Active - CineSync is spoofing as Radarr/Sonarr' : 'Inactive - Spoofing is disabled'}
               </Typography>
             </Box>
-            <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1
+              }}>
               {loading && <CircularProgress size={20} />}
               <Switch
                 checked={Boolean(config.enabled)}
@@ -335,7 +344,12 @@ const SpoofingSettings: React.FC = () => {
             {/* Instance Name and Version Row */}
             <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
               <Box sx={{ flex: 1 }}>
-                <Box display="flex" alignItems="center" mb={1}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    mb: 1
+                  }}>
                   <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
                   <Typography variant="subtitle1">
                     Instance Name
@@ -346,14 +360,19 @@ const SpoofingSettings: React.FC = () => {
                   value="CineSync"
                   disabled={true}
                   helperText="Name displayed to connecting applications"
-                  InputProps={{
+                  slotProps={{ input: {
                     style: { fontSize: '14px' }
-                  }}
+                  } }}
                 />
               </Box>
 
               <Box sx={{ flex: 1 }}>
-                <Box display="flex" alignItems="center" mb={1}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    mb: 1
+                  }}>
                   <TagIcon sx={{ mr: 1, color: 'primary.main' }} />
                   <Typography variant="subtitle1">
                     Version
@@ -365,16 +384,21 @@ const SpoofingSettings: React.FC = () => {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, version: e.target.value })}
                   disabled={loading}
                   helperText="Version reported to applications"
-                  InputProps={{
+                  slotProps={{ input: {
                     style: { fontSize: '14px' }
-                  }}
+                  } }}
                 />
               </Box>
             </Box>
 
             {/* API Key Section */}
             <Box>
-              <Box display="flex" alignItems="center" mb={1}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  mb: 1
+                }}>
                 <SecurityIcon sx={{ mr: 1, color: 'primary.main' }} />
                 <Typography variant="subtitle1">
                   API Key
@@ -383,7 +407,7 @@ const SpoofingSettings: React.FC = () => {
               <TextField
                 fullWidth
                 value={regenerating ? 'Generating API key...' : (config.apiKey || '')}
-                InputProps={{
+                slotProps={{ input: {
                   readOnly: true,
                   style: {
                     fontFamily: 'monospace',
@@ -391,7 +415,11 @@ const SpoofingSettings: React.FC = () => {
                   },
                   endAdornment: (
                     <InputAdornment position="end">
-                      <Box display="flex" gap={0.5}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          gap: 0.5
+                        }}>
                         <Tooltip title="Copy API Key">
                           <IconButton
                             onClick={copyAPIKey}
@@ -425,10 +453,12 @@ const SpoofingSettings: React.FC = () => {
                       </Box>
                     </InputAdornment>
                   ),
-                }}
+                } }}
                 error={!config.apiKey && !regenerating}
               />
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 Use this API key when configuring Bazarr or other applications
               </Typography>
             </Box>
@@ -443,16 +473,19 @@ const SpoofingSettings: React.FC = () => {
 
                 <Box sx={{ mb: 3 }}>
                   <Box
-                    display="flex"
-                    alignItems="center"
-                    mb={1.5}
                     sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      mb: 1.5,
                       flexDirection: 'row',
-                      alignItems: 'center',
                       gap: 1
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
+                    }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        flexGrow: 1
+                      }}>
                       <FolderIcon sx={{ mr: 1, color: 'primary.main' }} />
                       <Typography variant="h6" component="h3" sx={{ fontWeight: 600, mr: 1 }}>
                         Folder-Level Spoofing
@@ -505,10 +538,11 @@ const SpoofingSettings: React.FC = () => {
                     }}
                   >
                     <Box
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="space-between"
-                    >
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between"
+                      }}>
                       <Box>
                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                           Enable Folder Mode
@@ -517,7 +551,12 @@ const SpoofingSettings: React.FC = () => {
                           {config.folderMode ? 'Active - Using folder-specific endpoints' : 'Inactive - Using global endpoint'}
                         </Typography>
                       </Box>
-                      <Box display="flex" alignItems="center" gap={1}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1
+                        }}>
                         {loading && <CircularProgress size={20} />}
                         <Switch
                           checked={Boolean(config.folderMode)}
@@ -541,16 +580,14 @@ const SpoofingSettings: React.FC = () => {
                   {config.folderMode && (
                     <Box>
                       <Box
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="space-between"
-                        mb={2}
                         sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          mb: 2,
                           flexDirection: 'row',
-                          alignItems: 'center',
                           gap: 1
-                        }}
-                      >
+                        }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                           Folder Mappings
                         </Typography>
@@ -721,7 +758,12 @@ const SpoofingSettings: React.FC = () => {
                                     />
                                   </TableCell>
                                   <TableCell align="right">
-                                    <Box display="flex" gap={0.5} justifyContent="flex-end">
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        gap: 0.5,
+                                        justifyContent: "flex-end"
+                                      }}>
                                       <Tooltip title="Copy API Key">
                                         <IconButton
                                           size="small"
@@ -797,8 +839,18 @@ const SpoofingSettings: React.FC = () => {
                                 }}
                               >
                                 <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                                  <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-                                    <Box flex={1} mr={1}>
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      mb: 1
+                                    }}>
+                                    <Box
+                                      sx={{
+                                        flex: 1,
+                                        mr: 1
+                                      }}>
                                       <Typography
                                         variant="subtitle2"
                                         sx={{
@@ -826,7 +878,11 @@ const SpoofingSettings: React.FC = () => {
                                         {mapping.folderPath}
                                       </Typography>
                                     </Box>
-                                    <Box display="flex" gap={0.25}>
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        gap: 0.25
+                                      }}>
                                       <IconButton
                                         size="small"
                                         onClick={() => {
@@ -855,7 +911,12 @@ const SpoofingSettings: React.FC = () => {
                                     </Box>
                                   </Box>
 
-                                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center"
+                                    }}>
                                     <Chip
                                       label={mapping.serviceType === 'auto' ? 'AUTO' : mapping.serviceType.toUpperCase()}
                                       color={
@@ -956,17 +1017,16 @@ const SpoofingSettings: React.FC = () => {
 
             {/* Action Buttons */}
             <Box
-              display="flex"
-              gap={{ xs: 1, sm: 2 }}
-              justifyContent="center"
-              alignItems="center"
               sx={{
+                display: "flex",
+                gap: { xs: 1, sm: 2 },
+                justifyContent: "center",
+                alignItems: "center",
                 mt: 2,
                 mb: 1,
                 flexDirection: { xs: 'column', sm: 'row' },
                 width: '100%'
-              }}
-            >
+              }}>
               <Button
                 onClick={loadConfig}
                 disabled={loading}
@@ -1044,7 +1104,6 @@ const SpoofingSettings: React.FC = () => {
           </Alert>
         </Snackbar>
       </CardContent>
-
       {/* Connection Guide */}
       {config.enabled && config.apiKey && (
         <SpoofingConnectionGuide
@@ -1052,14 +1111,13 @@ const SpoofingSettings: React.FC = () => {
           serverUrl={window.location.origin}
         />
       )}
-
       {/* Folder Mapping Dialog */}
       <Dialog
         open={folderDialogOpen}
         onClose={closeFolderDialog}
         maxWidth="md"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 2,
             boxShadow: theme.palette.mode === 'dark'
@@ -1067,7 +1125,7 @@ const SpoofingSettings: React.FC = () => {
               : '0 8px 32px rgba(0, 0, 0, 0.12)',
             bgcolor: theme.palette.mode === 'dark' ? '#000' : 'background.paper',
           },
-        }}
+        } }}
       >
         <DialogTitle sx={{
           pb: 1,
@@ -1103,7 +1161,13 @@ const SpoofingSettings: React.FC = () => {
         }}>
           <Stack spacing={3}>
             <Box>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  mb: 1.5
+                }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
                   Folder Configuration
                 </Typography>
@@ -1161,7 +1225,9 @@ const SpoofingSettings: React.FC = () => {
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {folder.displayName}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{
+                            color: "text.secondary"
+                          }}>
                             {folder.path} • {folder.fileCount} files
                           </Typography>
                         </Box>
@@ -1224,7 +1290,12 @@ const SpoofingSettings: React.FC = () => {
                   }}
                 >
                   <MenuItem value="auto">
-                    <Box display="flex" alignItems="center" gap={1}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1
+                      }}>
                       <Chip label="Recommended" size="small" color="info" sx={{ height: 20, fontSize: '0.7rem' }} />
                       Auto-detect
                     </Box>
@@ -1240,10 +1311,14 @@ const SpoofingSettings: React.FC = () => {
               label="API Key"
               value={newFolder.apiKey}
               onChange={(e) => setNewFolder({ ...newFolder, apiKey: e.target.value })}
-              InputProps={{
+              slotProps={{ input: {
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Box display="flex" gap={0.5}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 0.5
+                      }}>
                       <Tooltip title="Copy API key">
                         <IconButton
                           onClick={() => {
@@ -1281,7 +1356,7 @@ const SpoofingSettings: React.FC = () => {
                     </Box>
                   </InputAdornment>
                 ),
-              }}
+              } }}
               helperText="Unique API key for this folder mapping"
               variant="outlined"
               sx={{
@@ -1305,17 +1380,16 @@ const SpoofingSettings: React.FC = () => {
             />
 
             <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
               sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 p: 2,
                 border: '1px solid',
                 borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'divider',
                 borderRadius: 2,
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'grey.50',
-              }}
-            >
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'grey.50'
+              }}>
               <Box>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
                   Enable Mapping

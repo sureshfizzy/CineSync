@@ -43,7 +43,14 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
       </Paper>
       <Box sx={{ flex: 1, minWidth: 0, textAlign: { xs: 'center', md: 'left' } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' } }}>
-          <Typography variant="h3" fontWeight={700} gutterBottom sx={{ mb: 0, textAlign: { xs: 'center', md: 'left' } }}>
+          <Typography
+            variant="h3"
+            gutterBottom
+            sx={{
+              fontWeight: 700,
+              mb: 0,
+              textAlign: { xs: 'center', md: 'left' }
+            }}>
             {(data.name || data.title)} {firstAirYear && <span style={{ color: '#aaa', fontWeight: 400 }}>({firstAirYear})</span>}
           </Typography>
           {onSearchIndexer && (
@@ -147,7 +154,14 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
           </Box>
         )}
         {data.tagline && (
-          <Typography variant="h5" color="text.secondary" fontStyle="italic" gutterBottom sx={{ mb: 1 }}>
+          <Typography
+            variant="h5"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+              fontStyle: "italic",
+              mb: 1
+            }}>
             {data.tagline}
           </Typography>
         )}

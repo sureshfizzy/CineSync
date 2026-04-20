@@ -123,7 +123,6 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
           <TextField
@@ -131,13 +130,13 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
             placeholder="Search for movies..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
+            slotProps={{ input: {
               startAdornment: (
                 <InputAdornment position="start">
                   <SearchIcon />
                 </InputAdornment>
               ),
-            }}
+            } }}
             size="small"
           />
         </Box>
@@ -152,7 +151,9 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
             gap: 2
           }}>
             <CircularProgress />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Searching movies...
             </Typography>
           </Box>
@@ -179,7 +180,12 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {movie.title}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          display: 'block'
+                        }}>
                         From TMDB Search
                       </Typography>
                     </TableCell>
@@ -197,7 +203,9 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
                           sx={{ fontSize: '0.7rem', height: 20 }}
                         />
                       ) : (
-                        <Typography variant="body2" color="text.secondary">-</Typography>
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>-</Typography>
                       )}
                     </TableCell>
                     <TableCell align="center">
@@ -213,7 +221,12 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
                 {movies.length === 0 && !loading && (
                   <TableRow>
                     <TableCell colSpan={4} align="center">
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                          py: 4
+                        }}>
                         {searchQuery ? 'No movies found matching your search.' : 'Start typing to search for movies...'}
                       </Typography>
                     </TableCell>
@@ -224,7 +237,6 @@ const MovieSelectionDialog: React.FC<MovieSelectionDialogProps> = ({
           </TableContainer>
         )}
       </DialogContent>
-
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,

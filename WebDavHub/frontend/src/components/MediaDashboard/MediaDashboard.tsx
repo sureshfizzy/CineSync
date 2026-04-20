@@ -420,7 +420,12 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
               }}>
                 <SortRoundedIcon sx={{ color: 'primary.main', fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 700,
+                  fontSize: { xs: '0.95rem', sm: '1.05rem' }
+                }}>
                 Sort by
               </Typography>
               <IconButton size="small" sx={{ ml: 0.5 }}>
@@ -435,13 +440,13 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
                 size="small"
                 placeholder={`Search ${arrFilter === 'movies' ? 'movies' : 'series'}...`}
                 sx={{ minWidth: { xs: 160, sm: 240, md: 320 } }}
-                InputProps={{
+                slotProps={{ input: {
                   startAdornment: (
                     <InputAdornment position="start">
                       <SearchIcon sx={{ fontSize: 18 }} />
                     </InputAdornment>
                   ),
-                }}
+                } }}
               />
             )}
           </Box>
@@ -572,7 +577,9 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
               {arrFilter === 'wanted' ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="subtitle2" color="text.secondary">
+                    <Typography variant="subtitle2" sx={{
+                      color: "text.secondary"
+                    }}>
                       {wantedFilter === 'series' ? 'Wanted episodes' : 'Wanted movies'}: {wantedTotal || wantedItems.length}
                       {wantedTotal > PAGE_SIZE && `  •  Page ${wantedPage + 1}`}
                     </Typography>

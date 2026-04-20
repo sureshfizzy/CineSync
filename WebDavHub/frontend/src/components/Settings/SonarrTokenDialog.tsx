@@ -238,14 +238,14 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
       maxWidth="lg"
       fullWidth
       fullScreen={isMobile}
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           bgcolor: 'background.default',
           backgroundImage: 'none',
           minHeight: { xs: '100vh', md: '70vh' },
           maxHeight: { xs: '100vh', md: '90vh' },
         },
-      }}
+      } }}
     >
       <DialogTitle
         sx={{
@@ -256,18 +256,24 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="h6" fontWeight="600">
+          <Typography variant="h6" sx={{
+            fontWeight: "600"
+          }}>
             {title} - Folder Name Tokens
           </Typography>
           <IconButton onClick={onClose} size="small">
             <Close />
           </IconButton>
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            fontSize: '0.875rem'
+          }}>
           Click tokens below to build your format, or edit directly in the text field at the bottom
         </Typography>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{
           display: 'flex',
@@ -330,10 +336,14 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
             {filteredCategories[selectedCategory] && (
               <>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="600">
+                  <Typography variant="h6" sx={{
+                    fontWeight: "600"
+                  }}>
                     {filteredCategories[selectedCategory].name}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     Click a token to insert it
                   </Typography>
                 </Box>
@@ -360,7 +370,9 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
                         }}
                       >
                         <Stack spacing={1.5}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
+                          <Stack direction="row" spacing={1} sx={{
+                            alignItems: "center"
+                          }}>
                             <Chip
                               label={tokenInfo.token}
                               size="small"
@@ -395,24 +407,22 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
                           <Box>
                             <Typography
                               variant="body2"
-                              color="text.secondary"
                               sx={{
+                                color: "text.secondary",
                                 fontFamily: 'monospace',
                                 fontSize: '0.875rem',
                                 fontWeight: 500,
-                                mb: 0.5,
-                              }}
-                            >
+                                mb: 0.5
+                              }}>
                               Example: {tokenInfo.example}
                             </Typography>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
                               sx={{
+                                color: "text.secondary",
                                 fontSize: '0.75rem',
-                                lineHeight: 1.3,
-                              }}
-                            >
+                                lineHeight: 1.3
+                              }}>
                               {tokenInfo.description}
                             </Typography>
                           </Box>
@@ -426,7 +436,6 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
           </Box>
         </Box>
       </DialogContent>
-
       {/* Current Format Display */}
       <Box
         sx={{
@@ -460,9 +469,12 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
           <Box sx={{ mt: 1.5 }}>
             <Typography
               variant="caption"
-              fontWeight="600"
-              sx={{ mb: 0.5, color: 'text.secondary', display: 'block' }}
-            >
+              sx={{
+                fontWeight: "600",
+                mb: 0.5,
+                color: 'text.secondary',
+                display: 'block'
+              }}>
               Preview:
             </Typography>
             <Box
@@ -484,7 +496,6 @@ const SonarrTokenDialog: React.FC<SonarrTokenDialogProps> = ({
           </Box>
         )}
       </Box>
-
       <DialogActions
         sx={{
           bgcolor: 'background.paper',

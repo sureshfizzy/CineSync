@@ -141,10 +141,14 @@ export default function MediaWantedList({
 
     return (
       <Box sx={{ textAlign: 'center', py: 8 }}>
-        <Typography variant="h6" color="text.secondary" gutterBottom>
+        <Typography variant="h6" gutterBottom sx={{
+          color: "text.secondary"
+        }}>
           {title}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           {subtitle}
         </Typography>
       </Box>
@@ -165,8 +169,12 @@ export default function MediaWantedList({
           bgcolor: alpha(theme.palette.background.paper, 0.6)
         }}
       >
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Stack direction="row" spacing={1.5} alignItems="center">
+        <Stack direction="row" spacing={2} sx={{
+          alignItems: "center"
+        }}>
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Tooltip title="Search all">
               <span>
                 <IconButton size="small" onClick={handleSearchAll} disabled={!onSearch}>
@@ -174,11 +182,15 @@ export default function MediaWantedList({
                 </IconButton>
               </span>
             </Tooltip>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               Search All
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Tooltip title={selectedItems.length ? 'Unmonitor selected' : 'Select items first'}>
               <span>
                 <IconButton size="small" disabled={!selectedItems.length}>
@@ -186,13 +198,17 @@ export default function MediaWantedList({
                 </IconButton>
               </span>
             </Tooltip>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               Unmonitor Selected
             </Typography>
           </Stack>
         </Stack>
 
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{
+          alignItems: "center"
+        }}>
           <Tooltip title="Search selected">
             <span>
               <IconButton size="small" onClick={handleSearchSelected} disabled={!onSearch || !selectedItems.length}>
@@ -209,8 +225,12 @@ export default function MediaWantedList({
           </Tooltip>
         </Stack>
 
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Typography variant="caption" color="text.secondary">
+        <Stack direction="row" spacing={1.5} sx={{
+          alignItems: "center"
+        }}>
+          <Typography variant="caption" sx={{
+            color: "text.secondary"
+          }}>
             Quality
           </Typography>
           <Select
@@ -234,7 +254,6 @@ export default function MediaWantedList({
           </Select>
         </Stack>
       </Box>
-
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -328,7 +347,13 @@ export default function MediaWantedList({
                     </>
                   )}
                   <TableCell>
-                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: meta.color }}>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{
+                        alignItems: "center",
+                        color: meta.color
+                      }}>
                       {meta.icon}
                       <Typography variant="caption" sx={{ color: meta.color, fontWeight: 600 }}>
                         {meta.label}
@@ -336,7 +361,9 @@ export default function MediaWantedList({
                     </Stack>
                   </TableCell>
                   <TableCell align="right">
-                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                    <Stack direction="row" spacing={0.5} sx={{
+                      justifyContent: "flex-end"
+                    }}>
                       <Tooltip title="Search">
                         <span>
                           <IconButton size="small" onClick={() => onSearch?.(item)} disabled={!onSearch}>

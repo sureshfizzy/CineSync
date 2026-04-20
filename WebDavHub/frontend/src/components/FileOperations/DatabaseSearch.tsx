@@ -372,7 +372,6 @@ const DatabaseSearch: React.FC = () => {
           </Box>
         </Alert>
       )}
-
       {/* Stats Cards */}
       {stats && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -409,13 +408,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <StorageIcon sx={{ color: 'primary.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.totalRecords.toLocaleString()}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Total Records
                     </Typography>
                   </Box>
@@ -449,13 +452,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <MovieIcon sx={{ color: 'success.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.movies.toLocaleString()}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Movies
                     </Typography>
                   </Box>
@@ -489,13 +496,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <TvIcon sx={{ color: 'secondary.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.tvShows.toLocaleString()}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       TV Shows
                     </Typography>
                   </Box>
@@ -529,13 +540,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <ClearIcon sx={{ color: 'warning.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.skippedFiles.toLocaleString()}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Skipped
                     </Typography>
                   </Box>
@@ -560,13 +575,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <TrendingUpIcon sx={{ color: 'info.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {formatFileSize(stats.totalSize)}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Total Size
                     </Typography>
                   </Box>
@@ -591,13 +610,17 @@ const DatabaseSearch: React.FC = () => {
               }}
             >
               <CardContent sx={{ p: { xs: 1.5, sm: 2 }, '&:last-child': { pb: { xs: 1.5, sm: 2 } } }}>
-                <Stack direction="row" alignItems="center" spacing={{ xs: 0.75, sm: 1 }}>
+                <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} sx={{
+                  alignItems: "center"
+                }}>
                   <StorageIcon sx={{ color: 'success.main', fontSize: { xs: 18, sm: 20 } }} />
                   <Box>
                     <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                       {stats.processedFiles.toLocaleString()}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       Processed
                     </Typography>
                   </Box>
@@ -621,14 +644,16 @@ const DatabaseSearch: React.FC = () => {
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             spacing={2}
-            alignItems={{ xs: 'stretch', sm: 'center' }}
+            sx={{
+              alignItems: { xs: 'stretch', sm: 'center' }
+            }}
           >
             {/* Search Bar */}
             <TextField
               placeholder="Search files, paths, TMDB IDs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{
+              slotProps={{ input: {
                 startAdornment: (
                   <InputAdornment position="start">
                     <SearchIcon sx={{ color: 'text.secondary' }} />
@@ -641,7 +666,7 @@ const DatabaseSearch: React.FC = () => {
                     </IconButton>
                   </InputAdornment>
                 ),
-              }}
+              } }}
               sx={{
                 flex: { xs: 1, sm: 1 },
                 maxWidth: { xs: '100%', sm: 400 },
@@ -672,10 +697,11 @@ const DatabaseSearch: React.FC = () => {
             <Stack
               direction="row"
               spacing={1}
-              justifyContent={{ xs: 'center', sm: 'flex-end' }}
-              flexWrap="wrap"
-              sx={{ gap: 1 }}
-            >
+              sx={{
+                justifyContent: { xs: 'center', sm: 'flex-end' },
+                flexWrap: "wrap",
+                gap: 1
+              }}>
               <Tooltip title={compactView ? "Card View" : "Compact View"}>
                 <IconButton
                   onClick={() => setCompactView(!compactView)}
@@ -776,12 +802,11 @@ const DatabaseSearch: React.FC = () => {
           }}>
             <Typography
               variant="body2"
-              color="text.secondary"
               sx={{
+                color: "text.secondary",
                 textAlign: { xs: 'center', sm: 'left' },
                 fontSize: { xs: '0.75rem', sm: '0.875rem' }
-              }}
-            >
+              }}>
               Showing {records.length} of {totalRecords.toLocaleString()} records
               {searchQuery && ` for "${searchQuery}"`}
             </Typography>
@@ -1104,9 +1129,12 @@ const DatabaseSearch: React.FC = () => {
                         <Box sx={{ mb: isExpanded ? 2 : 0 }}>
                           <Typography
                             variant="caption"
-                            color="text.secondary"
-                            sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}
-                          >
+                            sx={{
+                              color: "text.secondary",
+                              fontWeight: 600,
+                              display: 'block',
+                              mb: 0.5
+                            }}>
                             Source Path:
                           </Typography>
                           <Typography
@@ -1143,9 +1171,12 @@ const DatabaseSearch: React.FC = () => {
                             <Box sx={{ mb: 2 }}>
                               <Typography
                                 variant="caption"
-                                color="text.secondary"
-                                sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}
-                              >
+                                sx={{
+                                  color: "text.secondary",
+                                  fontWeight: 600,
+                                  display: 'block',
+                                  mb: 0.5
+                                }}>
                                 Destination Path:
                               </Typography>
                               <Typography
@@ -1174,9 +1205,12 @@ const DatabaseSearch: React.FC = () => {
                             <Box sx={{ mb: 2 }}>
                               <Typography
                                 variant="caption"
-                                color="text.secondary"
-                                sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}
-                              >
+                                sx={{
+                                  color: "text.secondary",
+                                  fontWeight: 600,
+                                  display: 'block',
+                                  mb: 0.5
+                                }}>
                                 Reason:
                               </Typography>
                               <Typography
@@ -1207,7 +1241,12 @@ const DatabaseSearch: React.FC = () => {
                                   xs: 6,
                                   sm: 4
                                 }}>
-                                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "text.secondary",
+                                    fontWeight: 600
+                                  }}>
                                   TMDB ID:
                                 </Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -1222,7 +1261,12 @@ const DatabaseSearch: React.FC = () => {
                                   xs: 6,
                                   sm: 4
                                 }}>
-                                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "text.secondary",
+                                    fontWeight: 600
+                                  }}>
                                   Season:
                                 </Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -1237,7 +1281,12 @@ const DatabaseSearch: React.FC = () => {
                                   xs: 6,
                                   sm: 4
                                 }}>
-                                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "text.secondary",
+                                    fontWeight: 600
+                                  }}>
                                   File Size:
                                 </Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -1280,7 +1329,6 @@ const DatabaseSearch: React.FC = () => {
           </Box>
         </>
       )}
-
       {/* Bulk Action Confirmation Dialog */}
       <Dialog
         open={bulkActionDialogOpen}
@@ -1294,7 +1342,7 @@ const DatabaseSearch: React.FC = () => {
             background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
@@ -1305,7 +1353,7 @@ const DatabaseSearch: React.FC = () => {
               ? '0 8px 32px rgba(0, 0, 0, 0.8)'
               : '0 4px 20px rgba(0, 0, 0, 0.08)',
           }
-        }}
+        } }}
       >
         <DialogTitle>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -1362,7 +1410,6 @@ const DatabaseSearch: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Database Update Dialog */}
       <Dialog
         open={updateDialogOpen}
@@ -1376,7 +1423,7 @@ const DatabaseSearch: React.FC = () => {
             background: theme.palette.mode === 'dark' ? '#000000 !important' : undefined,
           }
         }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 3,
             bgcolor: theme.palette.mode === 'dark' ? '#000000 !important' : 'background.paper',
@@ -1387,7 +1434,7 @@ const DatabaseSearch: React.FC = () => {
               ? '0 8px 32px rgba(0, 0, 0, 0.8)'
               : '0 4px 20px rgba(0, 0, 0, 0.08)',
           }
-        }}
+        } }}
       >
         <DialogTitle sx={{
           pb: 1,
@@ -1434,7 +1481,9 @@ const DatabaseSearch: React.FC = () => {
           {updateLoading && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2 }}>
               <CircularProgress size={24} color="warning" />
-              <Typography color="text.primary">{updateMessage}</Typography>
+              <Typography sx={{
+                color: "text.primary"
+              }}>{updateMessage}</Typography>
             </Box>
           )}
 

@@ -206,7 +206,12 @@ export default function QualityProfilesManagement() {
     >
       <CardContent sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ color: theme.palette.text.primary }}>{profile.name}</Typography>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 600,
+              color: theme.palette.text.primary
+            }}>{profile.name}</Typography>
           <Stack direction="row" spacing={0.5}>
             <IconButton size="small" onClick={() => openEditDialog(profile)} sx={{ color: theme.palette.text.secondary }}>
               <EditIcon fontSize="small" />
@@ -268,16 +273,19 @@ export default function QualityProfilesManagement() {
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box>
-              <Typography variant="h5" fontWeight={600} sx={{
-                color: theme.palette.text.primary,
-                
-                
-                mb: 0.5,
-                fontSize: { xs: '1.25rem', sm: '1.5rem' },
-              }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 600,
+                  color: theme.palette.text.primary,
+                  mb: 0.5,
+                  fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                }}>
                 Quality Profiles
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Manage quality profiles per media type
               </Typography>
             </Box>
@@ -291,7 +299,9 @@ export default function QualityProfilesManagement() {
         {loading ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8, gap: 2 }}>
             <CircularProgress size={40} />
-            <Typography variant="body2" color="text.secondary">Loading quality profiles...</Typography>
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>Loading quality profiles...</Typography>
           </Box>
         ) : (
           <Stack spacing={3}>
@@ -320,7 +330,9 @@ export default function QualityProfilesManagement() {
                   >
                     <Box sx={{ textAlign: 'center', color: theme.palette.text.secondary }}>
                       <AddIcon />
-                      <Typography variant="caption" display="block">Add Profile</Typography>
+                      <Typography variant="caption" sx={{
+                        display: "block"
+                      }}>Add Profile</Typography>
                     </Box>
                   </Card>
                 </Box>
@@ -329,13 +341,12 @@ export default function QualityProfilesManagement() {
           </Stack>
         )}
       </Box>
-
       <Dialog
         open={dialogOpen}
         onClose={closeDialog}
         fullWidth
         maxWidth="xs"
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 2,
             boxShadow: (theme) => theme.palette.mode === 'dark'
@@ -344,7 +355,7 @@ export default function QualityProfilesManagement() {
             border: (theme) => `1px solid ${theme.palette.divider}`,
             maxWidth: 460
           }
-        }}
+        } }}
       >
         <DialogTitle sx={{ pb: 1 }}>{form.id ? 'Edit Quality Profile' : 'New Quality Profile'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
@@ -426,7 +437,6 @@ export default function QualityProfilesManagement() {
           </Button>
         </DialogActions>
       </Dialog>
-
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
         <DialogTitle>Delete Profile</DialogTitle>
         <DialogContent>

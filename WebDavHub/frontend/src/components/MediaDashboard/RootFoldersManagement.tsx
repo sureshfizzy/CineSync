@@ -169,7 +169,9 @@ export default function RootFoldersManagement() {
         }}
       >
         <CircularProgress size={32} />
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           Loading root folders...
         </Typography>
       </Box>
@@ -186,12 +188,18 @@ export default function RootFoldersManagement() {
           spacing={1.5}
           sx={{ mb: 2, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Box>
-              <Typography variant="h6" fontWeight={600}>
+              <Typography variant="h6" sx={{
+                fontWeight: 600
+              }}>
                 Root Folders
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 Manage the directories used for media storage
               </Typography>
             </Box>
@@ -214,7 +222,14 @@ export default function RootFoldersManagement() {
           </Alert>
         )}
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, color: 'text.secondary' }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: "center",
+            mb: 1.5,
+            color: 'text.secondary'
+          }}>
           <Typography variant="caption">{rootFolders.length} total</Typography>
           <Typography variant="caption">•</Typography>
           <Typography variant="caption">{customCount} custom</Typography>
@@ -241,10 +256,19 @@ export default function RootFoldersManagement() {
                 <Avatar sx={{ width: 48, height: 48, mx: 'auto', mb: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }}>
                   <FolderIcon sx={{ fontSize: 24 }} />
                 </Avatar>
-                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                <Typography variant="subtitle1" gutterBottom sx={{
+                  fontWeight: 600
+                }}>
                   No root folders yet
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 420, mx: 'auto' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    mb: 2,
+                    maxWidth: 420,
+                    mx: 'auto'
+                  }}>
                   Add a root folder to define where your media libraries are stored.
                 </Typography>
                 <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddFolderClick}>
@@ -295,7 +319,13 @@ export default function RootFoldersManagement() {
                       </Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         {folder.name && (
-                          <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontWeight: 600,
+                              display: 'block',
+                              mb: 0.5
+                            }}>
                             {folder.name}
                           </Typography>
                         )}
@@ -331,13 +361,18 @@ export default function RootFoldersManagement() {
 
         <FolderSelector open={folderSelectorOpen} onClose={() => setFolderSelectorOpen(false)} onSelect={handleFolderSelect} />
 
-        <Dialog open={deleteDialogOpen} onClose={cancelDelete} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+        <Dialog open={deleteDialogOpen} onClose={cancelDelete} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 2 } } }}>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
             <WarningIcon color="warning" fontSize="small" />
             Delete Root Folder
           </DialogTitle>
           <DialogContent sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 2
+              }}>
               This removes the folder from your media configuration.
             </Typography>
             <Box

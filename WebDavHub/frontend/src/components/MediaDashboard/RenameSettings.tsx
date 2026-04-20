@@ -102,24 +102,31 @@ export default function RenameSettings() {
 
   return (
     <Stack spacing={1.5} sx={{ mb: 2 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
         <Box>
-          <Typography variant="h6" fontWeight={600}>Rename Structure</Typography>
+          <Typography variant="h6" sx={{
+            fontWeight: 600
+          }}>Rename Structure</Typography>
         </Box>
         <Button variant="contained" size="small" disabled={configLoading || configSaving || Object.keys(pendingChanges).length === 0} onClick={saveConfigChanges}>
           {configSaving ? 'Saving...' : `Save ${Object.keys(pendingChanges).length > 0 ? `(${Object.keys(pendingChanges).length})` : ''}`}
         </Button>
       </Stack>
-
       {configError && <Alert severity="error" sx={{ borderRadius: 2 }} onClose={() => setConfigError('')}>{configError}</Alert>}
       {configSuccess && <Alert severity="success" sx={{ borderRadius: 2 }} onClose={() => setConfigSuccess('')}>{configSuccess}</Alert>}
-
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
         <CardContent sx={{ p: 2 }}>
           {configLoading ? (
             <Box sx={{ py: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <CircularProgress size={18} />
-              <Typography variant="body2" color="text.secondary">Loading rename settings...</Typography>
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Loading rename settings...</Typography>
             </Box>
           ) : (
             <Stack spacing={1.5}>
@@ -134,7 +141,12 @@ export default function RenameSettings() {
                 const colonItem = getConfigItem('COLON_REPLACEMENT');
                 return (
                   <Stack spacing={1}>
-                    <Typography variant="subtitle2" fontWeight={600} color="text.primary">Illegal Characters & Colon Management</Typography>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color: "text.primary"
+                      }}>Illegal Characters & Colon Management</Typography>
                     {replaceItem && <FormField label="Replace Illegal Characters" value={getFieldValue(replaceItem.key)} onChange={(value) => handleConfigFieldChange(replaceItem.key, value)} type={getFieldType(replaceItem)} required={replaceItem.required} description={replaceItem.description} options={getFieldOptions(replaceItem)} beta={replaceItem.beta} disabled={replaceItem.disabled} locked={replaceItem.locked} />}
                     {colonItem && <FormField label="Colon Management" value={getFieldValue(colonItem.key)} onChange={(value) => handleConfigFieldChange(colonItem.key, value)} type={getFieldType(colonItem)} required={colonItem.required} description={colonItem.description} options={getFieldOptions(colonItem)} beta={colonItem.beta} disabled={colonItem.disabled} locked={colonItem.locked} />}
                   </Stack>
@@ -149,12 +161,19 @@ export default function RenameSettings() {
 
                 return (
                   <Stack spacing={1}>
-                    <Typography variant="subtitle2" fontWeight={600} color="text.primary">Rename Tags & MediaInfo</Typography>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color: "text.primary"
+                      }}>Rename Tags & MediaInfo</Typography>
                     {renameTags && <FormField label="Rename Tags" value={getFieldValue(renameTags.key)} onChange={(value) => handleConfigFieldChange(renameTags.key, value)} type={getFieldType(renameTags)} required={renameTags.required} description={renameTags.description} options={getFieldOptions(renameTags)} beta={renameTags.beta} disabled={renameTags.disabled} locked={renameTags.locked} />}
                     {parserToggle && <FormField label="MediaInfo Parser" value={getFieldValue(parserToggle.key)} onChange={(value) => handleConfigFieldChange(parserToggle.key, value)} type={getFieldType(parserToggle)} required={parserToggle.required} description={parserToggle.description} options={getFieldOptions(parserToggle)} beta={parserToggle.beta} disabled={parserToggle.disabled} locked={parserToggle.locked} />}
                     {isParserEnabled && mediaInfoItems.length > 0 && (
                       <Stack spacing={0.5}>
-                        <Typography variant="caption" color="text.secondary">MediaInfo naming formats</Typography>
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>MediaInfo naming formats</Typography>
                         {mediaInfoItems.map((item) => (
                           <FormField key={item.key} label={item.key.replace('MEDIAINFO_', '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())} value={getFieldValue(item.key)} onChange={(value) => handleConfigFieldChange(item.key, value)} type={getFieldType(item)} required={item.required} description={item.description} options={getFieldOptions(item)} beta={item.beta} disabled={item.disabled} locked={item.locked} />
                         ))}

@@ -70,8 +70,17 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
       <CardContent sx={{ p: 0, flex: '1 1 auto', overflowY: 'auto' }}>
         {/* Title Row (sticky) */}
         <Box sx={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'background.paper', px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0 }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {title} {year && <Typography component="span" variant="body2" color="text.secondary">({year})</Typography>}
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1
+            }}>
+            {title} {year && <Typography component="span" variant="body2" sx={{
+            color: "text.secondary"
+          }}>({year})</Typography>}
           </Typography>
           <IconButton size="small" onClick={onClose}>✕</IconButton>
         </Box>
@@ -81,14 +90,24 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
           <Avatar src={posterUrl} variant="rounded" sx={{ width: 96, height: 144 }}>
             {isTv ? <TvIcon /> : <MovieIcon />}
           </Avatar>
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              lineHeight: 1.5
+            }}>
             {overview || ''}
           </Typography>
         </Box>
 
         {/* Form grid - arranged similar to *arr layout */}
         <Box sx={{ px: 2.5, pb: 2, display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: 1.5, columnGap: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Root Folder</Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center'
+            }}>Root Folder</Typography>
           <FormControl size="small" fullWidth>
             <InputLabel>Root Folder</InputLabel>
             <Select
@@ -144,14 +163,25 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
             </Select>
           </FormControl>
           <Box />
-          <Typography variant="caption" color="text.secondary" sx={{ gridColumn: '1 / span 2', mt: -0.5 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              gridColumn: '1 / span 2',
+              mt: -0.5
+            }}>
             {!config.rootFolder 
               ? 'Select a root folder to continue.'
               : `'${title}' subfolder will be created automatically at ${config.rootFolder}/${title}`
             }
           </Typography>
 
-          {isTv && <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Monitor</Typography>}
+          {isTv && <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center'
+            }}>Monitor</Typography>}
           {isTv && (
             <FormControl size="small" fullWidth>
               <InputLabel>Monitor</InputLabel>
@@ -167,7 +197,12 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
             </FormControl>
           )}
 
-          <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Quality Profile</Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center'
+            }}>Quality Profile</Typography>
           <FormControl size="small" fullWidth>
             <InputLabel>Quality Profile</InputLabel>
             <Select value={selectedQualityValue} label="Quality Profile" onChange={(e) => onChange({ qualityProfile: String(e.target.value) })}>
@@ -180,7 +215,12 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
             </Select>
           </FormControl>
 
-          {isTv && <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Series Type</Typography>}
+          {isTv && <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center'
+            }}>Series Type</Typography>}
           {isTv && (
             <FormControl size="small" fullWidth>
               <InputLabel>Series Type</InputLabel>
@@ -193,19 +233,29 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
           )}
           {isTv && <Box />}
           {isTv && (
-            <Typography variant="caption" color="text.secondary" sx={{ gridColumn: '1 / span 2', mt: -0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                gridColumn: '1 / span 2',
+                mt: -0.5
+              }}>
               Series type is used for renaming, parsing and searching
             </Typography>
           )}
 
-          {isTv && <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Season Folder</Typography>}
+          {isTv && <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center'
+            }}>Season Folder</Typography>}
           {isTv && (
             <FormControlLabel control={<Switch checked={!!config.seasonFolder} onChange={(e) => onChange({ seasonFolder: e.target.checked })} />} label="" />
           )}
         </Box>
 
       </CardContent>
-
       {/* Footer actions (fixed/sticky) */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider', position: 'sticky', bottom: 0, backgroundColor: 'background.paper' }}>
           {isTv && (
@@ -223,7 +273,6 @@ export default function MediaConfigCard({ mediaType, title, year, posterUrl, ove
             {submitting ? 'Adding...' : `Add ${title}`}
           </Button>
       </Box>
-
       {/* Folder Selector */}
       <FolderSelector
         open={folderSelectorOpen}

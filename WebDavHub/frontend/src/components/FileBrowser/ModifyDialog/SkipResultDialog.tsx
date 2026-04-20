@@ -103,24 +103,26 @@ const SkipResultDialog: React.FC<SkipResultDialogProps> = ({
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 3,
-          backgroundColor: theme.palette.background.paper,
-          background: theme.palette.mode === 'dark'
-            ? `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(255, 152, 0, 0.08) 100%)`
-            : `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(255, 152, 0, 0.04) 100%)`,
-          border: `2px solid ${isComplete ? theme.palette.success.main + '60' : theme.palette.warning.main + '60'}`,
-          boxShadow: theme.palette.mode === 'dark'
-            ? '0 8px 32px rgba(0, 0, 0, 0.6)'
-            : '0 8px 32px rgba(0, 0, 0, 0.15)',
-          minHeight: '400px',
-        }
-      }}
-      BackdropProps={{
-        sx: {
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(4px)',
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 3,
+            backgroundColor: theme.palette.background.paper,
+            background: theme.palette.mode === 'dark'
+              ? `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(255, 152, 0, 0.08) 100%)`
+              : `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(255, 152, 0, 0.04) 100%)`,
+            border: `2px solid ${isComplete ? theme.palette.success.main + '60' : theme.palette.warning.main + '60'}`,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 8px 32px rgba(0, 0, 0, 0.6)'
+              : '0 8px 32px rgba(0, 0, 0, 0.15)',
+            minHeight: '400px',
+          }
+        },
+        backdrop: {
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+          }
         }
       }}
     >
@@ -155,13 +157,14 @@ const SkipResultDialog: React.FC<SkipResultDialogProps> = ({
               }} 
             />
           </Fade>
-          <Typography variant="h6" fontWeight={700} color={isComplete ? theme.palette.success.main : theme.palette.warning.main}>
+          <Typography variant="h6" color={isComplete ? theme.palette.success.main : theme.palette.warning.main} sx={{
+            fontWeight: 700
+          }}>
             {isComplete ? 'Skip Processing Complete' : 'Processing Skip Request'}
           </Typography>
         </Box>
 
       </DialogTitle>
-
       <DialogContent
         sx={{
           pt: 3,
@@ -171,7 +174,9 @@ const SkipResultDialog: React.FC<SkipResultDialogProps> = ({
         }}
       >
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography variant="subtitle1" gutterBottom sx={{
+            fontWeight: 600
+          }}>
             File being skipped:
           </Typography>
           <Typography 
@@ -253,12 +258,13 @@ const SkipResultDialog: React.FC<SkipResultDialogProps> = ({
                       transition: 'color 0.3s ease-in-out'
                     }}
                   />
-                  <Typography 
-                    variant="body2" 
-                    fontWeight={isActive ? 600 : 400}
+                  <Typography
+                    variant="body2"
                     color={isCompleted ? theme.palette.success.main : theme.palette.text.primary}
-                    sx={{ transition: 'all 0.3s ease-in-out' }}
-                  >
+                    sx={{
+                      fontWeight: isActive ? 600 : 400,
+                      transition: 'all 0.3s ease-in-out'
+                    }}>
                     {step.text}
                   </Typography>
                   {isActive && !isComplete && (
@@ -294,7 +300,9 @@ const SkipResultDialog: React.FC<SkipResultDialogProps> = ({
               border: `1px solid ${theme.palette.success.main}40`,
               textAlign: 'center'
             }}>
-              <Typography variant="body2" color={theme.palette.success.main} fontWeight={600}>
+              <Typography variant="body2" color={theme.palette.success.main} sx={{
+                fontWeight: 600
+              }}>
                 ✅ File has been successfully skipped
               </Typography>
               <Typography variant="caption" color={theme.palette.text.secondary} sx={{ mt: 0.5, display: 'block' }}>

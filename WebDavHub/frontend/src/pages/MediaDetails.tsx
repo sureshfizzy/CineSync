@@ -335,7 +335,6 @@ export default function MediaDetails() {
         tmdbId={tmdbId ? Number(tmdbId) : data?.id}
         year={parseInt((data?.release_date || data?.first_air_date || '').slice(0, 4)) || undefined}
       />
-
       {/* Main content area: animate only this */}
       <Box sx={{
         position: 'relative',
@@ -381,7 +380,12 @@ export default function MediaDetails() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1, duration: 0.3 }}
                 >
-                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      textAlign: 'center'
+                    }}>
                     Updating to "{pendingFolderName}"...
                   </Typography>
                 </motion.div>

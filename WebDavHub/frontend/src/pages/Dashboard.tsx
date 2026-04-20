@@ -44,7 +44,13 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "60vh"
+        }}>
         <CircularProgress />
       </Box>
     );
@@ -64,7 +70,11 @@ export default function Dashboard() {
           }}>
           <Card>
             <CardContent>
-              <Box display="flex" alignItems="center">
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center"
+                }}>
                 <StorageIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
                 <Box>
                   <Typography color="textSecondary" gutterBottom>
@@ -86,7 +96,11 @@ export default function Dashboard() {
           }}>
           <Card>
             <CardContent>
-              <Box display="flex" alignItems="center">
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center"
+                }}>
                 <FolderIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
                 <Box>
                   <Typography color="textSecondary" gutterBottom>
@@ -108,7 +122,11 @@ export default function Dashboard() {
           }}>
           <Card>
             <CardContent>
-              <Box display="flex" alignItems="center">
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center"
+                }}>
                 <UploadIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
                 <Box>
                   <Typography color="textSecondary" gutterBottom>

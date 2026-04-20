@@ -26,7 +26,7 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
       onClose={onClose}
       maxWidth="lg"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 3,
           backgroundColor: theme.palette.background.paper,
@@ -38,7 +38,7 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
             ? '0 8px 32px rgba(0, 0, 0, 0.6)'
             : '0 8px 32px rgba(0, 0, 0, 0.15)',
         }
-      }}
+      } }}
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -55,7 +55,13 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
         </Box>
       </DialogTitle>
       <DialogContent>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
+        <Typography
+          variant="body1"
+          sx={{
+            color: "text.secondary",
+            mb: 3,
+            textAlign: 'center'
+          }}>
           Choose the episode for your content
         </Typography>
 
@@ -130,15 +136,14 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({ open, o
                   {episode.overview && (
                     <Typography
                       variant="body2"
-                      color="text.secondary"
                       sx={{
+                        color: "text.secondary",
                         display: '-webkit-box',
                         WebkitLineClamp: 3,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        lineHeight: 1.4,
-                      }}
-                    >
+                        lineHeight: 1.4
+                      }}>
                       {episode.overview}
                     </Typography>
                   )}

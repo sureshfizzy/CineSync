@@ -248,7 +248,13 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "200px"
+        }}>
         <CircularProgress />
       </Box>
     );
@@ -256,7 +262,13 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
   const header = (
       <Box sx={{ mb: { xs: 2, md: 3 } }}>
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{
+            alignItems: "center",
+            mb: 2
+          }}>
           <Box
             sx={{
               width: { xs: 40, md: 48 },
@@ -272,10 +284,20 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
             <CloudDownload sx={{ fontSize: { xs: 24, md: 28 } }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="600" sx={{ color: 'text.primary' }}>
+            <Typography
+              variant={isMobile ? 'h5' : 'h4'}
+              sx={{
+                fontWeight: "600",
+                color: 'text.primary'
+              }}>
               Real-Debrid
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                display: { xs: 'none', sm: 'block' }
+              }}>
               Configure Real-Debrid API access for media management
             </Typography>
           </Box>
@@ -296,7 +318,9 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
             }}
           >
             <CardContent sx={{ py: { xs: 1.5, md: 2 }, '&:last-child': { pb: { xs: 1.5, md: 2 } } }}>
-              <Stack direction="row" alignItems="flex-start" spacing={2}>
+              <Stack direction="row" spacing={2} sx={{
+                alignItems: "flex-start"
+              }}>
               {isApiConnected ? (
                   <CheckCircle sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 ) : (
@@ -305,13 +329,20 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
                   variant={isMobile ? 'subtitle1' : 'h6'}
-                  fontWeight="600"
-                  sx={{ color: isApiConnected ? 'success.main' : isMainEnabled ? 'warning.main' : 'text.secondary' }}
-                >
+                  sx={{
+                    fontWeight: "600",
+                    color: isApiConnected ? 'success.main' : isMainEnabled ? 'warning.main' : 'text.secondary'
+                  }}>
                   {isApiConnected ? 'Connected' : isMainEnabled ? 'Not configured yet' : 'Disabled'}
                   </Typography>
                 {status.apiStatus && isApiConnected && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mt: 0.5,
+                        wordBreak: 'break-word'
+                      }}>
                     {status.apiStatus.username} ({status.apiStatus.type})
                     </Typography>
                   )}
@@ -343,10 +374,17 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
         {!isApiConnected ? (
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="700" sx={{ mb: 1 }}>
+              <Typography
+                variant={isMobile ? 'subtitle1' : 'h6'}
+                sx={{
+                  fontWeight: "700",
+                  mb: 1
+                }}>
                 Account not connected
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Enter a valid API key and enable Real-Debrid to see account details here.
               </Typography>
             </CardContent>
@@ -354,36 +392,80 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
         ) : status?.apiStatus ? (
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: { xs: 1.5, md: 2 }
+                }}>
                 <Speed sx={{ color: 'success.main', fontSize: { xs: 20, md: 24 } }} />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                  fontWeight: "600"
+                }}>
                   Account
                 </Typography>
               </Stack>
               <Stack spacing={1.5}>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Username
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.username || 'N/A'}</Typography>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>{status.apiStatus.username || 'N/A'}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Type
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.type || 'N/A'}</Typography>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>{status.apiStatus.type || 'N/A'}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Points
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.points?.toLocaleString() || 'N/A'}</Typography>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>{status.apiStatus.points?.toLocaleString() || 'N/A'}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Expires
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>{status.apiStatus.expiration || 'N/A'}</Typography>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>{status.apiStatus.expiration || 'N/A'}</Typography>
                 </Box>
               </Stack>
             </CardContent>
@@ -394,52 +476,102 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
         {status?.httpDavStatus ? (
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: { xs: 1.5, md: 2 }
+                }}>
                 <CloudDownload
                   sx={{
                     color: status.httpDavStatus.connected ? 'success.main' : 'error.main',
                     fontSize: { xs: 20, md: 24 },
                   }}
                 />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                  fontWeight: "600"
+                }}>
                   HTTP DAV
                 </Typography>
               </Stack>
               <Stack spacing={1.5}>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Status
                   </Typography>
                   <Typography
                     variant="body2"
-                    fontSize={{ xs: '0.875rem', md: '0.875rem' }}
                     color={status.httpDavStatus.connected ? 'success.main' : 'error.main'}
+                    sx={{
+                      fontSize: { xs: '0.875rem', md: '0.875rem' }
+                    }}
                   >
                     {status.httpDavStatus.connected ? 'Connected' : 'Disconnected'}
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Credentials
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>
                     {status.httpDavStatus.userIdSet && status.httpDavStatus.passwordSet ? 'Configured' : 'Not Configured'}
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Base URL
                   </Typography>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} sx={{ wordBreak: 'break-all' }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: { xs: '0.875rem', md: '0.875rem' },
+                      wordBreak: 'break-all'
+                    }}>
                     https://dav.real-debrid.com/
                   </Typography>
                 </Box>
                 {status.httpDavStatus.connectionError && (
                   <Box>
-                    <Typography variant="caption" fontWeight="600" color="error.main" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: "600",
+                        color: "error.main",
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5
+                      }}>
                       Error
                     </Typography>
-                    <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }} color="error.main">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: { xs: '0.875rem', md: '0.875rem' },
+                        color: "error.main"
+                      }}>
                       {status.httpDavStatus.connectionError}
                     </Typography>
                   </Box>
@@ -455,9 +587,17 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
   const mainConfig = (
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 2, md: 3 } }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: { xs: 2, md: 3 }
+                }}>
                 <Settings sx={{ color: 'primary.main', fontSize: { xs: 20, md: 24 } }} />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                  fontWeight: "600"
+                }}>
                   Configuration
                 </Typography>
               </Stack>
@@ -474,10 +614,17 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                   }
                   label={
                     <Box>
-                      <Typography variant="body1" fontWeight="500">
+                      <Typography variant="body1" sx={{
+                        fontWeight: "500"
+                      }}>
                         Enable Real-Debrid
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                          fontSize: { xs: '0.8rem', md: '0.875rem' }
+                        }}>
                         Enable API access to your Real-Debrid account
                       </Typography>
                     </Box>
@@ -496,7 +643,12 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
                 {/* API Key */}
                 <Box>
-                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: "600",
+                      mb: 1
+                    }}>
                     API Key
                   </Typography>
                   <TextField
@@ -506,7 +658,7 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                     value={config.apiKey}
                     onChange={(e) => handleConfigChange('apiKey', e.target.value)}
                     placeholder="Enter your Real-Debrid API key"
-                    InputProps={{
+                    slotProps={{ input: {
                       endAdornment: (
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title={showApiKey ? 'Hide' : 'Show'}>
@@ -530,7 +682,7 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                           </Tooltip>
                         </Stack>
                       ),
-                    }}
+                    } }}
                     helperText="Get your API key from Real-Debrid settings"
                   />
                 </Box>
@@ -539,20 +691,40 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
                 {/* Additional Tokens Section */}
                 <Box>
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{
+                      alignItems: "center",
+                      mb: 1
+                    }}>
                     <SwapHoriz sx={{ color: 'primary.main' }} />
-                    <Typography variant="subtitle2" fontWeight="600">
+                    <Typography variant="subtitle2" sx={{
+                      fontWeight: "600"
+                    }}>
                       Additional API Tokens (Bandwidth Rotation)
                     </Typography>
                   </Stack>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      mb: 2,
+                      fontSize: { xs: '0.8rem', md: '0.875rem' }
+                    }}>
                     Add extra Real-Debrid API tokens to automatically rotate when daily bandwidth limit is reached
                   </Typography>
 
                   {/* Token Status Display */}
                   {tokenStatuses && tokenStatuses.length > 0 && (
                     <Box sx={{ mb: 2, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 1 }}>
-                      <Typography variant="caption" fontWeight="600" sx={{ mb: 1, display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          mb: 1,
+                          display: 'block'
+                        }}>
                         Current Token Status
                       </Typography>
                       <List dense sx={{ py: 0 }}>
@@ -560,8 +732,12 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                           <ListItem key={index} sx={{ px: 0 }}>
                             <ListItemText
                               primary={
-                                <Stack direction="row" alignItems="center" spacing={1}>
-                                  <Typography variant="body2" fontWeight="500">
+                                <Stack direction="row" spacing={1} sx={{
+                                  alignItems: "center"
+                                }}>
+                                  <Typography variant="body2" sx={{
+                                    fontWeight: "500"
+                                  }}>
                                     {tokenStatus.label}
                                   </Typography>
                                   {tokenStatus.current && (
@@ -575,7 +751,9 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                                 </Stack>
                               }
                               secondary={
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography variant="caption" sx={{
+                                  color: "text.secondary"
+                                }}>
                                   {tokenStatus.masked}
                                 </Typography>
                               }
@@ -583,7 +761,13 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                           </ListItem>
                         ))}
                       </List>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          display: 'block',
+                          mt: 1
+                        }}>
                         Tokens reset daily at 12AM CET
                       </Typography>
                     </Box>
@@ -592,7 +776,13 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                   {/* Additional Tokens List */}
                   {config.additionalApiKeys && config.additionalApiKeys.length > 0 && (
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" fontWeight="600" sx={{ mb: 1, display: 'block' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          mb: 1,
+                          display: 'block'
+                        }}>
                         Additional Tokens
                       </Typography>
                       <List dense sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
@@ -600,7 +790,9 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                           <ListItem key={index}>
                             <ListItemText
                               primary={
-                                <Typography variant="body2" fontFamily="monospace">
+                                <Typography variant="body2" sx={{
+                                  fontFamily: "monospace"
+                                }}>
                                   {showAdditionalTokens[index] ? token : token.slice(0, 8) + '...' + token.slice(-8)}
                                 </Typography>
                               }
@@ -664,10 +856,21 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
                 {/* HTTP DAV Settings */}
                 <Box>
-                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: "600",
+                      mb: 2
+                    }}>
                     HTTP DAV Virtual Mount
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      mb: 2,
+                      fontSize: { xs: '0.8rem', md: '0.875rem' }
+                    }}>
                     Configure Real-Debrid HTTP DAV access for virtual filesystem
                   </Typography>
                   
@@ -684,10 +887,14 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                     }
                     label={
                       <Box>
-                        <Typography variant="body2" fontWeight="500">
+                        <Typography variant="body2" sx={{
+                          fontWeight: "500"
+                        }}>
                           Enable HTTP DAV Virtual Mount
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>
                           Browser-based virtual filesystem using HTTP DAV protocol
                         </Typography>
                       </Box>
@@ -721,7 +928,7 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                           password: e.target.value
                         })}
                         placeholder="Enter your HTTP DAV Password"
-                        InputProps={{
+                        slotProps={{ input: {
                           endAdornment: (
                             <Stack direction="row" spacing={0.5}>
                               <Tooltip title={showHttpDavPassword ? 'Hide' : 'Show'}>
@@ -745,7 +952,7 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                               </Tooltip>
                             </Stack>
                           ),
-                        }}
+                        } }}
                       />
                     </Stack>
                   )}
@@ -755,10 +962,21 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
 
                 {/* Repair Settings */}
                 <Box>
-                  <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: "600",
+                      mb: 2
+                    }}>
                     Repair Settings
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      mb: 2,
+                      fontSize: { xs: '0.8rem', md: '0.875rem' }
+                    }}>
                     Control automatic repair behavior for broken torrents
                   </Typography>
                   
@@ -776,10 +994,14 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                       }
                       label={
                         <Box>
-                          <Typography variant="body2" fontWeight="500">
+                          <Typography variant="body2" sx={{
+                            fontWeight: "500"
+                          }}>
                             Enable Repair
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{
+                            color: "text.secondary"
+                          }}>
                             Master switch to enable or disable all repair functionality
                           </Typography>
                         </Box>
@@ -800,10 +1022,14 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                       }
                       label={
                         <Box>
-                          <Typography variant="body2" fontWeight="500">
+                          <Typography variant="body2" sx={{
+                            fontWeight: "500"
+                          }}>
                             Auto Fix
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{
+                            color: "text.secondary"
+                          }}>
                             Automatically fixes broken files when detected (event-driven)
                           </Typography>
                         </Box>
@@ -874,21 +1100,20 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
     <Box sx={{ pb: { xs: 2, md: 4 } }}>
       {header}
       {body}
-
       {/* Test Connection Dialog */}
       <Dialog
         open={testDialog}
         onClose={() => setTestDialog(false)}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             borderRadius: 2,
             boxShadow: theme.palette.mode === 'dark'
               ? '0 12px 40px rgba(0,0,0,0.6)'
               : '0 12px 40px rgba(0,0,0,0.12)'
           }
-        }}
+        } }}
       >
         <DialogTitle>Connection Test Results</DialogTitle>
         <DialogContent>
@@ -917,25 +1142,45 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                   </Typography>
                   <Stack spacing={1}>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Username
                       </Typography>
                       <Typography variant="body2">{testResult.userInfo.username}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Email
                       </Typography>
                       <Typography variant="body2">{testResult.userInfo.email}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Account Type
                       </Typography>
                       <Typography variant="body2">{testResult.userInfo.type}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Points
                       </Typography>
                       <Typography variant="body2">{testResult.userInfo.points}</Typography>
@@ -951,19 +1196,34 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
                   </Typography>
                   <Stack spacing={1}>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Base URL
                       </Typography>
                       <Typography variant="body2">https://dav.real-debrid.com/</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Files Found
                       </Typography>
                       <Typography variant="body2">{testResult.fileCount || 0}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="body2" fontWeight="500" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: "500",
+                          color: "text.secondary"
+                        }}>
                         Directory Accessible
                       </Typography>
                       <Typography variant="body2">{testResult.directoryInfo.accessible ? 'Yes' : 'No'}</Typography>
@@ -978,7 +1238,6 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
           <Button onClick={() => setTestDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}

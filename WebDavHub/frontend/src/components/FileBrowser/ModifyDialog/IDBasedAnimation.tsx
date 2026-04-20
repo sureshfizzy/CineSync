@@ -117,10 +117,17 @@ const IDBasedAnimation: React.FC<IDBasedAnimationProps> = ({ selectedIds, isActi
   if (!isActive) {
     return (
       <AnimationContainer>
-        <Typography variant="h6" color="text.secondary">
+        <Typography variant="h6" sx={{
+          color: "text.secondary"
+        }}>
           🆔 ID-Based Processing Ready
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mt: 1
+          }}>
           Enter IDs in the form above to begin processing
         </Typography>
       </AnimationContainer>
@@ -134,7 +141,6 @@ const IDBasedAnimation: React.FC<IDBasedAnimationProps> = ({ selectedIds, isActi
       <ProcessingText variant="h6">
         Processing with ID-based metadata
       </ProcessingText>
-
       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
         {activeIds.map(([key, value], index) => (
           <IDChip
@@ -146,17 +152,23 @@ const IDBasedAnimation: React.FC<IDBasedAnimationProps> = ({ selectedIds, isActi
           />
         ))}
       </Box>
-
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           Processing
         </Typography>
         <FloatingDot />
         <FloatingDot />
         <FloatingDot />
       </Box>
-
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          mt: 2,
+          textAlign: 'center'
+        }}>
         No poster search needed - using direct ID lookup
       </Typography>
     </AnimationContainer>

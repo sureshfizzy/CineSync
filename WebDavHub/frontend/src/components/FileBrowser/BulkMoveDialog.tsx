@@ -95,7 +95,9 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
           <MoveIcon color="primary" />
           <Box>
             <Typography variant="h6">Move Selected Items</Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Moving {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''}
               {filesCount > 0 && (
                 <Chip label={`${filesCount} file${filesCount !== 1 ? 's' : ''}`} size="small" color="primary" sx={{ ml: 1 }} />
@@ -110,10 +112,14 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 2
+            }}>
             Select destination base folder:
           </Typography>
         </Box>
@@ -129,7 +135,9 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
               gap: 2
             }}>
               <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Loading available folders...
               </Typography>
             </Box>
@@ -137,7 +145,9 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
             <List sx={{ py: 0 }}>
               {availableFolders.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     No destination folders found
                   </Typography>
                 </Box>
@@ -163,7 +173,9 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
                               {folder.displayName}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: "text.secondary"
+                            }}>
                               {folder.path} • {folder.fileCount} files
                             </Typography>
                           </Box>
@@ -178,7 +190,6 @@ const BulkMoveDialog: React.FC<BulkMoveDialogProps> = ({
           )}
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Button onClick={onClose} disabled={loading}>
           Cancel

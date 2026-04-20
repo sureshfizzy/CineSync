@@ -262,15 +262,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     };
   };
 
-  const applyMountModeChange = (value: RcloneMountMode) => {
-    setConfig(prev => getConfigForMountMode(prev, value));
-
-    if (value !== 'internal') {
-      setIsPolling(false);
-      setStatus(null);
-    }
-  };
-
   const handleMountModeChange = (value: RcloneMountMode) => {
     if (value === mountMode) {
       return;
@@ -451,7 +442,13 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "200px"
+        }}>
         <CircularProgress />
       </Box>
     );
@@ -459,7 +456,13 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
   const header = (
       <Box sx={{ mb: { xs: 1.5, md: 3 } }}>
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{
+            alignItems: "center",
+            mb: 2
+          }}>
           <Box
             sx={{
               width: { xs: 40, md: 48 },
@@ -475,10 +478,20 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
             <Storage sx={{ fontSize: { xs: 24, md: 28 } }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="600" sx={{ color: 'text.primary' }}>
+            <Typography
+              variant={isMobile ? 'h5' : 'h4'}
+              sx={{
+                fontWeight: "600",
+                color: 'text.primary'
+              }}>
               Rclone Mount
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                display: { xs: 'none', sm: 'block' }
+              }}>
               Mount Real-Debrid as a local filesystem using rclone
             </Typography>
           </Box>
@@ -495,7 +508,9 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
             }}
           >
             <CardContent sx={{ py: { xs: 1, md: 2 }, '&:last-child': { pb: { xs: 1, md: 2 } } }}>
-              <Stack direction="row" alignItems="flex-start" spacing={2}>
+              <Stack direction="row" spacing={2} sx={{
+                alignItems: "flex-start"
+              }}>
                 {status.waiting || (isPolling && !status?.mounted) ? (
                   <CircularProgress size={24} sx={{ mt: 0.5 }} />
                 ) : status.mounted ? (
@@ -504,26 +519,51 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                   <Error sx={{ color: 'error.main', fontSize: { xs: 20, md: 24 }, mt: 0.5 }} />
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600" sx={{ color: status.waiting || (isPolling && !status?.mounted) ? 'warning.main' : status.mounted ? 'success.main' : 'error.main' }}>
+                  <Typography
+                    variant={isMobile ? 'subtitle1' : 'h6'}
+                    sx={{
+                      fontWeight: "600",
+                      color: status.waiting || (isPolling && !status?.mounted) ? 'warning.main' : status.mounted ? 'success.main' : 'error.main'
+                    }}>
                     {status.waiting ? 'Waiting for Torrents' : isPolling && !status?.mounted ? 'Mounting...' : status.mounted ? 'Mounted' : 'Not Mounted'}
                   </Typography>
                   {(status.waitingReason || (isPolling && !status?.mounted)) && (
-                    <Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "warning.main",
+                        mt: 0.5
+                      }}>
                       {status.waitingReason || 'Mounting in progress...'}
                     </Typography>
                   )}
                   {status.mountPath && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mt: 0.5
+                      }}>
                       Mount Path: {status.mountPath}
                     </Typography>
                   )}
                   {status.processId && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mt: 0.5
+                      }}>
                       Process ID: {status.processId}
                     </Typography>
                   )}
                   {status.error && (
-                    <Typography variant="body2" color="error.main" sx={{ mt: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "error.main",
+                        mt: 0.5
+                      }}>
                       Error: {status.error}
                     </Typography>
                   )}
@@ -542,23 +582,37 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
         {navigator.platform.toLowerCase().includes('win') && (
           <Card>
             <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: { xs: 1.5, md: 2 }
+                }}>
                 <Science sx={{ color: 'info.main', fontSize: { xs: 20, md: 24 } }} />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">Windows Requirements</Typography>
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                  fontWeight: "600"
+                }}>Windows Requirements</Typography>
               </Stack>
               <Stack spacing={1.5}>
                 <Box>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>
                     <strong>WinFsp Required:</strong> Install WinFsp from <a href="https://github.com/winfsp/winfsp/releases" target="_blank" rel="noopener noreferrer">GitHub</a> to enable FUSE filesystem support.
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>
                     <strong>Mount Paths:</strong> Use drive letters (Z:\) or full paths (C:\mounts\realdebrid). Avoid using existing directories.
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" fontSize={{ xs: '0.875rem', md: '0.875rem' }}>
+                  <Typography variant="body2" sx={{
+                    fontSize: { xs: '0.875rem', md: '0.875rem' }
+                  }}>
                     <strong>Administrator:</strong> Running as administrator may be required for some mount operations.
                   </Typography>
                 </Box>
@@ -585,9 +639,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
       <Box sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden', gridArea: 'main' }}>
           <Card sx={{ width: '100%', maxWidth: '100%' }}>
             <CardContent sx={{ p: { xs: 1.5, md: 3 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 3 } }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: { xs: 1.5, md: 3 }
+                }}>
                 <Settings sx={{ color: 'primary.main', fontSize: { xs: 20, md: 24 } }} />
-                <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                  fontWeight: "600"
+                }}>
                   Configuration
                 </Typography>
               </Stack>
@@ -608,10 +670,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         control={<Radio color="primary" />}
                         label={
                           <Box>
-                            <Typography variant="body1" fontWeight="500">
+                            <Typography variant="body1" sx={{
+                              fontWeight: "500"
+                            }}>
                               Disabled
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: { xs: '0.8rem', md: '0.875rem' }
+                              }}>
                               Direct streaming only. CineSync will not use or manage an rclone mount.
                             </Typography>
                           </Box>
@@ -622,10 +691,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         control={<Radio color="primary" />}
                         label={
                           <Box>
-                            <Typography variant="body1" fontWeight="500">
+                            <Typography variant="body1" sx={{
+                              fontWeight: "500"
+                            }}>
                               External Mount
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: { xs: '0.8rem', md: '0.875rem' }
+                              }}>
                               Use an existing rclone mount path that you manage outside CineSync.
                             </Typography>
                           </Box>
@@ -636,10 +712,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         control={<Radio color="primary" />}
                         label={
                           <Box>
-                            <Typography variant="body1" fontWeight="500">
+                            <Typography variant="body1" sx={{
+                              fontWeight: "500"
+                            }}>
                               Internal Rclone Mount
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: { xs: '0.8rem', md: '0.875rem' }
+                              }}>
                               CineSync starts and manages the rclone mount for you.
                             </Typography>
                           </Box>
@@ -654,7 +737,9 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                       sx={{ mt: 1.5, py: 0.5 }}
                       icon={<Storage fontSize="small" />}
                     >
-                      <Typography variant="body2" fontWeight="500">
+                      <Typography variant="body2" sx={{
+                        fontWeight: "500"
+                      }}>
                         Active Mode: CineSync manages the rclone mount lifecycle.
                       </Typography>
                     </Alert>
@@ -667,7 +752,12 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                     {/* Mount Path */}
                     <Box>
-                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{
+                          fontWeight: "600",
+                          mb: 1
+                        }}>
                         {mountMode === 'external' ? 'Local Mount Path' : 'Mount Path'}
                       </Typography>
                       <TextField
@@ -690,7 +780,12 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                     {mountMode === 'external' && (
                       <Box>
-                        <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{
+                            fontWeight: "600",
+                            mb: 1
+                          }}>
                           External RC Connection
                         </Typography>
                         <Stack spacing={1.5}>
@@ -759,10 +854,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                       }
                       label={
                         <Box>
-                          <Typography variant="body1" fontWeight="500">
+                          <Typography variant="body1" sx={{
+                            fontWeight: "500"
+                          }}>
                             Auto-mount on application start
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                              fontSize: { xs: '0.8rem', md: '0.875rem' }
+                            }}>
                             Automatically mount rclone at startup when enabled and configured
                           </Typography>
                         </Box>
@@ -773,13 +875,25 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                     {/* Advanced Settings */}
                     <Box>
-                      <Typography variant="subtitle2" fontWeight="600" sx={{ mb: { xs: 1.5, md: 2 } }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{
+                          fontWeight: "600",
+                          mb: { xs: 1.5, md: 2 }
+                        }}>
                         Advanced Settings
                       </Typography>
                       <Stack spacing={{ xs: 1.5, md: 2 }}>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               VFS Cache Mode
                             </Typography>
                             <TextField
@@ -791,7 +905,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                             />
                           </Box>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               Cache Max Size
                             </Typography>
                             <TextField
@@ -805,7 +926,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         </Box>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               Cache Max Age
                             </Typography>
                             <TextField
@@ -817,7 +945,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                             />
                           </Box>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               Buffer Size
                             </Typography>
                             <TextField
@@ -831,7 +966,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         </Box>
                         {/*Cache Path */}
                         <Box>
-                          <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontWeight: "600",
+                              color: "text.secondary",
+                              mb: 0.5,
+                              display: 'block'
+                            }}>
                             Cache Directory (Optional)
                           </Typography>
                           <TextField
@@ -845,7 +987,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         </Box>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               Directory Cache Time
                             </Typography>
                             <TextField
@@ -857,7 +1006,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                             />
                           </Box>
                           <Box>
-                            <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "600",
+                                color: "text.secondary",
+                                mb: 0.5,
+                                display: 'block'
+                              }}>
                               Poll Interval
                             </Typography>
                             <TextField
@@ -872,7 +1028,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
                           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Attribute Timeout
                               </Typography>
                               <TextField
@@ -885,7 +1048,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Read Ahead
                               </Typography>
                               <TextField
@@ -898,7 +1068,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Cache Poll Interval
                               </Typography>
                               <TextField
@@ -911,7 +1088,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Transfers
                               </Typography>
                               <TextField
@@ -930,7 +1114,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
                           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Read Wait
                               </Typography>
                               <TextField
@@ -943,7 +1134,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Write Wait
                               </Typography>
                               <TextField
@@ -956,7 +1154,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 TPS Limit
                               </Typography>
                               <TextField
@@ -969,7 +1174,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 TPS Limit Burst
                               </Typography>
                               <TextField
@@ -982,7 +1194,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Drive Chunk Size
                               </Typography>
                               <TextField
@@ -995,7 +1214,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Max Read Ahead
                               </Typography>
                               <TextField
@@ -1012,12 +1238,25 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                         {/* Logging */}
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
-                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              fontWeight: "600",
+                              mb: 1.5,
+                              color: 'primary.main'
+                            }}>
                             Logging
                           </Typography>
                           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Log Level
                               </Typography>
                               <TextField
@@ -1030,7 +1269,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Log File
                               </Typography>
                               <TextField
@@ -1047,12 +1293,25 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                         {/* Network & Retry Settings */}
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
-                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              fontWeight: "600",
+                              mb: 1.5,
+                              color: 'primary.main'
+                            }}>
                             Network & Retry Settings
                           </Typography>
                           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Timeout
                               </Typography>
                               <TextField
@@ -1065,7 +1324,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Connection Timeout
                               </Typography>
                               <TextField
@@ -1078,7 +1344,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Low-Level Retries
                               </Typography>
                               <TextField
@@ -1091,7 +1364,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Retries
                               </Typography>
                               <TextField
@@ -1108,12 +1388,25 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                         {/* Streaming Settings */}
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
-                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              fontWeight: "600",
+                              mb: 1.5,
+                              color: 'primary.main'
+                            }}>
                             Streaming Settings
                           </Typography>
                           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 1.5, md: 2 } }}>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Read Chunk Size
                               </Typography>
                               <TextField
@@ -1126,7 +1419,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 VFS Read Chunk Size Limit
                               </Typography>
                               <TextField
@@ -1139,7 +1439,14 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                               />
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: "600",
+                                  color: "text.secondary",
+                                  mb: 0.5,
+                                  display: 'block'
+                                }}>
                                 Stream Buffer Size
                               </Typography>
                               <TextField
@@ -1155,7 +1462,13 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         </Box>
 
                         <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
-                          <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 1.5, color: 'primary.main' }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              fontWeight: "600",
+                              mb: 1.5,
+                              color: 'primary.main'
+                            }}>
                             Internal RC Connection
                           </Typography>
                           <Stack spacing={1.5}>
@@ -1257,10 +1570,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         }
                         label={
                           <Box>
-                            <Typography variant="body1" fontWeight="500">
+                            <Typography variant="body1" sx={{
+                              fontWeight: "500"
+                            }}>
                               Serve Playback From Internal Mount
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: { xs: '0.8rem', md: '0.875rem' }
+                              }}>
                               Use the mounted filesystem for playback instead of direct cached Real-Debrid links
                             </Typography>
                           </Box>
@@ -1271,7 +1591,9 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         sx={{ mt: 1, py: 0.5 }}
                         icon={config.serveFromRclone ? <Storage fontSize="small" /> : <CheckCircle fontSize="small" />}
                       >
-                        <Typography variant="body2" fontWeight="500">
+                        <Typography variant="body2" sx={{
+                          fontWeight: "500"
+                        }}>
                           {config.serveFromRclone
                             ? 'Active Playback: serving from the internal rclone mount.'
                             : 'Active Playback: direct streaming from cached Real-Debrid links.'}
@@ -1285,7 +1607,12 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
 
                 {isInternalMountMode && (
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: "600",
+                        mb: 2
+                      }}>
                       API Rate Limiting
                     </Typography>
                     <Stack spacing={2}>
@@ -1350,10 +1677,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         }
                         label={
                           <Box>
-                            <Typography variant="body1" fontWeight="500">
+                            <Typography variant="body1" sx={{
+                              fontWeight: "500"
+                            }}>
                               Retain Folder Extensions
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: { xs: '0.8rem', md: '0.875rem' }
+                              }}>
                               Keep file extensions in mounted directory names (e.g., "Movie.mkv/" instead of "Movie/")
                             </Typography>
                           </Box>
@@ -1363,7 +1697,9 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                         severity="info"
                         sx={{ mt: 1, py: 0.5 }}
                       >
-                        <Typography variant="body2" fontWeight="500">
+                        <Typography variant="body2" sx={{
+                          fontWeight: "500"
+                        }}>
                           {config.retainFolderExtension
                             ? '📁 Directories will be named: "Movie.mkv/", "Archive.zip/"'
                             : '📂 Directories will be named: "Movie/", "Archive/" (Recommended)'}
@@ -1422,9 +1758,17 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
           {(mountMode === 'disabled' || mountMode === 'external') && (
             <Card sx={{ mt: { xs: 1.5, md: 3 }, width: '100%', maxWidth: '100%' }}>
               <CardContent sx={{ p: { xs: 1.5, md: 3 }, width: '100%', maxWidth: '100%' }}>
-                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1.5, md: 2 } }}>
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{
+                    alignItems: "center",
+                    mb: { xs: 1.5, md: 2 }
+                  }}>
                   <MenuBook sx={{ color: 'secondary.main', fontSize: { xs: 20, md: 24 } }} />
-                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="600">
+                  <Typography variant={isMobile ? 'subtitle1' : 'h6'} sx={{
+                    fontWeight: "600"
+                  }}>
                     External Mount Guide (Optional)
                   </Typography>
                   <Button
@@ -1466,13 +1810,12 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     <Box sx={{ pb: { xs: 2, md: 4 }, width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
       {header}
       {bodyWithGrid}
-
       <Dialog
         open={mountSwitchDialogOpen}
         onClose={handleCancelMountModeChange}
         fullWidth
         maxWidth="sm"
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             bgcolor: '#030508',
             color: '#eef7ff',
@@ -1481,11 +1824,21 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
             backgroundImage: 'radial-gradient(circle at top right, rgba(110, 196, 255, 0.14), transparent 38%), linear-gradient(180deg, #05080d 0%, #020406 100%)',
             boxShadow: '0 24px 80px rgba(0, 0, 0, 0.65)',
           },
-        }}
+        } }}
       >
         <DialogTitle sx={{ px: 4, pt: 3, pb: 2 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em' }}>
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}>
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+                letterSpacing: '-0.02em'
+              }}>
               Switch Mount Type
             </Typography>
             <IconButton
@@ -1559,7 +1912,6 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}

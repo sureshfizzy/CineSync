@@ -77,7 +77,13 @@ vendor = other`;
           }}
         >
           <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1, md: 1.5 } }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                mb: { xs: 1, md: 1.5 }
+              }}>
               <Box
                 sx={{
                   width: 32,
@@ -92,7 +98,12 @@ vendor = other`;
               >
                 <Download sx={{ fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle2" fontWeight="700" color="primary.main">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: "700",
+                  color: "primary.main"
+                }}>
                 1. Install Rclone & FUSE
               </Typography>
             </Stack>
@@ -260,7 +271,13 @@ vendor = other`;
           }}
         >
           <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1, md: 1.5 } }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                mb: { xs: 1, md: 1.5 }
+              }}>
               <Box
                 sx={{
                   width: 32,
@@ -275,11 +292,22 @@ vendor = other`;
               >
                 <Description sx={{ fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle2" fontWeight="700" color="warning.main">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: "700",
+                  color: "warning.main"
+                }}>
                 2. Config File Example
               </Typography>
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: { xs: 1, md: 1.5 }, fontSize: '0.875rem' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: { xs: 1, md: 1.5 },
+                fontSize: '0.875rem'
+              }}>
               The config file contains the CineSync remote configuration:
             </Typography>
             <Box
@@ -326,7 +354,13 @@ vendor = other`;
           }}
         >
           <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1, md: 1.5 } }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                mb: { xs: 1, md: 1.5 }
+              }}>
               <Box
                 sx={{
                   width: 32,
@@ -341,11 +375,22 @@ vendor = other`;
               >
                 <Code sx={{ fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle2" fontWeight="700" color="secondary.main">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: "700",
+                  color: "secondary.main"
+                }}>
                 3. Create Config File (Optional)
               </Typography>
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: { xs: 1, md: 1.5 }, fontSize: '0.875rem' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: { xs: 1, md: 1.5 },
+                fontSize: '0.875rem'
+              }}>
               To manually create the config file, run this command (replace <code style={{ background: alpha(theme.palette.secondary.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>YOUR_PASSWORD</code> with your CineSync WebDAV password):
             </Typography>
             {isWindows && (
@@ -399,7 +444,13 @@ vendor = other`;
           }}
         >
           <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1, md: 1.5 } }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                mb: { xs: 1, md: 1.5 }
+              }}>
               <Box
                 sx={{
                   width: 32,
@@ -414,11 +465,22 @@ vendor = other`;
               >
                 <Code sx={{ fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle2" fontWeight="700" color="secondary.main">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: "700",
+                  color: "secondary.main"
+                }}>
                 4. Mount Command
               </Typography>
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: { xs: 1, md: 1.5 }, fontSize: '0.875rem' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: { xs: 1, md: 1.5 },
+                fontSize: '0.875rem'
+              }}>
               Run from your server shell (add additional flags as needed):
             </Typography>
             {isWindows && (
@@ -528,7 +590,13 @@ vendor = other`;
           }}
         >
           <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 1, md: 1.5 } }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{
+                alignItems: "center",
+                mb: { xs: 1, md: 1.5 }
+              }}>
               <Box
                 sx={{
                   width: 32,
@@ -543,7 +611,12 @@ vendor = other`;
               >
                 <PlayArrow sx={{ fontSize: 18 }} />
               </Box>
-              <Typography variant="subtitle2" fontWeight="700" color="success.main">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: "700",
+                  color: "success.main"
+                }}>
                 5. Verify & Unmount
               </Typography>
             </Stack>

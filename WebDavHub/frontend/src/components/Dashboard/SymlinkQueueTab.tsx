@@ -262,16 +262,28 @@ const SymlinkQueueTab: React.FC = () => {
         >
           <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
             {/* Header */}
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
-              <Stack direction="row" alignItems="center" spacing={1.5}>
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                justifyContent: "space-between",
+                mb: 2.5
+              }}>
+              <Stack direction="row" spacing={1.5} sx={{
+                alignItems: "center"
+              }}>
                 <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44 }}>
                   <LinkIcon sx={{ fontSize: 24 }} />
                 </Avatar>
                 <Box>
-                  <Typography variant="h6" fontWeight="700">
+                  <Typography variant="h6" sx={{
+                    fontWeight: "700"
+                  }}>
                     Symlink Activity
                   </Typography>
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Stack direction="row" spacing={0.5} sx={{
+                    alignItems: "center"
+                  }}>
                     {isRunning ? (
                       <CircularProgress size={10} sx={{ color: 'success.main' }} />
                     ) : (
@@ -287,14 +299,18 @@ const SymlinkQueueTab: React.FC = () => {
                     <Typography
                       variant="caption"
                       color={isRunning ? 'success.main' : 'text.secondary'}
-                      fontWeight={500}
+                      sx={{
+                        fontWeight: 500
+                      }}
                     >
                       {isRunning ? 'Processing' : 'Idle'}
                     </Typography>
                   </Stack>
                 </Box>
               </Stack>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={1} sx={{
+                alignItems: "center"
+              }}>
                 <Chip
                   icon={isRunning ? <PlayArrow sx={{ fontSize: 14 }} /> : <Pause sx={{ fontSize: 14 }} />}
                   label={isRunning ? 'Active' : 'Idle'}
@@ -324,15 +340,25 @@ const SymlinkQueueTab: React.FC = () => {
                 <Box>
                   <Typography
                     variant="caption"
-                    fontWeight="600"
-                    color="text.secondary"
-                    sx={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}
-                  >
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      display: 'block',
+                      fontSize: '0.65rem',
+                      textTransform: 'uppercase'
+                    }}>
                     Workers
                   </Typography>
-                  <Typography variant="body1" fontWeight="700" color="info.main">
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontWeight: "700",
+                      color: "info.main"
+                    }}>
                     {workerStats.activeWorkers}{' '}
-                    <Typography component="span" variant="caption" color="text.secondary">
+                    <Typography component="span" variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       / {workerStats.maxWorkers}
                     </Typography>
                   </Typography>
@@ -354,13 +380,21 @@ const SymlinkQueueTab: React.FC = () => {
                 <Box>
                   <Typography
                     variant="caption"
-                    fontWeight="600"
-                    color="text.secondary"
-                    sx={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}
-                  >
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      display: 'block',
+                      fontSize: '0.65rem',
+                      textTransform: 'uppercase'
+                    }}>
                     Queue
                   </Typography>
-                  <Typography variant="body1" fontWeight="700" color="warning.main">
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontWeight: "700",
+                      color: "warning.main"
+                    }}>
                     {workerStats.queueSize.toLocaleString()}
                   </Typography>
                 </Box>
@@ -372,16 +406,15 @@ const SymlinkQueueTab: React.FC = () => {
             {/* Smart Processing Statistics - real-time updates */}
             <Typography
               variant="caption"
-              fontWeight="700"
-              color="text.secondary"
               sx={{
+                fontWeight: "700",
+                color: "text.secondary",
                 display: 'block',
                 mb: 1.5,
                 textTransform: 'uppercase',
                 letterSpacing: 0.5,
-                fontSize: '0.65rem',
-              }}
-            >
+                fontSize: '0.65rem'
+              }}>
               Smart Processing
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
@@ -397,13 +430,21 @@ const SymlinkQueueTab: React.FC = () => {
               >
                 <Typography
                   variant="caption"
-                  fontWeight="600"
-                  color="text.secondary"
-                  sx={{ display: 'block', mb: 0.5, fontSize: '0.65rem' }}
-                >
+                  sx={{
+                    fontWeight: "600",
+                    color: "text.secondary",
+                    display: 'block',
+                    mb: 0.5,
+                    fontSize: '0.65rem'
+                  }}>
                   Processing
                 </Typography>
-                <Typography variant="h5" fontWeight="700" color="warning.main">
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: "700",
+                    color: "warning.main"
+                  }}>
                   {Math.max(0, stats.total - stats.completed - stats.errors).toLocaleString()}
                 </Typography>
               </Paper>
@@ -419,13 +460,21 @@ const SymlinkQueueTab: React.FC = () => {
               >
                 <Typography
                   variant="caption"
-                  fontWeight="600"
-                  color="text.secondary"
-                  sx={{ display: 'block', mb: 0.5, fontSize: '0.65rem' }}
-                >
+                  sx={{
+                    fontWeight: "600",
+                    color: "text.secondary",
+                    display: 'block',
+                    mb: 0.5,
+                    fontSize: '0.65rem'
+                  }}>
                   Completed
                 </Typography>
-                <Typography variant="h5" fontWeight="700" color="success.main">
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: "700",
+                    color: "success.main"
+                  }}>
                   {stats.completed.toLocaleString()}
                 </Typography>
               </Paper>
@@ -441,13 +490,21 @@ const SymlinkQueueTab: React.FC = () => {
               >
                 <Typography
                   variant="caption"
-                  fontWeight="600"
-                  color="text.secondary"
-                  sx={{ display: 'block', mb: 0.5, fontSize: '0.65rem' }}
-                >
+                  sx={{
+                    fontWeight: "600",
+                    color: "text.secondary",
+                    display: 'block',
+                    mb: 0.5,
+                    fontSize: '0.65rem'
+                  }}>
                   Errors
                 </Typography>
-                <Typography variant="h5" fontWeight="700" color="error.main">
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: "700",
+                    color: "error.main"
+                  }}>
                   {stats.errors.toLocaleString()}
                 </Typography>
               </Paper>
@@ -457,10 +514,20 @@ const SymlinkQueueTab: React.FC = () => {
             {isRunning && stats.total > 0 && (
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: "0.7rem"
+                    }}>
                     Progress
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: "0.7rem"
+                    }}>
                     {stats.completed} / {stats.total} ({progressPercentage}%)
                   </Typography>
                 </Box>
@@ -479,7 +546,6 @@ const SymlinkQueueTab: React.FC = () => {
           </CardContent>
         </Card>
       </motion.div>
-
       {/* Recent Symlinks Card */}
       <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={1}>
         <Card
@@ -495,16 +561,22 @@ const SymlinkQueueTab: React.FC = () => {
           <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
             <Stack
               direction="row"
-              alignItems="center"
-              justifyContent="space-between"
               onClick={() => setExpandedSection(expandedSection === 'recent' ? null : 'recent')}
-              sx={{ cursor: 'pointer', py: 0.5 }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1.5}>
+              sx={{
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: 'pointer',
+                py: 0.5
+              }}>
+              <Stack direction="row" spacing={1.5} sx={{
+                alignItems: "center"
+              }}>
                 <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.15), width: 32, height: 32 }}>
                   <CheckCircle sx={{ fontSize: 18, color: 'success.main' }} />
                 </Avatar>
-                <Typography variant="subtitle2" fontWeight="700">
+                <Typography variant="subtitle2" sx={{
+                  fontWeight: "700"
+                }}>
                   Recent Symlinks
                 </Typography>
                 <Chip
@@ -528,10 +600,14 @@ const SymlinkQueueTab: React.FC = () => {
               {recentCompleted.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <LinkIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     No symlinks created yet
                   </Typography>
-                  <Typography variant="caption" color="text.disabled">
+                  <Typography variant="caption" sx={{
+                    color: "text.disabled"
+                  }}>
                     Activity will appear here in real-time
                   </Typography>
                 </Box>
@@ -565,8 +641,19 @@ const SymlinkQueueTab: React.FC = () => {
                           </ListItemIcon>
                           <ListItemText
                             primary={
-                              <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
-                                <Typography variant="body2" fontWeight="600" sx={{ fontSize: '0.8rem' }}>
+                              <Stack
+                                direction="row"
+                                spacing={0.75}
+                                sx={{
+                                  alignItems: "center",
+                                  flexWrap: 'wrap'
+                                }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: "600",
+                                    fontSize: '0.8rem'
+                                  }}>
                                   {activity.mediaName}
                                 </Typography>
                                 {(activity.mediaType === 'tv' || activity.mediaType === 'tvshow') &&
@@ -589,27 +676,30 @@ const SymlinkQueueTab: React.FC = () => {
                             secondary={
                               <Typography
                                 variant="caption"
-                                color="text.secondary"
                                 sx={{
+                                  color: "text.secondary",
                                   fontSize: '0.7rem',
                                   display: 'block',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
-                                  maxWidth: { xs: 200, sm: 350, md: 500 },
-                                }}
-                              >
+                                  maxWidth: { xs: 200, sm: 350, md: 500 }
+                                }}>
                                 {activity.filename || activity.sourceFile || formatTimeAgo(activity.timestamp)}
                               </Typography>
                             }
                             sx={{ my: 0 }}
                           />
-                          <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Stack direction="row" spacing={0.5} sx={{
+                            alignItems: "center"
+                          }}>
                             <Typography
                               variant="caption"
-                              color="text.disabled"
-                              sx={{ fontSize: '0.65rem', display: { xs: 'none', sm: 'block' } }}
-                            >
+                              sx={{
+                                color: "text.disabled",
+                                fontSize: '0.65rem',
+                                display: { xs: 'none', sm: 'block' }
+                              }}>
                               {formatTimeAgo(activity.timestamp)}
                             </Typography>
                             {getStatusIcon(activity.status)}
@@ -624,7 +714,6 @@ const SymlinkQueueTab: React.FC = () => {
           </CardContent>
         </Card>
       </motion.div>
-
       {/* Errors Card */}
       {recentErrors.length > 0 && (
         <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
@@ -640,16 +729,22 @@ const SymlinkQueueTab: React.FC = () => {
             <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
               <Stack
                 direction="row"
-                alignItems="center"
-                justifyContent="space-between"
                 onClick={() => setExpandedSection(expandedSection === 'errors' ? null : 'errors')}
-                sx={{ cursor: 'pointer', py: 0.5 }}
-              >
-                <Stack direction="row" alignItems="center" spacing={1.5}>
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: 'pointer',
+                  py: 0.5
+                }}>
+                <Stack direction="row" spacing={1.5} sx={{
+                  alignItems: "center"
+                }}>
                   <Avatar sx={{ bgcolor: alpha(theme.palette.error.main, 0.15), width: 32, height: 32 }}>
                     <ErrorIcon sx={{ fontSize: 18, color: 'error.main' }} />
                   </Avatar>
-                  <Typography variant="subtitle2" fontWeight="700">
+                  <Typography variant="subtitle2" sx={{
+                    fontWeight: "700"
+                  }}>
                     Recent Errors
                   </Typography>
                   <Chip
@@ -682,12 +777,22 @@ const SymlinkQueueTab: React.FC = () => {
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography variant="body2" fontWeight="600" sx={{ fontSize: '0.8rem' }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: "600",
+                              fontSize: '0.8rem'
+                            }}>
                             {activity.mediaName}
                           </Typography>
                         }
                         secondary={
-                          <Typography variant="caption" color="error.main" sx={{ fontSize: '0.7rem' }}>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "error.main",
+                              fontSize: '0.7rem'
+                            }}>
                             {activity.error || 'Unknown error'}
                           </Typography>
                         }

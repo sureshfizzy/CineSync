@@ -67,7 +67,9 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
             backgroundColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.200',
           }}
         >
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             No Image
           </Typography>
         </Box>
@@ -80,8 +82,8 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
       }}>
         <Typography
           variant="subtitle2"
-          fontWeight={700}
           sx={{
+            fontWeight: 700,
             mb: 0.5,
             color: theme.palette.text.primary,
             fontSize: { xs: '0.8rem', sm: '0.875rem' },
@@ -91,29 +93,28 @@ const MovieOptionCard: React.FC<MovieOptionCardProps> = ({ option, onClick }) =>
             textOverflow: 'ellipsis',
             display: '-webkit-box',
             WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-          }}
-        >
+            WebkitBoxOrient: 'vertical'
+          }}>
           {option.title}
         </Typography>
         {option.year && (
           <Typography
             variant="body2"
-            color="text.secondary"
-            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
-          >
+            sx={{
+              color: "text.secondary",
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }}>
             {option.year}
           </Typography>
         )}
         {option.tmdbData?.id && (
           <Typography
             variant="caption"
-            color="primary.main"
             sx={{
+              color: "primary.main",
               fontSize: { xs: '0.65rem', sm: '0.7rem' },
               fontWeight: 500
-            }}
-          >
+            }}>
             TMDb: {option.tmdbData.id}
           </Typography>
         )}

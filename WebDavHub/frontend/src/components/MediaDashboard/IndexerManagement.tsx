@@ -159,7 +159,9 @@ export default function IndexerManagement() {
         }}
       >
         <CircularProgress size={32} />
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           Loading indexers...
         </Typography>
       </Box>
@@ -174,12 +176,18 @@ export default function IndexerManagement() {
           spacing={1.5}
           sx={{ mb: 2, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={1.5} sx={{
+            alignItems: "center"
+          }}>
             <Box>
-              <Typography variant="h6" fontWeight={600}>
+              <Typography variant="h6" sx={{
+                fontWeight: 600
+              }}>
                 Indexers
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 Configure and manage your indexer connections
               </Typography>
             </Box>
@@ -202,7 +210,14 @@ export default function IndexerManagement() {
           </Alert>
         )}
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, color: 'text.secondary' }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: "center",
+            mb: 1.5,
+            color: 'text.secondary'
+          }}>
           <Typography variant="caption">{indexers.length} total</Typography>
           <Typography variant="caption">•</Typography>
           <Typography variant="caption">{enabledCount} enabled</Typography>
@@ -229,10 +244,19 @@ export default function IndexerManagement() {
                 <Avatar sx={{ width: 48, height: 48, mx: 'auto', mb: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }}>
                   <SearchIcon sx={{ fontSize: 24 }} />
                 </Avatar>
-                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                <Typography variant="subtitle1" gutterBottom sx={{
+                  fontWeight: 600
+                }}>
                   No indexers yet
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 420, mx: 'auto' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    mb: 2,
+                    maxWidth: 420,
+                    mx: 'auto'
+                  }}>
                   Indexers provide access to torrent and usenet search results.
                 </Typography>
                 <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddIndexer}>
@@ -246,7 +270,9 @@ export default function IndexerManagement() {
                     key={indexer.id}
                     divider={index < indexers.length - 1}
                     secondaryAction={
-                      <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Stack direction="row" spacing={0.5} sx={{
+                        alignItems: "center"
+                      }}>
                         <Tooltip title={indexer.enabled ? 'Disable' : 'Enable'}>
                           <FormControlLabel
                             control={
@@ -309,8 +335,17 @@ export default function IndexerManagement() {
                         <SearchIcon sx={{ fontSize: 14 }} />
                       </Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', mb: 0.25 }}>
-                          <Typography variant="body2" fontWeight={600}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{
+                            alignItems: "center",
+                            flexWrap: 'wrap',
+                            mb: 0.25
+                          }}>
+                          <Typography variant="body2" sx={{
+                            fontWeight: 600
+                          }}>
                             {indexer.name}
                           </Typography>
                           <Chip
@@ -336,7 +371,13 @@ export default function IndexerManagement() {
                         >
                           {IndexerApi.formatIndexerUrl(indexer.url)}
                         </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{
+                            alignItems: "center",
+                            mt: 0.5
+                          }}>
                           {indexer.testStatus && indexer.testStatus !== 'unknown' && (
                             <Chip
                               label={TEST_STATUS_LABELS[indexer.testStatus]}
@@ -351,7 +392,12 @@ export default function IndexerManagement() {
                             />
                           )}
                           {indexer.testStatus && indexer.testStatus !== 'unknown' && indexer.lastTested && (
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: "text.secondary",
+                                fontSize: '0.65rem'
+                              }}>
                               {IndexerApi.getRelativeTime(indexer.lastTested)}
                             </Typography>
                           )}
@@ -384,7 +430,7 @@ export default function IndexerManagement() {
           onClose={cancelDelete}
           maxWidth="sm"
           fullWidth
-          PaperProps={{
+          slotProps={{ paper: {
             sx: {
               borderRadius: 2,
               boxShadow: theme.palette.mode === 'dark'
@@ -392,14 +438,19 @@ export default function IndexerManagement() {
                 : `0 12px 28px ${alpha(theme.palette.common.black, 0.18)}`,
               border: `1px solid ${alpha(theme.palette.divider, 0.6)}`
             }
-          }}
+          } }}
         >
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
             <WarningIcon color="warning" fontSize="small" />
             Delete Indexer
           </DialogTitle>
           <DialogContent sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 2
+              }}>
               This removes the indexer from your configuration.
             </Typography>
             <Box

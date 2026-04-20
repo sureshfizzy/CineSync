@@ -108,7 +108,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
           </ListItemIcon>
           <ListItemText 
             primary={
-              <Typography variant="body2" fontWeight={700}>
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
                 Movies
               </Typography>
             } 
@@ -136,7 +138,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               </ListItemIcon>
               <ListItemText 
                 primary={
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 500
+                  }}>
                     Search Movies
                   </Typography>
                 } 
@@ -164,7 +168,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
           </ListItemIcon>
           <ListItemText 
             primary={
-              <Typography variant="body2" fontWeight={700}>
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
                 Series
               </Typography>
             } 
@@ -192,7 +198,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               </ListItemIcon>
               <ListItemText 
                 primary={
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 500
+                  }}>
                     Search Series
                   </Typography>
                 } 
@@ -220,7 +228,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
           </ListItemIcon>
           <ListItemText
             primary={
-              <Typography variant="body2" fontWeight={700}>
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
                 Queue
               </Typography>
             }
@@ -245,7 +255,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
           </ListItemIcon>
           <ListItemText 
             primary={
-              <Typography variant="body2" fontWeight={700}>
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
                 Wanted
               </Typography>
             } 
@@ -270,7 +282,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
           </ListItemIcon>
           <ListItemText 
             primary={
-              <Typography variant="body2" fontWeight={700}>
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
                 Settings
               </Typography>
             } 
@@ -297,7 +311,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               </ListItemIcon>
               <ListItemText 
                 primary={
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 500
+                  }}>
                     Media Management
                   </Typography>
                 } 
@@ -322,7 +338,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               </ListItemIcon>
               <ListItemText 
                 primary={
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 500
+                  }}>
                     Quality Profiles
                   </Typography>
                 } 
@@ -346,7 +364,9 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
               </ListItemIcon>
               <ListItemText 
                 primary={
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 500
+                  }}>
                     Indexer Management
                   </Typography>
                 } 

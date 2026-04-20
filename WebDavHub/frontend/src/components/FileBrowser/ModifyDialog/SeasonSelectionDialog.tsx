@@ -25,7 +25,7 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
       onClose={onClose}
       maxWidth="lg"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 3,
           backgroundColor: theme.palette.background.paper,
@@ -37,7 +37,7 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
             ? '0 8px 32px rgba(0, 0, 0, 0.6)'
             : '0 8px 32px rgba(0, 0, 0, 0.15)',
         }
-      }}
+      } }}
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -54,7 +54,13 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
         </Box>
       </DialogTitle>
       <DialogContent>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
+        <Typography
+          variant="body1"
+          sx={{
+            color: "text.secondary",
+            mb: 3,
+            textAlign: 'center'
+          }}>
           Choose the season for your content
         </Typography>
 
@@ -106,7 +112,12 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
                   </Box>
 
                   {season.air_date && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mb: 1
+                      }}>
                       Air Date: {new Date(season.air_date).getFullYear()}
                     </Typography>
                   )}
@@ -114,15 +125,14 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({ open, onC
                   {season.overview && (
                     <Typography
                       variant="body2"
-                      color="text.secondary"
                       sx={{
+                        color: "text.secondary",
                         display: '-webkit-box',
                         WebkitLineClamp: 3,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        lineHeight: 1.4,
-                      }}
-                    >
+                        lineHeight: 1.4
+                      }}>
                       {season.overview}
                     </Typography>
                   )}

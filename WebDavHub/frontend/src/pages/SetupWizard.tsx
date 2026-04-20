@@ -678,7 +678,13 @@ export default function SetupWizard() {
         }}
       >
         <Stack spacing={2}>
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              alignItems: "center",
+              flexWrap: "wrap"
+            }}>
             <Box
               sx={{
                 width: 48,
@@ -703,10 +709,14 @@ export default function SetupWizard() {
               />
             </Box>
             <Box>
-              <Typography variant="h4" fontWeight={800}>
+              <Typography variant="h4" sx={{
+                fontWeight: 800
+              }}>
                 CineSync Guided Setup
               </Typography>
-              <Typography variant="body1" color="text.secondary">
+              <Typography variant="body1" sx={{
+                color: "text.secondary"
+              }}>
                 Configure CineSync step-by-step.
               </Typography>
             </Box>
@@ -724,7 +734,13 @@ export default function SetupWizard() {
                   border: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
                 }}
               >
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    mb: 1
+                  }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                     Steps ({activeStep + 1}/{wizardSteps.length})
                   </Typography>
@@ -750,10 +766,14 @@ export default function SetupWizard() {
                       background: alpha(wizardSteps[activeStep].accent, 0.08),
                     }}
                   >
-                    <Typography variant="body2" fontWeight={700}>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 700
+                    }}>
                       {wizardSteps[activeStep].title}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>
                       {wizardSteps[activeStep].description}
                     </Typography>
                   </Box>
@@ -782,7 +802,9 @@ export default function SetupWizard() {
                             opacity: isFutureBlocked ? 0.5 : 1,
                           }}
                         >
-                          <Stack direction="row" spacing={1} alignItems="center">
+                          <Stack direction="row" spacing={1} sx={{
+                            alignItems: "center"
+                          }}>
                             <Box
                               sx={{
                                 width: { xs: 24, sm: 28 },
@@ -798,10 +820,14 @@ export default function SetupWizard() {
                               {idx + 1}
                             </Box>
                             <Box sx={{ minWidth: 0 }}>
-                              <Typography variant="body2" fontWeight={700} noWrap>
+                              <Typography variant="body2" noWrap sx={{
+                                fontWeight: 700
+                              }}>
                                 {s.title}
                               </Typography>
-                              <Typography variant="caption" color="text.secondary" noWrap>
+                              <Typography variant="caption" noWrap sx={{
+                                color: "text.secondary"
+                              }}>
                                 {s.description}
                               </Typography>
                             </Box>
@@ -818,7 +844,9 @@ export default function SetupWizard() {
               {loading ? (
                 <Paper sx={{ p: 3, borderRadius: 3 }}>
                   <Stack spacing={2}>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} sx={{
+                      alignItems: "center"
+                    }}>
                       <CircularProgress size={20} />
                       <Typography variant="body1">Loading configuration…</Typography>
                     </Stack>
@@ -836,7 +864,13 @@ export default function SetupWizard() {
                       background: alpha(step.accent, 0.04),
                     }}
                   >
-                    <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
+                    <Stack
+                      direction="row"
+                      spacing={1.5}
+                      sx={{
+                        alignItems: "center",
+                        mb: 2
+                      }}>
                       <Box
                         sx={{
                           width: 40,
@@ -851,15 +885,21 @@ export default function SetupWizard() {
                         {step.icon}
                       </Box>
                       <Box>
-                        <Typography variant="h6" fontWeight={700}>
+                        <Typography variant="h6" sx={{
+                          fontWeight: 700
+                        }}>
                           {step.title}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>
                           {step.description}
                         </Typography>
                       </Box>
                     </Stack>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={2}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{
+                      mb: 2
+                    }}>
                       <Chip
                         label={`${requiredInStep.length} required in this step`}
                         size="small"
@@ -888,18 +928,32 @@ export default function SetupWizard() {
                       }}
                     >
                       <Stack spacing={1}>
-                        <Typography variant="subtitle2" fontWeight={700} color="text.primary">
+                        <Typography
+                          variant="subtitle2"
+                          sx={{
+                            fontWeight: 700,
+                            color: "text.primary"
+                          }}>
                           What these toggles do
                         </Typography>
                         <Stack spacing={0.75}>
                           {booleanKeysInStep.map((key) => (
-                            <Stack key={key} direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                            <Stack
+                              key={key}
+                              direction="row"
+                              spacing={1}
+                              sx={{
+                                alignItems: "center",
+                                flexWrap: "wrap"
+                              }}>
                               <Chip
                                 label={key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
                                 size="small"
                                 variant="outlined"
                               />
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" sx={{
+                                color: "text.secondary"
+                              }}>
                                 {booleanBlurbs[key]}
                               </Typography>
                             </Stack>
@@ -920,10 +974,20 @@ export default function SetupWizard() {
                             background: alpha(step.accent, 0.03),
                           }}
                         >
-                          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              fontWeight: 700,
+                              mb: 0.5
+                            }}>
                             TMDb API Key (Optional)
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                              mb: 1.5
+                            }}>
                             Your TMDb API key for lookups. Leave empty to skip TMDb-powered metadata.
                           </Typography>
                           <FormField
@@ -952,7 +1016,9 @@ export default function SetupWizard() {
                           border: `1px solid ${alpha(step.accent, 0.2)}`,
                         }}
                       >
-                        <Typography variant="body2" fontWeight={600}>
+                        <Typography variant="body2" sx={{
+                          fontWeight: 600
+                        }}>
                           Optional — Useful for file repair and inbuilt rclone mount
                         </Typography>
                       </Alert>
@@ -965,10 +1031,20 @@ export default function SetupWizard() {
                           boxShadow: `0 10px 30px ${alpha(theme.palette.primary.main, 0.12)}`,
                         }}
                       >
-                        <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            fontWeight: 800,
+                            mb: 1
+                          }}>
                           Real-Debrid account & HTTP DAV
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                            mb: 2
+                          }}>
                           Configure your Real-Debrid API keys and HTTP DAV before mounting with rclone.
                         </Typography>
                         <RealDebridSettings stackInfoOnTop={true} />
@@ -986,7 +1062,9 @@ export default function SetupWizard() {
                           border: `1px solid ${alpha(step.accent, 0.2)}`,
                         }}
                       >
-                        <Typography variant="body2" fontWeight={600}>
+                        <Typography variant="body2" sx={{
+                          fontWeight: 600
+                        }}>
                           Optional — Useful for inbuilt rclone mount
                         </Typography>
                       </Alert>
@@ -1001,8 +1079,16 @@ export default function SetupWizard() {
                         }}
                       >
                         <Stack spacing={2.25}>
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }} flexWrap="wrap">
-                            <Stack direction="row" spacing={1} alignItems="center">
+                          <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1.5}
+                            sx={{
+                              alignItems: { xs: 'flex-start', sm: 'center' },
+                              flexWrap: "wrap"
+                            }}>
+                            <Stack direction="row" spacing={1} sx={{
+                              alignItems: "center"
+                            }}>
                               <Box
                                 sx={{
                                   width: 40,
@@ -1018,16 +1104,22 @@ export default function SetupWizard() {
                                 <CloudRounded />
                               </Box>
                               <Box>
-                                <Typography variant="h6" fontWeight={800}>
+                                <Typography variant="h6" sx={{
+                                  fontWeight: 800
+                                }}>
                                   Rclone mount hub
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="body2" sx={{
+                                  color: "text.secondary"
+                                }}>
                                   Configure Real-Debrid mount, caching, and rate limits in-place.
                                 </Typography>
                               </Box>
                             </Stack>
                             <Box sx={{ flexGrow: 1 }} />
-                            <Stack direction="row" spacing={1} flexWrap="wrap">
+                            <Stack direction="row" spacing={1} sx={{
+                              flexWrap: "wrap"
+                            }}>
                               <Chip
                                 label={rcloneModeLabel}
                                 color={rcloneSummary.enabled ? 'success' : rcloneSummary.serveFromRclone ? 'info' : 'default'}
@@ -1046,7 +1138,13 @@ export default function SetupWizard() {
                             </Stack>
                           </Stack>
 
-                          <Typography variant="body2" color="text.secondary" fontWeight={700} sx={{ mb: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                              fontWeight: 700,
+                              mb: 1
+                            }}>
                             Rclone panel
                           </Typography>
 
@@ -1165,7 +1263,6 @@ export default function SetupWizard() {
         </Stack>
 
       </Paper>
-
       <Snackbar
         open={!!success}
         autoHideDuration={3200}
@@ -1179,6 +1276,6 @@ export default function SetupWizard() {
         message={error || undefined}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       />
-      </Container>
+    </Container>
   );
 }

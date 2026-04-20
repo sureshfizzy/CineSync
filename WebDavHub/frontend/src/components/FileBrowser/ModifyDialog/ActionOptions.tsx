@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import WarningIcon from '@mui/icons-material/Warning';
 import { OptionCard } from './StyledComponents';
 import { ActionOptionsProps } from './types';
@@ -81,25 +81,25 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
                 <Box>
                   <Typography
                     variant="subtitle2"
-                    fontWeight={600}
                     sx={{
+                      fontWeight: 600,
+
                       color: theme.palette.mode === 'dark'
                         ? theme.palette.success.main
                         : '#2e7d32'
-                    }}
-                  >
+                    }}>
                     {autoSelectOption.label}
                   </Typography>
                   <Typography
                     variant="body2"
-                    mt={0.5}
                     sx={{
+                      mt: 0.5,
                       fontWeight: 500,
+
                       color: theme.palette.mode === 'dark'
                         ? theme.palette.success.main
                         : '#2e7d32'
-                    }}
-                  >
+                    }}>
                     {autoSelectOption.description}
                   </Typography>
                 </Box>
@@ -120,7 +120,6 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
           })()}
         </Box>
       )}
-
       {/* Other Options - Grid Layout */}
       <Box sx={{
         display: 'grid',
@@ -150,15 +149,18 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
               <Box>
                 <Typography
                   variant="subtitle2"
-                  fontWeight={600}
+                  sx={{
+                    fontWeight: 600
+                  }}
                 >
                   {option.label}
                 </Typography>
                 <Typography
                   variant="body2"
-                  color="text.secondary"
-                  mt={0.5}
-                >
+                  sx={{
+                    color: "text.secondary",
+                    mt: 0.5
+                  }}>
                   {option.description}
                 </Typography>
               </Box>
@@ -176,7 +178,6 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
           );
         })}
       </Box>
-
       {/* Skip Processing - Full Width Block at Bottom */}
       {options.find(opt => opt.value === 'skip') && (
         <Box sx={{ mt: 1 }}>
@@ -248,25 +249,25 @@ const ActionOptions: React.FC<ActionOptionsProps> = ({
                 <Box>
                   <Typography
                     variant="subtitle2"
-                    fontWeight={600}
                     sx={{
+                      fontWeight: 600,
+
                       color: theme.palette.mode === 'dark'
                         ? theme.palette.warning.main
                         : '#f57c00'
-                    }}
-                  >
+                    }}>
                     {skipOption.label}
                   </Typography>
                   <Typography
                     variant="body2"
-                    mt={0.5}
                     sx={{
+                      mt: 0.5,
                       fontWeight: 500,
+
                       color: theme.palette.mode === 'dark'
                         ? theme.palette.warning.main
                         : '#f57c00'
-                    }}
-                  >
+                    }}>
                     {skipOption.description}
                   </Typography>
                 </Box>

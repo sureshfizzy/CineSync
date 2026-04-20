@@ -49,18 +49,20 @@ export const FormField: React.FC<FormFieldProps> = ({
     switch (type) {
       case 'boolean':
         return (
-          <Stack spacing={0.5} alignItems="flex-start">
-          <FormControlLabel
-            control={
-              <Switch
-                checked={value === 'true' || value === '1' || value === 'yes'}
-                onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
-                disabled={isFieldDisabled}
-                color="primary"
-              />
-            }
-              label={label}
-          />
+          <Stack spacing={0.5} sx={{
+            alignItems: "flex-start"
+          }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={value === 'true' || value === '1' || value === 'yes'}
+                  onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
+                  disabled={isFieldDisabled}
+                  color="primary"
+                />
+              }
+                label={label}
+            />
             {(description || error) && (
               <Typography variant="caption" color={error ? 'error' : 'text.secondary'}>
                 {error || description}
@@ -82,9 +84,9 @@ export const FormField: React.FC<FormFieldProps> = ({
             helperText={error || description}
             variant="outlined"
             size="small"
-            InputProps={{
+            slotProps={{ input: {
               inputProps: { min: 0 }
-            }}
+            } }}
           />
         );
 
@@ -147,7 +149,13 @@ export const FormField: React.FC<FormFieldProps> = ({
                   {error || description}
                 </Typography>
               )}
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  mt: 0.75,
+                  display: 'block'
+                }}>
                 Example filename: {exampleFilename}
               </Typography>
             </Box>
@@ -200,7 +208,7 @@ export const FormField: React.FC<FormFieldProps> = ({
             helperText={error || description}
             variant="outlined"
             size="small"
-            InputProps={{
+            slotProps={{ input: {
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
@@ -212,7 +220,7 @@ export const FormField: React.FC<FormFieldProps> = ({
                   </IconButton>
                 </InputAdornment>
               ),
-            }}
+            } }}
           />
         );
 
@@ -283,27 +291,29 @@ export const FormField: React.FC<FormFieldProps> = ({
             size="small"
             multiline={multiline}
             rows={rows}
-            InputProps={showTokenHelper ? {
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title="Show available tokens" placement="top">
-                    <IconButton
-                      onClick={onTokenHelperClick}
-                      edge="end"
-                      size="small"
-                      sx={{
-                        color: 'primary.main',
-                        '&:hover': {
-                          bgcolor: 'primary.main',
-                          color: 'primary.contrastText',
-                        }
-                      }}
-                    >
-                      <Help />
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
+            slotProps={showTokenHelper ? {
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Show available tokens" placement="top">
+                      <IconButton
+                        onClick={onTokenHelperClick}
+                        edge="end"
+                        size="small"
+                        sx={{
+                          color: 'primary.main',
+                          '&:hover': {
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                          }
+                        }}
+                      >
+                        <Help />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }
             } : undefined}
           />
         );
@@ -317,13 +327,13 @@ export const FormField: React.FC<FormFieldProps> = ({
     <Box sx={{ mb: 3 }}>
       {/* Locked Alert */}
       {/* Locked banner removed per request; rely on chip + disabled state */}
-
       {/* Beta/Disabled Alert */}
       {/* Removed visual message; rely on disable state only */}
-
       {(label || locked) && (
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-          <Stack direction="row" alignItems="center" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{
+            alignItems: "center"
+          }}>
             {label && (
             <Typography
               variant="subtitle2"
@@ -335,7 +345,12 @@ export const FormField: React.FC<FormFieldProps> = ({
             >
               {label}
               {required && (
-                <Typography component="span" color="error.main" sx={{ ml: 0.5 }}>
+                <Typography
+                  component="span"
+                  sx={{
+                    color: "error.main",
+                    ml: 0.5
+                  }}>
                   *
                 </Typography>
               )}

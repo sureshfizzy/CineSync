@@ -93,7 +93,7 @@ const JobEditDialog: React.FC<JobEditDialogProps> = ({ open, onClose, job, onJob
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           bgcolor: 'background.paper',
           backgroundImage: 'none',
@@ -101,7 +101,7 @@ const JobEditDialog: React.FC<JobEditDialogProps> = ({ open, onClose, job, onJob
             ? '0 8px 32px rgba(0, 0, 0, 0.12)'
             : '0 8px 32px rgba(0, 0, 0, 0.4)',
         },
-      }}
+      } }}
     >
       <DialogTitle
         sx={{
@@ -177,7 +177,7 @@ const JobEditDialog: React.FC<JobEditDialogProps> = ({ open, onClose, job, onJob
               type="number"
               value={intervalSeconds}
               onChange={(e) => setIntervalSeconds(parseInt(e.target.value) || 0)}
-              inputProps={{ min: 1 }}
+              slotProps={{ htmlInput: { min: 1 } }}
               helperText="How often the job should run (in seconds)"
             />
           )}

@@ -1180,13 +1180,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         onClose={handleDialogClose}
         maxWidth="sm"
         fullWidth
-        PaperProps={{
+        slotProps={{ paper: {
           sx: {
             margin: { xs: 1, sm: 2 },
             maxHeight: { xs: '95vh', sm: '90vh' },
             width: { xs: 'calc(100vw - 16px)', sm: 'auto' },
           }
-        }}
+        } }}
       >
         <DialogTitle
           component="div"
@@ -1207,14 +1207,14 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
           <Typography
             variant="h6"
             component="h2"
-            fontWeight={700}
             sx={{
+              fontWeight: 700,
+
               ...(Object.values(selectedIds).some(v => v) && {
                 color: theme.palette.primary.main,
                 fontWeight: 700,
               })
-            }}
-          >
+            }}>
             {isBulkMode
               ? `📦 Bulk Process ${bulkProcessingTotal} Files`
               : Object.values(selectedIds).some(v => v)
@@ -1264,10 +1264,18 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
               bgcolor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.1)' : 'rgba(33, 150, 243, 0.05)',
               border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.3)' : 'rgba(33, 150, 243, 0.2)'}`
             }}>
-              <Typography variant="body2" color="primary.main" fontWeight={600} sx={{ mb: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "primary.main",
+                  fontWeight: 600,
+                  mb: 1
+                }}>
                 💡 Bulk Processing Mode
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 For operations requiring user selection (Force as TV Show/Movie), the first available match will be automatically selected for each file.
               </Typography>
             </Box>
@@ -1277,7 +1285,9 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
           {isBulkMode && (bulkProcessingProgress > 0 || execOpen) && (
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>
                   {bulkProcessingProgress === 0
                     ? `Preparing to process ${bulkProcessingTotal} files...`
                     : `Processing files (${bulkProcessingProgress}/${bulkProcessingTotal})`
@@ -1304,7 +1314,13 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
                 }}
               />
               {bulkProcessingCurrent && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    mt: 1,
+                    display: 'block'
+                  }}>
                   Current: {bulkProcessingCurrent}
                 </Typography>
               )}
@@ -1359,7 +1375,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
           </ActionButton>
         </DialogActions>
       </StyledDialog>
-
       <ExecutionDialog
         open={execOpen}
         onClose={handleExecClose}
@@ -1381,7 +1396,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         selectionInProgress={selectionInProgress}
 
       />
-
       <SkipConfirmationDialog
         open={skipConfirmOpen}
         onConfirm={handleSkipConfirm}
@@ -1390,7 +1404,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         bulkFilePaths={bulkFilePaths}
         isBulkMode={isBulkMode}
       />
-
       <SkipResultDialog
         open={skipResultOpen}
         onClose={handleSkipResultClose}
@@ -1398,7 +1411,6 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         onNavigateBack={onNavigateBack}
         filePath={currentFilePath}
       />
-
       <ForceConfirmationDialog
         open={forceConfirmOpen}
         onConfirm={handleForceConfirm}
@@ -1407,14 +1419,12 @@ const ModifyDialog: React.FC<ModifyDialogProps> = ({
         bulkFilePaths={bulkFilePaths}
         isBulkMode={isBulkMode}
       />
-
       <SeasonSelectionDialog
         open={seasonDialogOpen}
         onClose={() => setSeasonDialogOpen(false)}
         seasons={seasonOptions}
         onSeasonClick={handleSeasonClick}
       />
-
       <EpisodeSelectionDialog
         open={episodeDialogOpen}
         onClose={() => setEpisodeDialogOpen(false)}

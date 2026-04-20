@@ -215,7 +215,7 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
                   error={!!error}
-                  InputProps={{
+                  slotProps={{ input: {
                     endAdornment: (
                       <InputAdornment position="end">
                         <IconButton
@@ -228,7 +228,7 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
                         </IconButton>
                       </InputAdornment>
                     ),
-                  }}
+                  } }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       '& fieldset': {

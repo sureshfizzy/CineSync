@@ -96,7 +96,6 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
             Access Denied
           </Typography>
         </motion.div>
-
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -104,13 +103,14 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
         >
           <Typography
             variant="h6"
-            color="text.secondary"
-            sx={{ mb: 1, textAlign: 'center' }}
-          >
+            sx={{
+              color: "text.secondary",
+              mb: 1,
+              textAlign: 'center'
+            }}>
             You need to be logged in to access this page.
           </Typography>
         </motion.div>
-
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -118,9 +118,11 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
         >
           <Typography
             variant="body1"
-            color="text.secondary"
-            sx={{ mb: 3, textAlign: 'center' }}
-          >
+            sx={{
+              color: "text.secondary",
+              mb: 3,
+              textAlign: 'center'
+            }}>
             Redirecting to login page in{' '}
             <motion.span
               key={countdown}
@@ -138,7 +140,6 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
             {' '}seconds...
           </Typography>
         </motion.div>
-
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -197,7 +198,6 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
           404 - Not Found
         </Typography>
       </motion.div>
-
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -205,13 +205,14 @@ export function NotFound({ inline = false, returnPath }: { inline?: boolean; ret
       >
         <Typography
           variant="h6"
-          color="text.secondary"
-          sx={{ mb: 3, textAlign: 'center' }}
-        >
+          sx={{
+            color: "text.secondary",
+            mb: 3,
+            textAlign: 'center'
+          }}>
           {inline ? "This title isn't in your library." : "The page you're looking for doesn't exist."}
         </Typography>
       </motion.div>
-
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}

@@ -241,12 +241,11 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="outlined"
-              InputProps={{
+              slotProps={{ input: {
                 endAdornment: loading ? <CircularProgress size={20} /> : <SearchIcon />
-              }}
+              } }}
               sx={{ mb: 2 }}
             />
-            
             <List sx={{ maxHeight: 400, overflow: 'auto' }}>
               {searchResults.map((result) => (
                 <ListItem
@@ -273,7 +272,9 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
                   <ListItemText
                     primary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1" fontWeight={600}>
+                        <Typography variant="subtitle1" sx={{
+                          fontWeight: 600
+                        }}>
                           {result.title || result.name}
                         </Typography>
                         <Chip
@@ -295,14 +296,13 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
                     secondary={
                       <Typography
                         variant="body2"
-                        color="text.secondary"
                         sx={{
+                          color: "text.secondary",
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden'
-                        }}
-                      >
+                        }}>
                         {result.overview || 'No overview available'}
                       </Typography>
                     }
@@ -329,7 +329,9 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
                     <Typography variant="h6" gutterBottom>
                       {selectedResult.title || selectedResult.name}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                    <Typography variant="body2" gutterBottom sx={{
+                      color: "text.secondary"
+                    }}>
                       {formatDate(selectedResult.release_date || selectedResult.first_air_date)}
                     </Typography>
                     <Typography variant="body2">
@@ -339,7 +341,6 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
                 </Box>
               </Box>
             )}
-
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <FormControl fullWidth>
                 <InputLabel>Root Folder</InputLabel>
@@ -434,7 +435,9 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
             <Typography variant="h6" gutterBottom>
               Successfully Added!
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               {selectedResult?.title || selectedResult?.name} has been added to your library.
             </Typography>
           </Box>
@@ -451,9 +454,9 @@ export default function MediaSearchModal({ open, onClose, mediaType, initialQuer
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: { minHeight: 600 }
-      }}
+      } }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

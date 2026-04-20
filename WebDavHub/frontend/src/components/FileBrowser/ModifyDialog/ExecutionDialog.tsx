@@ -156,7 +156,7 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
       onClose={onClose}
       maxWidth={getDialogMaxWidth(movieOptions.length)}
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 3,
           backgroundColor: theme.palette.background.paper,
@@ -169,15 +169,13 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
             : '0 8px 32px rgba(0, 0, 0, 0.15)',
           maxWidth: movieOptions.length > 6 ? '85vw' : undefined,
         }
-      }}
-      slotProps={{
-        backdrop: {
+      },
+          backdrop: {
           sx: {
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
             backdropFilter: 'blur(4px)',
           }
-        }
-      }}
+        } }}
     >
       <DialogTitle
         sx={{
@@ -204,7 +202,12 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
             )}
           </Zoom>
           <Box>
-            <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                lineHeight: 1.2
+              }}>
               {operationSuccess
                 ? 'Operation Complete'
                 : hasMovieOptions
@@ -214,7 +217,13 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                     : 'Processing Media File'
               }
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                mt: 0.5,
+                display: 'block'
+              }}>
               {operationSuccess
                 ? 'Media processing completed successfully'
                 : showMovieOptions
@@ -320,10 +329,11 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                       />
                       <Typography
                         variant="body2"
-                        fontWeight={isActive ? 600 : 400}
                         color={isCompleted ? theme.palette.success.main : theme.palette.text.primary}
-                        sx={{ transition: 'all 0.3s ease-in-out' }}
-                      >
+                        sx={{
+                          fontWeight: isActive ? 600 : 400,
+                          transition: 'all 0.3s ease-in-out'
+                        }}>
                         {step.text}
                       </Typography>
                       {isActive && !isComplete && (
@@ -374,10 +384,17 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                   animation: `${pulse} 1.5s ease-in-out infinite`
                 }}
               />
-              <Typography variant="h6" color="success.main" fontWeight={700}>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: "success.main",
+                  fontWeight: 700
+                }}>
                 File processing completed successfully!
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 This dialog will close automatically in a few seconds...
               </Typography>
             </Box>
@@ -396,7 +413,9 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
               mt: 2,
             }}>
               <CircularProgress size={40} />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Loading movie options...
               </Typography>
             </Box>
@@ -417,10 +436,18 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
               border: `1px solid ${theme.palette.primary.main}40`,
               mb: 2,
             }}>
-              <Typography variant="subtitle1" color="primary.main" fontWeight={600} sx={{ mb: 1 }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  color: "primary.main",
+                  fontWeight: 600,
+                  mb: 1
+                }}>
                 🎯 Selection Confirmed
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Processing your selection and finalizing metadata...
               </Typography>
             </Box>
@@ -447,11 +474,21 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                     }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 1 }}>
                       <CheckCircleIcon sx={{ color: 'success.main', fontSize: '20px' }} />
-                      <Typography variant="subtitle1" color="success.main" fontWeight={600}>
+                      <Typography
+                        variant="subtitle1"
+                        sx={{
+                          color: "success.main",
+                          fontWeight: 600
+                        }}>
                         ✨ Found {movieOptions.length} TMDB Match{movieOptions.length !== 1 ? 'es' : ''}
                       </Typography>
                     </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mb: 1
+                      }}>
                       Select the best match for your media file
                     </Typography>
                   </Box>
@@ -527,11 +564,21 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, justifyContent: 'center' }}>
                       <WarningIcon sx={{ color: 'warning.main', fontSize: 28 }} />
-                      <Typography variant="h6" fontWeight={600} color="warning.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: "warning.main"
+                        }}>
                         Manual Search Required
                       </Typography>
                     </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mb: 4
+                      }}>
                       Automatic search failed - please provide a custom search term
                     </Typography>
 
@@ -545,10 +592,21 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                       maxWidth: '500px',
                       mx: 'auto',
                     }}>
-                      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2, color: 'warning.main' }}>
+                      <Typography
+                        variant="subtitle1"
+                        sx={{
+                          fontWeight: 600,
+                          mb: 2,
+                          color: 'warning.main'
+                        }}>
                         🔍 Enter your search term:
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                          mb: 3
+                        }}>
                         Automatic search failed - please provide a simpler title
                       </Typography>
 
@@ -642,7 +700,13 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                 mx: 2,
               },
             }}>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mb: 2 }}>
+              <Typography
+                variant="subtitle2"
+                gutterBottom
+                sx={{
+                  fontWeight: 600,
+                  mb: 2
+                }}>
                 💬 Your input is required:
               </Typography>
 
@@ -743,7 +807,12 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
               <Typography variant="h6" color="primary" sx={{ fontWeight: 700, mb: 1 }}>
                 🆔 Processing with Direct ID Lookup
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  mb: 2
+                }}>
                 No user input required - using provided metadata IDs
               </Typography>
               <Box sx={{
@@ -764,7 +833,12 @@ const ExecutionDialog: React.FC<ExecutionDialogProps> = ({
                       border: `1px solid ${theme.palette.primary.main}40`,
                     }}
                   >
-                    <Typography variant="caption" color="primary.main" fontWeight={600}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "primary.main",
+                        fontWeight: 600
+                      }}>
                       {key.toUpperCase()}: {value}
                     </Typography>
                   </Box>

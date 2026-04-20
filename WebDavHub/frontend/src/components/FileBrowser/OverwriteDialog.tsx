@@ -1,6 +1,6 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, IconButton, useTheme, Alert, Chip } from '@mui/material';
-import { Close as CloseIcon, Warning as WarningIcon, DriveFileMove as MoveIcon, DeleteOutline as DeleteIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Warning as WarningIcon, DriveFileMove as MoveIcon, DeleteOutlined as DeleteIcon } from '@mui/icons-material';
 
 interface OverwriteDialogProps {
   open: boolean;
@@ -61,7 +61,6 @@ const OverwriteDialog: React.FC<OverwriteDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 3 }}>
         <Alert 
           severity="warning" 
@@ -74,7 +73,9 @@ const OverwriteDialog: React.FC<OverwriteDialogProps> = ({
           <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
             Warning: Overwriting Existing Directory
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             {hideFileName ? (
               <>
                 The destination already contains items with the same names. Overwriting will delete the
@@ -105,7 +106,12 @@ const OverwriteDialog: React.FC<OverwriteDialogProps> = ({
           p: 2,
           border: `1px solid ${theme.palette.divider}`
         }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 1
+            }}>
             Source (will be moved):
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -129,7 +135,12 @@ const OverwriteDialog: React.FC<OverwriteDialogProps> = ({
             )}
           </Box>
           
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 1
+            }}>
             Destination (will be replaced):
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -148,7 +159,6 @@ const OverwriteDialog: React.FC<OverwriteDialogProps> = ({
           </Box>
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ 
         p: 2, 
         borderTop: `1px solid ${theme.palette.divider}`,

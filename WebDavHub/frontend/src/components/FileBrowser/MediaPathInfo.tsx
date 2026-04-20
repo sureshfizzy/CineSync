@@ -260,7 +260,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
     if (seasons.length === 0) {
       return (
         <Paper elevation={1} sx={{ mt: 3, p: 2, bgcolor: 'background.paper', borderRadius: 2 }}>
-          <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center' }}>
+          <Typography
+            variant="body1"
+            sx={{
+              color: "text.secondary",
+              textAlign: 'center'
+            }}>
             No season information available.
           </Typography>
         </Paper>
@@ -330,7 +335,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 0.5
+            }}>
             File Name
           </Typography>
           <Typography variant="body2" sx={{
@@ -344,7 +354,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
         </Box>
 
         <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 0.5
+            }}>
             File Size
           </Typography>
           <Typography variant="body2" sx={{
@@ -358,7 +373,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
         </Box>
 
         <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 0.5
+            }}>
             Last Modified
           </Typography>
           <Typography variant="body2" sx={{
@@ -373,7 +393,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
 
         {pathInfo.sourcePath && (
           <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 0.5
+              }}>
               Source Path (Actual Location)
             </Typography>
             <Tooltip title={pathInfo.sourcePath} placement="top">
@@ -394,7 +419,12 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
 
         {pathInfo.fullPath && (
           <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 0.5
+              }}>
               Full Path
             </Typography>
             <Tooltip title={pathInfo.fullPath} placement="top">

@@ -166,7 +166,6 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
           <TextField
@@ -174,13 +173,13 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
             placeholder="Filter episodes"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
+            slotProps={{ input: {
               startAdornment: (
                 <InputAdornment position="start">
                   <SearchIcon />
                 </InputAdornment>
               ),
-            }}
+            } }}
             size="small"
           />
         </Box>
@@ -195,7 +194,9 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
             gap: 2
           }}>
             <CircularProgress />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Loading episodes from TMDB...
             </Typography>
           </Box>
@@ -230,7 +231,12 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
                   )}
                 </Box>
                 {episode.overview && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      mt: 0.5
+                    }}>
                     {episode.overview.length > 200 ? `${episode.overview.substring(0, 200)}...` : episode.overview}
                   </Typography>
                 )}
@@ -238,7 +244,9 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
             ))}
             {filteredEpisodes.length === 0 && !loading && (
               <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>
                   {searchQuery ? 'No episodes found matching your search.' : 'No episodes available.'}
                 </Typography>
               </Box>
@@ -246,7 +254,6 @@ const EpisodeSelectionDialog: React.FC<EpisodeSelectionDialogProps> = ({
           </Box>
         )}
       </DialogContent>
-
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,

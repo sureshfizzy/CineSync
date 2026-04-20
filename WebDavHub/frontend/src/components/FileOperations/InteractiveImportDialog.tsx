@@ -916,7 +916,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         {loading ? (
           <Box sx={{
@@ -930,10 +929,18 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             backgroundImage: 'none'
           }}>
             <CircularProgress />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Scanning and parsing media files...
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                mt: 1,
+                display: 'block'
+              }}>
               Files will appear as they are processed
             </Typography>
           </Box>
@@ -948,16 +955,30 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             bgcolor: theme.palette.background.paper,
             backgroundImage: 'none'
           }}>
-            <Typography variant="h6" color="text.secondary">
+            <Typography variant="h6" sx={{
+              color: "text.secondary"
+            }}>
               {initialFiles ? 'No Failed Entries Found' : 'No Media Files Found'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 400 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                textAlign: 'center',
+                maxWidth: 400
+              }}>
               {initialFiles
                 ? 'No failed entries are available for manual import.'
                 : 'No video files were found in the selected folder. Please ensure the folder contains supported video files (.mkv, .mp4, .avi, etc.).'}
             </Typography>
             {!initialFiles && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  mt: 1,
+                  textAlign: 'center'
+                }}>
                 Folder: {folderPath}
               </Typography>
             )}
@@ -974,14 +995,29 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
             backgroundImage: 'none'
           }}>
             <CircularProgress size={60} />
-            <Typography variant="h6" color="text.secondary">
+            <Typography variant="h6" sx={{
+              color: "text.secondary"
+            }}>
               Importing Files...
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', maxWidth: 400 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                textAlign: 'center',
+                maxWidth: 400
+              }}>
               Processing {importProgress.completed} of {importProgress.total} files
             </Typography>
             {importProgress.currentFile && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, textAlign: 'center', fontFamily: 'monospace' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  mt: 1,
+                  textAlign: 'center',
+                  fontFamily: 'monospace'
+                }}>
                 Current: {importProgress.currentFile}
               </Typography>
             )}
@@ -1108,7 +1144,9 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
                           )}
                         </Box>
                       ) : (
-                        <Typography variant="body2" color="text.secondary">-</Typography>
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>-</Typography>
                       )}
                     </TableCell>
                     <TableCell>
@@ -1148,7 +1186,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           </TableContainer>
         )}
       </DialogContent>
-
       {/* Progress indicator at the bottom */}
       {scanProgress.total > 0 && !processing && (
         <Box sx={{
@@ -1161,7 +1198,9 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           justifyContent: 'center',
           gap: 2
         }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             {isScanning
               ? `Scanning: ${scanProgress.current} of ${scanProgress.total} files processed`
               : `Scan completed: ${scanProgress.current} of ${scanProgress.total} files processed`
@@ -1172,7 +1211,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           )}
         </Box>
       )}
-
       {/* Bottom options */}
       {files.length > 0 && !processing && !loading && (
         <Box sx={{
@@ -1198,7 +1236,12 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
               gap: 1,
               minWidth: 'fit-content'
             }}>
-              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  whiteSpace: 'nowrap'
+                }}>
                 Default Media Type:
               </Typography>
               <FormControl size="small" sx={{ minWidth: 100 }}>
@@ -1243,7 +1286,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           </Button>
         </Box>
       )}
-
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,
@@ -1280,7 +1322,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
           </Button>
         </Box>
       </DialogActions>
-
       <SeriesSelectionDialog
         open={seriesDialogOpen}
         onClose={() => {
@@ -1290,7 +1331,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
         onSelect={handleSeriesSelect}
         currentValue={currentEditingFileId ? files.find(f => f.id === currentEditingFileId)?.series : undefined}
       />
-
       <SeasonSelectionDialog
         open={seasonDialogOpen}
         onClose={() => {
@@ -1302,7 +1342,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
         seriesName={currentEditingFileId ? files.find(f => f.id === currentEditingFileId)?.series : undefined}
         currentValue={currentEditingFileId ? files.find(f => f.id === currentEditingFileId)?.season : undefined}
       />
-
       <EpisodeSelectionDialog
         open={episodeDialogOpen}
         onClose={() => {
@@ -1315,7 +1354,6 @@ const InteractiveImportDialog: React.FC<InteractiveImportDialogProps> = ({
         seasonNumber={currentEditingFileId ? files.find(f => f.id === currentEditingFileId)?.season : undefined}
         currentValue={currentEditingFileId ? files.find(f => f.id === currentEditingFileId)?.episode : undefined}
       />
-
       <MovieSelectionDialog
         open={movieDialogOpen}
         onClose={() => {

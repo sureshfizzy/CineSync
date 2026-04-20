@@ -170,14 +170,14 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
       maxWidth="lg"
       fullWidth
       fullScreen={isMobile}
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           bgcolor: 'background.default',
           backgroundImage: 'none',
           minHeight: { xs: '100vh', md: '70vh' },
           maxHeight: { xs: '100vh', md: '90vh' },
         },
-      }}
+      } }}
     >
       <DialogTitle
         sx={{
@@ -190,14 +190,15 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
           py: 2,
         }}
       >
-        <Typography variant="h6" fontWeight="600">
+        <Typography variant="h6" sx={{
+          fontWeight: "600"
+        }}>
           {title} - Movie Name Tokens
         </Typography>
         <IconButton onClick={onClose} size="small">
           <Close />
         </IconButton>
       </DialogTitle>
-
       {/* Search Bar */}
       <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
         <TextField
@@ -206,12 +207,11 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
           placeholder="Search tokens..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
+          slotProps={{ input: {
             startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />,
-          }}
+          } }}
         />
       </Box>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ 
           display: 'flex', 
@@ -232,7 +232,12 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
               overflowY: { xs: 'auto', md: 'visible' },
             }}
           >
-            <Typography variant="subtitle2" fontWeight="600" sx={{ mb: 2 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: "600",
+                mb: 2
+              }}>
               Categories
             </Typography>
             <Stack spacing={0.5}>
@@ -268,10 +273,14 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
             {filteredCategories[selectedCategory] && (
               <>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="600">
+                  <Typography variant="h6" sx={{
+                    fontWeight: "600"
+                  }}>
                     {filteredCategories[selectedCategory].name}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     Click a token to insert it
                   </Typography>
                 </Box>
@@ -298,7 +307,9 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
                         }}
                       >
                         <Stack spacing={1.5}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
+                          <Stack direction="row" spacing={1} sx={{
+                            alignItems: "center"
+                          }}>
                             <Chip
                               label={tokenInfo.token}
                               size="small"
@@ -333,24 +344,22 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
                           <Box>
                             <Typography
                               variant="body2"
-                              color="text.secondary"
-                              sx={{ 
-                                fontFamily: 'monospace', 
+                              sx={{
+                                color: "text.secondary",
+                                fontFamily: 'monospace',
                                 fontSize: '0.875rem',
                                 fontWeight: 500,
-                                mb: 0.5,
-                              }}
-                            >
+                                mb: 0.5
+                              }}>
                               Example: {tokenInfo.example}
                             </Typography>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
-                              sx={{ 
+                              sx={{
+                                color: "text.secondary",
                                 fontSize: '0.75rem',
-                                lineHeight: 1.3,
-                              }}
-                            >
+                                lineHeight: 1.3
+                              }}>
                               {tokenInfo.description}
                             </Typography>
                           </Box>
@@ -364,7 +373,6 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
           </Box>
         </Box>
       </DialogContent>
-
       {/* Current Format Display */}
       <Box
         sx={{
@@ -398,9 +406,12 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
           <Box sx={{ mt: 1.5 }}>
             <Typography
               variant="caption"
-              fontWeight="600"
-              sx={{ mb: 0.5, color: 'text.secondary', display: 'block' }}
-            >
+              sx={{
+                fontWeight: "600",
+                mb: 0.5,
+                color: 'text.secondary',
+                display: 'block'
+              }}>
               Preview:
             </Typography>
             <Box
@@ -422,7 +433,6 @@ const RadarrTokenDialog: React.FC<RadarrTokenDialogProps> = ({
           </Box>
         )}
       </Box>
-
       <DialogActions
         sx={{
           bgcolor: 'background.paper',

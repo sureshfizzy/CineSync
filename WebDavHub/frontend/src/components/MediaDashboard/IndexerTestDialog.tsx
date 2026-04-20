@@ -177,7 +177,7 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 3,
           boxShadow: theme.palette.mode === 'dark' 
@@ -190,7 +190,7 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
           overflow: 'hidden',
           backdropFilter: 'blur(10px)'
         }
-      }}
+      } }}
     >
       <Fade in={open} timeout={300}>
         <Box>
@@ -215,10 +215,14 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
                 <TestTubeIcon sx={{ fontSize: 24 }} />
               </Avatar>
               <Box>
-                <Typography variant="h6" fontWeight={600} color="info">
+                <Typography variant="h6" color="info" sx={{
+                  fontWeight: 600
+                }}>
                   Test Indexer Connection
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>
                   {indexer?.name}
                 </Typography>
               </Box>
@@ -240,20 +244,34 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
               border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
               mb: 3
             }}>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 600,
+                  mb: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}>
                 <SearchIcon sx={{ fontSize: 20 }} />
                 Indexer Details
               </Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 1, fontSize: '0.875rem' }}>
-                <Typography variant="body2" color="text.secondary">Protocol:</Typography>
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>Protocol:</Typography>
                 <Typography variant="body2">{IndexerApi.getProtocolDisplayName(indexer?.protocol || '')}</Typography>
                 
-                <Typography variant="body2" color="text.secondary">URL:</Typography>
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>URL:</Typography>
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                   {indexer?.url}
                 </Typography>
                 
-                <Typography variant="body2" color="text.secondary">API Key:</Typography>
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>API Key:</Typography>
                 <Typography variant="body2">
                   {indexer?.apiKey ? '••••••••' : 'Not provided'}
                 </Typography>
@@ -273,10 +291,17 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
             }}>
               {getStatusIcon(overallStatus)}
               <Box>
-                <Typography variant="h6" fontWeight={600} sx={{ color: getOverallStatusColor() }}>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    color: getOverallStatusColor()
+                  }}>
                   {TEST_STATUS_LABELS[overallStatus]}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>
                   {getOverallStatusMessage()}
                 </Typography>
               </Box>
@@ -285,7 +310,12 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
             {/* Test Progress */}
             {testing && (
               <Box sx={{ mb: 3 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    mb: 1
+                  }}>
                   Running tests...
                 </Typography>
                 <LinearProgress sx={{ borderRadius: 1 }} />
@@ -293,7 +323,15 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
             )}
 
             {/* Test Results */}
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                mb: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}>
               <TestTubeIcon sx={{ fontSize: 20 }} />
               Test Results
             </Typography>
@@ -312,7 +350,9 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
                     <ListItemText
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                          <Typography variant="body1" fontWeight={500}>
+                          <Typography variant="body1" sx={{
+                            fontWeight: 500
+                          }}>
                             {test.name}
                           </Typography>
                           <Chip
@@ -340,7 +380,9 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
                         </Box>
                       }
                       secondary={
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>
                           {test.description}
                           {test.message && (
                             <Box component="span" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
@@ -366,7 +408,9 @@ export default function IndexerTestDialog({ open, onClose, indexer }: IndexerTes
                 borderRadius: 2
               }}>
                 <TestTubeIcon sx={{ fontSize: 48, color: theme.palette.grey[400], mb: 2 }} />
-                <Typography variant="body1" color="text.secondary">
+                <Typography variant="body1" sx={{
+                  color: "text.secondary"
+                }}>
                   Click "Run Tests" to start testing the indexer connection
                 </Typography>
               </Box>

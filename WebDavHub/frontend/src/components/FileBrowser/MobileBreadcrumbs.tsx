@@ -11,7 +11,11 @@ const MobileBreadcrumbs: React.FC<MobileBreadcrumbsProps> = ({ currentPath, onPa
   const pathParts = currentPath.split('/').filter(Boolean);
 
   if (pathParts.length === 0) {
-    return <Typography fontWeight={500}>Home</Typography>;
+    return (
+      <Typography sx={{
+        fontWeight: 500
+      }}>Home</Typography>
+    );
   }
 
   if (pathParts.length === 1) {
@@ -32,7 +36,14 @@ const MobileBreadcrumbs: React.FC<MobileBreadcrumbsProps> = ({ currentPath, onPa
           Home
         </Link>
         <Typography sx={{ mx: 0.5, color: 'text.secondary', fontWeight: 500 }}>/</Typography>
-        <Typography fontWeight={500} noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <Typography
+          noWrap
+          sx={{
+            fontWeight: 500,
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
           {pathParts[0]}
         </Typography>
       </Box>
@@ -58,7 +69,14 @@ const MobileBreadcrumbs: React.FC<MobileBreadcrumbsProps> = ({ currentPath, onPa
         {pathParts[pathParts.length - 2]}
       </Link>
       <Typography sx={{ mx: 0.5, color: 'text.secondary', fontWeight: 500 }}>/</Typography>
-      <Typography fontWeight={500} noWrap sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <Typography
+        noWrap
+        sx={{
+          fontWeight: 500,
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
         {pathParts[pathParts.length - 1]}
       </Typography>
     </Box>

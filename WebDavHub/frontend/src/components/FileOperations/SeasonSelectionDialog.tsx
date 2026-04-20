@@ -164,7 +164,6 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
           <TextField
@@ -172,13 +171,13 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({
             placeholder="Filter seasons"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
+            slotProps={{ input: {
               startAdornment: (
                 <InputAdornment position="start">
                   <SearchIcon />
                 </InputAdornment>
               ),
-            }}
+            } }}
             size="small"
           />
         </Box>
@@ -193,7 +192,9 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({
             gap: 2
           }}>
             <CircularProgress />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Loading seasons from TMDB...
             </Typography>
           </Box>
@@ -218,7 +219,9 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({
             ))}
             {filteredSeasons.length === 0 && !loading && (
               <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: "text.secondary"
+                }}>
                   {searchQuery ? 'No seasons found matching your search.' : 'No seasons available.'}
                 </Typography>
               </Box>
@@ -226,7 +229,6 @@ const SeasonSelectionDialog: React.FC<SeasonSelectionDialogProps> = ({
           </Box>
         )}
       </DialogContent>
-
       <DialogActions sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,

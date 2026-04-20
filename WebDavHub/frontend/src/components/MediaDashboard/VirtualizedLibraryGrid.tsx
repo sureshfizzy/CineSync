@@ -239,7 +239,9 @@ export default function VirtualizedLibraryGrid({
   if (items.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography color="text.secondary">No items to display.</Typography>
+        <Typography sx={{
+          color: "text.secondary"
+        }}>No items to display.</Typography>
       </Box>
     );
   }
@@ -267,9 +269,13 @@ export default function VirtualizedLibraryGrid({
       {(loadingMore || items.length < totalCount) && (
         <Box ref={loadMoreRef} sx={{ py: 3, display: 'flex', justifyContent: 'center' }}>
           {loadingMore ? (
-            <Typography color="text.secondary">Loading more...</Typography>
+            <Typography sx={{
+              color: "text.secondary"
+            }}>Loading more...</Typography>
           ) : (
-            <Typography color="text.secondary">
+            <Typography sx={{
+              color: "text.secondary"
+            }}>
               {items.length} of {totalCount} loaded. Scroll for more.
             </Typography>
           )}

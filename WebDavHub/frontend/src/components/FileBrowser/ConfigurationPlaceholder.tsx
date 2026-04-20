@@ -89,9 +89,11 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
 
         <Typography
           variant="body1"
-          color="text.secondary"
-          sx={{ mb: 3, lineHeight: 1.6 }}
-        >
+          sx={{
+            color: "text.secondary",
+            mb: 3,
+            lineHeight: 1.6
+          }}>
           The destination directory is not properly configured. Please update your
           configuration to start browsing your media files.
         </Typography>
@@ -141,7 +143,9 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
           </Alert>
         </Stack>
 
-        <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }} justifyContent="center">
+        <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }} sx={{
+          justifyContent: "center"
+        }}>
           <Button
             variant="contained"
             size="large"
@@ -163,17 +167,28 @@ const ConfigurationPlaceholder: React.FC<ConfigurationPlaceholderProps> = ({
         </Stack>
 
         <Box sx={{ mt: 4, pt: 3, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 2
+            }}>
             What you need to do:
           </Typography>
           <Stack spacing={1} sx={{ textAlign: 'left' }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               • Set <code>DESTINATION_DIR</code> to a valid directory path in Settings
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               • Ensure the directory exists and is accessible
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               • Changes take effect immediately without restart
             </Typography>
           </Stack>

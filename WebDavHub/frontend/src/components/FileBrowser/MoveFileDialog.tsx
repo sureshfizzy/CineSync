@@ -91,7 +91,9 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
           <MoveIcon color="primary" />
           <Box>
             <Typography variant="h6">Move File</Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Moving: <Chip label={fileName} size="small" color="primary" />
             </Typography>
           </Box>
@@ -100,10 +102,14 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 2
+            }}>
             Select destination base folder:
           </Typography>
         </Box>
@@ -119,7 +125,9 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
               gap: 2
             }}>
               <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Loading available folders...
               </Typography>
             </Box>
@@ -127,7 +135,9 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
             <List sx={{ py: 0 }}>
               {availableFolders.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                  }}>
                     No destination folders found
                   </Typography>
                 </Box>
@@ -153,7 +163,9 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
                               {folder.displayName}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: "text.secondary"
+                            }}>
                               {folder.path} • {folder.fileCount} files
                             </Typography>
                           </Box>
@@ -168,7 +180,6 @@ const MoveFileDialog: React.FC<MoveFileDialogProps> = ({
           )}
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Button onClick={onClose} disabled={loading}>
           Cancel

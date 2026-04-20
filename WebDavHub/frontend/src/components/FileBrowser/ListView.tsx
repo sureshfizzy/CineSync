@@ -108,7 +108,9 @@ export default function ListView({
   if (files.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
-        <Typography color="text.secondary">
+        <Typography sx={{
+          color: "text.secondary"
+        }}>
           This folder is empty.
         </Typography>
       </Box>

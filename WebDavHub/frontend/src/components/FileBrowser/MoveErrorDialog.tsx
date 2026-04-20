@@ -1,6 +1,6 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, IconButton, useTheme, Alert, Chip } from '@mui/material';
-import { Close as CloseIcon, ErrorOutline as ErrorIcon, DriveFileMove as MoveIcon } from '@mui/icons-material';
+import { Close as CloseIcon, ErrorOutlined as ErrorIcon, DriveFileMove as MoveIcon } from '@mui/icons-material';
 
 interface MoveErrorDialogProps {
   open: boolean;
@@ -58,7 +58,6 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ p: 3 }}>
           <Alert 
@@ -75,7 +74,9 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
             <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
               Move Operation Failed
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               {errorMessage}
             </Typography>
           </Alert>
@@ -86,7 +87,12 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
             p: 2,
             border: `1px solid ${theme.palette.divider}`
           }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 1
+              }}>
               Item being moved:
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -100,7 +106,12 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
               />
             </Box>
             
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 1
+              }}>
               Destination:
             </Typography>
             <Typography variant="body2" sx={{ 
@@ -116,7 +127,6 @@ const MoveErrorDialog: React.FC<MoveErrorDialogProps> = ({
           </Box>
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ 
         p: 2, 
         borderTop: `1px solid ${theme.palette.divider}`,

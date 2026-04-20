@@ -68,7 +68,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       onClose={onClose}
       maxWidth={maxWidth}
       fullWidth
-      PaperProps={{
+      slotProps={{ paper: {
         sx: {
           borderRadius: 2,
           boxShadow: theme.palette.mode === 'dark'
@@ -81,7 +81,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             ? '1px solid rgba(255, 255, 255, 0.12)'
             : 'none',
         },
-      }}
+      } }}
     >
       <DialogTitle sx={{ pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -101,13 +101,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </IconButton>
         </Box>
       </DialogTitle>
-
       <DialogContent sx={{ pt: 1 }}>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" sx={{
+          color: "text.secondary"
+        }}>
           {message}
         </Typography>
       </DialogContent>
-
       <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
         <LoadingButton
           onClick={onClose}

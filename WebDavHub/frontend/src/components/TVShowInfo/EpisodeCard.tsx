@@ -215,7 +215,9 @@ const EpisodeCard: React.FC<EpisodeCardProps> = ({
               }}
             >
               <PlayArrowIcon sx={{ fontSize: 32, color: 'text.secondary' }} />
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 No Preview
               </Typography>
             </Box>

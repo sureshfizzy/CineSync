@@ -263,20 +263,21 @@ export default function DebridDashboard() {
     >
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography 
-          variant="h4" 
-          fontWeight="700" 
-          sx={{ 
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: "700",
             mb: 2,
             fontSize: { xs: '1.75rem', sm: '2.125rem' },
+
             background: theme.palette.mode === 'dark' 
               ? `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
               : 'inherit',
+
             backgroundClip: theme.palette.mode === 'dark' ? 'text' : 'initial',
             WebkitBackgroundClip: theme.palette.mode === 'dark' ? 'text' : 'initial',
-            WebkitTextFillColor: theme.palette.mode === 'dark' ? 'transparent' : 'inherit',
-          }}
-        >
+            WebkitTextFillColor: theme.palette.mode === 'dark' ? 'transparent' : 'inherit'
+          }}>
           Debrid Dashboard
         </Typography>
         
@@ -293,7 +294,6 @@ export default function DebridDashboard() {
           </Typography>
         )}
       </Box>
-
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs 
@@ -320,7 +320,6 @@ export default function DebridDashboard() {
           />
         </Tabs>
       </Box>
-
       {/* Tab Content */}
       {currentTab === 0 && (
         <Box>
@@ -339,7 +338,13 @@ export default function DebridDashboard() {
           }}
         >
           <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'center', sm: 'center' }} spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: 3 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={{ xs: 1.5, sm: 2 }}
+              sx={{
+                alignItems: { xs: 'center', sm: 'center' },
+                mb: 3
+              }}>
               <Avatar 
                 sx={{ 
                   bgcolor: 'primary.main', 
@@ -355,17 +360,23 @@ export default function DebridDashboard() {
                 textAlign: { xs: 'center', sm: 'left' },
                 minWidth: 0
               }}>
-                <Typography variant="h5" fontWeight="700" sx={{ 
-                  mb: 0.5,
-                  fontSize: { xs: '1.25rem', sm: '1.5rem' }
-                }}>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: "700",
+                    mb: 0.5,
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                  }}>
                   {stats.account.username}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{
-                  wordBreak: 'break-word',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    wordBreak: 'break-word',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
                   {stats.account.email}
                 </Typography>
               </Box>
@@ -402,13 +413,22 @@ export default function DebridDashboard() {
                     borderRadius: 2,
                   }}
                 >
-                  <Typography variant="h4" fontWeight="700" color="primary.main" sx={{ 
-                    mb: 0.5,
-                    fontSize: { xs: '1.75rem', sm: '2.125rem' }
-                  }}>
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: "700",
+                      color: "primary.main",
+                      mb: 0.5,
+                      fontSize: { xs: '1.75rem', sm: '2.125rem' }
+                    }}>
                     {stats.account.points.toLocaleString()}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" fontWeight="500">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      fontWeight: "500"
+                    }}>
                     Points Available
                   </Typography>
                 </Paper>
@@ -426,13 +446,22 @@ export default function DebridDashboard() {
                     borderRadius: 2,
                   }}
                 >
-                  <Typography variant="h6" fontWeight="700" color="success.main" sx={{ 
-                    mb: 0.5,
-                    fontSize: { xs: '1rem', sm: '1.25rem' }
-                  }}>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "700",
+                      color: "success.main",
+                      mb: 0.5,
+                      fontSize: { xs: '1rem', sm: '1.25rem' }
+                    }}>
                     {formatDate(stats.account.expiration)}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" fontWeight="500">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                      fontWeight: "500"
+                    }}>
                     Subscription Expires
                   </Typography>
                 </Paper>
@@ -475,11 +504,19 @@ export default function DebridDashboard() {
             }}
         >
               <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{
+                    alignItems: "center",
+                    mb: 2
+                  }}>
                   <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
                     <CloudDownload sx={{ fontSize: 22 }} />
                   </Avatar>
-                  <Typography variant="subtitle1" fontWeight="700">
+                  <Typography variant="subtitle1" sx={{
+                    fontWeight: "700"
+                  }}>
                     Torrent Statistics
                   </Typography>
                 </Stack>
@@ -504,10 +541,23 @@ export default function DebridDashboard() {
                       }}
                     >
                       <Storage sx={{ fontSize: 28, color: 'primary.main', mb: 0.5 }} />
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Total Torrents
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="primary.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "primary.main"
+                        }}>
                         {stats.torrents.total}
                       </Typography>
                     </Paper>
@@ -527,10 +577,23 @@ export default function DebridDashboard() {
                       }}
                     >
                       <DataUsage sx={{ fontSize: 28, color: 'info.main', mb: 0.5 }} />
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Total Size
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="info.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "info.main"
+                        }}>
                         {formatBytes(stats.torrents.totalSize)}
                       </Typography>
                     </Paper>
@@ -540,13 +603,17 @@ export default function DebridDashboard() {
                 <Divider sx={{ my: 1.5 }} />
 
                 <Box>
-                  <Typography variant="caption" fontWeight="700" color="text.secondary" sx={{ 
-                    mb: 1, 
-                    display: 'block', 
-                    textTransform: 'uppercase', 
-                    letterSpacing: 0.5, 
-                    fontSize: { xs: '0.65rem', sm: '0.7rem' }
-                  }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "700",
+                      color: "text.secondary",
+                      mb: 1,
+                      display: 'block',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                      fontSize: { xs: '0.65rem', sm: '0.7rem' }
+                    }}>
                     Status Breakdown
                   </Typography>
                   <Box sx={{ 
@@ -591,11 +658,19 @@ export default function DebridDashboard() {
               }}
             >
               <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{
+                    alignItems: "center",
+                    mb: 2
+                  }}>
                   <Avatar sx={{ bgcolor: 'success.main', width: 40, height: 40 }}>
                     <TrendingUp sx={{ fontSize: 22 }} />
                   </Avatar>
-                  <Typography variant="subtitle1" fontWeight="700">
+                  <Typography variant="subtitle1" sx={{
+                    fontWeight: "700"
+                  }}>
                     Traffic Statistics
                   </Typography>
                 </Stack>
@@ -610,10 +685,23 @@ export default function DebridDashboard() {
                   }}
                 >
                   <TodayIcon sx={{ fontSize: 32, color: 'success.main', mb: 0.5 }} />
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      display: 'block',
+                      mb: 0.5,
+                      fontSize: '0.7rem'
+                    }}>
                     Today's Usage
                   </Typography>
-                  <Typography variant="h5" fontWeight="700" color="success.main">
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: "700",
+                      color: "success.main"
+                    }}>
                     {formatBytes(stats.traffic.today)}
                   </Typography>
                 </Paper>
@@ -648,29 +736,63 @@ export default function DebridDashboard() {
             }}
           >
             <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  mb: 2
+                }}>
                 <Avatar sx={{ bgcolor: 'warning.main', width: 40, height: 40 }}>
                   <CloudSync sx={{ fontSize: 22 }} />
                 </Avatar>
-                <Typography variant="subtitle1" fontWeight="700">
+                <Typography variant="subtitle1" sx={{
+                  fontWeight: "700"
+                }}>
                   Workers
                 </Typography>
               </Stack>
 
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
                 <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.info.main, 0.08), borderRadius: 1.5 }}>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      display: 'block',
+                      mb: 0.5,
+                      fontSize: '0.7rem'
+                    }}>
                     IO Workers
                   </Typography>
-                  <Typography variant="h6" fontWeight="700" color="info.main">
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "700",
+                      color: "info.main"
+                    }}>
                     {stats.workers?.io ?? 0}{stats.workers?.ioInUse != null ? ` (${stats.workers?.ioInUse} active)` : ''}
                   </Typography>
                 </Paper>
                 <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.success.main, 0.08), borderRadius: 1.5 }}>
-                  <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "600",
+                      color: "text.secondary",
+                      display: 'block',
+                      mb: 0.5,
+                      fontSize: '0.7rem'
+                    }}>
                     API Workers
                   </Typography>
-                  <Typography variant="h6" fontWeight="700" color="success.main">
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: "700",
+                      color: "success.main"
+                    }}>
                     {stats.workers?.api ?? 0}{stats.workers?.apiInUse != null ? ` (${stats.workers?.apiInUse} active)` : ''}
                   </Typography>
                 </Paper>
@@ -679,45 +801,101 @@ export default function DebridDashboard() {
               {stats.enrich && stats.enrich.total > 0 && (
                 <>
                   <Divider sx={{ my: 2 }} />
-                  <Typography variant="caption" fontWeight="700" color="text.secondary" sx={{ 
-                    mb: 1.5, 
-                    display: 'block', 
-                    textTransform: 'uppercase', 
-                    letterSpacing: 0.5, 
-                    fontSize: { xs: '0.65rem', sm: '0.7rem' }
-                  }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "700",
+                      color: "text.secondary",
+                      mb: 1.5,
+                      display: 'block',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                      fontSize: { xs: '0.65rem', sm: '0.7rem' }
+                    }}>
                     Enrich Queue
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                     <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.primary.main, 0.08), borderRadius: 1.5 }}>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Total
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="primary.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "primary.main"
+                        }}>
                         {stats.enrich.total.toLocaleString()}
                       </Typography>
                     </Paper>
                     <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.info.main, 0.08), borderRadius: 1.5 }}>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Processed
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="info.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "info.main"
+                        }}>
                         {stats.enrich.processed.toLocaleString()}
                       </Typography>
                     </Paper>
                     <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.success.main, 0.08), borderRadius: 1.5 }}>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Saved
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="success.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "success.main"
+                        }}>
                         {stats.enrich.saved.toLocaleString()}
                       </Typography>
                     </Paper>
                     <Paper elevation={0} sx={{ p: 1.5, textAlign: 'center', flex: '1 1 200px', background: alpha(theme.palette.warning.main, 0.08), borderRadius: 1.5 }}>
-                      <Typography variant="caption" fontWeight="600" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: "600",
+                          color: "text.secondary",
+                          display: 'block',
+                          mb: 0.5,
+                          fontSize: '0.7rem'
+                        }}>
                         Remaining
                       </Typography>
-                      <Typography variant="h6" fontWeight="700" color="warning.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: "700",
+                          color: "warning.main"
+                        }}>
                         {stats.enrich.remaining.toLocaleString()}
                       </Typography>
                     </Paper>
@@ -725,10 +903,20 @@ export default function DebridDashboard() {
                   {stats.enrich.total > 0 && (
                     <Box sx={{ mt: 2 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            fontSize: "0.7rem"
+                          }}>
                           Progress
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" fontSize="0.7rem">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            fontSize: "0.7rem"
+                          }}>
                           {stats.enrich.total > 0 ? Math.round((stats.enrich.processed / stats.enrich.total) * 100) : 0}%
                         </Typography>
                       </Box>
@@ -756,7 +944,6 @@ export default function DebridDashboard() {
       </Box>
         </Box>
       )}
-
       {/* Torrent Manager Tab */}
       {currentTab === 1 && <TorrentManagerTab />}
     </Box>

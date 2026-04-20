@@ -243,7 +243,9 @@ const PosterView = memo(({
   if (files.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography color="text.secondary">
+        <Typography sx={{
+          color: "text.secondary"
+        }}>
           This folder is empty.
         </Typography>
       </Box>
@@ -337,7 +339,6 @@ const PosterView = memo(({
                   onLoad={() => onImageLoad(file.name)}
                 />
               )}
-
               <Box
                 className="poster-image-container"
                 sx={{
@@ -504,7 +505,6 @@ const PosterView = memo(({
                   }
                 })()}
               </Box>
-
               {/* Title section */}
               <Box sx={{
                 width: '100%',
@@ -531,15 +531,14 @@ const PosterView = memo(({
                 {tmdb && (tmdb.release_date || tmdb.first_air_date) && (
                   <Typography
                     variant="body2"
-                    color="text.secondary"
                     sx={{
+                      color: "text.secondary",
                       fontWeight: 500,
                       textAlign: 'center',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                      whiteSpace: 'nowrap'
+                    }}>
                     {(() => {
                       const dateStr = tmdb.release_date || tmdb.first_air_date;
                       return dateStr ? new Date(dateStr).getFullYear() : '';
@@ -615,7 +614,6 @@ const PosterView = memo(({
           );
         })}
       </Box>
-
       {/* Context Menu */}
       <Menu
         open={contextMenu !== null}
@@ -708,7 +706,6 @@ const PosterView = memo(({
           </MenuItem>
         )}
       </Menu>
-
       {/* Dialogs */}
       <Dialog open={fileActions.renameDialogOpen} onClose={fileActions.handleRenameDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Rename File</DialogTitle>
@@ -735,7 +732,6 @@ const PosterView = memo(({
           </Button>
         </DialogActions>
       </Dialog>
-
       <Dialog open={fileActions.deleteDialogOpen} onClose={fileActions.handleDeleteDialogClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -749,7 +745,6 @@ const PosterView = memo(({
           </Button>
         </DialogActions>
       </Dialog>
-
       {fileActions.modifyDialogOpen && fileActions.fileBeingModified && (
         <ModifyDialog
           open={fileActions.modifyDialogOpen}
@@ -758,7 +753,6 @@ const PosterView = memo(({
           currentFilePath={fileActions.fileBeingModified.fullPath || fileActions.fileBeingModified.sourcePath || joinPaths(currentPath, fileActions.fileBeingModified.name)}
         />
       )}
-
       {/* Move Dialog */}
       <MoveFileDialog
         open={fileActions.moveDialogOpen}
@@ -767,7 +761,6 @@ const PosterView = memo(({
         fileName={fileActions.fileBeingMoved?.name || ''}
         loading={fileActions.moveLoading}
       />
-
       {/* Move Error Dialog */}
       {!fileActions.overwriteDialogOpen && (
         <MoveErrorDialog
@@ -784,7 +777,6 @@ const PosterView = memo(({
           errorMessage={fileActions.moveError || ''}
         />
       )}
-
       {/* Overwrite Dialog */}
       <OverwriteDialog
         open={fileActions.overwriteDialogOpen}
@@ -793,7 +785,6 @@ const PosterView = memo(({
         fileName={fileActions.fileBeingMoved?.name || ''}
         targetPath={fileActions.lastMoveAttempt?.targetPath || ''}
       />
-
       {/* Bulk Overwrite Dialog */}
       {bulkConflict && (
         <OverwriteDialog
@@ -806,7 +797,6 @@ const PosterView = memo(({
           hideFileName
         />
       )}
-
       {/* Bulk Actions */}
       <BulkActionsBar
         selectedItems={getSelectedItems(files)}
@@ -816,7 +806,6 @@ const PosterView = memo(({
         onSelectAll={() => selectAll(files)}
         isVisible={isSelectionMode && selectedItems.size > 0}
       />
-
       <BulkMoveDialog
         open={bulkMoveDialogOpen}
         onClose={() => setBulkMoveDialogOpen(false)}
@@ -824,7 +813,6 @@ const PosterView = memo(({
         selectedItems={getSelectedItems(files)}
         loading={bulkLoading}
       />
-
       <BulkDeleteDialog
         open={bulkDeleteDialogOpen}
         onClose={() => setBulkDeleteDialogOpen(false)}

@@ -102,7 +102,9 @@ const SeasonList: React.FC<SeasonListProps> = ({
     <>
       {data.seasons && data.seasons.length > 0 && (
         <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" fontWeight={600} gutterBottom>Seasons</Typography>
+          <Typography variant="h6" gutterBottom sx={{
+            fontWeight: 600
+          }}>Seasons</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <AnimatePresence>
               {[...data.seasons]
@@ -182,13 +184,17 @@ const SeasonList: React.FC<SeasonListProps> = ({
                             )}
                           </Box>
                           <Box sx={{ display: 'flex', gap: 2, mb: 1, alignItems: 'center' }}>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" sx={{
+                              color: "text.secondary"
+                            }}>
                               <span style={{ color: availableCount > 0 ? '#22c55e' : undefined, fontWeight: 700 }}>{availableCount}</span>
                               <span style={{ color: 'inherit', fontWeight: 400 }}>/</span>
                               <span style={{ color: 'inherit', fontWeight: 400 }}>{totalCount}</span> Episodes
                             </Typography>
                             {season.air_date && (
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" sx={{
+                                color: "text.secondary"
+                              }}>
                                 Air Date: {new Date(season.air_date).toLocaleDateString()}
                               </Typography>
                             )}
@@ -199,14 +205,15 @@ const SeasonList: React.FC<SeasonListProps> = ({
                         </Box>
                       </Box>
                     </Paper>
-
                     {/* Episode List - Only show in ArrDashboard context when expanded */}
                     {isArrDashboardContext && (
                       <Collapse in={expandedSeasons.has(season.season_number)}>
                         <Box sx={{ mt: 2, ml: 2 }}>
                           {loadingEpisodes.has(season.season_number) ? (
                             <Box sx={{ p: 2, textAlign: 'center' }}>
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" sx={{
+                                color: "text.secondary"
+                              }}>
                                 Loading episodes...
                               </Typography>
                             </Box>
@@ -392,7 +399,12 @@ const SeasonList: React.FC<SeasonListProps> = ({
                                             borderColor: alpha(theme.palette.divider, 0.1)
                                           }}
                                         >
-                                          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{
+                                              color: "text.secondary",
+                                              lineHeight: 1.5
+                                            }}>
                                             {episode.overview}
                                           </Typography>
                                         </Box>

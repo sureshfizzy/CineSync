@@ -117,11 +117,13 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
                 </ListItemIcon>
                 <ListItemText
                   primary={item.text}
-                  primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: isActive ? 600 : 500,
-                    color: isActive ? theme.palette.primary.main : 'inherit'
-                  }}
+                  slotProps={{ primary: {
+                    sx: {
+                      fontSize: '0.875rem',
+                      fontWeight: isActive ? 600 : 500,
+                      color: isActive ? theme.palette.primary.main : 'inherit'
+                    }
+                  } }}
                   sx={{
                     '& .MuiListItemText-primary': {
                       transition: 'color 0.2s ease-in-out'
@@ -177,10 +179,12 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               </ListItemIcon>
               <ListItemText
                 primary="Poster View"
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
-                  fontWeight: currentView === 'poster' ? 600 : 500
-                }}
+                slotProps={{ primary: {
+                  sx: {
+                    fontSize: '0.875rem',
+                    fontWeight: currentView === 'poster' ? 600 : 500
+                  }
+                } }}
                 sx={{
                   '& .MuiListItemText-primary': {
                     transition: 'color 0.2s ease-in-out',
@@ -215,10 +219,12 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               </ListItemIcon>
               <ListItemText
                 primary="List View"
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
-                  fontWeight: currentView === 'list' ? 600 : 500
-                }}
+                slotProps={{ primary: {
+                  sx: {
+                    fontSize: '0.875rem',
+                    fontWeight: currentView === 'list' ? 600 : 500
+                  }
+                } }}
                 sx={{
                   '& .MuiListItemText-primary': {
                     transition: 'color 0.2s ease-in-out'
@@ -251,11 +257,13 @@ export default function Sidebar({ onNavigate, onViewChange, currentView, onRefre
               </ListItemIcon>
               <ListItemText
                 primary="Refresh"
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  color: theme.palette.text.secondary
-                }}
+                slotProps={{ primary: {
+                  sx: {
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    color: theme.palette.text.secondary
+                  }
+                } }}
                 sx={{
                   '& .MuiListItemText-primary': {
                     transition: 'color 0.2s ease-in-out'

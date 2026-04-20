@@ -102,7 +102,9 @@ export default function Dashboard() {
         }}
       >
         <CircularProgress size={40} />
-        <Typography variant="h6" color="text.secondary">
+        <Typography variant="h6" sx={{
+          color: "text.secondary"
+        }}>
           Loading dashboard data...
         </Typography>
       </Box>
@@ -222,7 +224,9 @@ export default function Dashboard() {
           <RefreshIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
         </IconButton>
       </Box>
-      <Grid container spacing={{ xs: 0.8, sm: 2, md: 3 }} mb={{ xs: 2, sm: 3 }}>
+      <Grid container spacing={{ xs: 0.8, sm: 2, md: 3 }} sx={{
+        mb: { xs: 2, sm: 3 }
+      }}>
         {cards.map((card, index) => (
           <Grid
             key={card.title}

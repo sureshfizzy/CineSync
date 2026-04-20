@@ -85,7 +85,9 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {titleIcon}
-          <Typography variant="h6" fontWeight={700}>
+          <Typography variant="h6" sx={{
+            fontWeight: 700
+          }}>
             {title}
           </Typography>
         </Box>
@@ -102,7 +104,6 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent
         sx={{
           pt: 3,
@@ -134,7 +135,9 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
           border: `1px solid ${theme.palette.divider}`,
           mb: 3
         }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+          <Typography variant="subtitle2" gutterBottom sx={{
+            fontWeight: 600
+          }}>
             📁 Target File:
           </Typography>
           <Typography
@@ -152,7 +155,13 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
           </Typography>
         </Box>
 
-        <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mb: 2 }}>
+        <Typography
+          variant="subtitle2"
+          gutterBottom
+          sx={{
+            fontWeight: 600,
+            mb: 2
+          }}>
           What will happen:
         </Typography>
 
@@ -164,10 +173,14 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
                   {action.icon}
                 </Box>
                 <Box>
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography variant="body2" sx={{
+                    fontWeight: 600
+                  }}>
                     {action.title}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{
+                    color: "text.secondary"
+                  }}>
                     {action.description}
                   </Typography>
                 </Box>
@@ -179,7 +192,6 @@ const BaseConfirmationDialog: React.FC<BaseConfirmationDialogProps> = ({
           ))}
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ p: 3, gap: 2 }}>
         <ConfirmationActionButton
           onClick={onCancel}
