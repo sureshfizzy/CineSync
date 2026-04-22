@@ -94,7 +94,6 @@ class MediaCoverManager:
             if os.path.exists(media_dir):
                 import shutil
                 shutil.rmtree(media_dir)
-                log_message(f"Cleaned up MediaCover directory for TMDB ID {tmdb_id}", level="INFO")
                 return True
             return True
         except Exception as e:

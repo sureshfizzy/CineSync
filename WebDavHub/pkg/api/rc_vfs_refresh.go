@@ -6,13 +6,33 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 	"cinesync/pkg/realdebrid"
 )
+
+const pyBootstrap = "import os,sys;" +
+	"p=sys.argv[1];" +
+	"root=os.path.dirname(os.getcwd());" +
+	"sys.path.insert(0,root);" +
+	"sys.path.insert(0,os.getcwd());"
+
+const pollingMonitorProcessFileCode = pyBootstrap +
+	"from MediaHub.monitor.polling_monitor import process_file;" +
+	"process_file(p)"
+
+const deleteBrokenSymlinksCode = pyBootstrap +
+	"from MediaHub.config.config import get_directories;" +
+	"from MediaHub.processors.symlink_utils import delete_broken_symlinks_batch;" +
+	"_,dest=get_directories();" +
+	"delete_broken_symlinks_batch(dest,[p])"
 
 type externalRcloneRefreshRequest struct {
 	Dir       string   `json:"dir"`
@@ -200,12 +220,6 @@ func refreshExternalRcloneVFS(request externalRcloneRefreshRequest) (map[string]
 		}, http.StatusBadGateway, nil
 	}
 
-	logger.Info("[RC Refresh] Requesting external VFS refresh: dirs=%v recursive=%t async=%t mount=%s",
-		dirs,
-		recursive,
-		request.Async != nil && *request.Async,
-		mountName,
-	)
 	_, refreshStatusCode, refreshBodyText, refreshErr := callExternalRC(
 		baseURL,
 		rc.ExternalRcUsername,
@@ -229,7 +243,6 @@ func refreshExternalRcloneVFS(request externalRcloneRefreshRequest) (map[string]
 		}, http.StatusBadGateway, nil
 	}
 
-	logger.Info("[RC Refresh] External VFS refresh completed: dirs=%v", dirs)
 	return map[string]interface{}{
 		"success":       true,
 		"message":       "External rclone refresh requested successfully",
@@ -237,4 +250,176 @@ func refreshExternalRcloneVFS(request externalRcloneRefreshRequest) (map[string]
 		"requestedDirs": requestedDirs,
 		"dirs":          dirs,
 	}, http.StatusOK, nil
+}
+
+// RcloneRefreshForDirs requests an external RC VFS refresh
+func RcloneRefreshForDirs(dirs []string, source string) {
+	if len(dirs) == 0 {
+		return
+	}
+
+	recursive := false
+	async := true
+	response, statusCode, err := refreshExternalRcloneVFS(externalRcloneRefreshRequest{
+		Dirs:      dirs,
+		Recursive: &recursive,
+		Async:     &async,
+	})
+	if err != nil {
+		logger.Warn("[RC Refresh] %s: external VFS refresh failed for %v: %v", source, dirs, err)
+		return
+	}
+
+	if success, _ := response["success"].(bool); success {
+		logger.Debug("[RC Refresh] %s: external VFS refresh requested for %v (status %d)", source, dirs, statusCode)
+		return
+	}
+
+	logger.Warn("[RC Refresh] %s: external VFS refresh rejected for %v: %v", source, dirs, response["error"])
+}
+
+func runMonitorProcessFile(workDir, singlePath string) {
+	cmd := exec.Command(mediahub.GetPythonCommand(), "-c", pollingMonitorProcessFileCode, singlePath)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+
+func runSinglePathProcessing(candidates []string, source string) {
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		logger.Warn("[Import] %s: failed to resolve MediaHub workspace: %v", source, err)
+		return
+	}
+
+	for _, candidate := range candidates {
+		var info os.FileInfo
+		ready := false
+		for attempt := 0; attempt < 8; attempt++ {
+			if statInfo, statErr := os.Stat(candidate); statErr == nil {
+				info = statInfo
+				ready = true
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+		if !ready || info == nil {
+			logger.Warn("[Import] %s: new torrent path not visible on mount yet: %s", source, candidate)
+			continue
+		}
+
+		pathsToProcess := make([]string, 0, 8)
+		collectVideoPaths := func() {
+			pathsToProcess = pathsToProcess[:0]
+			if info.IsDir() {
+				_ = filepath.WalkDir(candidate, func(p string, d os.DirEntry, walkErr error) error {
+					if walkErr == nil && d != nil && !d.IsDir() && realdebrid.IsVideoFile(d.Name()) {
+						pathsToProcess = append(pathsToProcess, p)
+					}
+					return nil
+				})
+			} else if realdebrid.IsVideoFile(info.Name()) {
+				pathsToProcess = append(pathsToProcess, candidate)
+			}
+		}
+		collectVideoPaths()
+		for retry := 0; len(pathsToProcess) == 0 && retry < 4 && info.IsDir(); retry++ {
+			time.Sleep(2 * time.Second)
+			collectVideoPaths()
+		}
+
+		if len(pathsToProcess) == 0 {
+			logger.Warn("[Import] %s: no video files found in %s", source, candidate)
+			continue
+		}
+
+		for _, singlePath := range pathsToProcess {
+			runMonitorProcessFile(mediaHubExec.WorkDir, singlePath)
+		}
+	}
+}
+
+// TriggerBrokenSymlinkCleanup calls delete_broken_symlinks_batch
+func TriggerBrokenSymlinkCleanup(torrentFilenames []string, source string) {
+	if len(torrentFilenames) == 0 {
+		return
+	}
+
+	cfg := realdebrid.GetConfigManager().GetConfig()
+	mountPath := strings.TrimSpace(cfg.RcloneSettings.MountPath)
+	if mountPath == "" {
+		logger.Debug("[Cleanup] %s: skipping broken symlink cleanup (empty mount path)", source)
+		return
+	}
+
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		logger.Warn("[Cleanup] %s: failed to resolve MediaHub workspace: %v", source, err)
+		return
+	}
+
+	seen := make(map[string]struct{}, len(torrentFilenames))
+	for _, torrentFilename := range torrentFilenames {
+		entryNames := importFolderExtensionEntryNames(cfg, torrentFilename)
+		if len(entryNames) == 0 {
+			continue
+		}
+		p := filepath.Clean(filepath.Join(mountPath, realdebrid.ALL_TORRENTS, entryNames[0]))
+		if _, exists := seen[p]; exists {
+			continue
+		}
+		seen[p] = struct{}{}
+
+		cmd := exec.Command(mediahub.GetPythonCommand(), "-c", deleteBrokenSymlinksCode, p)
+		cmd.Dir = mediaHubExec.WorkDir
+		cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			continue
+		}
+	}
+}
+
+// TriggerSymlinkCreation executes single path processing.
+func TriggerSymlinkCreation(torrentFilenames []string, source string) {
+	if len(torrentFilenames) == 0 {
+		return
+	}
+
+	cfg := realdebrid.GetConfigManager().GetConfig()
+	mountPath := strings.TrimSpace(cfg.RcloneSettings.MountPath)
+	if mountPath == "" {
+		logger.Debug("[Import] %s: skipping processing (empty mount path)", source)
+		return
+	}
+
+	candidates := make([]string, 0, len(torrentFilenames))
+	seenCandidates := make(map[string]struct{}, len(torrentFilenames)*2)
+	for _, torrentFilename := range torrentFilenames {
+		entryNames := importFolderExtensionEntryNames(cfg, torrentFilename)
+		chosen := ""
+		for _, entryName := range entryNames {
+			p := filepath.Clean(filepath.Join(mountPath, realdebrid.ALL_TORRENTS, entryName))
+			if _, err := os.Stat(p); err == nil {
+				chosen = p
+				break
+			}
+		}
+		if chosen == "" && len(entryNames) > 0 {
+			chosen = filepath.Clean(filepath.Join(mountPath, realdebrid.ALL_TORRENTS, entryNames[0]))
+		}
+		if chosen == "" {
+			continue
+		}
+		if _, exists := seenCandidates[chosen]; exists {
+			continue
+		}
+		seenCandidates[chosen] = struct{}{}
+		candidates = append(candidates, chosen)
+	}
+
+	runSinglePathProcessing(candidates, source)
 }

@@ -704,8 +704,6 @@ def process_file(args, force=False, batch_apply=False):
     if existing_dest_path:
         log_message(f"Found file in database: {src_file} -> {existing_dest_path}", level="DEBUG")
         existing_dest_path = normalize_file_path(existing_dest_path)
-    else:
-        log_message(f"File not found in database: {src_file}", level="DEBUG")
 
     if existing_dest_path and not force:
         if not os.path.exists(existing_dest_path):
@@ -1610,7 +1608,7 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
 
     else:
         if auto_select and not use_smart_manager:
-            log_message("Auto-select enabled with targeted/monitor processing - skipping smart scan manager for faster handling", level="INFO")
+            pass
         dest_index = None
 
         for src_dir in src_dirs:
@@ -1632,12 +1630,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     # Skip destination index building for single files or force mode
                     if dest_index is None:
                         if is_single_file:
-                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
                             processed_files_set = set()
                         elif force:
-                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
                             processed_files_set = set()
@@ -1665,12 +1661,10 @@ def create_symlinks(src_dirs, dest_dir, auto_select=False, single_path=None, for
                     # Skip destination index building for single files or force mode
                     if dest_index is None:
                         if is_single_file:
-                            log_message("Single file mode - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
                             processed_files_set = set()
                         elif force:
-                            log_message("Force mode enabled - skipping destination index building for faster startup", level="INFO")
                             dest_index = set()
                             reverse_index = {}
                             processed_files_set = set()

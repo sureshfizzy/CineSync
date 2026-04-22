@@ -394,8 +394,6 @@ def process_file(file_path):
     Only handles the symlink creation without triggering the full main function.
     """
     if not check_file_in_db(file_path):
-        log_message(f"File not found in database. Initiating processing for: {file_path}", level="INFO")
-
         try:
             # Get source and destination directories
             src_dirs, dest_dir = get_directories()

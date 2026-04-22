@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -369,6 +370,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		}
 	done:
 		logger.Debug("[Refresh] File lists loaded for %d new torrents (unrestrict on-demand)", len(newTorrents))
+		notifyNewTorrentDirs(newTorrents)
 	}
 
 	if len(removedTorrents) > 0 {
@@ -380,6 +382,18 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 			} else if i == 3 {
 				logger.Info("[Refresh] ... and %d more files removed", len(removedTorrents)-3)
 				break
+			}
+		}
+
+		if OnRemovedTorrentsDetected != nil {
+			filenames := make([]string, 0, len(removedTorrents))
+			for i := range removedTorrents {
+				if name := strings.TrimSpace(removedTorrents[i].Filename); name != "" {
+					filenames = append(filenames, name)
+				}
+			}
+			if len(filenames) > 0 {
+				go OnRemovedTorrentsDetected(filenames)
 			}
 		}
 
@@ -455,6 +469,12 @@ func GetTorrentFilename(apiKey, torrentID string) string {
 // OnQueueSnapshot is set by main to avoid an import cycle.
 var OnQueueSnapshot func(activeTorrents map[string]TorrentSnapshot)
 
+// OnNewTorrentsDetected is set by main to allow optional side-effects.
+var OnNewTorrentsDetected func(torrentFilenames []string, refreshDirs []string)
+
+// OnRemovedTorrentsDetected is set by main to trigger broken symlink cleanup.
+var OnRemovedTorrentsDetected func(torrentFilenames []string)
+
 func notifyQueueSnapshot(torrents []TorrentItem) {
 	if OnQueueSnapshot == nil {
 		return
@@ -467,4 +487,51 @@ func notifyQueueSnapshot(torrents []TorrentItem) {
 		}
 	}
 	OnQueueSnapshot(snapshot)
+}
+
+func notifyNewTorrentDirs(torrents []TorrentItem) {
+	if OnNewTorrentsDetected == nil || len(torrents) == 0 {
+		return
+	}
+
+	cfg := GetConfigManager().GetConfig()
+	if !cfg.RcloneSettings.ServeFromRclone {
+		return
+	}
+
+	seen := make(map[string]struct{}, len(torrents)*2)
+	refreshDirs := make([]string, 0, len(torrents)*2)
+	addDir := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		dir := path.Join(ALL_TORRENTS, name)
+		if _, exists := seen[dir]; exists {
+			return
+		}
+		seen[dir] = struct{}{}
+		refreshDirs = append(refreshDirs, dir)
+	}
+
+	for i := range torrents {
+		normalized := GetDirectoryName(torrents[i].Filename)
+		if cfg.RcloneSettings.RetainFolderExtension {
+			addDir(torrents[i].Filename)
+			addDir(normalized)
+		} else {
+			addDir(normalized)
+			addDir(torrents[i].Filename)
+		}
+	}
+
+	if len(refreshDirs) > 0 {
+		filenames := make([]string, 0, len(torrents))
+		for i := range torrents {
+			if name := strings.TrimSpace(torrents[i].Filename); name != "" {
+				filenames = append(filenames, name)
+			}
+		}
+		OnNewTorrentsDetected(filenames, refreshDirs)
+	}
 }

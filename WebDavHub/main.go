@@ -345,6 +345,15 @@ func main() {
 			}
 		}
 	}
+	realdebrid.OnNewTorrentsDetected = func(torrentFilenames []string, refreshDirs []string) {
+		go func() {
+			api.RcloneRefreshForDirs(refreshDirs, "Refresh")
+			api.TriggerSymlinkCreation(torrentFilenames, "Refresh")
+		}()
+	}
+	realdebrid.OnRemovedTorrentsDetected = func(torrentFilenames []string) {
+		go api.TriggerBrokenSymlinkCleanup(torrentFilenames, "Refresh")
+	}
 
 	// Create a new mux for API routes
 	apiMux := http.NewServeMux()
