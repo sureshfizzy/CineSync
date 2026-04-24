@@ -160,10 +160,10 @@ const wizardSteps: Step[] = [
   {
     id: 'system',
     title: 'System & Logging',
-    description: 'Logging level, cores, workers, symlinks, rclone checks',
+    description: 'Logging level, cores, workers, symlinks',
     accent: '#3b82f6',
     icon: <CloudRounded />,
-    keys: ['LOG_LEVEL', 'RCLONE_MOUNT', 'MOUNT_CHECK_INTERVAL', 'RELATIVE_SYMLINK', 'MAX_CORES', 'MAX_PROCESSES'],
+    keys: ['LOG_LEVEL', 'RELATIVE_SYMLINK', 'MAX_CORES', 'MAX_PROCESSES'],
   },
   {
     id: 'files',
@@ -649,7 +649,6 @@ export default function SetupWizard() {
     TVDB_FOLDER_ID: 'Name folders using TVDb IDs.',
     RENAME_ENABLED: 'Enable metadata-based file renaming.',
     MEDIAINFO_PARSER: 'Use MediaInfo to enrich rename metadata.',
-    RCLONE_MOUNT: 'External mounts only: pause MediaHub if an external rclone mount is down (not needed for the built-in mount).',
     RELATIVE_SYMLINK: 'Create relative symlinks instead of absolute paths.',
     SKIP_EXTRAS_FOLDER: 'Skip processing extras folders.',
     SKIP_ADULT_PATTERNS: 'Skip files matching adult patterns.',

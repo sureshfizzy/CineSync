@@ -22,9 +22,6 @@ from MediaHub.utils.global_events import terminate_flag, error_event, shutdown_e
 from MediaHub.utils.webdav_api import send_source_file_update
 import requests
 
-# Add state variables for mount status tracking
-mount_state = None
-
 def _should_defer_symlink_deletion():
     """Defer symlink deletion to the cleanup thread when SYMLINK_CLEANUP_INTERVAL is set."""
     raw = os.getenv('SYMLINK_CLEANUP_INTERVAL')
@@ -39,119 +36,6 @@ def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
     log_message(f"Received signal {signum}, shutting down polling monitor...", level="INFO")
     set_shutdown()
-
-def get_mount_point(path):
-    """
-    Find the mount point of a path by walking up the directory tree.
-    Returns tuple (is_mount_point, mount_path)
-    """
-    global mount_state
-    path = os.path.abspath(path)
-
-    # First check if the path exists
-    if not os.path.exists(path):
-        log_message(f"Path does not exist: {path}", level="DEBUG")
-        return False, None
-
-    # Walk up the directory tree to find the mount point
-    while not os.path.ismount(path):
-        parent = os.path.dirname(path)
-        # If we've reached the root directory and it's not a mount point
-        if parent == path:
-            log_message(f"No mount point found for {path}", level="DEBUG")
-            return False, None
-        path = parent
-
-    # Don't consider root directory as a valid mount point
-    if path == '/':
-        log_message("Root directory is not a valid mount point", level="DEBUG")
-        return False, None
-
-    return True, path
-
-def verify_mount_health(directory):
-    """
-    Performs health checks on the mounted directory without requiring write access.
-    Returns True if the mount appears healthy, False otherwise.
-    """
-    try:
-        contents = os.listdir(directory)
-        if not contents:
-            return True
-
-        for item in contents[:1]:
-            full_path = os.path.join(directory, item)
-            os.stat(full_path)
-
-        os.statvfs(directory)
-
-        return True
-
-    except OSError:
-        return False
-    except Exception:
-        return False
-
-def verify_rclone_mount(directory):
-    """
-    Verifies if the directory is under a mount and checks mount health.
-    Returns tuple: (is_mounted, is_healthy)
-    """
-    global mount_state
-
-    if not os.path.exists(directory):
-        return False, False
-
-    is_mounted, mount_point = get_mount_point(directory)
-
-    if is_mounted and mount_point:
-        is_healthy = verify_mount_health(directory)
-
-        if is_healthy:
-            if mount_state != True:
-                log_message(f"Mount is now available: {mount_point}", level="INFO")
-                mount_state = True
-            return True, True
-        else:
-            if mount_state is not False:
-                log_message(f"Mount has become unresponsive: {mount_point}", level="WARNING")
-                mount_state = False
-            return False, False
-    else:
-        if mount_state is not False:
-            log_message(f"Mount is not available: {directory}", level="WARNING")
-            mount_state = False
-        return False, False
-
-def check_rclone_mount():
-    """
-    Checks if the mount is available and healthy.
-    Returns True if either RCLONE_MOUNT is False or if the mount is verified.
-    """
-    global mount_state
-
-    if not is_rclone_mount_enabled():
-        if mount_state is not False:
-            log_message("Mount check is disabled", level="INFO")
-            mount_state = False
-        return True
-
-    src_dirs, _ = get_directories()
-    if not src_dirs:
-        log_message("No source directories configured in environment", level="ERROR")
-        return False
-
-    directory = src_dirs[0]
-
-    try:
-        is_mounted, is_healthy = verify_rclone_mount(directory)
-        return is_mounted and is_healthy
-
-    except Exception as e:
-        if mount_state is not False:
-            log_message(f"Error checking mount: {str(e)}", level="ERROR")
-            mount_state = False
-        return False
 
 def scan_directories(dirs_to_watch, current_files, last_mod_times=None):
     """
@@ -468,7 +352,6 @@ def initial_scan(dirs_to_watch):
 
 def main():
     """Main function to monitor directories and process file changes in real-time."""
-    global mount_state
 
     # Set up signal handlers
     try:
@@ -514,18 +397,10 @@ def main():
     while not shutdown_event.is_set():
         try:
 
-            # Check if rclone mount is available (if enabled)
-            if not check_rclone_mount():
-                if mount_state is not False:
-                    log_message("Mount not available, waiting for rclone mount...", level="INFO")
-                    mount_state = False
-                time.sleep(is_mount_check_interval())
-                continue
-
-            # If this is our first successful mount check, do initial scan
+            # Run initial scan once after startup
             if not current_files:
                 current_files = initial_scan(src_dirs)
-                log_message("Initial scan after mount verification completed, Monitor Service is Running", level="INFO")
+                log_message("Initial scan completed, Monitor Service is Running", level="INFO")
 
             # Normal directory monitoring with error handling
             log_message("Performing regular directory scan", level="DEBUG")

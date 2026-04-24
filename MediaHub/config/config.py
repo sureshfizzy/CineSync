@@ -182,12 +182,6 @@ def is_jellyfin_multi_version_enabled():
     ' - label' suffix (e.g. resolution) so Jellyfin groups them together."""
     return os.getenv('JELLYFIN_MULTI_VERSION', 'false').lower() in ['true', '1', 'yes']
 
-def is_rclone_mount_enabled():
-    return os.getenv('RCLONE_MOUNT', 'false').lower() == 'true'
-
-def is_mount_check_interval():
-    return get_env_int('MOUNT_CHECK_INTERVAL', 30)
-
 def is_anime_scan():
     return os.getenv('ANIME_SCAN', 'false').lower() == 'true'
 

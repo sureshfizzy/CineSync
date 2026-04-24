@@ -10,7 +10,6 @@ import socket
 import threading
 import traceback
 import io
-import time
 import tempfile
 
 # Configure UTF-8 encoding for stdout/stderr to handle Unicode characters
@@ -39,8 +38,6 @@ from MediaHub.utils.file_utils import resolve_symlink_to_source
 from MediaHub.utils.dashboard_utils import is_dashboard_available, force_dashboard_recheck
 from MediaHub.utils.global_events import *
 
-db_initialized = False
-
 # Polling monitor path
 if is_frozen():
     POLLING_MONITOR_PATH = None
@@ -54,42 +51,10 @@ LOCK_TIMEOUT = 3600
 # Set up global variables to track processes
 background_processes = []
 
-def wait_for_mount():
-    """Wait for the rclone mount to become available with minimal logging."""
-    initial_message = True
-    while True:
-        if check_rclone_mount():
-            if initial_message:
-                log_message("Mount is now available.", level="INFO")
-            return True
-
-        if initial_message:
-            log_message(f"Waiting for mount directory to become available...", level="INFO")
-            initial_message = False
-
-        time.sleep(is_mount_check_interval())
-
-def check_mount_points():
-    """Check if all configured mount points are accessible."""
+def initialize_database():
+    """Initialize the database and report startup failures."""
     try:
-        if is_rclone_mount_enabled():
-            return check_rclone_mount()
-        return True
-    except Exception as e:
-        log_message(f"Error checking mount points: {e}", level="ERROR")
-        return False
-
-
-def initialize_db_with_mount_check():
-    """Initialize database with mount point verification."""
-    try:
-        # Only initialize if not already initialized
         initialize_db()
-
-        # Check if mount points are accessible
-        if is_rclone_mount_enabled() and not check_mount_points():
-            log_message("Mount points are not accessible. Please check your configuration.", level="ERROR")
-            return False
         return True
     except Exception as e:
         log_message(f"Error during database initialization: {e}", level="ERROR")
@@ -585,7 +550,7 @@ def main(dest_dir):
         # Check dashboard availability even in monitor-only mode
         check_dashboard_availability()
         # Initialize database
-        if not initialize_db_with_mount_check():
+        if not initialize_database():
             log_message("Failed to initialize database. Exiting.", level="ERROR")
             return
         # Start only the polling monitor
@@ -595,8 +560,8 @@ def main(dest_dir):
         return
 
     if not os.path.exists(LOCK_FILE):
-        # Wait for mount if needed and initialize database
-        if not initialize_db_with_mount_check():
+        # Initialize database state before processing
+        if not initialize_database():
             log_message("Failed to initialize database. Exiting.", level="ERROR")
             return
 
@@ -623,9 +588,6 @@ def main(dest_dir):
         sys.exit(1)
     src_dirs = src_dirs_str.split(',')
 
-    # Wait for mount before creating symlinks if needed
-    if is_rclone_mount_enabled() and not check_rclone_mount():
-        wait_for_mount()
     try:
         # Check if this is a single file operation for optimization
         is_single_file_operation = args.single_path and os.path.isfile(args.single_path) if args.single_path else False

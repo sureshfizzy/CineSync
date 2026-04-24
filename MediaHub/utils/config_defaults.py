@@ -56,9 +56,6 @@ def collect_defaults():
         "MOVIE_RESOLUTION_FOLDER_DEFAULT": "Movies",
         # Logging
         "LOG_LEVEL": "INFO",
-        # Rclone
-        "RCLONE_MOUNT": "false",
-        "MOUNT_CHECK_INTERVAL": "30",
         # Metadata / IDs
         "TMDB_API_KEY": "your_tmdb_api_key_here",
         "LANGUAGE": "English",

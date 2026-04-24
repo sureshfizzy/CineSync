@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -240,10 +239,6 @@ func getConfigDefinitions() []ConfigValue {
 
 		// Logging Configuration
 		{Key: "LOG_LEVEL", Category: "Logging Configuration", Type: "string", Required: false, Description: "Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"},
-
-		// Rclone Mount Configuration
-		{Key: "RCLONE_MOUNT", Category: "Rclone Mount Configuration", Type: "boolean", Required: false, Disabled: runtime.GOOS == "windows", Description: "Fail-safe for external rclone mounts only. Not needed for the built-in/internal mount."},
-		{Key: "MOUNT_CHECK_INTERVAL", Category: "Rclone Mount Configuration", Type: "integer", Required: false, Description: "Interval (in seconds) for checking rclone mount availability"},
 
 		// MediaHub Service Configuration
 		{Key: "MEDIAHUB_AUTO_START", Category: "MediaHub Service Configuration", Type: "boolean", Required: false, Description: "Enable or disable automatic startup of MediaHub service (including built-in RTM) when CineSync starts"},
@@ -767,9 +762,6 @@ func getConfigDefaults() map[string]string {
 		"MOVIE_RESOLUTION_FOLDER_DEFAULT":       "Movies",
 		// Logging
 		"LOG_LEVEL": "INFO",
-		// Rclone
-		"RCLONE_MOUNT":         "false",
-		"MOUNT_CHECK_INTERVAL": "30",
 		// Metadata / IDs
 		"TMDB_API_KEY":             "your_tmdb_api_key_here",
 		"LANGUAGE":                 "English",
