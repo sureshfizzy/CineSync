@@ -2054,6 +2054,7 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         r'\s-\s(\d{1,4})(?:v\d+)?$',
         r'\s-(\d{1,4})(?:v\d+)?\.mkv$',
         r'\s-(\d{1,4})(?:v\d+)?$',
+        r'^\[[^\]]+\]\s*.+?\s(\d{1,4})(?:v\d+)?\s*-\s.+$',
         r'S\d{1,2}\s*-\s*(\d{1,4})(?:v\d+)?',
 
         # Season X - Episode pattern (common in anime)
@@ -2064,7 +2065,7 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         # Space-separated episode numbers (common in anime)
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+[-\[]',  # "[Group] Title 16 - NCED" pattern
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+\[',     # "[Group] Title 02 [Hash]" pattern
-        r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})(?:\s|$)',  # "[Group] Title 16" at end
+        r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s*$',      # "[Group] Title 16" at end
         r'^\[[^\]]+\]\s*([^\d\[\]]+?)\s+(\d{1,4})(?:v\d+)?\s*-\s*.+$',  # "[Group]Title 01 - Episode title"
 
         # Episode indicators
