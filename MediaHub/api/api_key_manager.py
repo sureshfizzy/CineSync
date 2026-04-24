@@ -27,17 +27,17 @@ def get_api_key():
 
 @api_retry(max_retries=3, base_delay=5, max_delay=60)
 def is_valid_api_key(api_key):
-    test_url = 'https://api.themoviedb.org/3/configuration?api_key=' + api_key
+    test_url = 'https://api.themoviedb.org/3/configuration'
     try:
-        response = requests.get(test_url)
+        response = requests.get(test_url, params={'api_key': api_key})
         if response.status_code == 200:
             return True
         else:
             log_message(f"API key validation failed with status code: {response.status_code}", level="WARNING")
             return False
 
-    except requests.RequestException as e:
-        log_message(f"API key validation error: {str(e)}", level="WARNING")
+    except requests.RequestException:
+        log_message("API key validation error.", level="WARNING")
         return False
 
 def check_api_key():
@@ -51,8 +51,8 @@ def check_api_key():
 
     # Test the API key with a simple request
     try:
-        test_url = f"https://api.themoviedb.org/3/configuration?api_key={api_key}"
-        response = requests.get(test_url, timeout=5)
+        test_url = "https://api.themoviedb.org/3/configuration"
+        response = requests.get(test_url, params={'api_key': api_key}, timeout=5)
         response.raise_for_status()
 
         # Reset the warning flag if the API key is now working
@@ -71,7 +71,7 @@ def check_api_key():
             elif isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 401:
                 log_message("Invalid TMDB API key. Please check your API key and try again.", level="ERROR")
             else:
-                log_message(f"TMDB API error: {str(e)}", level="ERROR")
+                log_message(f"TMDB API error: {type(e).__name__}", level="ERROR")
 
             api_warning_logged = True
 
