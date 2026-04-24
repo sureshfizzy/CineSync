@@ -60,6 +60,21 @@ def _strip_second_title_suffix(title: str) -> str:
     return match.group('main').strip()
 
 
+def _strip_fansub_cut_suffix(title: str) -> str:
+    """Strip known fan-edit suffixes (Kai/Yabai/Henshu) from title tail."""
+    if not title:
+        return ""
+
+    suffix_pattern = (
+        r'\s*(?:[-:]\s*)?(?:'
+        r'kai|yabai|henshu|hensh[uû]|henchu|'
+        r'version\s+(?:kai|yabai|henshu|hensh[uû])'
+        r')\s*$'
+    )
+    normalized = re.sub(suffix_pattern, '', title, flags=re.IGNORECASE).strip()
+    return re.sub(r'\s+', ' ', normalized).strip()
+
+
 def _finalize_anime_title(title: str) -> str:
     """Normalize extracted anime title for API lookup."""
     if not title:
@@ -67,6 +82,7 @@ def _finalize_anime_title(title: str) -> str:
     normalized = _strip_split_cour_suffix(title)
     normalized = _strip_anime_season_suffix(normalized)
     normalized = _strip_second_title_suffix(normalized)
+    normalized = _strip_fansub_cut_suffix(normalized)
     return clean_title_string(normalized)
 
 

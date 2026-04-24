@@ -2065,6 +2065,7 @@ def _extract_anime_episode_from_parsed(parsed: ParsedFilename) -> Optional[int]:
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+[-\[]',  # "[Group] Title 16 - NCED" pattern
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})\s+\[',     # "[Group] Title 02 [Hash]" pattern
         r'\]\s+([A-Za-z\s]+)\s+(\d{1,3})(?:\s|$)',  # "[Group] Title 16" at end
+        r'^\[[^\]]+\]\s*([^\d\[\]]+?)\s+(\d{1,4})(?:v\d+)?\s*-\s*.+$',  # "[Group]Title 01 - Episode title"
 
         # Episode indicators
         r'Episode\s+(\d{1,4})',

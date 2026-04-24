@@ -802,7 +802,7 @@ def process_file(args, force=False, batch_apply=False):
         # Parse parent directory if file doesn't have episode info
         if not has_episode_info or is_hash_name:
             if not parent_result:
-                parent_result = clean_query(os.path.basename(src_file))
+                parent_result = clean_query(os.path.basename(os.path.dirname(src_file)))
             has_episode_info = parent_result.get('episode_identifier') or parent_result.get('episode')
 
         # Check for anime patterns using intelligent detection
