@@ -23,8 +23,6 @@ from MediaHub.utils.logging_utils import log_message
 def main():
     """Run one symlink cleanup cycle."""
     try:
-        os.environ["MEDIAHUB_PLAIN_STDOUT"] = "1"
-
         _, dest_dir = get_directories()
         if not dest_dir:
             log_message("Destination directory is not configured", level="ERROR")

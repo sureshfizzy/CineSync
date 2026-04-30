@@ -22,6 +22,14 @@ else:
 from MediaHub.config.config import get_cinesync_ip, get_cinesync_api_port
 from MediaHub.utils.logging_utils import log_message
 
+def _get_api_headers():
+    """Build API auth headers for CineSync requests."""
+    headers = {}
+    api_key = os.getenv("CINESYNC_API_KEY", "").strip()
+    if api_key:
+        headers["X-API-Key"] = api_key
+    return headers
+
 def trigger_source_scan():
     """Trigger a source directory scan via WebDavHub API"""
     try:
@@ -41,7 +49,7 @@ def trigger_source_scan():
         
         log_message("Starting scheduled source files scan...", level="INFO")
         
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, headers=_get_api_headers(), timeout=30)
         
         if response.status_code == 200:
             result = response.json()
@@ -71,7 +79,7 @@ def wait_for_scan_completion():
         
         while time.time() - start_time < max_wait_time:
             try:
-                response = requests.get(url, timeout=10)
+                response = requests.get(url, headers=_get_api_headers(), timeout=10)
                 if response.status_code == 200:
                     scan_data = response.json()
                     status = scan_data.get('status', 'unknown')
@@ -117,7 +125,7 @@ def update_processing_status():
         
         # Get all file operations
         operations_url = f"http://{cinesync_ip}:{cinesync_port}/api/file-operations"
-        response = requests.get(operations_url, params={"limit": 10000}, timeout=30)
+        response = requests.get(operations_url, params={"limit": 10000}, headers=_get_api_headers(), timeout=30)
         
         if response.status_code != 200:
             log_message(f"Failed to fetch file operations: HTTP {response.status_code}", level="ERROR")
@@ -163,7 +171,7 @@ def update_processing_status():
                 "files": status_updates
             }
             
-            response = requests.post(update_url, json=update_payload, timeout=60)
+            response = requests.post(update_url, json=update_payload, headers=_get_api_headers(), timeout=60)
             
             if response.status_code == 200:
                 result = response.json()
@@ -183,8 +191,6 @@ def update_processing_status():
 
 def main():
     """Main job execution"""
-    log_message("=== Source Files Scan Job Started ===", level="INFO")
-    
     success = True
 
     if not trigger_source_scan():
@@ -202,7 +208,6 @@ def main():
         log_message("=== Source Files Scan Job Completed Successfully ===", level="INFO")
         sys.exit(0)
     else:
-        log_message("=== Source Files Scan Job Failed ===", level="ERROR")
         sys.exit(1)
 
 if __name__ == "__main__":
