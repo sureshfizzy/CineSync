@@ -563,6 +563,18 @@ def get_db_cache_size():
     """Get database cache size"""
     return get_env_int('DB_CACHE_SIZE', 10000)
 
+def get_monitor_mode():
+    """Get monitor mode. Supported: rc_monitor, polling."""
+    mode = os.getenv('MONITOR_MODE', 'rc_monitor').strip().lower()
+    if mode in ['rc_monitor', 'polling']:
+        return mode
+    log_message(f"Invalid MONITOR_MODE '{mode}'. Using 'rc_monitor'.", level="WARNING")
+    return 'rc_monitor'
+
+def is_rtm_auto_start_enabled():
+    """Check if RTM auto-start is enabled (effective only for polling mode)."""
+    return os.getenv('RTM_AUTO_START', 'false').strip().lower() in ['true', '1', 'yes']
+
 # Dashboard Configuration Functions
 def is_dashboard_notifications_enabled():
     """Check if dashboard notifications should be sent"""

@@ -42,6 +42,15 @@ interface CategoryInfo {
   modifiedCount: number;
 }
 
+interface MonitoringRcloneSettings {
+  mountPath: string;
+  externalRcServerUrl: string;
+  externalVfsMountName: string;
+  externalRcPort: string;
+  externalRcUsername: string;
+  externalRcPassword: string;
+}
+
 const Settings: React.FC = () => {
   const theme = useTheme();
 
@@ -88,6 +97,15 @@ const Settings: React.FC = () => {
     title: '',
     currentValue: '',
   });
+  const [monitoringRcloneSettings, setMonitoringRcloneSettings] = useState<MonitoringRcloneSettings>({
+    mountPath: '',
+    externalRcServerUrl: '127.0.0.1',
+    externalVfsMountName: 'CineSync',
+    externalRcPort: '5572',
+    externalRcUsername: 'admin',
+    externalRcPassword: '',
+  });
+  const [monitoringRcloneSaving, saveRcloneSettings] = useState(false);
 
   useEffect(() => {
     fetchConfig();
@@ -267,10 +285,46 @@ const Settings: React.FC = () => {
         setCineSyncApiKey(apiKeyItem.value);
         localStorage.setItem('CINESYNC_API_KEY', apiKeyItem.value);
       }
+
+      try {
+        const rdResponse = await axios.get('/api/realdebrid/config');
+        const settings = rdResponse.data?.config?.rcloneSettings || {};
+        setMonitoringRcloneSettings({
+          mountPath: settings.mountPath || '',
+          externalRcServerUrl: settings.externalRcServerUrl || '127.0.0.1',
+          externalVfsMountName: settings.externalVfsMountName || 'CineSync',
+          externalRcPort: settings.externalRcPort || '5572',
+          externalRcUsername: settings.externalRcUsername || 'admin',
+          externalRcPassword: settings.externalRcPassword || '',
+        });
+      } catch (rdError) {
+        console.error('Failed to load external RC settings:', rdError);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveMonitoringRcloneSettings = async () => {
+    try {
+      saveRcloneSettings(true);
+      await axios.put('/api/realdebrid/config', {
+        rcloneSettings: {
+          mountPath: monitoringRcloneSettings.mountPath,
+          externalRcServerUrl: monitoringRcloneSettings.externalRcServerUrl,
+          externalVfsMountName: monitoringRcloneSettings.externalVfsMountName,
+          externalRcPort: monitoringRcloneSettings.externalRcPort,
+          externalRcUsername: monitoringRcloneSettings.externalRcUsername,
+          externalRcPassword: monitoringRcloneSettings.externalRcPassword,
+        },
+      });
+      setSuccess('External RC monitoring settings synced successfully');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync external RC monitoring settings');
+    } finally {
+      saveRcloneSettings(false);
     }
   };
 
@@ -2155,6 +2209,183 @@ const Settings: React.FC = () => {
                     </Stack>
                   </Grid>
                 </Grid>
+              </Box>
+            );
+          }
+
+          if (currentCategory === 'Real-Time Monitoring Configuration') {
+            return (
+              <Box>
+                <Grid container spacing={3} sx={{ mb: 3 }}>
+                  {items.map((item) => (
+                    <Grid
+                      key={item.key}
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
+                      <Box
+                        sx={{
+                          p: 3,
+                          bgcolor: 'background.paper',
+                          border: '1px solid',
+                          borderColor: pendingChanges[item.key] !== undefined
+                            ? 'warning.main'
+                            : 'divider',
+                          borderRadius: 3,
+                          transition: 'all 0.2s ease-in-out',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                            transform: 'translateY(-1px)',
+                          },
+                        }}
+                      >
+                        <Stack spacing={2}>
+                          <Box>
+                            <Typography
+                              variant="subtitle2"
+                              sx={{
+                                fontWeight: "600",
+                                color: 'text.primary',
+                                mb: 0.5,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                flexWrap: 'wrap'
+                              }}>
+                              {formatFieldLabel(item.key)}
+                              {item.required && (
+                                <Chip
+                                  label="Required"
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                              {pendingChanges[item.key] !== undefined && (
+                                <Chip
+                                  label="Modified"
+                                  size="small"
+                                  color="warning"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: "text.secondary",
+                                mb: 2,
+                                lineHeight: 1.4
+                              }}>
+                              {item.description}
+                            </Typography>
+                          </Box>
+                          <FormField
+                            label=""
+                            value={getFieldValue(item)}
+                            onChange={(value) => handleFieldChange(item.key, value)}
+                            type={getFieldType(item)}
+                            required={item.required}
+                            options={getFieldOptions(item)}
+                            multiline={item.type === 'array' || item.key.includes('TAGS')}
+                            rows={item.type === 'array' ? 2 : 1}
+                            beta={item.beta}
+                            disabled={item.disabled}
+                            locked={item.locked}
+                          />
+                        </Stack>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+
+                <Box
+                  sx={{
+                    p: 3,
+                    bgcolor: alpha(theme.palette.info.main, 0.05),
+                    border: '1px solid',
+                    borderColor: alpha(theme.palette.info.main, 0.2),
+                    borderRadius: 3,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: 'info.main', mb: 1 }}>
+                    External RC Connection (Synced with Rclone Settings)
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+                    These fields are shared with external mount settings so both pages stay in sync.
+                  </Typography>
+
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Local Mount Path"
+                        value={monitoringRcloneSettings.mountPath}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, mountPath: e.target.value }))}
+                        helperText="Windows: Point this to your existing mount (for example Z:\\ or C:\\mounts\\realdebrid). Ensure WinFsp is installed."
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="RC Server URL"
+                        value={monitoringRcloneSettings.externalRcServerUrl}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcServerUrl: e.target.value }))}
+                        helperText="Host or base URL for your RC server. http:// is assumed if omitted."
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="VFS Mount Name"
+                        value={monitoringRcloneSettings.externalVfsMountName}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalVfsMountName: e.target.value }))}
+                        helperText="Stored for your external VFS setup."
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="RC Port"
+                        value={monitoringRcloneSettings.externalRcPort}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcPort: e.target.value }))}
+                        helperText="Optional if the server URL already includes a port."
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Username"
+                        value={monitoringRcloneSettings.externalRcUsername}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcUsername: e.target.value }))}
+                        helperText="Optional."
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Password"
+                        type="password"
+                        value={monitoringRcloneSettings.externalRcPassword}
+                        onChange={(e) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcPassword: e.target.value }))}
+                        helperText="Optional."
+                      />
+                    </Grid>
+                  </Grid>
+
+                  <Box sx={{ mt: 2 }}>
+                    <LoadingButton
+                      variant="outlined"
+                      loading={monitoringRcloneSaving}
+                      onClick={handleSaveMonitoringRcloneSettings}
+                    >
+                      Sync External RC Settings
+                    </LoadingButton>
+                  </Box>
+                </Box>
               </Box>
             );
           }

@@ -145,7 +145,7 @@ func StartMediaHubService() error {
 	}
 
 	// Get command and arguments
-	cmd, args := mediaHubExec.GetCommand("--auto-select")
+	cmd, args := mediaHubExec.GetCommand("--auto-select", "--disable-monitor")
 
 	mediaHubProcessMux.Lock()
 	mediaHubProcess = exec.Command(cmd, args...)
@@ -420,7 +420,7 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start MediaHub process
-	cmd, args := mediaHubExec.GetCommand("--auto-select")
+	cmd, args := mediaHubExec.GetCommand("--auto-select", "--disable-monitor")
 
 	mediaHubProcessMux.Lock()
 	mediaHubProcess = exec.Command(cmd, args...)

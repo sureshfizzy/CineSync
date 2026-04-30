@@ -151,8 +151,6 @@ class WebDavHubDevelopmentServer:
 
         if not self.env_vars.get('DESTINATION_DIR'):
             self.setup_required = True
-            self.env_vars.setdefault('MEDIAHUB_AUTO_START', 'false')
-            self.env_vars.setdefault('RTM_AUTO_START', 'false')
 
     def _parse_env_file(self, env_file: Path):
         """Parse .env file and extract environment variables"""
@@ -231,11 +229,11 @@ class WebDavHubDevelopmentServer:
         print("⚠️  Backend API did not become ready in time")
         return False
 
-    def is_auto_start_enabled(self) -> bool:
-        """Check if MediaHub or RTM auto-start is enabled"""
-        mediahub_auto = self.env_vars.get('MEDIAHUB_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+    def is_rtm_auto_start_enabled(self) -> bool:
+        """Check if RTM auto-start is enabled and monitor mode is polling."""
         rtm_auto = self.env_vars.get('RTM_AUTO_START', 'false').lower() in ('true', '1', 'yes')
-        return mediahub_auto or rtm_auto
+        monitor_mode = (self.env_vars.get('MONITOR_MODE', 'rc_monitor') or 'rc_monitor').strip().lower()
+        return rtm_auto and monitor_mode == 'polling'
 
     def get_mount_path_from_config(self) -> Optional[str]:
         """Get mount path from Real-Debrid config API"""
@@ -296,7 +294,6 @@ class WebDavHubDevelopmentServer:
                 try:
                     mount_dir = Path(mount_path)
                     if mount_dir.exists() and mount_dir.is_dir():
-                        # Try to access it
                         list(mount_dir.iterdir())
                         print(f"✅ Mount is ready at {mount_path}")
                         return True
@@ -336,14 +333,14 @@ class WebDavHubDevelopmentServer:
             if not self.wait_for_backend_api():
                 print("⚠️  Continuing despite API not being ready...")
 
-            if self.is_auto_start_enabled():
+            if self.is_rtm_auto_start_enabled():
                 time.sleep(2)
                 mount_path = self.get_mount_path_from_config()
                 if mount_path:
-                    print(f"\n🔗 Auto-start enabled - waiting for mount before MediaHub/RTM starts...")
+                    print("\n🔗 RTM auto-start enabled")
                     self.wait_for_mount(mount_path)
                 else:
-                    print("ℹ️  Auto-start enabled but no auto-mount configured")
+                    print("ℹ️  RTM auto-start is enabled but no auto-mount configured.")
 
         except Exception as e:
             print(f"Error starting backend server: {e}")

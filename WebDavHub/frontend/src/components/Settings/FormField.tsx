@@ -45,6 +45,12 @@ export const FormField: React.FC<FormFieldProps> = ({
     setShowPassword(!showPassword);
   };
 
+  const formatOptionLabel = (option: string) => {
+    if (option === 'rc_monitor') return 'RC Monitor';
+    if (option === 'polling') return 'Polling';
+    return option;
+  };
+
   const renderField = () => {
     switch (type) {
       case 'boolean':
@@ -237,7 +243,7 @@ export const FormField: React.FC<FormFieldProps> = ({
             >
               {options && options.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {option}
+                  {formatOptionLabel(option)}
                   {option === 'Smart Replace' && (
                     <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
                       Dash or Space Dash depending on name
@@ -271,7 +277,7 @@ export const FormField: React.FC<FormFieldProps> = ({
               </MenuItem>
               {options.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {option}
+                  {formatOptionLabel(option)}
                 </MenuItem>
               ))}
             </Select>

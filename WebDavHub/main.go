@@ -597,69 +597,26 @@ func main() {
 		}
 	}()
 
-	// Auto-start MediaHub service if enabled (delayed to appear after startup summary)
-	if env.IsBool("MEDIAHUB_AUTO_START", true) {
-		go func() {
-			// Wait longer for the server to fully initialize and startup summary to display
-			time.Sleep(10 * time.Second)
+	// RTM auto-start
+	go func() {
+		if !env.IsBool("RTM_AUTO_START", false) {
+			return
+		}
 
-			awaitMountReady(
-				"Inbuilt mount is configured, waiting for mount to be ready before starting MediaHub...",
-				"Mount is ready, proceeding with MediaHub auto-start",
-			)
+		monitorMode := strings.ToLower(strings.TrimSpace(env.GetString("MONITOR_MODE", "rc_monitor")))
+		if monitorMode != "polling" {
+			logger.Info("RTM auto-start skipped: MONITOR_MODE=%s (only polling is supported)", monitorMode)
+			return
+		}
 
-			logger.Info("Auto-starting MediaHub service (includes built-in RTM)...")
+		awaitMountReady("Waiting for mount before RTM auto-start...", "Mount ready. Starting RTM auto-start...")
 
-			// Check if MediaHub is already running
-			status, err := api.GetMediaHubStatus()
-			if err != nil {
-				logger.Warn("Failed to check MediaHub status for auto-start: %v", err)
-				return
-			}
-
-			if !status.IsRunning {
-				logger.Info("Starting MediaHub service automatically...")
-				if err := api.StartMediaHubService(); err != nil {
-					logger.Error("Failed to auto-start MediaHub service: %v", err)
-				} else {
-					logger.Info("MediaHub service auto-started successfully")
-				}
-			} else {
-				logger.Info("MediaHub service is already running")
-			}
-		}()
-	}
-
-	// Auto-start standalone RTM if enabled (only when MediaHub service is not running)
-	if env.IsBool("RTM_AUTO_START", false) {
-		go func() {
-			// Wait for server initialization
-			time.Sleep(10 * time.Second)
-
-			awaitMountReady(
-				"Standalone RTM is waiting for the inbuilt mount to be ready...",
-				"Mount is ready, proceeding with standalone RTM auto-start",
-			)
-
-			status, err := api.GetMediaHubStatus()
-			if err != nil {
-				logger.Error("Failed to check MediaHub status for RTM auto-start: %v", err)
-				return
-			}
-
-			// Skip if MediaHub is running (it includes RTM)
-			if status.IsRunning {
-				return
-			}
-
-			if !status.MonitorRunning {
-				logger.Info("Starting standalone RTM automatically...")
-				if err := api.StartMediaHubMonitorService(); err != nil {
-					logger.Error("Failed to auto-start standalone RTM: %v", err)
-				}
-			}
-		}()
-	}
+		if err := api.StartMediaHubMonitorService(); err != nil {
+			logger.Error("RTM auto-start failed: %v", err)
+			return
+		}
+		logger.Info("RTM auto-started in polling mode")
+	}()
 
 	// Add shutdown handler to checkpoint WAL
 	shutdown := make(chan os.Signal, 1)

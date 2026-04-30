@@ -36,6 +36,15 @@ interface ConfigStatus {
   needsConfiguration: boolean;
 }
 
+interface MonitoringRcloneSettings {
+  mountPath: string;
+  externalRcServerUrl: string;
+  externalVfsMountName: string;
+  externalRcPort: string;
+  externalRcUsername: string;
+  externalRcPassword: string;
+}
+
 type Step = {
   id: string;
   title: string;
@@ -191,7 +200,7 @@ const wizardSteps: Step[] = [
     description: 'Real-time monitor intervals and cleanup',
     accent: '#0ea5e9',
     icon: <NetworkCheckRounded />,
-    keys: ['SLEEP_TIME', 'SYMLINK_CLEANUP_INTERVAL', 'SYMLINK_DELETE_BEHAVIOUR'],
+    keys: ['MONITOR_MODE', 'RTM_AUTO_START', 'SLEEP_TIME', 'SYMLINK_CLEANUP_INTERVAL', 'SYMLINK_DELETE_BEHAVIOUR'],
   },
   {
     id: 'plex',
@@ -212,10 +221,10 @@ const wizardSteps: Step[] = [
   {
     id: 'services',
     title: 'MediaHub & RTM',
-    description: 'Auto-start behaviors and file operations auto mode',
+    description: 'File operations behavior',
     accent: '#10b981',
     icon: <SettingsApplicationsRounded />,
-    keys: ['MEDIAHUB_AUTO_START', 'RTM_AUTO_START', 'FILE_OPERATIONS_AUTO_MODE'],
+    keys: ['FILE_OPERATIONS_AUTO_MODE'],
   },
   {
     id: 'database',
@@ -263,6 +272,15 @@ export default function SetupWizard() {
   });
   const rcloneMountConfigured = !!rcloneSummary.mountPath && (rcloneSummary.enabled || rcloneSummary.serveFromRclone);
   const rcloneModeLabel = rcloneSummary.enabled ? 'Internal mount' : rcloneSummary.serveFromRclone ? 'External mount' : 'Disabled';
+  const [monitoringRcloneSettings, setMonitoringRcloneSettings] = useState<MonitoringRcloneSettings>({
+    mountPath: '',
+    externalRcServerUrl: '127.0.0.1',
+    externalVfsMountName: 'CineSync',
+    externalRcPort: '5572',
+    externalRcUsername: 'admin',
+    externalRcPassword: '',
+  });
+  const [monitoringRcloneSaving, saveRcloneSettings] = useState(false);
 
   useEffect(() => {
     if (rcloneMountConfigured) {
@@ -365,6 +383,44 @@ export default function SetupWizard() {
     return {};
   };
 
+  const loadRcloneSettings = async () => {
+    try {
+      const response = await axios.get('/api/realdebrid/config');
+      const settings = response.data?.config?.rcloneSettings || {};
+      setMonitoringRcloneSettings({
+        mountPath: settings.mountPath || '',
+        externalRcServerUrl: settings.externalRcServerUrl || '127.0.0.1',
+        externalVfsMountName: settings.externalVfsMountName || 'CineSync',
+        externalRcPort: settings.externalRcPort || '5572',
+        externalRcUsername: settings.externalRcUsername || 'admin',
+        externalRcPassword: settings.externalRcPassword || '',
+      });
+    } catch (error) {
+      console.error('Failed to load monitoring rclone settings:', error);
+    }
+  };
+
+  const saveMonitoringRcloneSettings = async () => {
+    saveRcloneSettings(true);
+    try {
+      await axios.put('/api/realdebrid/config', {
+        rcloneSettings: {
+          mountPath: monitoringRcloneSettings.mountPath,
+          externalRcServerUrl: monitoringRcloneSettings.externalRcServerUrl,
+          externalVfsMountName: monitoringRcloneSettings.externalVfsMountName,
+          externalRcPort: monitoringRcloneSettings.externalRcPort,
+          externalRcUsername: monitoringRcloneSettings.externalRcUsername,
+          externalRcPassword: monitoringRcloneSettings.externalRcPassword,
+        },
+      });
+      setSuccess('External RC monitoring settings synced successfully');
+    } catch (error) {
+      setError('Failed to sync external RC monitoring settings');
+    } finally {
+      saveRcloneSettings(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -409,6 +465,7 @@ export default function SetupWizard() {
       setValues(prefilled);
       setInitialValues(prefilled);
       setStatus(statusRes.data);
+      await loadRcloneSettings();
 
     } catch (err) {
       setError('Failed to load setup data. Please retry.');
@@ -657,8 +714,6 @@ export default function SetupWizard() {
     REPLACE_ILLEGAL_CHARACTERS: 'Replace illegal characters. If unchecked, MediaHub will remove them instead.',
     ENABLE_PLEX_UPDATE: 'Trigger Plex library updates after processing.',
     CINESYNC_AUTH_ENABLED: 'Require authentication for UI/API.',
-    MEDIAHUB_AUTO_START: 'Auto-start MediaHub service when CineSync starts.',
-    RTM_AUTO_START: 'Auto-start standalone RTM on start.',
     FILE_OPERATIONS_AUTO_MODE: 'Run file operations automatically.',
   };
   const booleanKeysInStep = availableKeys.filter((k) => booleanBlurbs[k]);
@@ -1183,6 +1238,89 @@ export default function SetupWizard() {
                         </Stack>
                       </Box>
                     </Box>
+                  ) : step.id === 'monitoring' ? (
+                    <Stack spacing={2}>
+                      {renderFields(availableKeys)}
+                      <Alert
+                        severity="info"
+                        icon={false}
+                        sx={{
+                          borderRadius: 2,
+                          bgcolor: alpha(step.accent, 0.08),
+                          border: `1px solid ${alpha(step.accent, 0.2)}`,
+                        }}
+                      >
+                        <Stack spacing={2}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                            External Mount RC Sync (shared with Rclone Settings)
+                          </Typography>
+
+                          <FormField
+                            label="Local Mount Path"
+                            value={monitoringRcloneSettings.mountPath}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, mountPath: val }))}
+                            type="string"
+                            required={false}
+                            description="Windows: Point this to your existing mount (for example Z:\\ or C:\\mounts\\realdebrid). Ensure WinFsp is installed."
+                          />
+
+                          <FormField
+                            label="RC Server URL"
+                            value={monitoringRcloneSettings.externalRcServerUrl}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcServerUrl: val }))}
+                            type="string"
+                            required={false}
+                            description="Host or base URL for your RC server. http:// is assumed if omitted."
+                          />
+
+                          <FormField
+                            label="VFS Mount Name"
+                            value={monitoringRcloneSettings.externalVfsMountName}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalVfsMountName: val }))}
+                            type="string"
+                            required={false}
+                            description="Stored for your external VFS setup."
+                          />
+
+                          <FormField
+                            label="RC Port"
+                            value={monitoringRcloneSettings.externalRcPort}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcPort: val }))}
+                            type="string"
+                            required={false}
+                            description="Optional if the server URL already includes a port."
+                          />
+
+                          <FormField
+                            label="Username"
+                            value={monitoringRcloneSettings.externalRcUsername}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcUsername: val }))}
+                            type="string"
+                            required={false}
+                            description="Optional."
+                          />
+
+                          <FormField
+                            label="Password"
+                            value={monitoringRcloneSettings.externalRcPassword}
+                            onChange={(val) => setMonitoringRcloneSettings((prev) => ({ ...prev, externalRcPassword: val }))}
+                            type="password"
+                            required={false}
+                            description="Optional."
+                          />
+
+                          <Box>
+                            <Button
+                              variant="outlined"
+                              onClick={saveMonitoringRcloneSettings}
+                              disabled={monitoringRcloneSaving}
+                            >
+                              {monitoringRcloneSaving ? 'Syncing...' : 'Sync External RC Settings'}
+                            </Button>
+                          </Box>
+                        </Stack>
+                      </Alert>
+                    </Stack>
                   ) : availableKeys.length ? (
                     renderFields(availableKeys)
                   ) : (

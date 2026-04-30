@@ -240,10 +240,6 @@ func getConfigDefinitions() []ConfigValue {
 		// Logging Configuration
 		{Key: "LOG_LEVEL", Category: "Logging Configuration", Type: "string", Required: false, Description: "Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"},
 
-		// MediaHub Service Configuration
-		{Key: "MEDIAHUB_AUTO_START", Category: "MediaHub Service Configuration", Type: "boolean", Required: false, Description: "Enable or disable automatic startup of MediaHub service (including built-in RTM) when CineSync starts"},
-		{Key: "RTM_AUTO_START", Category: "MediaHub Service Configuration", Type: "boolean", Required: false, Description: "Enable or disable automatic startup of standalone Real-Time Monitor when CineSync starts"},
-
 		// TMDb/IMDB Configuration
 		{Key: "TMDB_API_KEY", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Your TMDb API key for accessing TMDb services"},
 		{Key: "LANGUAGE", Category: "TMDb/IMDB Configuration", Type: "string", Required: false, Description: "Language for TMDb API requests"},
@@ -287,6 +283,8 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "COLON_REPLACEMENT", Category: "File Handling Configuration", Type: "select", Required: false, Description: "Colon replacement format", Options: []string{"Delete", "Replace with Dash", "Replace with Space Dash", "Replace with Space Dash Space", "Smart Replace"}},
 
 		// Real-Time Monitoring Configuration
+		{Key: "MONITOR_MODE", Category: "Real-Time Monitoring Configuration", Type: "select", Required: false, Description: "Select monitor mode for runtime tracking", Options: []string{"rc_monitor", "polling"}},
+		{Key: "RTM_AUTO_START", Category: "Real-Time Monitoring Configuration", Type: "boolean", Required: false, Description: "Auto-start RTM on app startup (polling mode only)"},
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
 		{Key: "SYMLINK_CLEANUP_INTERVAL", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Cleanup interval for deleting broken symbolic links"},
 		{Key: "SYMLINK_DELETE_BEHAVIOUR", Category: "Real-Time Monitoring Configuration", Type: "select", Required: false, Description: "Symlink deletion behavior", Options: []string{"trash", "permanent"}},
@@ -801,6 +799,8 @@ func getConfigDefaults() map[string]string {
 		"REPLACE_ILLEGAL_CHARACTERS": "true",
 		"COLON_REPLACEMENT":          "Smart Replace",
 		// Monitoring
+		"MONITOR_MODE":             "rc_monitor",
+		"RTM_AUTO_START":           "false",
 		"SLEEP_TIME":               "60",
 		"SYMLINK_CLEANUP_INTERVAL": "600",
 		"SYMLINK_DELETE_BEHAVIOUR": "permanent",
@@ -816,8 +816,6 @@ func getConfigDefaults() map[string]string {
 		"CINESYNC_USERNAME":     "admin",
 		"CINESYNC_PASSWORD":     "admin",
 		// Services
-		"MEDIAHUB_AUTO_START":       "true",
-		"RTM_AUTO_START":            "false",
 		"FILE_OPERATIONS_AUTO_MODE": "true",
 		// Database
 		"DB_THROTTLE_RATE": "10",

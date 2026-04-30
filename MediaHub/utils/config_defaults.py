@@ -93,6 +93,8 @@ def collect_defaults():
         "REPLACE_ILLEGAL_CHARACTERS": "true",
         "COLON_REPLACEMENT": "Smart Replace",
         # Monitoring
+        "MONITOR_MODE": "rc_monitor",
+        "RTM_AUTO_START": "false",
         "SLEEP_TIME": "60",
         "SYMLINK_CLEANUP_INTERVAL": "600",
         "SYMLINK_DELETE_BEHAVIOUR": "permanent",
@@ -107,8 +109,6 @@ def collect_defaults():
         "CINESYNC_USERNAME": "admin",
         "CINESYNC_PASSWORD": "admin",
         # Services
-        "MEDIAHUB_AUTO_START": "true",
-        "RTM_AUTO_START": "false",
         "FILE_OPERATIONS_AUTO_MODE": "true",
         # Database
         "DB_THROTTLE_RATE": "10",

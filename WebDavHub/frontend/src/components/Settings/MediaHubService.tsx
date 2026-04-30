@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Switch, FormControlLabel, Menu, MenuItem } from '@mui/material';
+import { Box, Typography, Button, Chip, Stack, Alert, CircularProgress, useTheme, alpha, IconButton, Collapse, Grid, Tooltip, Menu, MenuItem } from '@mui/material';
 import axios from 'axios';
 import { PlayArrow, Stop, Refresh, Terminal, Speed, Storage, FolderOpen, Link, Visibility, Circle, Download } from '@mui/icons-material';
 import LoadingButton from './LoadingButton';
@@ -36,11 +36,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
   const [success, setSuccess] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [autoStart, setAutoStart] = useState(true);
-  const [autoStartLoading, setAutoStartLoading] = useState(false);
-  const [rtmAutoStart, setRtmAutoStart] = useState(false);
-  const [rtmAutoStartLoading, setRtmAutoStartLoading] = useState(false);
+  const [monitorMode, setMonitorMode] = useState<'rc_monitor' | 'polling'>('rc_monitor');
+  const [cinesyncPort, setCinesyncPort] = useState('8082');
   const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null);
   const [exportLoading, setExportLoading] = useState(false);
 
@@ -73,60 +70,39 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     }
   };
 
-  const fetchAutoStartConfig = async () => {
+  const fetchMonitorConfig = async () => {
     try {
-      const response = await axios.get('/api/config');
-      const { config } = response.data;
+      const [configResponse, rdResponse] = await Promise.all([
+        axios.get('/api/config'),
+        axios.get('/api/realdebrid/config').catch(() => null),
+      ]);
+      const { config } = configResponse.data;
+      if (!Array.isArray(config)) return;
 
-      if (Array.isArray(config)) {
-        const autoStartItem = config.find(item => item.key === 'MEDIAHUB_AUTO_START');
-        const rtmAutoStartItem = config.find(item => item.key === 'RTM_AUTO_START');
+      const monitorModeItem = config.find(item => item.key === 'MONITOR_MODE');
+      const modeValue = monitorModeItem?.value === 'polling' ? 'polling' : 'rc_monitor';
+      setMonitorMode(modeValue);
 
-        setAutoStart(autoStartItem?.value === 'true');
-        setRtmAutoStart(rtmAutoStartItem?.value === 'true');
+      const externalRcPort = rdResponse?.data?.config?.rcloneSettings?.externalRcPort;
+      const cinesyncPortItem = config.find(item => item.key === 'CINESYNC_PORT');
+      const displayPort = modeValue === 'rc_monitor'
+        ? (externalRcPort || cinesyncPortItem?.value || '5572')
+        : (cinesyncPortItem?.value || '8082');
+
+      if (displayPort) {
+        setCinesyncPort(displayPort);
       }
     } catch (err) {
-      console.error('Failed to fetch auto-start config:', err);
+      console.error('Failed to fetch monitor config:', err);
     }
   };
-
-  const updateConfig = async (key: string, enabled: boolean, setLoading: (loading: boolean) => void, setState: (state: boolean) => void, label: string) => {
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    setState(enabled);
-
-    try {
-      const response = await axios.post('/api/config/update-silent', {
-        updates: [{ key, value: enabled.toString(), type: 'boolean', required: false }]
-      });
-
-      if (response.data.status === 'success') {
-        setSuccess(`${label} ${enabled ? 'enabled' : 'disabled'} successfully`);
-      } else {
-        setError(`Failed to update ${label.toLowerCase()} setting`);
-        setState(!enabled);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to update ${label.toLowerCase()} setting`);
-      setState(!enabled);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateAutoStartConfig = (enabled: boolean) =>
-    updateConfig('MEDIAHUB_AUTO_START', enabled, setAutoStartLoading, setAutoStart, 'Auto-start');
-
-  const updateRtmAutoStartConfig = (enabled: boolean) =>
-    updateConfig('RTM_AUTO_START', enabled, setRtmAutoStartLoading, setRtmAutoStart, 'Standalone RTM Auto-start');
 
   const fetchData = async (showRefreshIndicator = false) => {
     setLoading(true);
     await Promise.all([
       fetchStatus(showRefreshIndicator),
       fetchActivity(),
-      fetchAutoStartConfig()
+      fetchMonitorConfig()
     ]);
     setLoading(false);
   };
@@ -277,17 +253,22 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
 
   const getStatusColor = () => {
     if (!status) return '#6B7280';
-    if (status.isRunning && status.monitorRunning) return '#4CAF50';
-    if (status.isRunning || status.monitorRunning) return '#F59E0B';
+    const effectiveMonitorRunning = monitorMode === 'rc_monitor'
+      ? (status.monitorRunning || status.isRunning)
+      : status.monitorRunning;
+    if (status.isRunning && effectiveMonitorRunning) return '#4CAF50';
+    if (status.isRunning || effectiveMonitorRunning) return '#F59E0B';
     return '#EF4444';
   };
 
   const getStatusText = () => {
     if (!status) return 'Unknown';
-    if (status.isRunning && status.monitorRunning) return 'Active';
-    if (status.isRunning) return 'Partial';
-    if (status.monitorRunning) return 'Monitor';
-    return 'Stopped';
+    const effectiveMonitorRunning = monitorMode === 'rc_monitor'
+      ? (status.monitorRunning || status.isRunning)
+      : status.monitorRunning;
+    if (effectiveMonitorRunning) return 'Monitoring';
+    if (status.isRunning) return 'Syncing';
+    return 'Idle';
   };
 
   const handleExportLogs = async (exportType: 'current' | 'all' | 'date', dateFilter?: string) => {
@@ -361,6 +342,10 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
     );
   }
 
+  const effectiveMonitorRunning = status
+    ? (monitorMode === 'rc_monitor' ? (status.monitorRunning || status.isRunning) : status.monitorRunning)
+    : false;
+
   return (
     <Box>
       {/* Alerts */}
@@ -427,7 +412,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               <Typography variant="body2" sx={{
                 color: "text.secondary"
               }}>
-                Automated media processing & organization
+                Monitor-first controls with on-demand full sync
               </Typography>
             </Box>
           </Stack>
@@ -467,7 +452,38 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
           </Stack>
         </Stack>
 
-        {/* Process Status Grid */}
+        {/* Monitor Mode Summary */}
+        <Box sx={{ mb: 2 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}>
+            <Chip
+              size="small"
+              label={`Mode: ${monitorMode === 'rc_monitor' ? 'RC Monitor' : 'Polling'}`}
+              sx={{
+                bgcolor: alpha('#3B82F6', 0.1),
+                color: '#3B82F6',
+                border: `1px solid ${alpha('#3B82F6', 0.2)}`,
+                fontWeight: 600,
+              }}
+            />
+            {monitorMode === 'rc_monitor' && (
+              <Chip
+                size="small"
+                label={`RC Port: ${cinesyncPort}`}
+                sx={{
+                  bgcolor: alpha('#8B5CF6', 0.1),
+                  color: '#8B5CF6',
+                  border: `1px solid ${alpha('#8B5CF6', 0.2)}`,
+                  fontWeight: 600,
+                }}
+              />
+            )}
+          </Stack>
+          <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
+            Monitor mode is configured in setup. It starts only when you click Start Monitor or run a full sync.
+          </Typography>
+        </Box>
+
+        {/* Service Status Grid */}
         {status && (
           <Grid container spacing={2} sx={{
             mb: 3
@@ -506,16 +522,16 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     <Typography variant="subtitle2" sx={{
                       fontWeight: "600"
                     }}>
-                      Main Process
+                      Full Sync Engine
                     </Typography>
                     <Typography variant="body2" sx={{
                       color: "text.secondary"
                     }}>
-                      {status.isRunning ? 'Processing files' : 'Inactive'}
+                      {status.isRunning ? 'Running full sync pass' : 'Ready on demand'}
                     </Typography>
                   </Box>
                   <Chip
-                    label={status.isRunning ? 'Running' : 'Stopped'}
+                    label={status.isRunning ? 'Running' : 'Standby'}
                     size="small"
                     sx={{
                       bgcolor: status.isRunning ? '#4CAF50' : '#EF4444',
@@ -537,11 +553,11 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 sx={{
                   p: 2,
                   borderRadius: 2,
-                  bgcolor: status.monitorRunning
+                  bgcolor: effectiveMonitorRunning
                     ? alpha('#4CAF50', 0.1)
                     : alpha('#EF4444', 0.1),
                   border: '1px solid',
-                  borderColor: status.monitorRunning
+                  borderColor: effectiveMonitorRunning
                     ? alpha('#4CAF50', 0.2)
                     : alpha('#EF4444', 0.2),
                   transition: 'all 0.4s ease-in-out',
@@ -553,7 +569,9 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                   <Visibility
                     sx={{
                       fontSize: 20,
-                      color: status.monitorRunning ? '#4CAF50' : '#EF4444'
+                      color: monitorMode === 'rc_monitor'
+                        ? '#4CAF50'
+                        : (effectiveMonitorRunning ? '#4CAF50' : '#EF4444')
                     }}
                   />
                   <Box sx={{
@@ -562,19 +580,23 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                     <Typography variant="subtitle2" sx={{
                       fontWeight: "600"
                     }}>
-                      Monitor
+                      Real-Time Monitor
                     </Typography>
                     <Typography variant="body2" sx={{
                       color: "text.secondary"
                     }}>
-                      {status.monitorRunning ? 'Watching directories' : 'Not monitoring'}
+                      {monitorMode === 'rc_monitor'
+                        ? 'RC mode uses external mount events.'
+                        : (effectiveMonitorRunning ? 'Watching directories continuously' : 'Not running')}
                     </Typography>
                   </Box>
                   <Chip
-                    label={status.monitorRunning ? 'Active' : 'Stopped'}
+                    label={monitorMode === 'rc_monitor' ? 'RC Mode' : (effectiveMonitorRunning ? 'Active' : 'Stopped')}
                     size="small"
                     sx={{
-                      bgcolor: status.monitorRunning ? '#4CAF50' : '#EF4444',
+                      bgcolor: monitorMode === 'rc_monitor'
+                        ? '#3B82F6'
+                        : (effectiveMonitorRunning ? '#4CAF50' : '#EF4444'),
                       color: 'white',
                       fontWeight: 600,
                       transition: 'all 0.4s ease-in-out',
@@ -716,14 +738,14 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 },
               }}
             >
-              Start Service
+              Run Full Sync
             </LoadingButton>
 
             <LoadingButton
               variant="contained"
               startIcon={<Stop />}
               loading={actionLoading === 'stop'}
-              disabled={!status?.isRunning && !status?.monitorRunning || actionLoading !== null}
+              disabled={!status?.isRunning || actionLoading !== null}
               onClick={() => handleAction('stop')}
               sx={{
                 px: 3,
@@ -744,30 +766,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 },
               }}
             >
-              Stop Service
-            </LoadingButton>
-
-            <LoadingButton
-              variant="outlined"
-              startIcon={<Refresh />}
-              loading={actionLoading === 'restart'}
-              disabled={actionLoading !== null}
-              onClick={() => handleAction('restart')}
-              sx={{
-                px: 3,
-                py: 1.2,
-                borderRadius: 2,
-                fontWeight: 600,
-                textTransform: 'none',
-                borderColor: theme.palette.mode === 'dark' ? alpha('#FFF', 0.23) : alpha('#000', 0.23),
-                color: 'text.primary',
-                '&:hover': {
-                  borderColor: theme.palette.mode === 'dark' ? alpha('#FFF', 0.23) : alpha('#000', 0.23),
-                  bgcolor: theme.palette.mode === 'dark' ? alpha('#FFF', 0.04) : alpha('#000', 0.04),
-                },
-              }}
-            >
-              Restart
+              Stop Active Processes
             </LoadingButton>
 
             <Button
@@ -794,136 +793,8 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
             </Button>
           </Stack>
 
-        {/* Auto-Start Configuration */}
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={autoStart}
-                onChange={(e) => updateAutoStartConfig(e.target.checked)}
-                disabled={autoStartLoading}
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#4CAF50',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: '#4CAF50',
-                  },
-                }}
-              />
-            }
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" sx={{
-                  fontWeight: "600"
-                }}>
-                  Auto-Start MediaHub Service
-                </Typography>
-                {autoStartLoading && <CircularProgress size={16} />}
-              </Box>
-            }
-          />
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-              ml: 4,
-              display: 'block'
-            }}>
-            Automatically start MediaHub service (includes built-in RTM) when CineSync starts
-          </Typography>
-        </Box>
-
-        {/* Standalone RTM Auto-Start Configuration */}
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={rtmAutoStart}
-                onChange={(e) => updateRtmAutoStartConfig(e.target.checked)}
-                disabled={rtmAutoStartLoading}
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#8B5CF6',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: '#8B5CF6',
-                  },
-                }}
-              />
-            }
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" sx={{
-                  fontWeight: "600"
-                }}>
-                  Auto-Start Standalone RTM
-                </Typography>
-                {rtmAutoStartLoading && <CircularProgress size={16} />}
-              </Box>
-            }
-          />
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-              ml: 4,
-              display: 'block'
-            }}>
-            Automatically start standalone Real-Time Monitor when CineSync starts (only when MediaHub service is not running)
-          </Typography>
-
-          {/* Warning when both are enabled */}
-          {autoStart && rtmAutoStart && (
-            <Alert
-              severity="warning"
-              sx={{
-                mt: 2,
-                ml: 4,
-                borderRadius: 2,
-                border: 'none',
-                bgcolor: alpha('#F59E0B', 0.1),
-                color: '#D97706',
-                '& .MuiAlert-icon': { color: '#D97706' }
-              }}
-            >
-              <Typography variant="body2">
-                <strong>Note:</strong> MediaHub service includes RTM functionality.
-                Standalone RTM will be skipped since MediaHub auto-start is enabled.
-              </Typography>
-            </Alert>
-          )}
-        </Box>
-
-        {/* Advanced Controls Toggle */}
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showAdvanced}
-                onChange={(e) => setShowAdvanced(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#8B5CF6',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: '#8B5CF6',
-                  },
-                }}
-              />
-            }
-            label={
-              <Typography variant="body2" sx={{
-                fontWeight: "600"
-              }}>
-                Advanced Controls
-              </Typography>
-            }
-          />
-        </Box>
-
-        {/* Advanced Monitor Controls */}
-        <Collapse in={showAdvanced}>
+        {/* Monitor Controls (polling mode only) */}
+        {monitorMode !== 'rc_monitor' && (
           <Box
             sx={{
               p: 3,
@@ -952,7 +823,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 color: "text.secondary",
                 mb: 3
               }}>
-              Control the directory monitor independently from the main service.
+              Control the directory monitor independently.
             </Typography>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -960,7 +831,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 variant="contained"
                 startIcon={<PlayArrow />}
                 loading={actionLoading === 'monitor-start'}
-                disabled={status?.monitorRunning || actionLoading !== null}
+                disabled={effectiveMonitorRunning || actionLoading !== null}
                 onClick={() => handleMonitorAction('start')}
                 sx={{
                   px: 3,
@@ -988,7 +859,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
                 variant="contained"
                 startIcon={<Stop />}
                 loading={actionLoading === 'monitor-stop'}
-                disabled={!status?.monitorRunning || actionLoading !== null}
+                disabled={!effectiveMonitorRunning || actionLoading !== null}
                 onClick={() => handleMonitorAction('stop')}
                 sx={{
                   px: 3,
@@ -1013,7 +884,7 @@ const MediaHubService: React.FC<MediaHubServiceProps> = ({ onStatusChange }) => 
               </LoadingButton>
             </Stack>
           </Box>
-        </Collapse>
+        )}
       </Box>
       {/* Logs Section */}
       <Collapse in={showLogs}>

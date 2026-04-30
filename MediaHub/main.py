@@ -443,6 +443,7 @@ def main(dest_dir):
     parser.add_argument("--force-extra", action="store_true", help="Force an extra file to be considered as a Movie/Show")
     parser.add_argument("--disable-monitor", action="store_true", help="Disable polling monitor and symlink cleanup processes")
     parser.add_argument("--monitor-only", action="store_true", help="Start only the polling monitor without processing existing files")
+    parser.add_argument("--monitor-mode", type=str, choices=['rc_monitor', 'polling'], help="Override monitor mode")
     parser.add_argument("--imdb", type=str, help="Direct IMDb ID for the show")
     parser.add_argument("--tmdb", type=int, help="Direct TMDb ID for the show")
     parser.add_argument("--tvdb", type=int, help="Direct TVDb ID for the show")
@@ -544,18 +545,26 @@ def main(dest_dir):
         source_scan_job.main()
         return
 
+    monitor_mode = get_monitor_mode()
+    if args.monitor_mode:
+        monitor_mode = args.monitor_mode.strip().lower()
+        if monitor_mode not in ['rc_monitor', 'polling']:
+            log_message(f"Unknown monitor mode '{monitor_mode}', defaulting to rc_monitor", level="WARNING")
+            monitor_mode = 'rc_monitor'
+
     # Handle monitor-only mode
     if args.monitor_only:
-        log_message("Starting in monitor-only mode", level="INFO")
+        log_message(f"Starting in monitor-only mode ({monitor_mode})", level="INFO")
         # Check dashboard availability even in monitor-only mode
         check_dashboard_availability()
         # Initialize database
         if not initialize_database():
             log_message("Failed to initialize database. Exiting.", level="ERROR")
             return
-        # Start only the polling monitor
-        start_polling_monitor()
-        # Note: start_polling_monitor() blocks in frozen mode, so we only reach here if it exits
+        if monitor_mode == 'polling':
+            start_polling_monitor()
+        else:
+            log_message("RC monitor mode does not start a local monitor process. Exiting monitor-only mode.", level="INFO")
         log_message("Monitor process has exited", level="INFO")
         return
 
@@ -570,7 +579,7 @@ def main(dest_dir):
 
         if not args.disable_monitor and not is_single_file_operation:
             log_message("Starting background processes...", level="INFO")
-            log_message("RealTime-Monitoring is enabled", level="INFO")
+            log_message(f"RealTime-Monitoring is enabled ({monitor_mode})", level="INFO")
 
             log_message("Missing files check disabled at startup for better performance", level="INFO")
 
@@ -595,11 +604,15 @@ def main(dest_dir):
         # Start RealTime-Monitoring in main thread if not disabled and not single file operation
         if not args.disable_monitor and not is_single_file_operation:
             start_webdav_server()
-            log_message("Starting RealTime-Monitoring...", level="INFO")
-            monitor_thread = threading.Thread(target=start_polling_monitor)
-            monitor_thread.daemon = True
-            monitor_thread.start()
-            time.sleep(2)
+            log_message(f"Starting RealTime-Monitoring ({monitor_mode})...", level="INFO")
+            monitor_thread = None
+            if monitor_mode == 'polling':
+                monitor_thread = threading.Thread(target=start_polling_monitor)
+                monitor_thread.daemon = True
+                monitor_thread.start()
+                time.sleep(2)
+            else:
+                log_message("RC monitor mode selected; skipping local monitor thread.", level="INFO")
             def run_initial_scan():
                 try:
                     create_symlinks(src_dirs, dest_dir, auto_select=args.auto_select, single_path=args.single_path, force=args.force, mode='create', tmdb_id=args.tmdb, imdb_id=args.imdb, tvdb_id=args.tvdb, force_show=args.force_show, force_movie=args.force_movie, season_number=season_number, episode_number=episode_number, force_extra=args.force_extra, skip=args.skip, batch_apply=args.batch_apply, manual_search=args.manual_search, use_source_db=args.use_source_db)
@@ -609,20 +622,26 @@ def main(dest_dir):
             initial_scan_thread = threading.Thread(target=run_initial_scan, name="InitialScanThread")
             initial_scan_thread.daemon = True
             initial_scan_thread.start()
-            log_message("Initial scan started in background - monitor will continue running", level="INFO")
+            log_message("Initial scan started in background", level="INFO")
 
-            while monitor_thread.is_alive() and not terminate_flag.is_set():
-                time.sleep(0.1)
+            if monitor_thread is not None:
+                while monitor_thread.is_alive() and not terminate_flag.is_set():
+                    time.sleep(0.1)
 
-            if terminate_flag.is_set():
-                log_message("Termination requested, stopping monitor thread", level="INFO")
-                terminate_subprocesses()
-                remove_lock_file()
-                sys.exit(1)
+                if terminate_flag.is_set():
+                    log_message("Termination requested, stopping monitor thread", level="INFO")
+                    terminate_subprocesses()
+                    remove_lock_file()
+                    sys.exit(1)
 
-            if not monitor_thread.is_alive():
-                log_message("RealTime-Monitoring stopped unexpectedly. Shutting down MediaHub.", level="ERROR")
-                set_shutdown()
+                if not monitor_thread.is_alive():
+                    log_message("RealTime-Monitoring stopped unexpectedly. Shutting down MediaHub.", level="ERROR")
+                    set_shutdown()
+                    terminate_subprocesses()
+                    remove_lock_file()
+                    sys.exit(1)
+            elif terminate_flag.is_set():
+                log_message("Termination requested. Shutting down MediaHub.", level="INFO")
                 terminate_subprocesses()
                 remove_lock_file()
                 sys.exit(1)
