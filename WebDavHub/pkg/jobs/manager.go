@@ -398,8 +398,42 @@ func (m *Manager) startJobTimer(job *Job) {
 		return
 	}
 
-	duration := time.Duration(job.IntervalSeconds) * time.Second
-	nextExecution := time.Now().Add(duration)
+	intervalDuration := time.Duration(job.IntervalSeconds) * time.Second
+	overdueGraceDuration := time.Hour
+	nowUTC := time.Now().UTC()
+	var duration time.Duration
+	var nextExecution time.Time
+	shouldDelayOverdueRun := job.ID == "source-files-scan" || job.ID == "symlink-cleanup"
+	if job.NextExecution != nil {
+		persistedNext := job.NextExecution.UTC()
+		if persistedNext.After(nowUTC) {
+			nextExecution = persistedNext
+			duration = persistedNext.Sub(nowUTC)
+		} else {
+			if shouldDelayOverdueRun {
+				duration = overdueGraceDuration
+			} else {
+				duration = time.Second
+			}
+			nextExecution = nowUTC.Add(duration)
+		}
+	} else if job.LastExecution != nil {
+		calculatedNext := job.LastExecution.UTC().Add(intervalDuration)
+		if calculatedNext.After(nowUTC) {
+			nextExecution = calculatedNext
+			duration = calculatedNext.Sub(nowUTC)
+		} else {
+			if shouldDelayOverdueRun {
+				duration = overdueGraceDuration
+			} else {
+				duration = time.Second
+			}
+			nextExecution = nowUTC.Add(duration)
+		}
+	} else {
+		duration = intervalDuration
+		nextExecution = nowUTC.Add(duration)
+	}
 
 	timer := time.AfterFunc(duration, func() {
 		m.executeJob(job.ID)
@@ -409,15 +443,19 @@ func (m *Manager) startJobTimer(job *Job) {
 	m.timers[job.ID] = timer
 	job.NextExecution = &nextExecution
 	m.mutex.Unlock()
+
+	if err := saveJobToDB(job); err != nil {
+		logger.Error("Failed to persist next execution for job %s: %v", job.ID, err)
+	}
 }
 
 // resetJobTimer resets the timer for a job after execution
 func (m *Manager) resetJobTimer(jobID string) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 
 	job, exists := m.jobs[jobID]
 	if !exists || job.ScheduleType != ScheduleTypeInterval || !job.Enabled {
+		m.mutex.Unlock()
 		return
 	}
 
@@ -428,7 +466,7 @@ func (m *Manager) resetJobTimer(jobID string) {
 
 	// Start new timer
 	duration := time.Duration(job.IntervalSeconds) * time.Second
-	nextExecution := time.Now().Add(duration)
+	nextExecution := time.Now().UTC().Add(duration)
 
 	timer := time.AfterFunc(duration, func() {
 		m.executeJob(jobID)
@@ -436,6 +474,11 @@ func (m *Manager) resetJobTimer(jobID string) {
 
 	m.timers[jobID] = timer
 	job.NextExecution = &nextExecution
+	m.mutex.Unlock()
+
+	if err := saveJobToDB(job); err != nil {
+		logger.Error("Failed to persist reset timer for job %s: %v", job.ID, err)
+	}
 }
 
 // startBroadcaster starts the status update broadcaster
@@ -588,10 +631,10 @@ func (m *Manager) executeJob(jobID string) {
 	m.mutex.Unlock()
 
 	// Execute command
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 
 	output, err := cmd.CombinedOutput()
-	endTime := time.Now()
+	endTime := time.Now().UTC()
 	duration := endTime.Sub(startTime)
 
 	if job.LogOutput && len(output) > 0 {
@@ -643,6 +686,9 @@ func (m *Manager) executeJob(jobID string) {
 		logger.Debug("Job %s completed. Resetting timer for next execution in %d seconds", job.Name, job.IntervalSeconds)
 		m.resetJobTimer(jobID)
 	} else {
+		if err := saveJobToDB(job); err != nil {
+			logger.Error("Failed to persist completion state for job %s: %v", job.ID, err)
+		}
 		logger.Debug("Job %s completed. No next execution scheduled (manual job)", job.Name)
 	}
 }
