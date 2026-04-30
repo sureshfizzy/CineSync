@@ -200,7 +200,7 @@ const wizardSteps: Step[] = [
     description: 'Real-time monitor intervals and cleanup',
     accent: '#0ea5e9',
     icon: <NetworkCheckRounded />,
-    keys: ['MONITOR_MODE', 'RTM_AUTO_START', 'SLEEP_TIME', 'SYMLINK_CLEANUP_INTERVAL', 'SYMLINK_DELETE_BEHAVIOUR'],
+    keys: ['MONITOR_MODE', 'RTM_AUTO_START', 'SLEEP_TIME', 'SYMLINK_DELETE_BEHAVIOUR'],
   },
   {
     id: 'plex',

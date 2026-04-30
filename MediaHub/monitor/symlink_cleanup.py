@@ -100,72 +100,83 @@ def run_symlink_cleanup(dest_dir):
         return
 
     while not shutdown_event.is_set():
-        symlinks_deleted = False
-        trash_mode = _get_symlink_delete_behaviour() == 'trash'
-        symlink_target_index = {}
-        for root, _, files in os.walk(dest_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                if os.path.islink(file_path):
-                    try:
-                        target = get_symlink_target_path(file_path)
-                        if target:
-                            normalized_target = normalize_file_path(target)
-                            if normalized_target not in symlink_target_index:
-                                symlink_target_index[normalized_target] = file_path
-
-                        # Check if the symlink target exists
-                        if not os.path.exists(target):
-                            log_message(f"Broken symlink found: {file_path} -> {target}", level="INFO")
-                            symlinks_deleted = True
-
-                            # First check if the file is in the database
-                            if check_file_in_db(file_path):
-                                # Try to get the actual destination using search_database if available
-                                actual_target = None
-                                try:
-                                    if 'search_database_quiet' in globals() and callable(globals()['search_database_quiet']):
-                                        search_results = search_database(file_path)
-                                        if search_results and len(search_results) > 0:
-                                            actual_target = search_results[0][0] if search_results[0][0] else target
-                                    else:
-                                        pass
-                                except Exception as search_error:
-                                    log_message(f"Error searching database: {str(search_error)}", level="ERROR")
-
-                                # Use actual target if found, otherwise use the original target
-                                removed_path = actual_target if actual_target else target
-                                if trash_mode:
-                                    _safe_delete_symlink(file_path)
-                                else:
-                                    delete_broken_symlinks(dest_dir, removed_path)
-                            else:
-                                log_message(f"Symlink not found in database, deleting directly: {file_path}", level="DEBUG")
-                                try:
-                                    _safe_delete_symlink(file_path)
-                                    log_message(f"Manually deleted broken symlink: {file_path}", level="INFO")
-
-                                    # Trigger Plex refresh for deletion
-                                    try:
-                                        update_plex_after_deletion(file_path)
-                                    except Exception as plex_error:
-                                        log_message(f"Error triggering Plex refresh for deletion: {plex_error}", level="DEBUG")
-                                except Exception as rm_error:
-                                    log_message(f"Error removing symlink: {str(rm_error)}", level="ERROR")
-                    except Exception as e:
-                        log_message(f"Error processing symlink {file_path}: {str(e)}", level="ERROR")
-                        print(f"Exception details: {traceback.format_exc()}")
-
-        if (not trash_mode) and _should_cleanup_orphans():
-            orphaned_removed = _cleanup_orphaned_db_entries(dest_dir, symlink_target_index)
-            if orphaned_removed:
-                log_message(f"Removed {orphaned_removed} orphaned DB entries.", level="INFO")
-        # Retrieve the cleanup interval
+        run_symlink_cleanup_job(dest_dir)
         try:
-            cleanup_interval_str = os.getenv("SYMLINK_CLEANUP_INTERVAL", "600")
-            cleanup_interval = int(cleanup_interval_str) if cleanup_interval_str and cleanup_interval_str.strip() else 600
+            cleanup_interval_str = os.getenv("SYMLINK_CLEANUP_INTERVAL", "86400")
+            cleanup_interval = int(cleanup_interval_str) if cleanup_interval_str and cleanup_interval_str.strip() else 86400
         except (ValueError, TypeError):
-            cleanup_interval = 600
+            cleanup_interval = 86400
 
         log_message(f"Sleeping Full broken symlink deletion for {cleanup_interval} seconds until next cleanup cycle.", level="DEBUG")
         shutdown_event.wait(cleanup_interval)
+
+
+def run_symlink_cleanup_job(dest_dir):
+    """
+    Runs a single cleanup pass and returns a tuple:
+    (broken_symlink_count, orphaned_db_entries_removed)
+    """
+    symlinks_deleted_count = 0
+    orphaned_removed = 0
+    trash_mode = _get_symlink_delete_behaviour() == 'trash'
+    symlink_target_index = {}
+
+    for root, _, files in os.walk(dest_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if os.path.islink(file_path):
+                try:
+                    target = get_symlink_target_path(file_path)
+                    if target:
+                        normalized_target = normalize_file_path(target)
+                        if normalized_target not in symlink_target_index:
+                            symlink_target_index[normalized_target] = file_path
+
+                    # Check if the symlink target exists
+                    if not os.path.exists(target):
+                        log_message(f"Broken symlink found: {file_path} -> {target}", level="INFO")
+                        symlinks_deleted_count += 1
+
+                        # First check if the file is in the database
+                        if check_file_in_db(file_path):
+                            # Try to get the actual destination using search_database if available
+                            actual_target = None
+                            try:
+                                if 'search_database_quiet' in globals() and callable(globals()['search_database_quiet']):
+                                    search_results = search_database(file_path)
+                                    if search_results and len(search_results) > 0:
+                                        actual_target = search_results[0][0] if search_results[0][0] else target
+                                else:
+                                    pass
+                            except Exception as search_error:
+                                log_message(f"Error searching database: {str(search_error)}", level="ERROR")
+
+                            # Use actual target if found, otherwise use the original target
+                            removed_path = actual_target if actual_target else target
+                            if trash_mode:
+                                _safe_delete_symlink(file_path)
+                            else:
+                                delete_broken_symlinks(dest_dir, removed_path)
+                        else:
+                            log_message(f"Symlink not found in database, deleting directly: {file_path}", level="DEBUG")
+                            try:
+                                _safe_delete_symlink(file_path)
+                                log_message(f"Manually deleted broken symlink: {file_path}", level="INFO")
+
+                                # Trigger Plex refresh for deletion
+                                try:
+                                    update_plex_after_deletion(file_path)
+                                except Exception as plex_error:
+                                    log_message(f"Error triggering Plex refresh for deletion: {plex_error}", level="DEBUG")
+                            except Exception as rm_error:
+                                log_message(f"Error removing symlink: {str(rm_error)}", level="ERROR")
+                except Exception as e:
+                    log_message(f"Error processing symlink {file_path}: {str(e)}", level="ERROR")
+                    print(f"Exception details: {traceback.format_exc()}")
+
+    if (not trash_mode) and _should_cleanup_orphans():
+        orphaned_removed = _cleanup_orphaned_db_entries(dest_dir, symlink_target_index)
+        if orphaned_removed:
+            log_message(f"Removed {orphaned_removed} orphaned DB entries.", level="INFO")
+
+    return symlinks_deleted_count, orphaned_removed

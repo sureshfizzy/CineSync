@@ -286,7 +286,6 @@ func getConfigDefinitions() []ConfigValue {
 		{Key: "MONITOR_MODE", Category: "Real-Time Monitoring Configuration", Type: "select", Required: false, Description: "Select monitor mode for runtime tracking", Options: []string{"rc_monitor", "polling"}},
 		{Key: "RTM_AUTO_START", Category: "Real-Time Monitoring Configuration", Type: "boolean", Required: false, Description: "Auto-start RTM on app startup (polling mode only)"},
 		{Key: "SLEEP_TIME", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Sleep time (in seconds) for real-time monitoring script"},
-		{Key: "SYMLINK_CLEANUP_INTERVAL", Category: "Real-Time Monitoring Configuration", Type: "integer", Required: false, Description: "Cleanup interval for deleting broken symbolic links"},
 		{Key: "SYMLINK_DELETE_BEHAVIOUR", Category: "Real-Time Monitoring Configuration", Type: "select", Required: false, Description: "Symlink deletion behavior", Options: []string{"trash", "permanent"}},
 
 		// Plex Integration Configuration
@@ -802,7 +801,6 @@ func getConfigDefaults() map[string]string {
 		"MONITOR_MODE":             "rc_monitor",
 		"RTM_AUTO_START":           "false",
 		"SLEEP_TIME":               "60",
-		"SYMLINK_CLEANUP_INTERVAL": "600",
 		"SYMLINK_DELETE_BEHAVIOUR": "permanent",
 		// Plex
 		"ENABLE_PLEX_UPDATE": "false",

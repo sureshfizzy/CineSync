@@ -155,6 +155,7 @@ def log_message(message, level="INFO", output="stdout"):
         safe_message = _normalize_for_logging(str(message))
 
         log_entry = f"{timestamp} [{level}] {safe_message}"
+        plain_stdout = os.getenv("MEDIAHUB_PLAIN_STDOUT", "").strip().lower() in ("1", "true", "yes", "on")
 
         # Only apply colors if not on Windows
         colored_message = log_entry if IS_WINDOWS else f"{get_color(log_entry)}{log_entry}{COLOR_CODES['END']}"
@@ -162,7 +163,7 @@ def log_message(message, level="INFO", output="stdout"):
         # Print to console with immediate flush
         try:
             if output == "stdout":
-                print(colored_message, flush=True)
+                print(safe_message if plain_stdout else colored_message, flush=True)
             elif output == "stderr":
                 print(colored_message, file=sys.stderr, flush=True)
         except (ValueError, OSError):

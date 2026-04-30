@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,11 +42,14 @@ func getMediaHubCommand(mediaHubDir string, pythonCmd string, jobType string, ac
 		exeName = "MediaHub"
 	}
 	mediaHubExe := filepath.Join(mediaHubDir, exeName)
+	mediaHubMainPy := filepath.Join(mediaHubDir, "main.py")
 
-	if fileExists(mediaHubExe) {
+	useCompiledBinary := fileExists(mediaHubExe) && !fileExists(mediaHubMainPy)
+	if useCompiledBinary {
 		flagMap := map[string]string{
 			"missing-files":                "--missing-files",
 			"cleanup-missing-destinations": "--cleanup-missing-destinations",
+			"symlink-cleanup":              "--cleanup-missing-destinations",
 			"optimize":                     "--optimize",
 			"verify":                       "--verify",
 			"vacuum":                       "--vacuum",
@@ -59,6 +63,13 @@ func getMediaHubCommand(mediaHubDir string, pythonCmd string, jobType string, ac
 
 	// Fallback to Python scripts
 	scriptName := "source_scan_job.py"
+	if jobType == "source-scan" {
+		return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName)}
+	}
+	if jobType == "symlink-cleanup" {
+		scriptName = "symlink_cleanup_job.py"
+		return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName)}
+	}
 	if jobType != "source-scan" {
 		scriptName = "database_maintenance_job.py"
 		return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName), action}
@@ -180,6 +191,8 @@ func (m *Manager) initializeDefaultJobs() {
 	// Get commands for each job type
 	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
 	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
+	symlinkCleanupCmd, symlinkCleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "symlink-cleanup", "")
+	cleanupInterval := 24 * 60 * 60
 
 	defaultJobs := []*Job{
 		{
@@ -220,6 +233,25 @@ func (m *Manager) initializeDefaultJobs() {
 			CreatedAt:       time.Now(),
 			UpdatedAt:       time.Now(),
 		},
+		{
+			ID:              "symlink-cleanup",
+			Name:            "Symlink Cleanup",
+			Description:     "Remove broken symlinks and stale destination DB entries",
+			Type:            JobTypeProcess,
+			Status:          JobStatusIdle,
+			ScheduleType:    ScheduleTypeInterval,
+			IntervalSeconds: cleanupInterval,
+			Command:         symlinkCleanupCmd,
+			Arguments:       symlinkCleanupArgs,
+			WorkingDir:      m.mediaHubDir,
+			Enabled:         true,
+			Category:        "Files",
+			Tags:            []string{"symlink", "cleanup", "maintenance"},
+			MaxRetries:      2,
+			LogOutput:       true,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		},
 	}
 
 	for _, job := range defaultJobs {
@@ -238,6 +270,8 @@ func (m *Manager) addMissingDefaultJobs() {
 	// Get commands for each job type
 	optimizeCmd, optimizeArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "optimize", "optimize")
 	sourceScanCmd, sourceScanArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "source-scan", "")
+	symlinkCleanupCmd, symlinkCleanupArgs := getMediaHubCommand(m.mediaHubDir, m.pythonCmd, "symlink-cleanup", "")
+	cleanupInterval := 24 * 60 * 60
 
 	// Define all default jobs that should exist
 	defaultJobsToCheck := map[string]*Job{
@@ -274,6 +308,25 @@ func (m *Manager) addMissingDefaultJobs() {
 			Category:        "Files",
 			Tags:            []string{"source", "scan", "files", "discovery"},
 			MaxRetries:      3,
+			LogOutput:       true,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		},
+		"symlink-cleanup": {
+			ID:              "symlink-cleanup",
+			Name:            "Symlink Cleanup",
+			Description:     "Remove broken symlinks and stale destination DB entries",
+			Type:            JobTypeProcess,
+			Status:          JobStatusIdle,
+			ScheduleType:    ScheduleTypeInterval,
+			IntervalSeconds: cleanupInterval,
+			Command:         symlinkCleanupCmd,
+			Arguments:       symlinkCleanupArgs,
+			WorkingDir:      m.mediaHubDir,
+			Enabled:         true,
+			Category:        "Files",
+			Tags:            []string{"symlink", "cleanup", "maintenance"},
+			MaxRetries:      2,
 			LogOutput:       true,
 			CreatedAt:       time.Now(),
 			UpdatedAt:       time.Now(),
@@ -540,6 +593,18 @@ func (m *Manager) executeJob(jobID string) {
 	output, err := cmd.CombinedOutput()
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)
+
+	if job.LogOutput && len(output) > 0 {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+
+			logger.Debug("%s", trimmed)
+		}
+	}
 
 	// Update execution record
 	m.mutex.Lock()
