@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, useTheme, useMediaQuery, alpha } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import FolderIcon from '@mui/icons-material/Folder';
-import StarIcon from '@mui/icons-material/Star';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import WifiIcon from '@mui/icons-material/Wifi';
@@ -17,7 +16,6 @@ const navItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Browse', icon: <FolderIcon />, path: '/browse' },
   { text: 'File Operations', icon: <AssignmentIcon />, path: '/file-operations' },
-  { text: 'Favorites', icon: <StarIcon />, path: '/favorites' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   { text: 'About', icon: <InfoOutlinedIcon />, path: '/about' },
 ];
