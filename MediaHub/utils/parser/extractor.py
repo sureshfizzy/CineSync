@@ -786,8 +786,8 @@ def _is_tv_show(parsed: ParsedFilename) -> bool:
     # Check for general "Title - Episode" patterns
     filename = parsed.original
     dash_episode_patterns = [
-        r'\s-\s(?:[1-9]\d{0,2}|1[0-4]\d{2})(?:\.mkv|\.mp4|\.avi|$)',
-        r'\s-(?:[1-9]\d{0,2}|1[0-4]\d{2})(?:\.mkv|\.mp4|\.avi|$)',
+        r'\s-\s(?:0[1-9]|[1-9]\d{0,2}|1[0-4]\d{2})(?=\s*(?:\[|\.mkv|\.mp4|\.avi|$))',
+        r'\s-(?:0[1-9]|[1-9]\d{0,2}|1[0-4]\d{2})(?=\s*(?:\[|\.mkv|\.mp4|\.avi|$))',
     ]
 
     for pattern in dash_episode_patterns:
