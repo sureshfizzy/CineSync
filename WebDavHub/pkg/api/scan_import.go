@@ -19,6 +19,7 @@ import (
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 )
 
 // ScanImportFile represents a parsed video file with TMDB data
@@ -768,24 +769,20 @@ func convertParsedResultToScanImportFile(result map[string]interface{}, file Vid
 }
 
 func callMediaHubCleanQuery(filename string) (map[string]interface{}, error) {
-	// Get the current working directory and navigate to project root
-	currentDir, err := os.Getwd()
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current directory: %v", err)
+		return nil, fmt.Errorf("failed to resolve MediaHub executable: %v", err)
 	}
 
-	scriptPath := filepath.Join(currentDir, "..", "MediaHub", "utils", "parse_filename.py")
+	scriptPath := filepath.Join(mediaHubExec.WorkDir, "utils", "parse_filename.py")
+	if _, err := os.Stat(scriptPath); err != nil {
+		return nil, fmt.Errorf("MediaHub parser script not found at %s: %v", scriptPath, err)
+	}
 
-	pythonCmd := "python"
-	if runtime.GOOS != "windows" {
-		pythonCmd = "python3"
-	}
-	if customPython := os.Getenv("PYTHON_COMMAND"); customPython != "" {
-		pythonCmd = customPython
-	}
+	pythonCmd := mediahub.GetPythonCommand()
 
 	cmd := exec.Command(pythonCmd, scriptPath, filename)
-	cmd.Dir = filepath.Join(currentDir, "..")
+	cmd.Dir = filepath.Dir(mediaHubExec.WorkDir)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

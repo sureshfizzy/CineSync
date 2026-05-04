@@ -13,6 +13,7 @@ import (
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 	"github.com/google/uuid"
 )
 
@@ -109,16 +110,20 @@ func NewManager() *Manager {
 	// Determine Python command based on OS and MediaHub directory
 	pythonCmd := getPythonCommand()
 
-	// Detect MediaHub directory
-	currentDir, _ := os.Getwd()
-	siblingPath := filepath.Join(currentDir, "MediaHub")
-	parentPath := filepath.Join(filepath.Dir(currentDir), "MediaHub")
-
-	mediaHubDir := parentPath
-	if fileExists(siblingPath) {
-		mediaHubDir = siblingPath
-	} else if !fileExists(parentPath) {
-		logger.Warn("MediaHub directory not found, using default: %s", parentPath)
+	mediaHubDir := ""
+	if mediaHubExec, err := mediahub.GetMediaHubExecutable(); err == nil {
+		mediaHubDir = mediaHubExec.WorkDir
+	} else {
+		// Keep existing fallback behavior if executable resolution fails.
+		currentDir, _ := os.Getwd()
+		siblingPath := filepath.Join(currentDir, "MediaHub")
+		parentPath := filepath.Join(filepath.Dir(currentDir), "MediaHub")
+		mediaHubDir = parentPath
+		if fileExists(siblingPath) {
+			mediaHubDir = siblingPath
+		} else if !fileExists(parentPath) {
+			logger.Warn("MediaHub directory not found, using default: %s", parentPath)
+		}
 	}
 
 	manager := &Manager{

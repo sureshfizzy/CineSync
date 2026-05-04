@@ -52,15 +52,13 @@ type MediaHubActivity struct {
 
 // getMediaHubPaths returns the paths for MediaHub lock files
 func getMediaHubPaths() (string, string, string, error) {
-	// Get the current working directory
-	cwd, err := os.Getwd()
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to get current directory: %v", err)
+		return "", "", "", fmt.Errorf("failed to resolve MediaHub executable: %v", err)
 	}
 
-	// Go up one level to get to the CineSync root
-	rootDir := filepath.Dir(cwd)
-	mediaHubDir := filepath.Join(rootDir, "MediaHub")
+	mediaHubDir := mediaHubExec.WorkDir
+	rootDir := filepath.Dir(mediaHubDir)
 	dbDir := filepath.Join(rootDir, "db")
 	lockFile := filepath.Join(dbDir, "polling_monitor.lock")
 	monitorPidFile := filepath.Join(dbDir, "monitor_pid.txt")
@@ -757,16 +755,14 @@ func HandleMediaHubLogsExport(w http.ResponseWriter, r *http.Request) {
 	exportType := r.URL.Query().Get("type") // "current", "all", "date"
 	dateFilter := r.URL.Query().Get("date") // for date-specific exports
 
-	// Get the current working directory and navigate to logs
-	cwd, err := os.Getwd()
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
 	if err != nil {
-		logger.Error("Failed to get current directory: %v", err)
+		logger.Error("Failed to resolve MediaHub executable: %v", err)
 		http.Error(w, "Failed to access log directory", http.StatusInternalServerError)
 		return
 	}
 
-	// Go up one level to get to the CineSync root, then to logs
-	rootDir := filepath.Dir(cwd)
+	rootDir := filepath.Dir(mediaHubExec.WorkDir)
 	logsDir := filepath.Join(rootDir, "logs")
 
 	// Check if logs directory exists
@@ -795,7 +791,6 @@ func HandleMediaHubLogsExport(w http.ResponseWriter, r *http.Request) {
 
 // exportCurrentLog exports the most recent log file
 func exportCurrentLog(w http.ResponseWriter, logsDir string) {
-	// Find the most recent log file
 	files, err := os.ReadDir(logsDir)
 	if err != nil {
 		logger.Error("Failed to read logs directory: %v", err)
@@ -888,11 +883,9 @@ func exportLogsByDate(w http.ResponseWriter, logsDir string, dateFilter string) 
 	}
 
 	if len(matchingFiles) == 1 {
-		// Single file - serve directly
 		logPath := filepath.Join(logsDir, matchingFiles[0])
 		serveLogFile(w, logPath, matchingFiles[0])
 	} else {
-		// Multiple files - create zip
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=mediahub_logs_%s.zip", dateFilter))
 

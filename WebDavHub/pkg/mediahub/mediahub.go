@@ -17,19 +17,30 @@ type MediaHubExecutable struct {
 
 // GetMediaHubExecutable returns the appropriate MediaHub executable configuration
 func GetMediaHubExecutable() (*MediaHubExecutable, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current directory: %v", err)
+	candidates := []string{}
+
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates, filepath.Join(exeDir, "MediaHub"))
+		candidates = append(candidates, filepath.Join(filepath.Dir(exeDir), "MediaHub"))
 	}
 
-	var mediaHubDir string
-	basename := filepath.Base(cwd)
+	if cwd, err := os.Getwd(); err == nil {
+		basename := filepath.Base(cwd)
+		if basename == "WebDavHub" {
+			candidates = append(candidates, filepath.Join(filepath.Dir(cwd), "MediaHub"))
+		}
+		candidates = append(candidates, filepath.Join(cwd, "MediaHub"))
+	}
 
-	if basename == "WebDavHub" {
-		parentDir := filepath.Dir(cwd)
-		mediaHubDir = filepath.Join(parentDir, "MediaHub")
-	} else {
-		mediaHubDir = filepath.Join(cwd, "MediaHub")
+	seen := make(map[string]bool)
+	uniqueCandidates := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		uniqueCandidates = append(uniqueCandidates, c)
 	}
 
 	// Determine the executable name based on OS
@@ -40,28 +51,30 @@ func GetMediaHubExecutable() (*MediaHubExecutable, error) {
 		exeName = "MediaHub"
 	}
 
-	exePath := filepath.Join(mediaHubDir, exeName)
-	scriptPath := filepath.Join(mediaHubDir, "main.py")
+	for _, mediaHubDir := range uniqueCandidates {
+		exePath := filepath.Join(mediaHubDir, exeName)
+		scriptPath := filepath.Join(mediaHubDir, "main.py")
 
-	if _, err := os.Stat(exePath); err == nil {
-		return &MediaHubExecutable{
-			Path:       exePath,
-			Args:       []string{},
-			IsCompiled: true,
-			WorkDir:    mediaHubDir,
-		}, nil
+		if _, err := os.Stat(exePath); err == nil {
+			return &MediaHubExecutable{
+				Path:       exePath,
+				Args:       []string{},
+				IsCompiled: true,
+				WorkDir:    mediaHubDir,
+			}, nil
+		}
+
+		if _, err := os.Stat(scriptPath); err == nil {
+			return &MediaHubExecutable{
+				Path:       scriptPath,
+				Args:       []string{},
+				IsCompiled: false,
+				WorkDir:    mediaHubDir,
+			}, nil
+		}
 	}
 
-	if _, err := os.Stat(scriptPath); err == nil {
-		return &MediaHubExecutable{
-			Path:       scriptPath,
-			Args:       []string{},
-			IsCompiled: false,
-			WorkDir:    mediaHubDir,
-		}, nil
-	}
-
-	return nil, fmt.Errorf("neither MediaHub executable (%s) nor Python script (%s) found", exePath, scriptPath)
+	return nil, fmt.Errorf("could not locate MediaHub executable or main.py in expected locations")
 }
 
 // GetPythonCommand returns the appropriate Python command for the system

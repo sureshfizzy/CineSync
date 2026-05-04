@@ -19,6 +19,7 @@ import (
 
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 	_ "modernc.org/sqlite"
 )
 
@@ -1964,12 +1965,17 @@ func getPythonCommand() string {
 func runDatabaseUpdate() error {
 	logger.Info("Starting database update to new format...")
 
+	mediaHubExec, err := mediahub.GetMediaHubExecutable()
+	if err != nil {
+		return fmt.Errorf("failed to resolve MediaHub executable: %v", err)
+	}
+
 	// Get the appropriate Python command for this platform
 	pythonCmd := getPythonCommand()
 
 	// Execute the MediaHub update database command
 	cmd := exec.Command(pythonCmd, "main.py", "--update-database")
-	cmd.Dir = "../MediaHub"
+	cmd.Dir = mediaHubExec.WorkDir
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

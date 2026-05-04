@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	"cinesync/pkg/mediahub"
 	"github.com/joho/godotenv"
 )
 
@@ -135,6 +136,9 @@ func loadClientLockedSettings() *ClientLockedSettingsFile {
 	}
 
 	jsonPath := filepath.Join("..", "MediaHub", "utils", "client_locked_settings.json")
+	if mediaHubExec, err := mediahub.GetMediaHubExecutable(); err == nil {
+		jsonPath = filepath.Join(mediaHubExec.WorkDir, "utils", "client_locked_settings.json")
+	}
 
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
 		// No JSON file exists, return empty structure
