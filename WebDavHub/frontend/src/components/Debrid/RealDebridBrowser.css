@@ -651,6 +651,48 @@
   background: var(--rd-bg-secondary) !important;
   border: 1px solid var(--rd-border) !important;
   border-radius: var(--rd-radius-lg) !important;
+  opacity: 1 !important;
+  background-image: none !important;
+}
+
+.rd-confirm-dialog {
+  background: #111318 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.6) !important;
+}
+
+.rd-confirm-dialog-title {
+  color: #f4f4f5 !important;
+}
+
+.rd-confirm-dialog-content {
+  color: #d4d4d8 !important;
+}
+
+.rd-confirm-dialog-text {
+  color: inherit !important;
+}
+
+.rd-confirm-dialog-text strong {
+  color: #fafafa;
+}
+
+.rd-browser.light .rd-confirm-dialog {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.14) !important;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18) !important;
+}
+
+.rd-browser.light .rd-confirm-dialog-title {
+  color: #111827 !important;
+}
+
+.rd-browser.light .rd-confirm-dialog-content {
+  color: #374151 !important;
+}
+
+.rd-browser.light .rd-confirm-dialog-text strong {
+  color: #111827;
 }
 
 /* Responsive - Tablet */
@@ -1019,6 +1061,10 @@
 .rd-dialog-backdrop {
   background: rgba(2, 6, 10, 0.72) !important;
   backdrop-filter: blur(8px);
+}
+
+.rd-browser.light .rd-dialog-backdrop {
+  background: rgba(15, 23, 42, 0.55) !important;
 }
 
 .rd-dialog {

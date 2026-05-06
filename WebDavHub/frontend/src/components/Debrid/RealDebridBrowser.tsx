@@ -931,14 +931,14 @@ export default function RealDebridBrowser() {
       <Dialog
         open={deleteDialog.open}
         onClose={() => !actionLoading && setDeleteDialog({ open: false, torrent: null })}
-        slotProps={{ paper: { className: 'rd-dialog' } }}
+        slotProps={{ paper: { className: 'rd-dialog rd-confirm-dialog' }, backdrop: { className: 'rd-dialog-backdrop' } }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>
+        <DialogTitle className="rd-confirm-dialog-title" sx={{ fontWeight: 700 }}>
           <DeleteIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'error.main' }} />
           Delete Torrent
         </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogContent className="rd-confirm-dialog-content">
+          <DialogContentText className="rd-confirm-dialog-text">
             Are you sure you want to delete "<strong>{deleteDialog.torrent?.name}</strong>"? 
             This will remove it from Real-Debrid and cannot be undone.
           </DialogContentText>
@@ -966,14 +966,14 @@ export default function RealDebridBrowser() {
       <Dialog
         open={reinsertDialog.open}
         onClose={() => !actionLoading && setReinsertDialog({ open: false, torrent: null })}
-        slotProps={{ paper: { className: 'rd-dialog' } }}
+        slotProps={{ paper: { className: 'rd-dialog rd-confirm-dialog' }, backdrop: { className: 'rd-dialog-backdrop' } }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>
+        <DialogTitle className="rd-confirm-dialog-title" sx={{ fontWeight: 700 }}>
           <RestartAlt sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
           Reinsert Torrent
         </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogContent className="rd-confirm-dialog-content">
+          <DialogContentText className="rd-confirm-dialog-text">
             This will attempt to reinsert "<strong>{reinsertDialog.torrent?.name}</strong>" by re-adding 
             it to Real-Debrid. This is useful for fixing broken or dead torrents.
           </DialogContentText>
