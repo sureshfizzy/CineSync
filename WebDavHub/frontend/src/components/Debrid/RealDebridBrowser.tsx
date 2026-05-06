@@ -614,17 +614,31 @@ export default function RealDebridBrowser() {
 
   const handleDelete = useCallback(async () => {
     if (!deleteDialog.torrent) return;
+    const deletedTorrentId = deleteDialog.torrent.id;
     
     setActionLoading(true);
     try {
-      await axios.post('/api/realdebrid/repair/delete', {
-        torrent_ids: [deleteDialog.torrent.id],
+      await axios.post('/api/realdebrid/repair-delete', {
+        torrent_ids: [deletedTorrentId],
         delete_from_debrid: true,
       });
-      
-      setSnackbar({ open: true, message: 'Torrent deleted successfully', severity: 'success' });
+      setTorrents((prev) => prev.filter((torrent) => torrent.id !== deletedTorrentId));
+      setSyncing(true);
+
+      void axios
+        .post('/api/realdebrid/refresh-control', { action: 'force_refresh' }, { timeout: 300000 })
+        .then(async () => {
+          await loadTorrents();
+        })
+        .catch(() => {
+          setSnackbar({ open: true, message: 'Torrent deleted, but background sync failed', severity: 'error' });
+        })
+        .finally(() => {
+          setSyncing(false);
+        });
+
+      setSnackbar({ open: true, message: 'Torrent deleted successfully. Sync running in background.', severity: 'success' });
       setDeleteDialog({ open: false, torrent: null });
-      loadTorrents();
     } catch (e: any) {
       setSnackbar({ open: true, message: e.response?.data?.error || 'Failed to delete torrent', severity: 'error' });
     } finally {
