@@ -425,8 +425,14 @@ const FileBrowserContent: React.FC = () => {
     const finalDestinationDir = destinationDir === '' ? '/' : destinationDir;
     const finalCurrentPath = normalizedCurrentPath === '' ? '/' : normalizedCurrentPath;
 
-    // Check if the destination directory matches the current path
-    return finalDestinationDir === finalCurrentPath;
+    // Refresh dir
+    if (finalDestinationDir === finalCurrentPath) {
+      return true;
+    }
+    if (finalCurrentPath === "/") {
+      return true;
+    }
+    return finalDestinationDir.startsWith(`${finalCurrentPath}/`);
   }, [currentPath]);
 
   // Listen for symlink creation events through centralized SSE (similar to FileOperations)

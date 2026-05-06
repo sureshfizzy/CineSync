@@ -512,9 +512,12 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 			logger.Info("[Import] Symlinked: %s -> %s", srcPath, dest)
 			symlinkCount++
 		}
-		basePath := srcDir
-		if basePath == "" {
-			basePath = filepath.Dir(srcPath)
+		basePath := filepath.Base(filepath.Clean(rootFolder))
+		if basePath == "" || basePath == "." || basePath == string(filepath.Separator) {
+			basePath = srcDir
+			if basePath == "" {
+				basePath = filepath.Dir(srcPath)
+			}
 		}
 		_, _ = database.Exec(
 			`INSERT OR REPLACE INTO processed_files
@@ -522,6 +525,20 @@ func ImportQueueItem(tmdbID int64, mediaType, title, torrentFilename string, que
 			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			srcPath, dest, basePath, rootFolder, tmdbIDStr, mediaType, cleanTitle, yearStr, size, now.Format("2006-01-02 15:04:05"),
 		)
+
+		symlinkEventData := map[string]interface{}{
+			"source_file":      srcPath,
+			"destination_file": dest,
+			"media_name":       cleanTitle,
+			"media_type":       mediaType,
+			"tmdb_id":          tmdbIDStr,
+			"filename":         filepath.Base(dest),
+			"force_mode":       false,
+		}
+		handleSymlinkCreated(symlinkEventData)
+		db.UpdateFolderCacheForNewFileFromDB(dest, tmdbIDStr, "")
+		db.NotifyFileOperationChanged()
+		BroadcastMediaHubEvent("symlink_created", symlinkEventData)
 	}
 
 	symlinkVideoFilesFromDir := func(dir string) {
