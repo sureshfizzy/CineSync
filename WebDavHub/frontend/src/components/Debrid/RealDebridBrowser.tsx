@@ -651,7 +651,7 @@ export default function RealDebridBrowser() {
     
     setActionLoading(true);
     try {
-      await axios.post('/api/realdebrid/repair', {
+      await axios.post('/api/realdebrid/repair-torrent', {
         torrent_ids: [reinsertDialog.torrent.id],
       });
       
