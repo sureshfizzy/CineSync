@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Box, CircularProgress, Typography, Fade, Paper, ToggleButtonGroup, ToggleButton, alpha, Collapse, IconButton, TextField, InputAdornment } from '@mui/material';
 import ConfigurationWrapper from '../Layout/ConfigurationWrapper';
 import { FileItem } from '../FileBrowser/types';
-import { formatDate, joinPaths } from '../FileBrowser/fileUtils';
+import { joinPaths } from '../FileBrowser/fileUtils';
 import FolderIcon from '@mui/icons-material/Folder';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import StraightenIcon from '@mui/icons-material/Straighten';
@@ -10,9 +10,7 @@ import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize';
 import SortRoundedIcon from '@mui/icons-material/SortRounded';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
-import ListView from '../FileBrowser/ListView';
 import VirtualizedLibraryGrid from './VirtualizedLibraryGrid';
-import { useLayoutContext } from '../Layout/Layout';
 import { useTmdb } from '../../contexts/TmdbContext';
 import { TmdbResult } from '../api/tmdbApi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -26,7 +24,6 @@ interface MediaDashboardProps {
 }
 
 export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProps) {
-  const { view } = useLayoutContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -338,32 +335,6 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
         navigate(`/files${targetPath}`);
       }
     } else if (file.type === 'directory' && file.isSeasonFolder) {
-      const targetPath = file.path || file.fullPath || joinPaths('/', file.name);
-      navigate(`/files${targetPath}`);
-    }
-  };
-
-  const handleListItemClick = (file: FileItem) => {
-    if (file.type === 'directory' && !file.isSeasonFolder && file.tmdbId) {
-      const mediaType = normalizeMediaType(file.mediaType, file.hasSeasonFolders ? 'tv' : 'movie');
-      const destPath = file.path || file.fullPath || joinPaths('/', file.name);
-      const pathParts = destPath.split('/').filter(Boolean);
-      pathParts.pop();
-      const parentPath = '/' + pathParts.join('/') + (pathParts.length > 0 ? '/' : '');
-      const tmdb = tmdbData[file.name || ''];
-      navigate(`/media/${mediaType}/${encodeURIComponent(file.tmdbId.toString())}`, {
-        state: {
-          mediaType,
-          tmdbId: file.tmdbId,
-          hasSeasonFolders: file.hasSeasonFolders,
-          currentPath: parentPath,
-          folderName: file.name,
-          tmdbData: tmdb,
-          returnPage: 1,
-          returnSearch: ''
-        }
-      });
-    } else if (file.type === 'directory') {
       const targetPath = file.path || file.fullPath || joinPaths('/', file.name);
       navigate(`/files${targetPath}`);
     }
@@ -720,28 +691,15 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
                     if (allItems.length > 0) {
                       return (
                         <Box>
-              {view === 'poster' ? (
-                <VirtualizedLibraryGrid
-                  items={allItems}
-                  totalCount={totalCount}
-                  loadingMore={loadingMore}
-                  onLoadMore={loadMoreItems}
-                  tmdbData={tmdbData}
-                  onFileClick={handleFileClick}
-                  onImageLoad={(key: string) => setImageLoaded(key, true)}
-                />
-              ) : (
-                <ListView
-                  files={allItems}
-                  currentPath={'/'}
-                  formatDate={formatDate}
-                  onItemClick={handleListItemClick}
-                  onViewDetails={() => {}}
-                  onRename={() => loadLibraryItems(true)}
-                  onDeleted={() => loadLibraryItems(true)}
-                  onError={setError}
-                />
-              )}
+              <VirtualizedLibraryGrid
+                items={allItems}
+                totalCount={totalCount}
+                loadingMore={loadingMore}
+                onLoadMore={loadMoreItems}
+                tmdbData={tmdbData}
+                onFileClick={handleFileClick}
+                onImageLoad={(key: string) => setImageLoaded(key, true)}
+              />
                         </Box>
                       );
                     }
