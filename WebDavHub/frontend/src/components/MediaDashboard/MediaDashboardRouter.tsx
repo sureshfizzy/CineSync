@@ -7,6 +7,7 @@ import RcloneSettings from '../Debrid/Settings/RcloneSettings';
 import MediaDashboard from './MediaDashboard';
 import MediaSearchPage from './MediaSearchPage';
 import MediaQueueList from './MediaQueueList';
+import MediaCalendar from './MediaCalendar';
 import RootFoldersManagement from './RootFoldersManagement';
 import QualityProfilesManagement from './QualityProfilesManagement';
 import IndexerManagement from './IndexerManagement';
@@ -21,6 +22,7 @@ export default function MediaDashboardRouter() {
       <Route path="queue" element={<MediaQueueList />} />
       <Route path="history" element={<MediaQueueList />} />
       <Route path="wanted" element={<MediaDashboard filter="wanted" />} />
+      <Route path="calendar" element={<MediaCalendar />} />
       <Route path="search/movie" element={<MediaSearchPage mediaType="movie" />} />
       <Route path="search/tv" element={<MediaSearchPage mediaType="tv" />} />
       <Route path="settings" element={<RootFoldersManagement />} />

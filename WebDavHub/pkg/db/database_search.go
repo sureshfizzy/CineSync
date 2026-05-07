@@ -1,10 +1,12 @@
 package db
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -1948,19 +1950,6 @@ func HandleDatabaseUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getPythonCommand determines the correct Python executable based on the OS and environment
-func getPythonCommand() string {
-	if customPython := env.GetString("PYTHON_COMMAND", ""); customPython != "" {
-		return customPython
-	}
-
-	// Default platform-specific behavior
-	if runtime.GOOS == "windows" {
-		return "python"
-	}
-	return "python3"
-}
-
 // runDatabaseUpdate executes the MediaHub database update command
 func runDatabaseUpdate() error {
 	logger.Info("Starting database update to new format...")
@@ -1970,27 +1959,55 @@ func runDatabaseUpdate() error {
 		return fmt.Errorf("failed to resolve MediaHub executable: %v", err)
 	}
 
-	// Get the appropriate Python command for this platform
-	pythonCmd := getPythonCommand()
-
-	// Execute the MediaHub update database command
-	cmd := exec.Command(pythonCmd, "main.py", "--update-database")
+	// Execute the MediaHub update database command using the configured executable.
+	command, args := mediaHubExec.GetCommand("--update-database")
+	cmd := exec.Command(command, args...)
 	cmd.Dir = mediaHubExec.WorkDir
 
-	output, err := cmd.CombinedOutput()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		logger.Error("Database update failed: %v, output: %s", err, string(output))
-		return fmt.Errorf("database update failed: %v", err)
+		return fmt.Errorf("failed to attach stdout: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to attach stderr: %v", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start database update: %v", err)
+	}
+
+	// Stream logs
+	done := make(chan struct{}, 2)
+	stream := func(r io.Reader) {
+		defer func() { done <- struct{}{} }()
+		sc := bufio.NewScanner(r)
+		buf := make([]byte, 0, 64*1024)
+		sc.Buffer(buf, 1024*1024)
+
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" {
+				continue
+			}
+			logger.Info("%s", line)
+		}
+		if err := sc.Err(); err != nil {
+			logger.Warn("Database update log stream error: %v", err)
+		}
+	}
+
+	go stream(stdout)
+	go stream(stderr)
+
+	waitErr := cmd.Wait()
+	<-done
+	<-done
+
+	if waitErr != nil {
+		return fmt.Errorf("database update failed: %v", waitErr)
 	}
 
 	logger.Info("Database update completed successfully")
-	logger.Info("Update output: %s", string(output))
-
-	// Parse output for success/failure counts
-	outputStr := string(output)
-	if strings.Contains(outputStr, "Successfully migrated") {
-		logger.Info("Database migration completed with results logged above")
-	}
-
 	return nil
 }

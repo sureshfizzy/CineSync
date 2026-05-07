@@ -208,6 +208,10 @@ func main() {
 	if err := env.LoadEnv(); err != nil {
 	}
 
+	if os.Getenv("MEDIAHUB_PLAIN_STDOUT") == "" {
+		_ = os.Setenv("MEDIAHUB_PLAIN_STDOUT", "1")
+	}
+
 	// Initialize spoofing configuration
 	if err := spoofing.InitializeConfig(); err != nil {
 		logger.Error("Failed to initialize spoofing configuration: %v", err)

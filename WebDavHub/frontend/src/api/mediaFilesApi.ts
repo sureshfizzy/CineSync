@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 export interface MediaFileInfo {
   name: string;
@@ -11,6 +11,9 @@ export interface MediaFileInfo {
   seasonNumber?: number;
   episodeNumber?: number;
   quality?: string;
+  inCinemasReleaseDate?: string;
+  digitalReleaseDate?: string;
+  physicalReleaseDate?: string;
 }
 
 export async function fetchMediaFiles(tmdbId: number, mediaType?: 'movie' | 'tv'): Promise<MediaFileInfo[]> {

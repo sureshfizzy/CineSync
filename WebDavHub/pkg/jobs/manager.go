@@ -627,10 +627,6 @@ func (m *Manager) executeJob(jobID string) {
 		cmd.Dir = job.WorkingDir
 	}
 
-	// Set environment variables for the command
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "MEDIAHUB_PLAIN_STDOUT=1")
-
 	// Store running command
 	m.mutex.Lock()
 	m.running[jobID] = cmd

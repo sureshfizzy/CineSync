@@ -19,6 +19,10 @@ export interface LibraryItem {
   overview?: string;
   quality?: string;
   destination_path?: string;
+  release_date?: string;
+  in_cinemas_release_date?: string;
+  digital_release_date?: string;
+  physical_release_date?: string;
 }
 
 export interface PagedResponse<T> {

@@ -4,6 +4,7 @@ import TvIcon from '@mui/icons-material/Tv';
 import SearchIcon from '@mui/icons-material/Search';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FolderIcon from '@mui/icons-material/Folder';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -22,12 +23,13 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
   const location = useLocation();
   
   // Determine current filter from URL
-  const getCurrentFilter = (): 'all' | 'movies' | 'series' | 'queue' | 'wanted' | 'settings' => {
+  const getCurrentFilter = (): 'all' | 'movies' | 'series' | 'queue' | 'wanted' | 'calendar' | 'settings' => {
     const path = location.pathname;
     if (path === '/Mediadashboard/movies') return 'movies';
     if (path === '/Mediadashboard/series') return 'series';
     if (path === '/Mediadashboard/queue' || path === '/Mediadashboard/history') return 'queue';
     if (path === '/Mediadashboard/wanted') return 'wanted';
+    if (path === '/Mediadashboard/calendar') return 'calendar';
     if (path.startsWith('/Mediadashboard/settings')) return 'settings';
     return 'all';
   };
@@ -51,7 +53,7 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
     setSettingsExpanded(filter === 'settings');
   }, [filter]);
 
-  const handleMainClick = (value: 'movies' | 'series' | 'queue' | 'wanted' | 'settings') => {
+  const handleMainClick = (value: 'movies' | 'series' | 'queue' | 'wanted' | 'calendar' | 'settings') => {
     // Auto-expand clicked section and collapse the other, but don't toggle closed when re-clicking
     if (value === 'movies') {
       setMoviesExpanded(true);
@@ -73,6 +75,11 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
       setSeriesExpanded(false);
       setSettingsExpanded(false);
       navigate('/Mediadashboard/wanted');
+    } else if (value === 'calendar') {
+      setMoviesExpanded(false);
+      setSeriesExpanded(false);
+      setSettingsExpanded(false);
+      navigate('/Mediadashboard/calendar');
     } else if (value === 'settings') {
       setMoviesExpanded(false);
       setSeriesExpanded(false);
@@ -209,6 +216,33 @@ export default function MediaSidebar({ onFilterChange, onSearchClick }: MediaSid
             </ListItemButton>
           </Box>
         </Collapse>
+
+        {/* Calendar Section */}
+        <ListItemButton
+          selected={filter === 'calendar'}
+          onClick={() => handleMainClick('calendar')}
+          sx={{
+            borderRadius: 1,
+            mx: 0.5,
+            mb: 0.5,
+            '&.Mui-selected': {
+              bgcolor: (t) => alpha(t.palette.primary.main, 0.12),
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34 }}>
+            <CalendarMonthIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography variant="body2" sx={{
+                fontWeight: 700
+              }}>
+                Calendar
+              </Typography>
+            }
+          />
+        </ListItemButton>
 
         {/* Queue Section */}
         <ListItemButton

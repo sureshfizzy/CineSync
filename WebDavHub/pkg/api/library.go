@@ -50,6 +50,10 @@ type LibraryItemFromDB struct {
 	Overview        string `json:"overview"`
 	Quality         string `json:"quality"`
 	DestinationPath string `json:"destination_path"`
+	ReleaseDate     string `json:"release_date,omitempty"`
+	InCinemasReleaseDate string `json:"in_cinemas_release_date,omitempty"`
+	DigitalReleaseDate   string `json:"digital_release_date,omitempty"`
+	PhysicalReleaseDate  string `json:"physical_release_date,omitempty"`
 }
 
 // WantedEpisode is a lightweight DTO for missing TV episodes
@@ -626,6 +630,72 @@ func fetchTmdbDetails(tmdbID int, mediaType string) map[string]string {
 		if y, ok := data["release_date"].(string); ok && len(y) >= 4 {
 			details["year"] = y[:4]
 		}
+
+		releaseDatesURL := fmt.Sprintf("https://api.themoviedb.org/3/movie/%d/release_dates?api_key=%s", tmdbID, apiKey)
+		if rdResp, rdErr := http.Get(releaseDatesURL); rdErr == nil {
+			defer rdResp.Body.Close()
+			if rdResp.StatusCode == http.StatusOK {
+				var rdData map[string]interface{}
+				if decErr := json.NewDecoder(rdResp.Body).Decode(&rdData); decErr == nil {
+					results, _ := rdData["results"].([]interface{})
+					earliestByType := map[int]string{}
+
+					considerDate := func(rdType int, value string) {
+						if len(value) < 10 {
+							return
+						}
+						dateOnly := value[:10]
+						if existing, ok := earliestByType[rdType]; !ok || dateOnly < existing {
+							earliestByType[rdType] = dateOnly
+						}
+					}
+
+					for _, countryEntry := range results {
+						cm, ok := countryEntry.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						releases, _ := cm["release_dates"].([]interface{})
+						for _, relEntry := range releases {
+							rm, ok := relEntry.(map[string]interface{})
+							if !ok {
+								continue
+							}
+							rawDate, _ := rm["release_date"].(string)
+							if rawDate == "" {
+								continue
+							}
+							rdTypeFloat, ok := rm["type"].(float64)
+							if !ok {
+								continue
+							}
+							rdType := int(rdTypeFloat)
+							switch rdType {
+							case 2, 3, 4, 5:
+								considerDate(rdType, rawDate)
+							}
+						}
+					}
+
+					theatrical := ""
+					if v, ok := earliestByType[2]; ok {
+						theatrical = v
+					}
+					if v, ok := earliestByType[3]; ok && (theatrical == "" || v < theatrical) {
+						theatrical = v
+					}
+					if theatrical != "" {
+						details["in_cinemas_release_date"] = theatrical
+					}
+					if v, ok := earliestByType[4]; ok && v != "" {
+						details["digital_release_date"] = v
+					}
+					if v, ok := earliestByType[5]; ok && v != "" {
+						details["physical_release_date"] = v
+					}
+				}
+			}
+		}
 	} else {
 		if v, ok := data["name"].(string); ok {
 			details["proper_name"] = v
@@ -711,6 +781,15 @@ func upsertProcessedWithDetails(tmdbID int, mediaType string, basicTitle string,
 	}
 	if v := details["release_date"]; v != "" {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET release_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["in_cinemas_release_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET in_cinemas_release_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["digital_release_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET digital_release_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
+	}
+	if v := details["physical_release_date"]; v != "" {
+		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET physical_release_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
 	}
 	if v := details["first_air_date"]; v != "" {
 		_, _ = mediaHubDB.Exec(`UPDATE processed_files SET first_air_date = ? WHERE tmdb_id = ?`, v, tmdbStr)
@@ -1080,10 +1159,7 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 		return nil, 0, err
 	}
 	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
+		limit = 1000
 	}
 	if offset < 0 {
 		offset = 0
@@ -1119,6 +1195,10 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 			COALESCE(root_folder, '') as root_folder,
 			MAX(processed_at) as latest_processed_at,
 			COALESCE(quality, '') as quality,
+			COALESCE(release_date, '') as release_date,
+			COALESCE(in_cinemas_release_date, '') as in_cinemas_release_date,
+			COALESCE(digital_release_date, '') as digital_release_date,
+			COALESCE(physical_release_date, '') as physical_release_date,
 			COALESCE(overview, '') as overview
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
@@ -1141,9 +1221,9 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 	defer rows.Close()
 	var items []LibraryItemFromDB
 	for rows.Next() {
-		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
+		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, releaseDate, inCinemasReleaseDate, digitalReleaseDate, physicalReleaseDate, overview string
 		var yearStr string
-		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview); err != nil {
+		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &releaseDate, &inCinemasReleaseDate, &digitalReleaseDate, &physicalReleaseDate, &overview); err != nil {
 			continue
 		}
 		tmdbID, _ := strconv.Atoi(tmdbIDStr)
@@ -1182,9 +1262,16 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 			Overview:        overview,
 			Quality:         quality,
 			DestinationPath: destPath,
+			ReleaseDate:     releaseDate,
+			InCinemasReleaseDate: inCinemasReleaseDate,
+			DigitalReleaseDate:   digitalReleaseDate,
+			PhysicalReleaseDate:  physicalReleaseDate,
 		})
 	}
-	return items, totalCount, rows.Err()
+	if rowErr := rows.Err(); rowErr != nil {
+		return nil, 0, rowErr
+	}
+	return items, totalCount, nil
 }
 
 // getSeriesFromProcessedFiles returns TV series
@@ -1326,7 +1413,7 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 
 // parseLimitOffset parses limit and offset from query params.
 func parseLimitOffset(r *http.Request) (limit, offset int) {
-	const maxLimit = 1000
+	const maxLimit = 10000
 
 	limit = 0
 	offset = 0

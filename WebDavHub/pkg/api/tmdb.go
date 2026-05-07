@@ -324,6 +324,26 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 				body, _ = json.Marshal(details)
 			}
 		}
+
+		// Enrich movie details with release date variants
+		if mediaType == "movie" {
+			var details map[string]interface{}
+			if err := json.Unmarshal(body, &details); err == nil {
+				if movieID, ok := details["id"].(float64); ok {
+					inCinemas, digital, physical := getMovieReleaseDates(int(movieID))
+					if inCinemas != "" {
+						details["in_cinemas_release_date"] = inCinemas
+					}
+					if digital != "" {
+						details["digital_release_date"] = digital
+					}
+					if physical != "" {
+						details["physical_release_date"] = physical
+					}
+					body, _ = json.Marshal(details)
+				}
+			}
+		}
 		// Only cache if skipCache is false
 		if !skipCache {
 			// Store in id-based cache (format for DB cache)
@@ -486,6 +506,30 @@ func HandleTmdbDetails(w http.ResponseWriter, r *http.Request, tmdbApiKey string
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-TMDB-Details-Cache", "MISS")
 	w.Write(body)
+}
+
+func getMovieReleaseDates(tmdbID int) (string, string, string) {
+	database, err := db.GetDatabaseConnection()
+	if err != nil {
+		return "", "", ""
+	}
+
+	var inCinemas, digital, physical string
+	err = database.QueryRow(`
+		SELECT
+			COALESCE(in_cinemas_release_date, ''),
+			COALESCE(digital_release_date, ''),
+			COALESCE(physical_release_date, '')
+		FROM processed_files
+		WHERE UPPER(media_type) = 'MOVIE' AND CAST(tmdb_id AS INTEGER) = ?
+		ORDER BY processed_at DESC
+		LIMIT 1
+	`, tmdbID).Scan(&inCinemas, &digital, &physical)
+	if err != nil && err != sql.ErrNoRows {
+		return "", "", ""
+	}
+
+	return inCinemas, digital, physical
 }
 
 // HandleTmdbCategoryContent fetches popular/trending content for category folders

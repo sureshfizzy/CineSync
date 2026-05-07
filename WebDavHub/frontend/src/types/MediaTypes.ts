@@ -5,6 +5,9 @@ export interface MediaDetailsData {
   poster_path: string | null;
   backdrop_path: string | null;
   release_date?: string;
+  in_cinemas_release_date?: string;
+  digital_release_date?: string;
+  physical_release_date?: string;
   first_air_date?: string;
   last_air_date?: string;
   runtime?: number;

@@ -3252,6 +3252,9 @@ def update_database_to_new_format(conn):
             "original_title TEXT",
             "status TEXT",
             "release_date TEXT",
+            "in_cinemas_release_date TEXT",
+            "digital_release_date TEXT",
+            "physical_release_date TEXT",
             "first_air_date TEXT",
             "last_air_date TEXT",
             "genres TEXT",
@@ -3561,7 +3564,29 @@ def _process_single_entry(entry, api_key):
 
             elif not is_tv_show:
                 release_dates = metadata.get('release_dates', {}).get('results', [])
+                theatrical_best = None
+                digital_best = None
+                physical_best = None
+
                 for release in release_dates:
+                    for rd in release.get('release_dates', []):
+                        rd_date = rd.get('release_date')
+                        if not rd_date:
+                            continue
+                        try:
+                            rd_type = int(rd.get('type'))
+                        except (TypeError, ValueError):
+                            continue
+                        if rd_type in (2, 3):  # theatrical/limited
+                            if theatrical_best is None or rd_date < theatrical_best:
+                                theatrical_best = rd_date
+                        elif rd_type == 4:  # digital
+                            if digital_best is None or rd_date < digital_best:
+                                digital_best = rd_date
+                        elif rd_type == 5:  # physical
+                            if physical_best is None or rd_date < physical_best:
+                                physical_best = rd_date
+
                     if release.get('iso_3166_1') == 'US':
                         for cert in release.get('release_dates', []):
                             if cert.get('certification'):
@@ -3578,6 +3603,13 @@ def _process_single_entry(entry, api_key):
                                 break
                         if 'certification' in updates:
                             break
+
+                if theatrical_best:
+                    updates['in_cinemas_release_date'] = theatrical_best
+                if digital_best:
+                    updates['digital_release_date'] = digital_best
+                if physical_best:
+                    updates['physical_release_date'] = physical_best
 
         # Add file size and base_path if missing
         if file_path and os.path.exists(file_path):

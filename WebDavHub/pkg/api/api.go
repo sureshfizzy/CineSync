@@ -3120,7 +3120,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "SELECT destination_path, file_size, processed_at, COALESCE(quality, ''), season_number, episode_number FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != '' AND file_path IS NOT NULL"
+	query := "SELECT destination_path, file_size, processed_at, COALESCE(quality, ''), season_number, episode_number, COALESCE(in_cinemas_release_date, ''), COALESCE(digital_release_date, ''), COALESCE(physical_release_date, '') FROM processed_files WHERE tmdb_id = ? AND destination_path IS NOT NULL AND destination_path != '' AND file_path IS NOT NULL"
 	args := []interface{}{tmdbId}
 	if mediaType != "" {
 		query += " AND LOWER(media_type) = ?"
@@ -3147,6 +3147,9 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		SeasonNumber    *int   `json:"seasonNumber,omitempty"`
 		EpisodeNumber   *int   `json:"episodeNumber,omitempty"`
 		Quality         string `json:"quality,omitempty"`
+		InCinemasReleaseDate string `json:"inCinemasReleaseDate,omitempty"`
+		DigitalReleaseDate   string `json:"digitalReleaseDate,omitempty"`
+		PhysicalReleaseDate  string `json:"physicalReleaseDate,omitempty"`
 	}
 
 	// Pre-compile bracket extractor for quality fallback
@@ -3160,8 +3163,11 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		var quality string
 		var seasonNumber sql.NullString
 		var episodeNumber sql.NullString
+		var inCinemasReleaseDate string
+		var digitalReleaseDate string
+		var physicalReleaseDate string
 
-		if err := rows.Scan(&destPath, &fileSize, &processedAt, &quality, &seasonNumber, &episodeNumber); err != nil {
+		if err := rows.Scan(&destPath, &fileSize, &processedAt, &quality, &seasonNumber, &episodeNumber, &inCinemasReleaseDate, &digitalReleaseDate, &physicalReleaseDate); err != nil {
 			continue
 		}
 		if !destPath.Valid || destPath.String == "" {
@@ -3218,6 +3224,9 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 			SeasonNumber:    seasonPtr,
 			EpisodeNumber:   episodePtr,
 			Quality:         quality,
+			InCinemasReleaseDate: inCinemasReleaseDate,
+			DigitalReleaseDate:   digitalReleaseDate,
+			PhysicalReleaseDate:  physicalReleaseDate,
 		})
 	}
 

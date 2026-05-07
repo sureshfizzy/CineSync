@@ -245,6 +245,7 @@ func initializeMediaHubTables(db *sql.DB) error {
 			sport_location TEXT, sport_session TEXT, sport_venue TEXT, sport_city TEXT,
 			sport_country TEXT, sport_time TEXT, sport_date TEXT, original_language TEXT,
 			overview TEXT, runtime INTEGER, original_title TEXT, status TEXT, release_date TEXT,
+				in_cinemas_release_date TEXT, digital_release_date TEXT, physical_release_date TEXT,
 			first_air_date TEXT, last_air_date TEXT, genres TEXT, certification TEXT,
 			episode_title TEXT, total_episodes INTEGER)`,
 		`CREATE TABLE IF NOT EXISTS processed_files_archive (

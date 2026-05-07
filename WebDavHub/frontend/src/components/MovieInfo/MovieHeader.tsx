@@ -42,6 +42,35 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
   const displayFiles = filteredFiles ?? files;
   const selectedFile = displayFiles[selectedFileIndex] ?? displayFiles[0] ?? files[0];
   const hasMultipleSameQuality = displayFiles.length > 1 && !!selectedQuality;
+  const inCinemasReleaseDate = data.in_cinemas_release_date;
+  const digitalReleaseDate = data.digital_release_date;
+  const physicalReleaseDate = data.physical_release_date;
+
+  const formatReleaseDate = (value?: string | null): string => {
+    const v = (value ?? '').trim();
+    if (!v) return '';
+    const iso = v.length >= 10 ? v.slice(0, 10) : v;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (!year || month < 1 || month > 12 || day < 1 || day > 31) return iso;
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const suffix = (() => {
+      if (day % 100 >= 11 && day % 100 <= 13) return 'th';
+      switch (day % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    })();
+
+    return `${monthNames[month - 1]} ${day}${suffix}, ${year}`;
+  };
 
 
 
@@ -413,6 +442,64 @@ const MovieHeader: React.FC<MovieHeaderProps> = ({ data, getPosterUrl, fileInfo,
                       fontSize: '0.875rem'
                     }}>
                       {data.production_countries[0].name}
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Movie release dates from processed_files */}
+                {typeof inCinemasReleaseDate === 'string' && inCinemasReleaseDate.trim() !== '' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Cinema Release:
+                    </Typography>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {formatReleaseDate(inCinemasReleaseDate)}
+                    </Typography>
+                  </Box>
+                )}
+
+                {typeof digitalReleaseDate === 'string' && digitalReleaseDate.trim() !== '' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Digital Release:
+                    </Typography>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {formatReleaseDate(digitalReleaseDate)}
+                    </Typography>
+                  </Box>
+                )}
+
+                {typeof physicalReleaseDate === 'string' && physicalReleaseDate.trim() !== '' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Physical Release:
+                    </Typography>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {formatReleaseDate(physicalReleaseDate)}
                     </Typography>
                   </Box>
                 )}
