@@ -78,6 +78,20 @@ func getMediaHubCommand(mediaHubDir string, pythonCmd string, jobType string, ac
 	return pythonCmd, []string{filepath.Join(mediaHubDir, "utils", "Jobs", scriptName)}
 }
 
+func plainStdout(job *Job) bool {
+	if job == nil {
+		return false
+	}
+
+	if job.Category == "Database" {
+		return true
+	}
+
+	id := strings.ToLower(job.ID)
+	name := strings.ToLower(job.Name)
+	return strings.Contains(id, "database") || strings.Contains(name, "database")
+}
+
 // JobStatusUpdate represents a job status change event
 type JobStatusUpdate struct {
 	JobID     string    `json:"jobId"`
@@ -625,6 +639,9 @@ func (m *Manager) executeJob(jobID string) {
 	cmd := exec.CommandContext(m.ctx, job.Command, job.Arguments...)
 	if job.WorkingDir != "" {
 		cmd.Dir = job.WorkingDir
+	}
+	if plainStdout(job) {
+		cmd.Env = append(os.Environ(), "MEDIAHUB_PLAIN_STDOUT=1")
 	}
 
 	// Store running command

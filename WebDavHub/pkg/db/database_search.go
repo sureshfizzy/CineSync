@@ -1963,6 +1963,7 @@ func runDatabaseUpdate() error {
 	command, args := mediaHubExec.GetCommand("--update-database")
 	cmd := exec.Command(command, args...)
 	cmd.Dir = mediaHubExec.WorkDir
+	cmd.Env = append(os.Environ(), "MEDIAHUB_PLAIN_STDOUT=1")
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
