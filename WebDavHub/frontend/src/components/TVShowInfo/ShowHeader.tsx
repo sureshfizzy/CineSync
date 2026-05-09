@@ -31,6 +31,13 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
   const country = data.production_countries?.[0]?.name;
   const theme = useTheme();
 
+  const formatDate = (value?: string): string => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
 
   return (
     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 4 }, alignItems: { xs: 'center', md: 'flex-start' } }}>
@@ -270,6 +277,44 @@ const ShowHeader: React.FC<ShowHeaderProps> = ({ data, getPosterUrl, folderName,
                       fontSize: '0.875rem'
                     }}>
                       {data.production_countries[0].name}
+                    </Typography>
+                  </Box>
+                )}
+
+                {data.first_air_date && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      First Air Date:
+                    </Typography>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {formatDate(data.first_air_date)}
+                    </Typography>
+                  </Box>
+                )}
+
+                {data.last_air_date && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      fontWeight: 500
+                    }}>
+                      Last Air Date:
+                    </Typography>
+                    <Typography variant="body2" sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem'
+                    }}>
+                      {formatDate(data.last_air_date)}
                     </Typography>
                   </Box>
                 )}

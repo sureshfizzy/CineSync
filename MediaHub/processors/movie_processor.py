@@ -28,6 +28,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     proper_name = None
     proper_movie_name = None
     collection_info = None
+    in_cinemas_release_date = ''
+    digital_release_date = ''
+    physical_release_date = ''
 
     # Determine source folder for source structure
     if is_source_structure_enabled():
@@ -111,6 +114,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
         status = full_movie_data.get('status', '')
         genres = full_movie_data.get('genres', '[]')
         certification = full_movie_data.get('certification', '')
+        in_cinemas_release_date = full_movie_data.get('in_cinemas_release_date', '')
+        digital_release_date = full_movie_data.get('digital_release_date', '')
+        physical_release_date = full_movie_data.get('physical_release_date', '')
         is_anime_genre = full_movie_data.get('is_anime_genre', False)
         is_kids_content = full_movie_data.get('is_kids_content', False)
         imdb_id = full_movie_data.get('imdb_id', '')
@@ -164,6 +170,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 release_date = ''
                 genres = '[]'
                 certification = ''
+                in_cinemas_release_date = ''
+                digital_release_date = ''
+                physical_release_date = ''
                 is_anime_genre = False
                 imdb_id = ''
 
@@ -179,6 +188,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_data = get_movie_data(tmdb_id)
                 collection_name = movie_data.get('collection_name')
                 collection_info = (collection_name, tmdb_id) if collection_name else None
+                in_cinemas_release_date = movie_data.get('in_cinemas_release_date', '')
+                digital_release_date = movie_data.get('digital_release_date', '')
+                physical_release_date = movie_data.get('physical_release_date', '')
 
                 # Use TMDB language as fallback if not available from file metadata
                 if not language:
@@ -212,6 +224,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             release_date = result[11] if len(result) > 11 else ''
             genres = result[12] if len(result) > 12 else '[]'
             certification = result[13] if len(result) > 13 else ''
+            in_cinemas_release_date = ''
+            digital_release_date = ''
+            physical_release_date = ''
             
             year = movie_year if movie_year is not None else year
             proper_movie_name = f"{proper_name} ({year})"
@@ -231,6 +246,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_data = get_movie_data(tmdb_id)
                 if movie_data:
                     language = movie_data.get('original_language')
+                    in_cinemas_release_date = movie_data.get('in_cinemas_release_date', '')
+                    digital_release_date = movie_data.get('digital_release_date', '')
+                    physical_release_date = movie_data.get('physical_release_date', '')
 
         elif isinstance(result, dict):
             proper_movie_name = f"{result['title']} ({result.get('release_date', '').split('-')[0]})"
@@ -248,6 +266,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
             release_date = ''
             genres = '[]'
             certification = ''
+            in_cinemas_release_date = ''
+            digital_release_date = ''
+            physical_release_date = ''
             
             if is_imdb_folder_id_enabled() and 'imdb_id' in result:
                 if is_jellyfin_id_format_enabled():
@@ -265,6 +286,9 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
                 movie_data = get_movie_data(result['id'])
                 if movie_data:
                     language = movie_data.get('original_language')
+                    in_cinemas_release_date = movie_data.get('in_cinemas_release_date', '')
+                    digital_release_date = movie_data.get('digital_release_date', '')
+                    physical_release_date = movie_data.get('physical_release_date', '')
         else:
             log_message(f"TMDB search returned unexpected result type for movie: {movie_name} ({year}). Skipping movie processing.", level="WARNING")
             track_file_failure(src_file, None, None, "TMDB search failed", f"Unexpected TMDB result type for movie: {movie_name} ({year})")
@@ -617,4 +641,5 @@ def process_movie(src_file, root, file, dest_dir, actual_dir, tmdb_folder_id_ena
     # Return all fields including language, quality, and new metadata fields
     return (dest_file, tmdb_id, 'Movie', clean_name, str(extracted_year) if extracted_year else None,
             None, imdb_id, 1 if is_anime_genre else 0, is_kids_content, language, quality,
-            original_language, overview, runtime, original_title, status, release_date, genres, certification)
+            original_language, overview, runtime, original_title, status, release_date, genres, certification,
+            in_cinemas_release_date, digital_release_date, physical_release_date)

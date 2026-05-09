@@ -174,8 +174,40 @@ def get_movie_data(tmdb_id):
         original_title = data.get('original_title', '') or ''
         status = data.get('status', '') or 'released'
         release_date = data.get('release_date', '') or ''
+        in_cinemas_release_date = ''
+        digital_release_date = ''
+        physical_release_date = ''
         genre_names = [genre.get('name', '') for genre in genres if genre.get('name')]
         genres_str = ', '.join(genre_names) if genre_names else ''
+
+        theatrical_best = None
+        digital_best = None
+        physical_best = None
+        for result in release_dates_data.get('results', []):
+            for release in result.get('release_dates', []):
+                rd_date = release.get('release_date')
+                if not rd_date:
+                    continue
+                try:
+                    rd_type = int(release.get('type'))
+                except (TypeError, ValueError):
+                    continue
+                if rd_type in (2, 3):
+                    if theatrical_best is None or rd_date < theatrical_best:
+                        theatrical_best = rd_date
+                elif rd_type == 4:
+                    if digital_best is None or rd_date < digital_best:
+                        digital_best = rd_date
+                elif rd_type == 5:
+                    if physical_best is None or rd_date < physical_best:
+                        physical_best = rd_date
+
+        if theatrical_best:
+            in_cinemas_release_date = theatrical_best
+        if digital_best:
+            digital_release_date = digital_best
+        if physical_best:
+            physical_release_date = physical_best
 
         return {
             'imdb_id': imdb_id,
@@ -188,6 +220,9 @@ def get_movie_data(tmdb_id):
             'original_title': original_title,
             'status': status.lower(),
             'release_date': release_date,
+            'in_cinemas_release_date': in_cinemas_release_date,
+            'digital_release_date': digital_release_date,
+            'physical_release_date': physical_release_date,
             'genres': genres_str,
             'certification': rating or '',
             'production_countries': production_countries,

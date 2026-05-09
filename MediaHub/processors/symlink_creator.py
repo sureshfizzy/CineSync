@@ -1031,6 +1031,9 @@ def process_file(args, force=False, batch_apply=False):
                 # Handle movie processor return format
                 if len(result) >= 18:
                     dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
+                    in_cinemas_release_date = result[19] if len(result) > 19 else None
+                    digital_release_date = result[20] if len(result) > 20 else None
+                    physical_release_date = result[21] if len(result) > 21 else None
 
         elif not show_processed:
             # Not sports content, process as movie
@@ -1089,6 +1092,9 @@ def process_file(args, force=False, batch_apply=False):
             # Handle movie processor return format
             if len(result) >= 18:
                 dest_file, tmdb_id, media_type, proper_name, year, episode_number_str, imdb_id, is_anime_genre, is_kids_content, language, quality, original_language, overview, runtime, original_title, status, release_date, genres, certification = result[:19]
+                in_cinemas_release_date = result[19] if len(result) > 19 else None
+                digital_release_date = result[20] if len(result) > 20 else None
+                physical_release_date = result[21] if len(result) > 21 else None
 
     if dest_file is None:
         log_message(f"Destination file path is None for {file}. Skipping.", level="WARNING")
@@ -1178,7 +1184,10 @@ def process_file(args, force=False, batch_apply=False):
                         genres if 'genres' in locals() else None,
                         certification if 'certification' in locals() else None,
                         episode_title if 'episode_title' in locals() else None,
-                        total_episodes if 'total_episodes' in locals() else None
+                        total_episodes if 'total_episodes' in locals() else None,
+                        in_cinemas_release_date=in_cinemas_release_date if 'in_cinemas_release_date' in locals() else None,
+                        digital_release_date=digital_release_date if 'digital_release_date' in locals() else None,
+                        physical_release_date=physical_release_date if 'physical_release_date' in locals() else None
                     )
                     return
                 else:
@@ -1235,7 +1244,10 @@ def process_file(args, force=False, batch_apply=False):
                 genres if 'genres' in locals() else None,
                 certification if 'certification' in locals() else None,
                 episode_title if 'episode_title' in locals() else None,
-                total_episodes if 'total_episodes' in locals() else None
+                total_episodes if 'total_episodes' in locals() else None,
+                in_cinemas_release_date=in_cinemas_release_date if 'in_cinemas_release_date' in locals() else None,
+                digital_release_date=digital_release_date if 'digital_release_date' in locals() else None,
+                physical_release_date=physical_release_date if 'physical_release_date' in locals() else None
             )
             return
         else:
@@ -1282,7 +1294,10 @@ def process_file(args, force=False, batch_apply=False):
                     genres if 'genres' in locals() else None,
                     certification if 'certification' in locals() else None,
                     episode_title if 'episode_title' in locals() else None,
-                    total_episodes if 'total_episodes' in locals() else None
+                    total_episodes if 'total_episodes' in locals() else None,
+                    in_cinemas_release_date=in_cinemas_release_date if 'in_cinemas_release_date' in locals() else None,
+                    digital_release_date=digital_release_date if 'digital_release_date' in locals() else None,
+                    physical_release_date=physical_release_date if 'physical_release_date' in locals() else None
                 )
                 return
             else:
@@ -1400,7 +1415,10 @@ def process_file(args, force=False, batch_apply=False):
             genres if 'genres' in locals() else None,
             certification if 'certification' in locals() else None,
             episode_title if 'episode_title' in locals() else None,
-            total_episodes if 'total_episodes' in locals() else None
+            total_episodes if 'total_episodes' in locals() else None,
+            in_cinemas_release_date=in_cinemas_release_date if 'in_cinemas_release_date' in locals() else None,
+            digital_release_date=digital_release_date if 'digital_release_date' in locals() else None,
+            physical_release_date=physical_release_date if 'physical_release_date' in locals() else None
         )
 
         # Handle cache updates for force mode vs normal mode

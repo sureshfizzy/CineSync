@@ -517,13 +517,11 @@ func getMovieReleaseDates(tmdbID int) (string, string, string) {
 	var inCinemas, digital, physical string
 	err = database.QueryRow(`
 		SELECT
-			COALESCE(in_cinemas_release_date, ''),
-			COALESCE(digital_release_date, ''),
-			COALESCE(physical_release_date, '')
+			COALESCE(MAX(NULLIF(in_cinemas_release_date, '')), ''),
+			COALESCE(MAX(NULLIF(digital_release_date, '')), ''),
+			COALESCE(MAX(NULLIF(physical_release_date, '')), '')
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE' AND CAST(tmdb_id AS INTEGER) = ?
-		ORDER BY processed_at DESC
-		LIMIT 1
 	`, tmdbID).Scan(&inCinemas, &digital, &physical)
 	if err != nil && err != sql.ErrNoRows {
 		return "", "", ""

@@ -1178,7 +1178,7 @@ def _repair_tv_season_totals_and_counts(cursor, conn):
 @throttle
 @retry_on_db_lock
 @with_connection(main_pool)
-def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_city=None, sport_country=None, sport_time=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None, episode_title=None, total_episodes=None, root_folder=None):
+def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_number=None, reason=None, file_size=None, error_message=None, media_type=None, proper_name=None, year=None, episode_number=None, imdb_id=None, is_anime_genre=None, language=None, quality=None, tvdb_id=None, league_id=None, sportsdb_event_id=None, sport_name=None, sport_round=None, sport_location=None, sport_session=None, sport_venue=None, sport_city=None, sport_country=None, sport_time=None, sport_date=None, original_language=None, overview=None, runtime=None, original_title=None, status=None, release_date=None, first_air_date=None, last_air_date=None, genres=None, certification=None, episode_title=None, total_episodes=None, root_folder=None, in_cinemas_release_date=None, digital_release_date=None, physical_release_date=None):
     if not source_path:
         log_message("save_processed_file called with empty source_path — skipping", level="DEBUG")
         return
@@ -1305,6 +1305,9 @@ def save_processed_file(conn, source_path, dest_path=None, tmdb_id=None, season_
             'original_title': original_title,
             'status': status,
             'release_date': release_date,
+            'in_cinemas_release_date': in_cinemas_release_date,
+            'digital_release_date': digital_release_date,
+            'physical_release_date': physical_release_date,
             'first_air_date': first_air_date,
             'last_air_date': last_air_date,
             'genres': genres,

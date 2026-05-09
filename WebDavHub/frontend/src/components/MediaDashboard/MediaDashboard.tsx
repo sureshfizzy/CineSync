@@ -299,8 +299,8 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
           poster_path: item.poster_path,
           backdrop_path: null,
           media_type: item.media_type,
-          release_date: yearStr,
-          first_air_date: yearStr
+          release_date: item.release_date || yearStr,
+          first_air_date: item.first_air_date || yearStr
         });
       }
     });
@@ -681,7 +681,8 @@ export default function MediaDashboard({ filter = 'movies' }: MediaDashboardProp
                           quality: item.quality,
                           posterPath: item.poster_path,
                           releaseDate: undefined,
-                          firstAirDate: undefined,
+                          firstAirDate: item.first_air_date,
+                          lastAirDate: item.last_air_date,
                           status: item.status as any
                         };
                       });

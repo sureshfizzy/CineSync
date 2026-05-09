@@ -54,6 +54,8 @@ type LibraryItemFromDB struct {
 	InCinemasReleaseDate string `json:"in_cinemas_release_date,omitempty"`
 	DigitalReleaseDate   string `json:"digital_release_date,omitempty"`
 	PhysicalReleaseDate  string `json:"physical_release_date,omitempty"`
+	FirstAirDate         string `json:"first_air_date,omitempty"`
+	LastAirDate          string `json:"last_air_date,omitempty"`
 }
 
 // WantedEpisode is a lightweight DTO for missing TV episodes
@@ -1191,15 +1193,15 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 			COALESCE(proper_name, '') as proper_name,
 			COALESCE(year, '0') as year,
 			COALESCE(tmdb_id, '') as tmdb_id,
-			COALESCE(destination_path, '') as destination_path,
-			COALESCE(root_folder, '') as root_folder,
+			COALESCE(MAX(destination_path), '') as destination_path,
+			COALESCE(MAX(root_folder), '') as root_folder,
 			MAX(processed_at) as latest_processed_at,
-			COALESCE(quality, '') as quality,
-			COALESCE(release_date, '') as release_date,
-			COALESCE(in_cinemas_release_date, '') as in_cinemas_release_date,
-			COALESCE(digital_release_date, '') as digital_release_date,
-			COALESCE(physical_release_date, '') as physical_release_date,
-			COALESCE(overview, '') as overview
+			COALESCE(MAX(quality), '') as quality,
+			COALESCE(MAX(NULLIF(release_date, '')), '') as release_date,
+			COALESCE(MAX(NULLIF(in_cinemas_release_date, '')), '') as in_cinemas_release_date,
+			COALESCE(MAX(NULLIF(digital_release_date, '')), '') as digital_release_date,
+			COALESCE(MAX(NULLIF(physical_release_date, '')), '') as physical_release_date,
+			COALESCE(MAX(NULLIF(overview, '')), '') as overview
 		FROM processed_files
 		WHERE UPPER(media_type) = 'MOVIE'
 		AND proper_name IS NOT NULL
@@ -1330,6 +1332,8 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 				WHERE q.res_bucket IS NOT NULL
 			), '') AS quality,
 			COALESCE(MAX(pf.overview), '') as overview,
+			COALESCE(MAX(NULLIF(pf.first_air_date, '')), '') as first_air_date,
+			COALESCE(MAX(NULLIF(pf.last_air_date, '')), '') as last_air_date,
 			COALESCE((
 				SELECT COUNT(1)
 				FROM episodes e
@@ -1363,10 +1367,10 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 	defer rows.Close()
 	var items []LibraryItemFromDB
 	for rows.Next() {
-		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview string
+		var properName, tmdbIDStr, destPath, rootFolder, latestProcessedAt, quality, overview, firstAirDate, lastAirDate string
 		var yearStr string
 		var totalAired, importedEps int
-		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview, &totalAired, &importedEps); err != nil {
+		if err := rows.Scan(&properName, &yearStr, &tmdbIDStr, &destPath, &rootFolder, &latestProcessedAt, &quality, &overview, &firstAirDate, &lastAirDate, &totalAired, &importedEps); err != nil {
 			continue
 		}
 		tmdbID, _ := strconv.Atoi(tmdbIDStr)
@@ -1406,6 +1410,8 @@ func getSeriesFromProcessedFiles(limit, offset int, query string) ([]LibraryItem
 			Overview:        overview,
 			Quality:         quality,
 			DestinationPath: destPath,
+			FirstAirDate:    firstAirDate,
+			LastAirDate:     lastAirDate,
 		})
 	}
 	return items, totalCount, rows.Err()
