@@ -18,6 +18,7 @@ import sys
 import subprocess
 import argparse
 import shutil
+import platform
 from pathlib import Path
 
 
@@ -91,7 +92,8 @@ class WebDavHubProductionBuilder:
         """Build Go backend"""
         print("🔧 Building Go backend...")
         try:
-            subprocess.run(["go", "build", "-o", "cinesync", "."], check=True)
+            exe_name = "cinesync.exe" if platform.system() == "Windows" else "cinesync"
+            subprocess.run(["go", "build", "-o", exe_name, "."], check=True)
             print("✅ Go backend built successfully")
         except subprocess.CalledProcessError:
             print("❌ Failed to build Go backend")
