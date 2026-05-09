@@ -335,24 +335,33 @@ def clean_query(query: str) -> Dict[str, Any]:
             result['alternative_title'] = normalize_unicode_characters(metadata.alternative_title)
 
         # Add legacy compatibility fields
-        result['episodes'] = [metadata.episode] if metadata.episode else []
-        result['seasons'] = [metadata.season] if metadata.season else []
+        result['episodes'] = [metadata.episode] if metadata.episode is not None else []
+        result['seasons'] = [metadata.season] if metadata.season is not None else []
 
-        # For episode_identifier, create if we have episode info
-        if metadata.episode and metadata.season:
-            result['episode_identifier'] = f"S{metadata.season:02d}E{metadata.episode:02d}"
-        elif metadata.episode:
+        # Infer names like "Special 2" as season 0 episode 2 when explicit
+        # season/episode tokens are missing from the parser result.
+        season_value = metadata.season
+        episode_value = metadata.episode
+        if season_value is None and episode_value is None:
+            special_match = re.search(r'\b(?:special|specials)\b[\s._-]*(\d{1,3})\b', query, re.IGNORECASE)
+            if special_match:
+                season_value = 0
+                episode_value = int(special_match.group(1))
+
+        if episode_value is not None and season_value is not None:
+            result['episode_identifier'] = f"S{season_value:02d}E{episode_value:02d}"
+        elif episode_value is not None:
             # If we have episode but no season, just use episode number
-            result['episode_identifier'] = f"E{metadata.episode:02d}"
+            result['episode_identifier'] = f"E{episode_value:02d}"
         elif metadata.air_date:
             # Date-based (daily) episodes use air-date as identifier
             result['episode_identifier'] = metadata.air_date
         else:
             result['episode_identifier'] = None
 
-        result['show_name'] = result['title'] if metadata.season or metadata.episode or metadata.is_daily else None
-        result['create_season_folder'] = bool(metadata.season or metadata.episode or metadata.is_daily)
-        result['is_extra'] = metadata.is_extra
+        result['show_name'] = result['title'] if season_value is not None or episode_value is not None or metadata.is_daily else None
+        result['create_season_folder'] = bool(season_value is not None or episode_value is not None or metadata.is_daily)
+        result['is_extra'] = metadata.is_extra and not (season_value == 0 and episode_value is not None)
         result['dubbed'] = metadata.is_dubbed
         result['subbed'] = metadata.is_subbed
         result['repack'] = metadata.is_repack
@@ -364,11 +373,11 @@ def clean_query(query: str) -> Dict[str, Any]:
         result['group'] = metadata.release_group
 
         # Add season/episode numbers as strings for compatibility
-        if metadata.season:
-            result['season_number'] = f"{metadata.season:02d}"
+        if season_value is not None:
+            result['season_number'] = f"{season_value:02d}"
 
-        if metadata.episode:
-            result['episode_number'] = f"{metadata.episode:02d}"
+        if episode_value is not None:
+            result['episode_number'] = f"{episode_value:02d}"
 
         # Reduce logging overhead for performance
         log_message(f"Final parsed result: title='{result.get('title')}', episode='{result.get('episode_identifier')}'", level="DEBUG")
@@ -816,6 +825,16 @@ def is_extras_file(file: str, file_path: str, is_movie: bool = False) -> bool:
     # These files are legitimately small and should always be processed
     if file.lower().endswith(('.srt', '.strm')):
         return False
+
+    # A valid S00E## should be treated as a real episode (season specials)
+    try:
+        parsed_file = clean_query(file)
+        season_number = parsed_file.get('season_number')
+        episode_number = parsed_file.get('episode_number')
+        if season_number == '00' and episode_number:
+            return False
+    except Exception:
+        pass
 
     if _is_extras_by_name(file, file_path):
         log_message(f"File identified as extra by name pattern: {file}", level="DEBUG")

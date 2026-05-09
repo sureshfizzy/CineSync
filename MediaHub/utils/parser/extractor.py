@@ -192,9 +192,9 @@ def extract_all_metadata(filename: str) -> MediaMetadata:
     if episode is not None:
         is_tv = True
 
-    # Check if this is a S00 episode (specials/extras)
+    # Extras detection: season-0 episodes (S00E##) are valid specials
     is_extra = False
-    if season == 0:
+    if season == 0 and episode is None:
         is_extra = True
 
     # Check for sports content
