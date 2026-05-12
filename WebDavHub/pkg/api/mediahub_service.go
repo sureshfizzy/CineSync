@@ -21,6 +21,7 @@ import (
 	"cinesync/pkg/logger"
 	"cinesync/pkg/mediahub"
 	"cinesync/pkg/realdebrid"
+	"cinesync/pkg/torbox"
 )
 
 // MediaHub service management
@@ -31,6 +32,17 @@ var (
 	mediaHubLiveLogs    []string
 	mediaHubLiveLogsMux sync.Mutex
 )
+
+func isInbuiltMountConfigured() bool {
+	if realdebrid.IsMountConfigured() {
+		return true
+	}
+	if !realdebrid.IsRcloneAutoMountConfigured() {
+		return false
+	}
+	tb := torbox.GetConfigManager().GetConfig()
+	return tb.Enabled && tb.APIKey != ""
+}
 
 type MediaHubStatus struct {
 	IsRunning      bool   `json:"isRunning"`
@@ -132,7 +144,7 @@ func StartMediaHubService() error {
 	}
 
 	// Block start if inbuilt mount is configured but not yet ready
-	if realdebrid.IsMountConfigured() && !realdebrid.IsMountReady() {
+	if isInbuiltMountConfigured() && !realdebrid.IsMountReady() {
 		return fmt.Errorf("cannot start MediaHub: inbuilt mount is not ready yet")
 	}
 
@@ -399,7 +411,7 @@ func HandleMediaHubStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Block start if inbuilt mount is configured but not yet ready
-	if realdebrid.IsMountConfigured() && !realdebrid.IsMountReady() {
+	if isInbuiltMountConfigured() && !realdebrid.IsMountReady() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{

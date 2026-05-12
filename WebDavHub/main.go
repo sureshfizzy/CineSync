@@ -28,6 +28,7 @@ import (
 	"cinesync/pkg/realdebrid"
 	"cinesync/pkg/server"
 	"cinesync/pkg/spoofing"
+	"cinesync/pkg/torbox"
 	"cinesync/pkg/webdav"
 
 	"github.com/joho/godotenv"
@@ -82,7 +83,7 @@ func getNetworkIP() string {
 }
 
 func awaitMountReady(waitReason, readyReason string) {
-	if !realdebrid.IsMountConfigured() {
+	if !isDebridMountConfigured() {
 		return
 	}
 
@@ -95,6 +96,17 @@ func awaitMountReady(waitReason, readyReason string) {
 	if readyReason != "" {
 		logger.Info("%s", readyReason)
 	}
+}
+
+func isDebridMountConfigured() bool {
+	if realdebrid.IsMountConfigured() {
+		return true
+	}
+	if !realdebrid.IsRcloneAutoMountConfigured() {
+		return false
+	}
+	tb := torbox.GetConfigManager().GetConfig()
+	return tb.Enabled && tb.APIKey != ""
 }
 
 // handleMediaCover serves poster and fanart images from the MediaCover directory
@@ -524,6 +536,16 @@ func main() {
 	apiMux.HandleFunc("/api/realdebrid/repair-torrent", api.HandleRepairTorrent)
 	apiMux.HandleFunc("/api/realdebrid/repair-delete", api.HandleRepairDelete)
 
+	_ = torbox.GetConfigManager()
+	apiMux.HandleFunc("/api/torbox/webdav/", api.HandleTorBoxWebDAV)
+	apiMux.HandleFunc("/api/torbox/config", api.HandleTorBoxConfig)
+	apiMux.HandleFunc("/api/torbox/test", api.HandleTorBoxTest)
+	apiMux.HandleFunc("/api/torbox/downloads", api.HandleTorBoxDownloads)
+	apiMux.HandleFunc("/api/torbox/torrent-files", api.HandleTorBoxTorrentFiles)
+	apiMux.HandleFunc("/api/torbox/unrestrict-file", api.HandleTorBoxUnrestrictFile)
+	apiMux.HandleFunc("/api/torbox/delete-torrent", api.HandleTorBoxDeleteTorrent)
+	apiMux.HandleFunc("/api/torbox/dashboard-stats", api.HandleTorBoxDashboardStats)
+
 	// Register spoofing routes using the new spoofing package
 	spoofing.RegisterRoutes(apiMux)
 
@@ -573,26 +595,36 @@ func main() {
 
 	// Auto-mount rclone
 	go func() {
-		cfgMgr := realdebrid.GetConfigManager()
-		cfg := cfgMgr.GetConfig()
-		if !cfg.Enabled {
-			return
-		}
-		rc := cfg.RcloneSettings
+		rdCfg := realdebrid.GetConfigManager().GetConfig()
+		rc := rdCfg.RcloneSettings
 		if !rc.Enabled || !rc.AutoMountOnStart || rc.MountPath == "" {
 			return
 		}
 
+		var creds realdebrid.MountCredentials
+		mountConfig := rc
+		mountConfig.RemoteName = "CineSync"
+
+		if rdCfg.Enabled && rdCfg.APIKey != "" {
+			creds = realdebrid.MountCredentials{APIKey: rdCfg.APIKey}
+		} else {
+			tbCfg := torbox.GetConfigManager().GetConfig()
+			if !tbCfg.Enabled || tbCfg.APIKey == "" {
+				return
+			}
+			creds = realdebrid.MountCredentials{APIKey: tbCfg.APIKey, TorBoxMount: true}
+		}
+
 		rcloneManager := realdebrid.GetRcloneManager()
-		status := rcloneManager.GetStatus(rc.MountPath)
+		status := rcloneManager.GetStatus(mountConfig.MountPath)
 		if status != nil && status.Mounted {
-			logger.Info("Rclone already mounted at startup on %s", rc.MountPath)
+			logger.Info("Rclone already mounted at startup on %s", mountConfig.MountPath)
 			realdebrid.SetMountReady()
 			return
 		}
 
-		logger.Info("Auto-mounting rclone at startup: %s", rc.MountPath)
-		if _, err := rcloneManager.Mount(rc, cfg.APIKey); err != nil {
+		logger.Info("Auto-mounting rclone (%s) at startup: %s", mountConfig.RemoteName, mountConfig.MountPath)
+		if _, err := rcloneManager.Mount(mountConfig, creds); err != nil {
 			logger.Error("Auto-mount rclone failed: %v", err)
 		}
 	}()
@@ -663,6 +695,7 @@ func main() {
 	go func() {
 		time.Sleep(2 * time.Second)
 		api.PrefetchRealDebridData()
+		api.PrefetchTorBoxData()
 	}()
 
 	// Wrap the root mux with global panic recovery

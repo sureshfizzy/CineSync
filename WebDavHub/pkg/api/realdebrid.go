@@ -18,6 +18,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/logger"
 	"cinesync/pkg/realdebrid"
+	"cinesync/pkg/torbox"
 )
 
 // validateRealDebridConfig validates that Real-Debrid is configured and enabled
@@ -1105,17 +1106,37 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 		rcloneConfig.LogFile = logFile
 	}
 
+	mountProvider := "realdebrid"
+	if mp, ok := rcloneConfigMap["mountProvider"].(string); ok && strings.TrimSpace(mp) != "" {
+		mountProvider = strings.ToLower(strings.TrimSpace(mp))
+	}
+	delete(rcloneConfigMap, "mountProvider")
+
 	rcloneConfig.RemoteName = "CineSync"
 
-	cfg, err := validateRealDebridConfig()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	var creds realdebrid.MountCredentials
+	if mountProvider == "torbox" {
+		tbc := torbox.GetConfigManager().GetConfig()
+		if !tbc.Enabled || tbc.APIKey == "" {
+			http.Error(w, "TorBox is not configured or enabled", http.StatusBadRequest)
+			return
+		}
+		creds = realdebrid.MountCredentials{
+			APIKey:      tbc.APIKey,
+			TorBoxMount: true,
+		}
+	} else {
+		cfg, err := validateRealDebridConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		creds = realdebrid.MountCredentials{APIKey: cfg.APIKey}
 	}
 
 	// Start mount
 	rcloneManager := realdebrid.GetRcloneManager()
-	status, mountErr := rcloneManager.Mount(rcloneConfig, cfg.APIKey)
+	status, mountErr := rcloneManager.Mount(rcloneConfig, creds)
 	if mountErr != nil {
 		logger.Error("Mount failed: %v", mountErr)
 		response := map[string]interface{}{
@@ -1262,7 +1283,6 @@ func PrefetchRealDebridData() {
 
 	cfg := realdebrid.GetConfigManager().GetConfig()
 	if !cfg.Enabled || cfg.APIKey == "" {
-		logger.Info("[RD] Prefetch skipped: disabled or missing API key")
 		return
 	}
 

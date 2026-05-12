@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { formatBytes, formatDate } from '../FileBrowser/fileUtils';
 import TorrentManagerTab from './TorrentManagerTab';
+import { useDebridProvider } from '../../contexts/DebridProviderContext';
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 
 interface DebridStats {
   account: {
@@ -138,6 +140,7 @@ export default function DebridDashboard() {
   const [error, setError] = useState('');
   const [currentTab, setCurrentTab] = useState(0);
   const theme = useTheme();
+  const [provider, setProvider] = useDebridProvider();
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
@@ -150,7 +153,7 @@ export default function DebridDashboard() {
     setError('');
 
     try {
-      const response = await axios.get('/api/realdebrid/dashboard-stats');
+      const response = await axios.get(provider === 'torbox' ? '/api/torbox/dashboard-stats' : '/api/realdebrid/dashboard-stats');
       setStats(response.data);
     } catch (err: any) {
       // Only show error on initial load, not on polling failures
@@ -162,7 +165,7 @@ export default function DebridDashboard() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     fetchStats(true); // Initial load with loading state
@@ -173,6 +176,12 @@ export default function DebridDashboard() {
 
     return () => clearInterval(interval);
   }, [fetchStats]);
+
+  useEffect(() => {
+    if (provider === 'torbox' && currentTab !== 0) {
+      setCurrentTab(0);
+    }
+  }, [provider, currentTab]);
 
   if (loading && !stats) {
     return (
@@ -280,6 +289,18 @@ export default function DebridDashboard() {
           }}>
           Debrid Dashboard
         </Typography>
+
+        <Box sx={{ mt: 1, mb: 1 }}>
+          <ToggleButtonGroup
+            value={provider}
+            exclusive
+            onChange={(_e, next) => next && setProvider(next)}
+            size="small"
+          >
+            <ToggleButton value="realdebrid">Real-Debrid</ToggleButton>
+            <ToggleButton value="torbox">TorBox</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
         
         {stats && (
           <Typography 
@@ -313,11 +334,13 @@ export default function DebridDashboard() {
             iconPosition="start" 
             label="Overview" 
           />
-          <Tab 
-            icon={<Memory sx={{ fontSize: 20 }} />} 
-            iconPosition="start" 
-            label="Torrent Manager" 
-          />
+          {provider !== 'torbox' && (
+            <Tab 
+              icon={<Memory sx={{ fontSize: 20 }} />} 
+              iconPosition="start" 
+              label="Torrent Manager" 
+            />
+          )}
         </Tabs>
       </Box>
       {/* Tab Content */}
@@ -944,8 +967,8 @@ export default function DebridDashboard() {
       </Box>
         </Box>
       )}
-      {/* Torrent Manager Tab */}
-      {currentTab === 1 && <TorrentManagerTab />}
+      {/* Torrent Manager Tab (Real-Debrid only) */}
+      {provider !== 'torbox' && currentTab === 1 && <TorrentManagerTab />}
     </Box>
   );
 }

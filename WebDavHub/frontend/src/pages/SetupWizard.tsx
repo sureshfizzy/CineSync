@@ -7,6 +7,7 @@ import axios from 'axios';
 import { FormField } from '../components/Settings/FormField';
 import RcloneSettings from '../components/Debrid/Settings/RcloneSettings';
 import RealDebridSettings from '../components/Settings/RealDebridSettings';
+import TorBoxSettings from '../components/Settings/TorBoxSettings';
 import logoImage from '../assets/logo.png';
 
 interface ConfigValue {
@@ -56,9 +57,9 @@ type Step = {
 
 const wizardSteps: Step[] = [
   {
-    id: 'realdebrid',
-    title: 'Real-Debrid',
-    description: 'API keys and HTTP DAV access',
+    id: 'debrid',
+    title: 'Debrid Providers',
+    description: 'Real-Debrid and TorBox API access',
     accent: '#f97316',
     icon: <ApiRounded />,
     keys: [],
@@ -1060,7 +1061,7 @@ export default function SetupWizard() {
                       )}
                       {renderFields(availableKeys.filter((k) => k !== 'TMDB_API_KEY'))}
                     </>
-                  ) : step.id === 'realdebrid' ? (
+                  ) : step.id === 'debrid' ? (
                     <Box>
                       <Alert
                         severity="info"
@@ -1093,7 +1094,7 @@ export default function SetupWizard() {
                             fontWeight: 800,
                             mb: 1
                           }}>
-                          Real-Debrid account & HTTP DAV
+                          Debrid providers
                         </Typography>
                         <Typography
                           variant="body2"
@@ -1101,9 +1102,12 @@ export default function SetupWizard() {
                             color: "text.secondary",
                             mb: 2
                           }}>
-                          Configure your Real-Debrid API keys and HTTP DAV before mounting with rclone.
+                          Configure Real-Debrid (optional for rclone mount/repair) and TorBox (optional for browser/streaming).
                         </Typography>
                         <RealDebridSettings stackInfoOnTop={true} />
+                        <Box sx={{ mt: 3 }}>
+                          <TorBoxSettings />
+                        </Box>
                       </Box>
                     </Box>
                   ) : step.id === 'rclone' ? (

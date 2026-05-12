@@ -34,23 +34,23 @@ type LibraryItem struct {
 
 // LibraryItemFromDB represents a movie or series
 type LibraryItemFromDB struct {
-	ID              int    `json:"id"`
-	TmdbID          int    `json:"tmdb_id"`
-	Title           string `json:"title"`
-	Year            *int   `json:"year,omitempty"`
-	MediaType       string `json:"media_type"`
-	RootFolder      string `json:"root_folder"`
-	QualityProfile  string `json:"quality_profile"`
-	MonitorPolicy   string `json:"monitor_policy"`
-	Tags            string `json:"tags"`
-	Status          string `json:"status"`
-	AddedAt         int64  `json:"added_at"`
-	UpdatedAt       int64  `json:"updated_at"`
-	PosterPath      string `json:"poster_path"` // /MediaCover/{tmdb_id}/poster.jpg
-	Overview        string `json:"overview"`
-	Quality         string `json:"quality"`
-	DestinationPath string `json:"destination_path"`
-	ReleaseDate     string `json:"release_date,omitempty"`
+	ID                   int    `json:"id"`
+	TmdbID               int    `json:"tmdb_id"`
+	Title                string `json:"title"`
+	Year                 *int   `json:"year,omitempty"`
+	MediaType            string `json:"media_type"`
+	RootFolder           string `json:"root_folder"`
+	QualityProfile       string `json:"quality_profile"`
+	MonitorPolicy        string `json:"monitor_policy"`
+	Tags                 string `json:"tags"`
+	Status               string `json:"status"`
+	AddedAt              int64  `json:"added_at"`
+	UpdatedAt            int64  `json:"updated_at"`
+	PosterPath           string `json:"poster_path"` // /MediaCover/{tmdb_id}/poster.jpg
+	Overview             string `json:"overview"`
+	Quality              string `json:"quality"`
+	DestinationPath      string `json:"destination_path"`
+	ReleaseDate          string `json:"release_date,omitempty"`
 	InCinemasReleaseDate string `json:"in_cinemas_release_date,omitempty"`
 	DigitalReleaseDate   string `json:"digital_release_date,omitempty"`
 	PhysicalReleaseDate  string `json:"physical_release_date,omitempty"`
@@ -1248,23 +1248,23 @@ func getMoviesFromProcessedFiles(limit, offset int, query string, missingOnly bo
 			movieStatus = "missing"
 		}
 		items = append(items, LibraryItemFromDB{
-			ID:              tmdbID,
-			TmdbID:          tmdbID,
-			Title:           properName,
-			Year:            yearPtr,
-			MediaType:       "movie",
-			RootFolder:      rootFolder,
-			QualityProfile:  quality,
-			MonitorPolicy:   "any",
-			Tags:            "[]",
-			Status:          movieStatus,
-			AddedAt:         addedAt,
-			UpdatedAt:       addedAt,
-			PosterPath:      fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
-			Overview:        overview,
-			Quality:         quality,
-			DestinationPath: destPath,
-			ReleaseDate:     releaseDate,
+			ID:                   tmdbID,
+			TmdbID:               tmdbID,
+			Title:                properName,
+			Year:                 yearPtr,
+			MediaType:            "movie",
+			RootFolder:           rootFolder,
+			QualityProfile:       quality,
+			MonitorPolicy:        "any",
+			Tags:                 "[]",
+			Status:               movieStatus,
+			AddedAt:              addedAt,
+			UpdatedAt:            addedAt,
+			PosterPath:           fmt.Sprintf("/MediaCover/%d/poster.jpg", tmdbID),
+			Overview:             overview,
+			Quality:              quality,
+			DestinationPath:      destPath,
+			ReleaseDate:          releaseDate,
 			InCinemasReleaseDate: inCinemasReleaseDate,
 			DigitalReleaseDate:   digitalReleaseDate,
 			PhysicalReleaseDate:  physicalReleaseDate,

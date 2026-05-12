@@ -117,13 +117,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, onClose, isInDial
     setIsLoading(true);
     setError(null);
     const token = localStorage.getItem('cineSyncJWT');
-    if (authEnabled) {
+    const isSameOrigin = (() => {
+      try {
+        const parsed = new URL(url, window.location.href);
+        return parsed.origin === window.location.origin;
+      } catch {
+        return true;
+      }
+    })();
+
+    if (authEnabled && isSameOrigin) {
       if (!token) {
         setError('Authentication required. Please log in.');
         setIsLoading(false);
         return;
       }
-      setVideoUrl(`${url}?token=${encodeURIComponent(token)}`);
+      const sep = url.includes('?') ? '&' : '?';
+      setVideoUrl(`${url}${sep}token=${encodeURIComponent(token)}`);
     } else {
       setVideoUrl(url);
     }

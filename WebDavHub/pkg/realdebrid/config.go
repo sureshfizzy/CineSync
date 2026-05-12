@@ -202,7 +202,6 @@ func (cm *ConfigManager) GetConfig() *Config {
 	// Return a copy to prevent external modifications
 	configCopy := *cm.config
 
-	// Ensure defaults are applied for rclone settings
 	if configCopy.RcloneSettings.RemoteName == "" {
 		configCopy.RcloneSettings.RemoteName = "CineSync"
 	}
@@ -566,7 +565,6 @@ func (cm *ConfigManager) loadConfig() error {
 		return err
 	}
 
-	// Apply defaults for missing rclone settings
 	if config.RcloneSettings.RemoteName == "" {
 		config.RcloneSettings.RemoteName = "CineSync"
 	}

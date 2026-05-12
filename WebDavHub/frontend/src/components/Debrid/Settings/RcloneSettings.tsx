@@ -3,6 +3,7 @@ import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel
 import { Storage, Settings, CheckCircle, Error, Refresh, Science, FolderOpen, MenuBook, ExpandMore, ExpandLess, Close } from '@mui/icons-material';
 import axios from 'axios';
 import CineSyncMountGuide from './CineSyncMountGuide';
+import { useDebridProvider } from '../../../contexts/DebridProviderContext';
 
 interface RcloneConfig {
   enabled: boolean;
@@ -83,6 +84,7 @@ const getRcloneMountMode = (rcloneConfig: Pick<RcloneConfig, 'enabled' | 'serveF
 const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [provider] = useDebridProvider();
   const [config, setConfig] = useState<RcloneConfig>({
     enabled: false,
     mountPath: '',
@@ -335,7 +337,10 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
       const configToSave = payload.rcloneSettings;
 
       await axios.put('/api/realdebrid/config', payload);
-      const response = await axios.post('/api/realdebrid/rclone/mount', configToSave);
+      const response = await axios.post('/api/realdebrid/rclone/mount', {
+        ...configToSave,
+        mountProvider: provider === 'torbox' ? 'torbox' : 'realdebrid',
+      });
       if (response.data.success) {
         if (response.data.status?.waiting) {
           showMessage('Configuration saved and mount is waiting for torrents to load...', 'info');
@@ -1795,6 +1800,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
                   }}
                   serverOS={serverOS}
                   showGuide={showGuide}
+                  provider={provider === 'torbox' ? 'torbox' : 'realdebrid'}
                 />
               </CardContent>
             </Card>

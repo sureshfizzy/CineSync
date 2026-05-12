@@ -5,6 +5,7 @@ import { Search as SearchIcon, Refresh as RefreshIcon, CloudDownload, PlayArrow,
 import axios from 'axios';
 import './RealDebridBrowser.css';
 import { inferMediaTypeFromText } from '../../utils/mediaType';
+import type { DebridProviderId } from '../../contexts/DebridProviderContext';
 
 const VideoPlayerDialog = lazy(() => import('../VideoPlayer/VideoPlayerDialog'));
 
@@ -22,6 +23,7 @@ interface TorrentFile {
 }
 
 interface StreamableFile {
+  id?: number;
   name: string;
   size: number;
   link: string;
@@ -185,12 +187,13 @@ const formatFullDate = (dateStr: string): string => {
 const TorrentRow: React.FC<{
   torrent: TorrentFile;
   index: number;
+  provider: DebridProviderId;
   onPlay: (torrent: TorrentFile) => void;
   onDelete: (torrent: TorrentFile) => void;
   onReinsert: (torrent: TorrentFile) => void;
   onCopyLink: (torrent: TorrentFile) => void;
   onDownload: (torrent: TorrentFile) => void;
-}> = ({ torrent, index, onPlay, onDelete, onReinsert, onCopyLink, onDownload }) => {
+}> = ({ torrent, index, provider, onPlay, onDelete, onReinsert, onCopyLink, onDownload }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
   
@@ -227,9 +230,11 @@ const TorrentRow: React.FC<{
     },
   };
   
-  const canPlay = torrent.status?.toLowerCase() === 'downloaded' || torrent.link;
+  const statusLower = torrent.status?.toLowerCase() || '';
+  const canPlay = ['downloaded', 'completed', 'cached', 'seeding', 'uploading', 'finished'].includes(statusLower) || !!torrent.link;
   const canLinkActions = torrent.files > 0 || !!torrent.link;
-  const canReinsert = ['error', 'dead', 'magnet_error', 'virus'].includes(torrent.status?.toLowerCase() || '');
+  const canReinsert = provider !== 'torbox' && ['error', 'dead', 'magnet_error', 'virus'].includes(statusLower);
+  const showReinsertMenu = provider !== 'torbox';
   
   return (
     <motion.div
@@ -375,10 +380,12 @@ const TorrentRow: React.FC<{
               <ListItemText>Download</ListItemText>
             </MenuItem>
           )}
-          <MenuItem onClick={() => handleAction(() => onReinsert(torrent))}>
-            <ListItemIcon><RestartAlt fontSize="small" /></ListItemIcon>
-            <ListItemText>Reinsert / Repair</ListItemText>
-          </MenuItem>
+          {showReinsertMenu && (
+            <MenuItem onClick={() => handleAction(() => onReinsert(torrent))}>
+              <ListItemIcon><RestartAlt fontSize="small" /></ListItemIcon>
+              <ListItemText>Reinsert / Repair</ListItemText>
+            </MenuItem>
+          )}
           <MenuItem onClick={() => handleAction(() => onDelete(torrent))} sx={{ color: 'error.main' }}>
             <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
             <ListItemText>Delete</ListItemText>
@@ -411,7 +418,7 @@ const LoadingSkeleton: React.FC = () => (
 );
 
 // Empty state
-const EmptyState: React.FC<{ search: string }> = ({ search }) => (
+const EmptyState: React.FC<{ search: string; providerLabel: string }> = ({ search, providerLabel }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -422,16 +429,19 @@ const EmptyState: React.FC<{ search: string }> = ({ search }) => (
       {search ? 'No results found' : 'No torrents yet'}
     </Typography>
     <Typography variant="body1" sx={{ opacity: 0.6, maxWidth: 400 }}>
-      {search 
-        ? `No torrents matching "${search}" were found in your Real-Debrid account.`
-        : 'Your Real-Debrid torrents will appear here. Add some torrents to get started!'
+      {search
+        ? `No torrents matching "${search}" were found in your ${providerLabel} account.`
+        : `Your ${providerLabel} torrents will appear here. Add some torrents to get started!`
       }
     </Typography>
   </motion.div>
 );
 
-export default function RealDebridBrowser() {
+export default function RealDebridBrowser({ provider = 'realdebrid' }: { provider?: DebridProviderId }) {
   const theme = useTheme();
+  const apiBase = provider === 'torbox' ? '/api/torbox' : '/api/realdebrid';
+  const providerLabel = provider === 'torbox' ? 'TorBox' : 'Real-Debrid';
+  const torrentsTitle = provider === 'torbox' ? 'TorBox Torrents' : 'Real-Debrid Torrents';
   const [torrents, setTorrents] = useState<TorrentFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -463,13 +473,14 @@ export default function RealDebridBrowser() {
   }, [search]);
   
   // Load torrents - fetches ALL local data in a single request
-  const loadTorrents = useCallback(async () => {
+  const loadTorrents = useCallback(async (force: boolean = false) => {
     setLoading(true);
     setError('');
-    
+
     try {
-      const res = await axios.get('/api/realdebrid/downloads');
-      
+      const url = force && provider === 'torbox' ? `${apiBase}/downloads?force=1` : `${apiBase}/downloads`;
+      const res = await axios.get(url);
+
       const allItems = res.data?.files || [];
       
       const mapped: TorrentFile[] = allItems.map((f: any) => ({
@@ -491,12 +502,12 @@ export default function RealDebridBrowser() {
       setPage(1);
       
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to load Real-Debrid torrents');
+      setError(e.response?.data?.error || `Failed to load ${providerLabel} torrents`);
       setTorrents([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBase, provider, providerLabel]);
   
   // Initial load
   useEffect(() => {
@@ -562,25 +573,39 @@ export default function RealDebridBrowser() {
 
   const fetchTorrentFiles = useCallback(async (torrentId: string): Promise<StreamableFile[]> => {
     try {
-      const res = await axios.get('/api/realdebrid/torrent-files', { params: { id: torrentId } });
-      const files: StreamableFile[] = (res.data?.files || []).filter((f: StreamableFile) => f.link);
+      const res = await axios.get(`${apiBase}/torrent-files`, { params: { id: torrentId } });
+      const files: StreamableFile[] = (res.data?.files || [])
+        .map((f: any) => ({
+          id: typeof f.id === 'number' ? f.id : typeof f.id === 'string' ? Number(f.id) : undefined,
+          name: f.name,
+          size: f.size,
+          link: f.link,
+        }))
+        .filter((f: StreamableFile) => !!f.link);
       const videoFiles = files.filter((f) => isVideoFile(f.name));
       return videoFiles.length > 0 ? videoFiles : files;
     } catch (err) {
       console.error('[Debrid] Failed to fetch torrent files', err);
       throw err;
     }
-  }, []);
+  }, [apiBase]);
 
-  const unrestrictFile = useCallback(async (torrentId: string, fileName: string): Promise<string> => {
+  const unrestrictFile = useCallback(async (torrentId: string, file: StreamableFile): Promise<string> => {
     try {
-      const res = await axios.get('/api/realdebrid/unrestrict-file', { params: { id: torrentId, file: fileName } });
+      const params: any = { id: torrentId };
+      if (provider === 'torbox' && typeof file.id === 'number' && file.id > 0) {
+        params.fileId = file.id;
+      } else {
+        params.file = file.name;
+      }
+
+      const res = await axios.get(`${apiBase}/unrestrict-file`, { params });
       return res.data?.url || '';
     } catch (err) {
       console.error('[Debrid] Failed to unrestrict file', err);
       throw err;
     }
-  }, []);
+  }, [apiBase, provider]);
 
   const handlePlay = useCallback(async (torrent: TorrentFile) => {
     setFilePickerDialog({ open: true, torrent, files: [], loading: true, mode: 'play' });
@@ -595,13 +620,13 @@ export default function RealDebridBrowser() {
       }
 
       if (files.length === 1) {
-        const fileName = files[0].name;
-        const url = await unrestrictFile(torrent.id, fileName);
+        const f = files[0];
+        const url = await unrestrictFile(torrent.id, f);
         if (!url) {
           throw new Error('No unrestricted link returned');
         }
         setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
-        openVideoPlayer(url, getBaseName(fileName));
+        openVideoPlayer(url, getBaseName(f.name));
         return;
       }
 
@@ -615,9 +640,23 @@ export default function RealDebridBrowser() {
   const handleDelete = useCallback(async () => {
     if (!deleteDialog.torrent) return;
     const deletedTorrentId = deleteDialog.torrent.id;
-    
+
     setActionLoading(true);
     try {
+      if (provider === 'torbox') {
+        const torrentID = parseInt(deletedTorrentId, 10);
+        if (Number.isNaN(torrentID) || torrentID <= 0) {
+          setSnackbar({ open: true, message: 'Invalid torrent id', severity: 'error' });
+          return;
+        }
+        await axios.post(`${apiBase}/delete-torrent`, { torrent_id: torrentID });
+        setTorrents((prev) => prev.filter((torrent) => torrent.id !== deletedTorrentId));
+        await loadTorrents(true);
+        setSnackbar({ open: true, message: 'Torrent removed from TorBox.', severity: 'success' });
+        setDeleteDialog({ open: false, torrent: null });
+        return;
+      }
+
       await axios.post('/api/realdebrid/repair-delete', {
         torrent_ids: [deletedTorrentId],
         delete_from_debrid: true,
@@ -640,21 +679,31 @@ export default function RealDebridBrowser() {
       setSnackbar({ open: true, message: 'Torrent deleted successfully. Sync running in background.', severity: 'success' });
       setDeleteDialog({ open: false, torrent: null });
     } catch (e: any) {
-      setSnackbar({ open: true, message: e.response?.data?.error || 'Failed to delete torrent', severity: 'error' });
+      const msg =
+        typeof e.response?.data === 'string'
+          ? e.response.data
+          : e.response?.data?.error || e.response?.data?.message || 'Failed to delete torrent';
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     } finally {
       setActionLoading(false);
     }
-  }, [deleteDialog.torrent, loadTorrents]);
+  }, [apiBase, deleteDialog.torrent, loadTorrents, provider]);
   
   const handleReinsert = useCallback(async () => {
     if (!reinsertDialog.torrent) return;
-    
+
+    if (provider === 'torbox') {
+      setSnackbar({ open: true, message: 'Reinsert is not supported for TorBox', severity: 'info' });
+      setReinsertDialog({ open: false, torrent: null });
+      return;
+    }
+
     setActionLoading(true);
     try {
       await axios.post('/api/realdebrid/repair-torrent', {
         torrent_ids: [reinsertDialog.torrent.id],
       });
-      
+
       setSnackbar({ open: true, message: 'Torrent reinsert initiated', severity: 'success' });
       setReinsertDialog({ open: false, torrent: null });
       // Refresh after a short delay to allow repair to process
@@ -664,7 +713,7 @@ export default function RealDebridBrowser() {
     } finally {
       setActionLoading(false);
     }
-  }, [reinsertDialog.torrent, loadTorrents]);
+  }, [provider, reinsertDialog.torrent, loadTorrents]);
   
   const handleCopyLink = useCallback(async (torrent: TorrentFile) => {
     setFilePickerDialog({ open: true, torrent, files: [], loading: true, mode: 'copy' });
@@ -679,8 +728,8 @@ export default function RealDebridBrowser() {
       }
 
       if (files.length === 1) {
-        const fileName = files[0].name;
-        const url = await unrestrictFile(torrent.id, fileName);
+        const f = files[0];
+        const url = await unrestrictFile(torrent.id, f);
         if (!url) {
           throw new Error('No unrestricted link returned');
         }
@@ -710,15 +759,15 @@ export default function RealDebridBrowser() {
       }
 
       if (files.length === 1) {
-        const fileName = files[0].name;
-        const url = await unrestrictFile(torrent.id, fileName);
+        const f = files[0];
+        const url = await unrestrictFile(torrent.id, f);
         if (!url) {
           throw new Error('No unrestricted link returned');
         }
         setFilePickerDialog({ open: false, torrent: null, files: [], loading: false, mode: 'play' });
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', getBaseName(fileName));
+        link.setAttribute('download', getBaseName(f.name));
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -742,7 +791,7 @@ export default function RealDebridBrowser() {
 
     try {
       setFilePickerDialog((prev) => ({ ...prev, loading: true }));
-      const url = await unrestrictFile(torrent.id, fileName);
+      const url = await unrestrictFile(torrent.id, file);
       if (!url) {
         throw new Error('No unrestricted link returned');
       }
@@ -774,17 +823,24 @@ export default function RealDebridBrowser() {
     setError('');
     
     try {
+      if (provider === 'torbox') {
+        setSnackbar({ open: true, message: 'Refreshing TorBox list...', severity: 'info' });
+        await loadTorrents(true);
+        setSnackbar({ open: true, message: 'Refresh complete!', severity: 'success' });
+        return;
+      }
+
       setSnackbar({ open: true, message: 'Syncing with Real-Debrid API...', severity: 'info' });
-      await axios.post('/api/realdebrid/refresh-control', { action: 'force_refresh' }, { timeout: 300000 });
+      await axios.post(`${apiBase}/refresh-control`, { action: 'force_refresh' }, { timeout: 300000 });
       setSnackbar({ open: true, message: 'Sync complete!', severity: 'success' });
       await loadTorrents();
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to sync with Real-Debrid');
-      setSnackbar({ open: true, message: 'Failed to sync with Real-Debrid', severity: 'error' });
+      setError(e.response?.data?.error || `Failed to sync with ${providerLabel}`);
+      setSnackbar({ open: true, message: `Failed to sync with ${providerLabel}`, severity: 'error' });
     } finally {
       setSyncing(false);
     }
-  }, [loadTorrents]);
+  }, [apiBase, loadTorrents, provider, providerLabel]);
   
   const toggleSort = useCallback((key: SortKey) => {
     setSortOption(prev => ({
@@ -808,7 +864,7 @@ export default function RealDebridBrowser() {
           </div>
           <div className="rd-header-text">
             <Typography variant="h5" className="rd-title">
-              Real-Debrid Torrents
+              {torrentsTitle}
             </Typography>
             <Typography variant="body2" className="rd-subtitle">
               {torrents.length.toLocaleString()} torrents • Page {page} of {totalPages}
@@ -860,7 +916,7 @@ export default function RealDebridBrowser() {
           </div>
           
           {/* Refresh */}
-          <Tooltip title="Sync with Real-Debrid">
+          <Tooltip title={provider === 'torbox' ? 'Refresh TorBox list' : 'Sync with Real-Debrid'}>
             <IconButton 
               onClick={handleRefresh} 
               className={`rd-refresh-btn ${(loading || syncing) ? 'rd-loading' : ''}`}
@@ -901,7 +957,7 @@ export default function RealDebridBrowser() {
             </Button>
           </Box>
         ) : displayedTorrents.length === 0 ? (
-          <EmptyState search={debouncedSearch} />
+          <EmptyState search={debouncedSearch} providerLabel={providerLabel} />
         ) : (
           <>
             <div className="rd-torrent-list">
@@ -910,6 +966,7 @@ export default function RealDebridBrowser() {
                   key={torrent.id || torrent.name + index}
                   torrent={torrent}
                   index={index}
+                  provider={provider}
                   onPlay={handlePlay}
                   onDelete={(t) => setDeleteDialog({ open: true, torrent: t })}
                   onReinsert={(t) => setReinsertDialog({ open: true, torrent: t })}
@@ -952,9 +1009,13 @@ export default function RealDebridBrowser() {
           Delete Torrent
         </DialogTitle>
         <DialogContent className="rd-confirm-dialog-content">
-          <DialogContentText className="rd-confirm-dialog-text">
-            Are you sure you want to delete "<strong>{deleteDialog.torrent?.name}</strong>"? 
-            This will remove it from Real-Debrid and cannot be undone.
+          <DialogContentText className="rd-confirm-dialog-text" component="div">
+            Are you sure you want to delete “
+            <strong>{deleteDialog.torrent?.name}</strong>
+            ”?{' '}
+            {provider === 'torbox'
+              ? 'This will remove it from your TorBox account permanently and cannot be undone.'
+              : 'This will remove it from Real-Debrid and cannot be undone.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -1079,12 +1140,11 @@ export default function RealDebridBrowser() {
                         e.stopPropagation();
                         if (!filePickerDialog.torrent) return;
                         try {
-                          const fileName = file.name;
-                          const url = await unrestrictFile(filePickerDialog.torrent.id, fileName);
+                          const url = await unrestrictFile(filePickerDialog.torrent.id, file);
                           if (!url) throw new Error('No unrestricted link returned');
                           const link = document.createElement('a');
                           link.href = url;
-                          link.setAttribute('download', getBaseName(fileName));
+                          link.setAttribute('download', getBaseName(file.name));
                           document.body.appendChild(link);
                           link.click();
                           link.remove();

@@ -61,6 +61,7 @@ CineSync creates symbolic links from source directories to destination directori
 - **🧰 Built-in Rclone & RD Repair** - Ships with rclone plus an integrated RealDebrid repair flow to automatically re-check and fix broken items
 - **🛠️ Bazarrr Integration** - Native Bazarrr hookup to enrich metadata and subtitles alongside your library automation
 - **⚡ Instant RD Mounts** - RealDebrid mounts with IO maps for smooth playback and near-instant availability
+- **📦 TorBox Support** - TorBox integration alongside Real-Debrid, including dashboard, browser, and native WebDAV rclone mounts
 
 ## Web Interface Features
 

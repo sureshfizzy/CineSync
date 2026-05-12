@@ -17,36 +17,37 @@ interface CineSyncMountGuideProps {
   config: RcloneConfig;
   serverOS: string;
   showGuide: boolean;
+  provider?: 'realdebrid' | 'torbox';
 }
 
 const CineSyncMountGuide: React.FC<CineSyncMountGuideProps> = ({
   config,
   serverOS,
   showGuide,
+  provider = 'realdebrid',
 }) => {
   const theme = useTheme();
   const isWindows = serverOS === 'windows';
 
-  const configFileExample = `[CineSync]
+  const remoteName = 'CineSync';
+  const proxyPath = provider === 'torbox' ? '/api/torbox/webdav/' : '/api/realdebrid/webdav/';
+  const remoteUrl = `http://localhost:8082${proxyPath}`;
+  const remoteUser = 'admin';
+
+  const configFileExample = `[${remoteName}]
 type = webdav
-url = http://localhost:8082/api/realdebrid/webdav/
-user = admin
+url = ${remoteUrl}
+user = ${remoteUser}
 pass = ENCRYPTED_PASSWORD_HERE
 vendor = other`;
 
-  const createConfigCommand = isWindows
-    ? `rclone config create CineSync webdav \\
-  url http://localhost:8082/api/realdebrid/webdav/ \\
-  user admin \\
-  pass YOUR_PASSWORD \\
-  vendor other`
-    : `rclone config create CineSync webdav \\
-  url http://localhost:8082/api/realdebrid/webdav/ \\
-  user admin \\
+  const createConfigCommand = `rclone config create ${remoteName} webdav \\
+  url ${remoteUrl} \\
+  user ${remoteUser} \\
   pass YOUR_PASSWORD \\
   vendor other`;
 
-  const exampleMountPath = isWindows ? 'Z:\\' : '/mnt/realdebrid';
+  const exampleMountPath = isWindows ? 'Z:\\' : provider === 'torbox' ? '/mnt/torbox' : '/mnt/realdebrid';
   const exampleCachePath = isWindows ? 'C:\\temp\\rclone-cache' : '/tmp/rclone-cache';
   const exampleLogPath = isWindows ? 'C:\\temp\\rclone.log' : '/tmp/rclone.log';
 
@@ -63,7 +64,7 @@ vendor = other`;
           }}
         >
           <Typography variant="body2">
-            <strong>Manual Mount Guide:</strong> This guide is only needed if you want to manually mount CineSync using rclone. <strong>Not necessary when using the inbuilt mount feature</strong> - the backend automatically manages the rclone config with remote <strong>CineSync</strong>.
+            <strong>Manual Mount Guide:</strong> This guide is only needed if you want to manually mount {remoteName} using rclone. <strong>Not necessary when using the inbuilt mount feature</strong> - the backend automatically manages the rclone config with remote <strong>{remoteName}</strong>.
           </Typography>
         </Alert>
 
@@ -308,7 +309,7 @@ vendor = other`;
                 mb: { xs: 1, md: 1.5 },
                 fontSize: '0.875rem'
               }}>
-              The config file contains the CineSync remote configuration:
+              The config file contains the {remoteName} remote configuration:
             </Typography>
             <Box
               sx={{
@@ -428,7 +429,7 @@ vendor = other`;
             </Box>
             <Alert severity="warning" sx={{ mt: 1.5, borderRadius: 1.5 }} icon={<Science fontSize="small" />}>
               <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                <strong>Note:</strong> The backend automatically creates and manages the rclone config in the <code style={{ background: alpha(theme.palette.warning.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>db/cinesync.conf</code> file within the CineSync installation directory. Manual config creation is optional.
+                <strong>Note:</strong> The backend automatically creates and manages the rclone config in the <code style={{ background: alpha(theme.palette.warning.main, 0.1), padding: '1px 4px', borderRadius: '3px', fontSize: '0.8rem' }}>{provider === 'torbox' ? 'db/torbox.conf' : 'db/cinesync.conf'}</code> file within the CineSync installation directory. Manual config creation is optional.
               </Typography>
             </Alert>
           </CardContent>
@@ -514,7 +515,7 @@ vendor = other`;
                 }}
               >
                 {isWindows ? (
-                  `rclone mount CineSync: ${exampleMountPath} \\
+                  `rclone mount ${remoteName}: ${exampleMountPath} \\
   --vfs-cache-mode ${config.vfsCacheMode || 'full'} \\
   --cache-dir "${exampleCachePath}" \\
   --vfs-cache-max-size ${config.vfsCacheMaxSize || '100G'} \\
@@ -522,7 +523,7 @@ vendor = other`;
   --buffer-size ${config.bufferSize || '16M'} \\
   --log-file "${exampleLogPath}"`
                 ) : (
-                  `rclone mount CineSync: ${exampleMountPath} \\
+                  `rclone mount ${remoteName}: ${exampleMountPath} \\
   --vfs-cache-mode ${config.vfsCacheMode || 'full'} \\
   --cache-dir "${exampleCachePath}" \\
   --vfs-cache-max-size ${config.vfsCacheMaxSize || '100G'} \\
@@ -637,7 +638,7 @@ vendor = other`;
                           fontSize: '0.85rem',
                         }}
                       >
-                        dir {config.mountPath || (isWindows ? 'Z:' : '/mnt/realdebrid')}
+                        dir {config.mountPath || (isWindows ? 'Z:' : exampleMountPath)}
                       </code>
                     </Box>
                   </Box>
@@ -676,7 +677,7 @@ vendor = other`;
                           fontSize: '0.85rem',
                         }}
                       >
-                        ls {config.mountPath || '/mnt/realdebrid'}
+                        ls {config.mountPath || exampleMountPath}
                       </code>
                     </Box>
                   </Box>
@@ -712,7 +713,7 @@ vendor = other`;
                           fontSize: '0.85rem',
                         }}
                       >
-                        fusermount -u "{config.mountPath || '/mnt/realdebrid'}"
+                        fusermount -u "{config.mountPath || exampleMountPath}"
                       </code>
                     </Box>
                   </Box>

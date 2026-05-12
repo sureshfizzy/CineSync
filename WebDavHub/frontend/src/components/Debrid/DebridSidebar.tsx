@@ -89,7 +89,7 @@ export default function DebridSidebar() {
                       <ListItemText 
                         primary={
                           <Box sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                            Real-Debrid
+                            Debrid
                           </Box>
                         } 
                       />

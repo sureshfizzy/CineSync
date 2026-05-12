@@ -29,6 +29,13 @@ type RcloneMount struct {
 	Waiting       bool
 	WaitingReason string
 	APIKey        string
+	Creds         MountCredentials
+}
+
+// MountCredentials carries the information needed to generate the rclone mount conf
+type MountCredentials struct {
+	APIKey      string
+	TorBoxMount bool
 }
 
 // RcloneManager manages rclone mounts
@@ -66,13 +73,22 @@ func SetMountReady() {
 	mountReady.Store(true)
 }
 
-// IsMountConfigured returns true if rclone mount is enabled and configured with auto-mount
+// IsMountConfigured returns true if a Real-Debrid rclone mount is enabled and configured.
 func IsMountConfigured() bool {
 	cfgMgr := GetConfigManager()
 	cfg := cfgMgr.GetConfig()
-	if !cfg.Enabled {
+	rc := cfg.RcloneSettings
+	if !rc.Enabled || !rc.AutoMountOnStart || rc.MountPath == "" {
 		return false
 	}
+	return cfg.Enabled
+}
+
+// IsRcloneAutoMountConfigured reports whether the shared rclone mount settings
+// are sufficient for an auto-mount, regardless of the active debrid provider.
+func IsRcloneAutoMountConfigured() bool {
+	cfgMgr := GetConfigManager()
+	cfg := cfgMgr.GetConfig()
 	rc := cfg.RcloneSettings
 	return rc.Enabled && rc.AutoMountOnStart && rc.MountPath != ""
 }
@@ -146,7 +162,11 @@ func triggerPendingMount() {
 
 	// Execute the mount in a goroutine to avoid blocking
 	go func() {
-		_, err := rm.Mount(pendingMount.Config, pendingMount.APIKey)
+		creds := pendingMount.Creds
+		if creds.APIKey == "" {
+			creds = MountCredentials{APIKey: pendingMount.APIKey}
+		}
+		_, err := rm.Mount(pendingMount.Config, creds)
 		if err != nil {
 			logger.Error("[Rclone] Failed to execute pending mount for %s: %v", pendingMount.MountPath, err)
 		}
@@ -164,7 +184,7 @@ type MountStatus struct {
 }
 
 // Mount starts an rclone mount
-func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStatus, error) {
+func (rm *RcloneManager) Mount(config RcloneSettings, creds MountCredentials) (*MountStatus, error) {
 	rm.mutex.Lock()
 	defer rm.mutex.Unlock()
 
@@ -190,12 +210,13 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 		delete(rm.mounts, config.MountPath)
 	}
 
-	// Check if torrents are loaded before mounting
-	tm := GetTorrentManager(apiKey)
-	allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
-	torrentCount := 0
-	if ok {
-		torrentCount = allTorrentsMap.Count()
+	torrentCount := 1
+	if !creds.TorBoxMount {
+		tm := GetTorrentManager(creds.APIKey)
+		allTorrentsMap, ok := tm.DirectoryMap.Get(ALL_TORRENTS)
+		if ok {
+			torrentCount = allTorrentsMap.Count()
+		}
 	}
 
 	if torrentCount == 0 {
@@ -205,7 +226,8 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 			Config:        config,
 			Waiting:       true,
 			WaitingReason: "Waiting for torrents to be loaded",
-			APIKey:        apiKey,
+			APIKey:        creds.APIKey,
+			Creds:         creds,
 		}
 		rm.pendingMutex.Lock()
 		rm.pendingMount = pendingMount
@@ -252,13 +274,12 @@ func (rm *RcloneManager) Mount(config RcloneSettings, apiKey string) (*MountStat
 		return &MountStatus{Error: "rclone is not installed or not in PATH"}, fmt.Errorf("rclone is not available")
 	}
 
-	// Create rclone config if it doesn't exist
-	if err := CreateRcloneConfig(apiKey); err != nil {
+	if err := CreateRcloneConfig(creds); err != nil {
 		return &MountStatus{Error: fmt.Sprintf("failed to create rclone config: %v", err)}, err
 	}
 
 	// Build rclone command
-	args := rm.buildRcloneArgs(config)
+	args := rm.buildRcloneArgs(config, creds)
 
 	rcloneCmd := getRcloneCommand()
 
@@ -454,12 +475,12 @@ func (rm *RcloneManager) setProcessAttributes(cmd *exec.Cmd) {
 	}
 }
 
-func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings) []string {
+func (rm *RcloneManager) buildRcloneArgs(config RcloneSettings, creds MountCredentials) []string {
 	args := []string{
 		"mount",
 		config.RemoteName + ":",
 		config.MountPath,
-		"--config", GetRcloneConfigPath(),
+		"--config", rcloneConfigFilePath(creds),
 		"--vfs-cache-mode", config.VfsCacheMode,
 		"--vfs-cache-max-size", config.VfsCacheMaxSize,
 		"--vfs-cache-max-age", config.VfsCacheMaxAge,
@@ -819,6 +840,21 @@ func (rm *RcloneManager) CleanupAllMounts() {
 	logger.Info("All rclone mounts cleaned up")
 }
 
+func GetTorBoxRcloneConfigPath() string {
+	p, err := filepath.Abs(filepath.Join("..", "db", "torbox.conf"))
+	if err != nil {
+		return filepath.Join("..", "db", "torbox.conf")
+	}
+	return p
+}
+
+func rcloneConfigFilePath(creds MountCredentials) string {
+	if creds.TorBoxMount {
+		return GetTorBoxRcloneConfigPath()
+	}
+	return GetRcloneConfigPath()
+}
+
 // GetRcloneConfigPath returns the path to rclone config file
 func GetRcloneConfigPath() string {
 	dbPath, err := filepath.Abs(filepath.Join("..", "db", "cinesync.conf"))
@@ -829,87 +865,88 @@ func GetRcloneConfigPath() string {
 	return dbPath
 }
 
-// CreateRcloneConfig creates a basic rclone config for Real-Debrid
-func CreateRcloneConfig(apiKey string) error {
-	configPath := GetRcloneConfigPath()
+// CreateRcloneConfig writes the rclone config based on the supplied credentials
+func CreateRcloneConfig(creds MountCredentials) error {
+	configPath := rcloneConfigFilePath(creds)
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
 
-	// Ensure config directory exists
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		logger.Warn("Failed to create config directory: %v", err)
 	}
 
-	// Check if config already exists
 	if _, err := os.Stat(configPath); err == nil {
-		return UpdateRcloneConfig(apiKey)
+		return UpdateRcloneConfig(creds)
 	}
 
-	remoteName := "CineSync"
-
-	// Get CineSync credentials for authentication
-	username := env.GetString("CINESYNC_USERNAME", "admin")
-	password := env.GetString("CINESYNC_PASSWORD", "admin")
-	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
-
-	obscuredPassword, err := obscurePassword(password)
+	body, err := buildRcloneConfigBody(creds)
 	if err != nil {
-		logger.Error("Failed to obscure password: %v", err)
-		logger.Warn("Using plain text password as fallback")
-		obscuredPassword = password
+		return err
 	}
 
-	config := fmt.Sprintf(`[%s]
-type = webdav
-url = http://localhost:%d/api/realdebrid/webdav/
-user = %s
-pass = %s
-vendor = other
-`, remoteName, webdavPort, username, obscuredPassword)
-
-	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(body), 0600); err != nil {
 		return fmt.Errorf("failed to write rclone config: %v", err)
 	}
-
 	return nil
 }
 
-// UpdateRcloneConfig updates the rclone config with new API key
-func UpdateRcloneConfig(apiKey string) error {
-	configPath := GetRcloneConfigPath()
+// UpdateRcloneConfig regenerates the rclone config file in-place
+func UpdateRcloneConfig(creds MountCredentials) error {
+	configPath := rcloneConfigFilePath(creds)
 	if configPath == "" {
 		return fmt.Errorf("unable to determine rclone config path")
 	}
-	remoteName := "CineSync"
-	// Ensure config directory exists
+
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		logger.Warn("Failed to create config directory: %v", err)
 	}
 
-	// Create updated config for Real-Debrid Virtual Filesystem
-	username := env.GetString("CINESYNC_USERNAME", "admin")
-	password := env.GetString("CINESYNC_PASSWORD", "admin")
-	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
-
-	obscuredPassword, err := obscurePassword(password)
+	body, err := buildRcloneConfigBody(creds)
 	if err != nil {
-		logger.Error("Failed to obscure password: %v", err)
-		obscuredPassword = password
+		return err
 	}
 
-	config := fmt.Sprintf(`[%s]
-type = webdav
-url = http://localhost:%d/api/realdebrid/webdav/
-user = %s
-pass = %s
-vendor = other
-`, remoteName, webdavPort, username, obscuredPassword)
-
-	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(body), 0600); err != nil {
 		return fmt.Errorf("failed to write rclone config: %v", err)
 	}
 	return nil
+}
+
+func buildRcloneConfigBody(creds MountCredentials) (string, error) {
+	user := env.GetString("CINESYNC_USERNAME", "admin")
+	pass := env.GetString("CINESYNC_PASSWORD", "admin")
+	webdavPort := env.GetInt("CINESYNC_PORT", 8082)
+
+	obscured, err := obscurePassword(pass)
+	if err != nil {
+		logger.Error("Failed to obscure rclone webdav password: %v", err)
+		logger.Warn("Falling back to plain-text password in rclone config")
+		obscured = pass
+	}
+
+	proxyPath := "/api/realdebrid/webdav/"
+	if creds.TorBoxMount {
+		proxyPath = "/api/torbox/webdav/"
+	}
+	host := rcloneMountHost()
+	url := fmt.Sprintf("http://%s:%d%s", host, webdavPort, proxyPath)
+
+	return fmt.Sprintf(`[CineSync]
+type = webdav
+url = %s
+user = %s
+pass = %s
+vendor = other
+`, url, user, obscured), nil
+}
+
+func rcloneMountHost() string {
+	ip := strings.TrimSpace(env.GetString("CINESYNC_IP", ""))
+	if ip == "" || ip == "0.0.0.0" || ip == "::" || ip == "[::]" {
+		return "127.0.0.1"
+	}
+	return ip
 }

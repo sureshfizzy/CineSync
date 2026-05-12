@@ -109,8 +109,7 @@ func APIKeyMiddleware(next http.Handler) http.Handler {
 			provided = strings.TrimSpace(r.URL.Query().Get("apiKey"))
 		}
 
-		// Allow rclone (Basic Auth) to access Real-Debrid WebDAV proxy
-		if provided == "" && strings.HasPrefix(r.URL.Path, "/api/realdebrid/webdav") {
+		if provided == "" && (strings.HasPrefix(r.URL.Path, "/api/realdebrid/webdav") || strings.HasPrefix(r.URL.Path, "/api/torbox/webdav")) {
 			if user, pass, ok := r.BasicAuth(); ok {
 				creds := auth.GetCredentials()
 				if subtle.ConstantTimeCompare([]byte(user), []byte(creds.Username)) == 1 &&
@@ -3136,17 +3135,17 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type MediaFileInfo struct {
-		Name            string `json:"name"`
-		Type            string `json:"type"`
-		Path            string `json:"path"`
-		FullPath        string `json:"fullPath"`
-		SourcePath      string `json:"sourcePath"`
-		DestinationPath string `json:"destinationPath"`
-		Size            string `json:"size"`
-		Modified        string `json:"modified"`
-		SeasonNumber    *int   `json:"seasonNumber,omitempty"`
-		EpisodeNumber   *int   `json:"episodeNumber,omitempty"`
-		Quality         string `json:"quality,omitempty"`
+		Name                 string `json:"name"`
+		Type                 string `json:"type"`
+		Path                 string `json:"path"`
+		FullPath             string `json:"fullPath"`
+		SourcePath           string `json:"sourcePath"`
+		DestinationPath      string `json:"destinationPath"`
+		Size                 string `json:"size"`
+		Modified             string `json:"modified"`
+		SeasonNumber         *int   `json:"seasonNumber,omitempty"`
+		EpisodeNumber        *int   `json:"episodeNumber,omitempty"`
+		Quality              string `json:"quality,omitempty"`
 		InCinemasReleaseDate string `json:"inCinemasReleaseDate,omitempty"`
 		DigitalReleaseDate   string `json:"digitalReleaseDate,omitempty"`
 		PhysicalReleaseDate  string `json:"physicalReleaseDate,omitempty"`
@@ -3213,17 +3212,17 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		}
 
 		results = append(results, MediaFileInfo{
-			Name:            name,
-			Type:            "file",
-			Path:            apiPath,
-			FullPath:        apiPath,
-			SourcePath:      destPath.String,
-			DestinationPath: destPath.String,
-			Size:            sizeStr,
-			Modified:        processedAt.String,
-			SeasonNumber:    seasonPtr,
-			EpisodeNumber:   episodePtr,
-			Quality:         quality,
+			Name:                 name,
+			Type:                 "file",
+			Path:                 apiPath,
+			FullPath:             apiPath,
+			SourcePath:           destPath.String,
+			DestinationPath:      destPath.String,
+			Size:                 sizeStr,
+			Modified:             processedAt.String,
+			SeasonNumber:         seasonPtr,
+			EpisodeNumber:        episodePtr,
+			Quality:              quality,
 			InCinemasReleaseDate: inCinemasReleaseDate,
 			DigitalReleaseDate:   digitalReleaseDate,
 			PhysicalReleaseDate:  physicalReleaseDate,

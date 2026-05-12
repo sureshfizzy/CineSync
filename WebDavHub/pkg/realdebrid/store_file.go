@@ -98,12 +98,23 @@ type RepairState struct {
 }
 
 // OpenCineSyncStore opens/creates the file-based store
-func OpenCineSyncStore(baseDir string) (*CineSyncStore, error) {
-	// Ensure directories exist
+func OpenCineSyncStore(baseDir string, createRepairDir ...bool) (*CineSyncStore, error) {
+	cr := true
+	if len(createRepairDir) > 0 {
+		cr = createRepairDir[0]
+	}
+	return openCineSyncStore(baseDir, cr)
+}
+
+func openCineSyncStore(baseDir string, createRepairDir bool) (*CineSyncStore, error) {
 	infoDir := filepath.Join(baseDir, "info")
 	repairDir := filepath.Join(baseDir, "repair")
 
-	for _, dir := range []string{baseDir, infoDir, repairDir} {
+	dirs := []string{baseDir, infoDir}
+	if createRepairDir {
+		dirs = append(dirs, repairDir)
+	}
+	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
