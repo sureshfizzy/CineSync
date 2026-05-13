@@ -167,8 +167,12 @@ func externalRCFormArgs(dirs []string, mountName string, recursive bool, async *
 func refreshExternalRcloneVFS(request externalRcloneRefreshRequest) (map[string]interface{}, int, error) {
 	cfg := realdebrid.GetConfigManager().GetConfig()
 	rc := cfg.RcloneSettings
-	if !rc.ServeFromRclone {
-		return nil, http.StatusBadRequest, fmt.Errorf("external rclone mount mode is not enabled")
+	if strings.TrimSpace(rc.ExternalRcServerURL) == "" {
+		return map[string]interface{}{
+			"success": true,
+			"skipped": true,
+			"reason":  "external RC URL not configured",
+		}, http.StatusOK, nil
 	}
 
 	baseURL, err := externalRCBaseURL(rc.ExternalRcServerURL, rc.ExternalRcPort)
@@ -259,7 +263,7 @@ func RcloneRefreshForDirs(dirs []string, source string) {
 	}
 
 	recursive := false
-	async := true
+	async := false
 	response, statusCode, err := refreshExternalRcloneVFS(externalRcloneRefreshRequest{
 		Dirs:      dirs,
 		Recursive: &recursive,

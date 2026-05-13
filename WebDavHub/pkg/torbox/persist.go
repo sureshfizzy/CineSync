@@ -54,19 +54,19 @@ func torBoxProgress(status string) float64 {
 	return 0
 }
 
-func toRDTorrentItem(it TorrentItem) realdebrid.TorrentItem {
+func adaptTorrentItem(it TorrentItem) realdebrid.TorrentItem {
 	id := strconv.Itoa(it.ID)
 	name := strings.TrimSpace(it.Name)
 	if name == "" {
 		name = "torrent-" + id
 	}
-	rdFiles := make([]realdebrid.TorrentFile, 0, len(it.Files))
+	files := make([]realdebrid.TorrentFile, 0, len(it.Files))
 	for _, f := range it.Files {
 		p := strings.TrimSpace(f.Name)
 		if p == "" {
 			p = strings.TrimSpace(f.ShortName)
 		}
-		rdFiles = append(rdFiles, realdebrid.TorrentFile{
+		files = append(files, realdebrid.TorrentFile{
 			ID:       f.ID,
 			Path:     p,
 			Bytes:    f.Size,
@@ -80,23 +80,31 @@ func toRDTorrentItem(it TorrentItem) realdebrid.TorrentItem {
 		Files:    len(it.Files),
 		Added:    it.Added,
 		Status:   it.Status,
-		FileList: rdFiles,
+		FileList: files,
 	}
 }
 
-func toRDTorrentInfo(it TorrentItem) *realdebrid.TorrentInfo {
+func AdaptTorrentItems(items []TorrentItem) []realdebrid.TorrentItem {
+	out := make([]realdebrid.TorrentItem, 0, len(items))
+	for i := range items {
+		out = append(out, adaptTorrentItem(items[i]))
+	}
+	return out
+}
+
+func adaptTorrentInfo(it TorrentItem) *realdebrid.TorrentInfo {
 	id := strconv.Itoa(it.ID)
 	name := strings.TrimSpace(it.Name)
 	if name == "" {
 		name = "torrent-" + id
 	}
-	rdFiles := make([]realdebrid.TorrentFile, 0, len(it.Files))
+	files := make([]realdebrid.TorrentFile, 0, len(it.Files))
 	for _, f := range it.Files {
 		p := strings.TrimSpace(f.Name)
 		if p == "" {
 			p = strings.TrimSpace(f.ShortName)
 		}
-		rdFiles = append(rdFiles, realdebrid.TorrentFile{
+		files = append(files, realdebrid.TorrentFile{
 			ID:       f.ID,
 			Path:     p,
 			Bytes:    f.Size,
@@ -113,7 +121,7 @@ func toRDTorrentInfo(it TorrentItem) *realdebrid.TorrentInfo {
 		Progress: torBoxProgress(it.Status),
 		Status:   it.Status,
 		Added:    it.Added,
-		Files:    rdFiles,
+		Files:    files,
 		Links:    []string{},
 	}
 }
@@ -141,13 +149,13 @@ func PersistTorrentList(items []TorrentItem) {
 		}
 	}
 
-	rdItems := make([]realdebrid.TorrentItem, len(items))
+	storeItems := make([]realdebrid.TorrentItem, len(items))
 	for i := range items {
-		rdItems[i] = toRDTorrentItem(items[i])
+		storeItems[i] = adaptTorrentItem(items[i])
 	}
-	_ = st.BulkSaveItems(rdItems, nil)
+	_ = st.BulkSaveItems(storeItems, nil)
 	for i := range items {
-		if err := st.SaveInfo(toRDTorrentInfo(items[i])); err != nil {
+		if err := st.SaveInfo(adaptTorrentInfo(items[i])); err != nil {
 			logger.Warn("[TorBox] persist info %d: %v", items[i].ID, err)
 		}
 	}

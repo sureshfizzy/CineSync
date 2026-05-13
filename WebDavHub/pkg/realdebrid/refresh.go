@@ -370,7 +370,7 @@ func (tm *TorrentManager) performFullRefresh(ctx context.Context) {
 		}
 	done:
 		logger.Debug("[Refresh] File lists loaded for %d new torrents (unrestrict on-demand)", len(newTorrents))
-		notifyNewTorrentDirs(newTorrents)
+		NotifyNewTorrentDirs(newTorrents)
 	}
 
 	if len(removedTorrents) > 0 {
@@ -489,13 +489,14 @@ func notifyQueueSnapshot(torrents []TorrentItem) {
 	OnQueueSnapshot(snapshot)
 }
 
-func notifyNewTorrentDirs(torrents []TorrentItem) {
+func NotifyNewTorrentDirs(torrents []TorrentItem) {
 	if OnNewTorrentsDetected == nil || len(torrents) == 0 {
 		return
 	}
 
 	cfg := GetConfigManager().GetConfig()
-	if !cfg.RcloneSettings.ServeFromRclone {
+	mountPath := strings.TrimSpace(cfg.RcloneSettings.MountPath)
+	if mountPath == "" {
 		return
 	}
 

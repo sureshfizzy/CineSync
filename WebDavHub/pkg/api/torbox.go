@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cinesync/pkg/logger"
+	"cinesync/pkg/realdebrid"
 	"cinesync/pkg/torbox"
 )
 
@@ -38,6 +39,7 @@ func applyTorBoxDiff(items []torbox.TorrentItem, reason string) {
 	tbHaveSeen = true
 	tbDiffMu.Unlock()
 
+	var newTorrents, removedTorrents []torbox.TorrentItem
 	if !hadPrev {
 		logger.Info("[TorBox] Baseline loaded: %d torrents (%s)", len(items), reason)
 	} else {
@@ -50,15 +52,32 @@ func applyTorBoxDiff(items []torbox.TorrentItem, reason string) {
 			newByID[t.ID] = struct{}{}
 			if _, ok := prevByID[t.ID]; !ok {
 				logger.Info("New file added: %s", truncateTorBoxName(t.Name))
+				newTorrents = append(newTorrents, t)
 			}
 		}
 		for _, t := range prev {
 			if _, ok := newByID[t.ID]; !ok {
 				logger.Info("File removed: %s", truncateTorBoxName(t.Name))
+				removedTorrents = append(removedTorrents, t)
 			}
 		}
 	}
 	torbox.PersistTorrentList(items)
+
+	if hadPrev && len(newTorrents) > 0 {
+		realdebrid.NotifyNewTorrentDirs(torbox.AdaptTorrentItems(newTorrents))
+	}
+	if hadPrev && len(removedTorrents) > 0 && realdebrid.OnRemovedTorrentsDetected != nil {
+		filenames := make([]string, 0, len(removedTorrents))
+		for _, t := range removedTorrents {
+			if name := strings.TrimSpace(t.Name); name != "" {
+				filenames = append(filenames, name)
+			}
+		}
+		if len(filenames) > 0 {
+			go realdebrid.OnRemovedTorrentsDetected(filenames)
+		}
+	}
 }
 
 func truncateTorBoxName(name string) string {
