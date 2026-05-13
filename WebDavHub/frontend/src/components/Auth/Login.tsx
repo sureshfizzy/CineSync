@@ -19,7 +19,7 @@ import {
 } from '@mui/icons-material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import { useAuth } from '../../contexts/AuthContext';
+import { getAuthHeaders, useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import logo from '../../assets/logo.png';
@@ -46,8 +46,16 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
   // Check if setup is needed
   useEffect(() => {
     let mounted = true;
+    const headers = getAuthHeaders();
+    if (!headers.Authorization && !headers['X-API-Key']) {
+      setNeedsConfiguration(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     axios
-      .get('/api/config-status')
+      .get('/api/config-status', { headers })
       .then((res) => {
         if (mounted) setNeedsConfiguration(res.data?.needsConfiguration || false);
       })
@@ -301,4 +309,4 @@ export default function Login({ toggleTheme, mode }: { toggleTheme: () => void; 
       </Box>
     </Container>
   );
-} 
+}

@@ -84,7 +84,7 @@ const getRcloneMountMode = (rcloneConfig: Pick<RcloneConfig, 'enabled' | 'serveF
 const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [provider] = useDebridProvider();
+  const [provider, setProvider] = useDebridProvider();
   const [config, setConfig] = useState<RcloneConfig>({
     enabled: false,
     mountPath: '',
@@ -150,9 +150,41 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
   const usesMountPath = mountMode !== 'disabled';
   const isInternalMountMode = mountMode === 'internal';
   const showActionButtons = mountMode !== 'disabled';
+  const rcloneApiBase = provider === 'torbox' ? '/api/torbox/rclone' : '/api/realdebrid/rclone';
 
   const showMessage = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity });
+  };
+
+  const isDebridConfigReady = (data: any) => {
+    return !!data?.config?.enabled && (!!data?.config?.apiKey || !!data?.status?.apiKeySet);
+  };
+
+  const checkMountProvider = async () => {
+    if (provider === 'torbox') {
+      return 'torbox';
+    }
+
+    try {
+      const [realDebridResult, torBoxResult] = await Promise.allSettled([
+        axios.get('/api/realdebrid/config'),
+        axios.get('/api/torbox/config'),
+      ]);
+
+      const realDebridReady =
+        realDebridResult.status === 'fulfilled' && isDebridConfigReady(realDebridResult.value.data);
+      const torBoxReady =
+        torBoxResult.status === 'fulfilled' && isDebridConfigReady(torBoxResult.value.data);
+
+      if (torBoxReady && !realDebridReady) {
+        setProvider('torbox');
+        return 'torbox';
+      }
+    } catch (error) {
+      console.error('Failed to resolve rclone mount provider:', error);
+    }
+
+    return provider;
   };
 
   const loadConfig = async () => {
@@ -281,7 +313,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     setSwitchingMountMode(true);
     try {
       if (mountMode === 'internal' && pendingMountMode !== 'internal' && config.mountPath) {
-        const response = await axios.post('/api/realdebrid/rclone/unmount', {
+        const response = await axios.post(`${rcloneApiBase}/unmount`, {
           path: config.mountPath,
         });
 
@@ -335,11 +367,13 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     try {
       const payload = buildConfigPayload(config);
       const configToSave = payload.rcloneSettings;
+      const mountProvider = await checkMountProvider();
+      const mountApiBase = mountProvider === 'torbox' ? '/api/torbox/rclone' : '/api/realdebrid/rclone';
 
       await axios.put('/api/realdebrid/config', payload);
-      const response = await axios.post('/api/realdebrid/rclone/mount', {
+      const response = await axios.post(`${mountApiBase}/mount`, {
         ...configToSave,
-        mountProvider: provider === 'torbox' ? 'torbox' : 'realdebrid',
+        mountProvider,
       });
       if (response.data.success) {
         if (response.data.status?.waiting) {
@@ -367,7 +401,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
   const unmountRclone = async () => {
     setUnmounting(true);
     try {
-      const response = await axios.post('/api/realdebrid/rclone/unmount', {
+      const response = await axios.post(`${rcloneApiBase}/unmount`, {
         path: config.mountPath
       });
       if (response.data.success) {
@@ -411,7 +445,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
     if (isPolling || status?.waiting) {
       interval = setInterval(async () => {
         try {
-          const response = await axios.get(`/api/realdebrid/rclone/status?path=${encodeURIComponent(config.mountPath)}`);
+          const response = await axios.get(`${rcloneApiBase}/status?path=${encodeURIComponent(config.mountPath)}`);
           if (response.data.status) {
             const newStatus = response.data.status;
             setStatus(prevStatus => {
@@ -436,7 +470,7 @@ const RcloneSettings: React.FC<RcloneSettingsProps> = ({ stackInfoOnTop = false 
         clearInterval(interval);
       }
     };
-  }, [isPolling, status?.waiting]);
+  }, [isPolling, status?.waiting, rcloneApiBase, config.mountPath]);
 
   useEffect(() => {
     if (status?.mounted && isPolling) {

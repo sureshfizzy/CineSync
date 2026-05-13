@@ -670,7 +670,7 @@ func (cm *ConfigManager) saveConfig() error {
 		return err
 	}
 
-	logger.Info("Real-Debrid configuration saved successfully")
+	logger.Info("Configuration saved successfully")
 	return nil
 }
 

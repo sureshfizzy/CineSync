@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -111,6 +112,47 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
+// ParseJWTClaims verifies a JWT issued by CineSync and returns its claims.
+func ParseJWTClaims(tokenStr string) (*JWTClaims, error) {
+	tokenStr = strings.TrimSpace(tokenStr)
+	if tokenStr == "" {
+		return nil, fmt.Errorf("missing token")
+	}
+
+	token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	claims, ok := token.Claims.(*JWTClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+	return claims, nil
+}
+
+// ValidateJWTString verifies a JWT issued by CineSync.
+func ValidateJWTString(tokenStr string) bool {
+	_, err := ParseJWTClaims(tokenStr)
+	return err == nil
+}
+
+// HasValidJWT checks Authorization: Bearer and token query parameter auth.
+func HasValidJWT(r *http.Request) bool {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(header), "bearer ") {
+		return ValidateJWTString(strings.TrimSpace(header[7:]))
+	}
+	return ValidateJWTString(r.URL.Query().Get("token"))
+}
+
 // GenerateJWT generates a JWT for a given username
 func GenerateJWT(username string) (string, error) {
 	claims := JWTClaims{
@@ -157,10 +199,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
-		})
-		if err != nil || !token.Valid {
+		if _, err := ParseJWTClaims(tokenStr); err != nil {
 			logger.Warn("Invalid or expired token for path %s: %v", r.URL.Path, err)
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
@@ -203,10 +242,7 @@ func HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	valid := false
 	if strings.HasPrefix(header, "Bearer ") {
 		tokenStr := strings.TrimPrefix(header, "Bearer ")
-		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
-		})
-		if err == nil && token.Valid {
+		if ValidateJWTString(tokenStr) {
 			valid = true
 		}
 	}
@@ -254,16 +290,9 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokenStr := strings.TrimPrefix(header, "Bearer ")
-	token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
-	if err != nil || !token.Valid {
+	claims, err := ParseJWTClaims(tokenStr)
+	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-		return
-	}
-	claims, ok := token.Claims.(*JWTClaims)
-	if !ok {
-		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

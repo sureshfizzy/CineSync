@@ -21,6 +21,7 @@ import ConfigurationPlaceholder from './ConfigurationPlaceholder';
 import axios from 'axios';
 import { normalizeMediaType } from '../../utils/mediaType';
 import MediaSearchModal from '../MediaDashboard/MediaSearchModal';
+import { getAuthHeaders } from '../../contexts/AuthContext';
 
 const ITEMS_PER_PAGE = 100;
 
@@ -182,7 +183,7 @@ const FileBrowserContent: React.FC = () => {
   useEffect(() => {
     const checkConfigStatus = async () => {
       try {
-        const response = await axios.get('/api/config-status');
+        const response = await axios.get('/api/config-status', { headers: getAuthHeaders() });
         setConfigStatus(response.data);
       } catch (err) {
         console.error('Failed to check config status:', err);

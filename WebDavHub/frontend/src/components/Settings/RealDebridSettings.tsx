@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, TextField, Switch, FormControlLabel, Button, Alert, Snackbar, CircularProgress, Chip, Stack, Divider, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, useTheme, useMediaQuery, alpha, List, ListItem, ListItemText, ListItemSecondaryAction } from '@mui/material';
 import { CloudDownload, Settings, CheckCircle, Error, Refresh, Visibility, VisibilityOff, Science, Speed, Add, Delete, SwapHoriz } from '@mui/icons-material';
 import axios from 'axios';
+import { useDebridProvider } from '../../contexts/DebridProviderContext';
 
 interface TokenStatus {
   label: string;
@@ -59,6 +60,7 @@ type RealDebridSettingsProps = {
 const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [, setProvider] = useDebridProvider();
   const [config, setConfig] = useState<RealDebridConfig>({
     enabled: false,
     apiKey: '',
@@ -144,6 +146,9 @@ const RealDebridSettings: React.FC<RealDebridSettingsProps> = ({ stackInfoOnTop 
       });
       setStatus(response.data.status);
       setTokenStatuses(response.data.tokenStatuses || []);
+      if (response.data?.config?.enabled && (response.data?.config?.apiKey || response.data?.status?.apiKeySet)) {
+        setProvider('realdebrid');
+      }
       showMessage('Configuration saved successfully');
     } catch (error) {
       console.error('Failed to save Real-Debrid config:', error);

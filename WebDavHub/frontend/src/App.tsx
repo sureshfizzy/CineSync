@@ -8,6 +8,7 @@ import { Dashboard as DashboardIcon } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TmdbProvider } from './contexts/TmdbContext';
 import { ConfigProvider } from './contexts/ConfigContext';
+import { DebridProvider } from './contexts/DebridProviderContext';
 import { SSEProvider } from './components/SSEProvider';
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
 import Layout from './components/Layout/Layout';
@@ -360,11 +361,13 @@ function App() {
         <AuthProvider>
           <SSEProvider>
             <TmdbProvider>
-              <BulkSelectionProvider>
-                <Router>
-                  <AppContent toggleTheme={toggleTheme} mode={mode} />
-                </Router>
-              </BulkSelectionProvider>
+              <DebridProvider>
+                <BulkSelectionProvider>
+                  <Router>
+                    <AppContent toggleTheme={toggleTheme} mode={mode} />
+                  </Router>
+                </BulkSelectionProvider>
+              </DebridProvider>
             </TmdbProvider>
           </SSEProvider>
         </AuthProvider>

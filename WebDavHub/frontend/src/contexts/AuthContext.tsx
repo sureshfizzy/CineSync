@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interceptor = axios.interceptors.request.use(
       (config) => {
 
-        // Skip JWT header for auth-related endpoints and config-status
-        if (config.url?.includes('/api/auth/') || config.url?.includes('/api/config-status')) {
+        // Skip JWT header for auth-related endpoints
+        if (config.url?.includes('/api/auth/')) {
           return config;
         }
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Container, Divider, LinearProgress, Paper, Snackbar, Stack, Tooltip, Typography, alpha, useTheme, Fade, Collapse, IconButton, useMediaQuery } from '@mui/material';
 import { RocketLaunchRounded, FolderSpecialRounded, CloudRounded, CheckCircleRounded, WarningAmberRounded, RefreshRounded, SaveRounded, BoltRounded, SettingsRounded, DriveFileRenameOutlineRounded, NetworkCheckRounded, LiveTvRounded, ApiRounded, StorageRounded, ChevronLeft, ChevronRight, SettingsApplicationsRounded, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { getAuthHeaders, useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { FormField } from '../components/Settings/FormField';
 import RcloneSettings from '../components/Debrid/Settings/RcloneSettings';
@@ -302,7 +302,7 @@ export default function SetupWizard() {
   useEffect(() => {
     const handleRcloneMountChange = async () => {
       try {
-        const rdConfigResp = await axios.get('/api/realdebrid/config');
+        const rdConfigResp = await axios.get('/api/realdebrid/config', { headers: getAuthHeaders() });
         const cfg = rdConfigResp?.data?.config?.rcloneSettings || {};
         setRcloneSummary({
           enabled: !!cfg.enabled,
@@ -340,7 +340,7 @@ export default function SetupWizard() {
     if (currentStep?.id === 'paths') {
       const refreshRcloneSummary = async () => {
         try {
-          const rdConfigResp = await axios.get('/api/realdebrid/config');
+          const rdConfigResp = await axios.get('/api/realdebrid/config', { headers: getAuthHeaders() });
           const cfg = rdConfigResp?.data?.config?.rcloneSettings || {};
           setRcloneSummary({
             enabled: !!cfg.enabled,
@@ -374,7 +374,9 @@ export default function SetupWizard() {
 
   const fetchDefaults = async () => {
     try {
-      const resp = await axios.get('/api/config/defaults', { headers: { 'Cache-Control': 'no-cache' } });
+      const resp = await axios.get('/api/config/defaults', {
+        headers: getAuthHeaders({ 'Cache-Control': 'no-cache' }),
+      });
       if (resp.data?.defaults) {
         return resp.data.defaults as Record<string, string>;
       }
@@ -386,7 +388,7 @@ export default function SetupWizard() {
 
   const loadRcloneSettings = async () => {
     try {
-      const response = await axios.get('/api/realdebrid/config');
+      const response = await axios.get('/api/realdebrid/config', { headers: getAuthHeaders() });
       const settings = response.data?.config?.rcloneSettings || {};
       setMonitoringRcloneSettings({
         mountPath: settings.mountPath || '',
@@ -404,16 +406,20 @@ export default function SetupWizard() {
   const saveMonitoringRcloneSettings = async () => {
     saveRcloneSettings(true);
     try {
-      await axios.put('/api/realdebrid/config', {
-        rcloneSettings: {
-          mountPath: monitoringRcloneSettings.mountPath,
-          externalRcServerUrl: monitoringRcloneSettings.externalRcServerUrl,
-          externalVfsMountName: monitoringRcloneSettings.externalVfsMountName,
-          externalRcPort: monitoringRcloneSettings.externalRcPort,
-          externalRcUsername: monitoringRcloneSettings.externalRcUsername,
-          externalRcPassword: monitoringRcloneSettings.externalRcPassword,
+      await axios.put(
+        '/api/realdebrid/config',
+        {
+          rcloneSettings: {
+            mountPath: monitoringRcloneSettings.mountPath,
+            externalRcServerUrl: monitoringRcloneSettings.externalRcServerUrl,
+            externalVfsMountName: monitoringRcloneSettings.externalVfsMountName,
+            externalRcPort: monitoringRcloneSettings.externalRcPort,
+            externalRcUsername: monitoringRcloneSettings.externalRcUsername,
+            externalRcPassword: monitoringRcloneSettings.externalRcPassword,
+          },
         },
-      });
+        { headers: getAuthHeaders() }
+      );
       setSuccess('External RC monitoring settings synced successfully');
     } catch (error) {
       setError('Failed to sync external RC monitoring settings');
@@ -428,13 +434,14 @@ export default function SetupWizard() {
     try {
       const defaults = await fetchDefaults();
 
+      const authHeaders = getAuthHeaders();
       const [configRes, statusRes, rdConfigResp] = await Promise.all([
         axios.get<ConfigResponse>('/api/config', {
-          headers: { 'Cache-Control': 'no-cache' },
+          headers: { ...authHeaders, 'Cache-Control': 'no-cache' },
           params: { t: Date.now() },
         }),
-        axios.get<ConfigStatus>('/api/config-status'),
-        axios.get('/api/realdebrid/config'),
+        axios.get<ConfigStatus>('/api/config-status', { headers: authHeaders }),
+        axios.get('/api/realdebrid/config', { headers: authHeaders }),
       ]);
 
       const cfg = rdConfigResp?.data?.config?.rcloneSettings || {};
@@ -532,11 +539,11 @@ export default function SetupWizard() {
 
     try {
       setSaving(true);
-      await axios.post('/api/config/update-silent', { updates });
+      await axios.post('/api/config/update-silent', { updates }, { headers: getAuthHeaders() });
       setSuccess('Configuration saved successfully');
       setError(null);
       setInitialValues(values);
-      const statusRes = await axios.get<ConfigStatus>('/api/config-status');
+      const statusRes = await axios.get<ConfigStatus>('/api/config-status', { headers: getAuthHeaders() });
       setStatus(statusRes.data);
       window.dispatchEvent(
         new CustomEvent('config-status-refresh', { detail: { timestamp: Date.now() } })
@@ -957,12 +964,14 @@ export default function SetupWizard() {
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{
                       mb: 2
                     }}>
-                      <Chip
-                        label={`${requiredInStep.length} required in this step`}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
+                      {requiredInStep.length > 0 && (
+                        <Chip
+                          label={`${requiredInStep.length} required in this step`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      )}
                       {missingRequired.length > 0 && (
                         <Chip
                           label={`${missingRequired.length} missing`}

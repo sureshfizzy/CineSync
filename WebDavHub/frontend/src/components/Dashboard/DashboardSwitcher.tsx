@@ -1,16 +1,11 @@
 import { useLocation } from 'react-router-dom';
 import DashboardCurrent from './Dashboard';
-import { DebridProvider } from '../../contexts/DebridProviderContext';
 import MediaDashboardRouter from '../MediaDashboard/MediaDashboardRouter';
 
 export default function DashboardSwitcher() {
   const location = useLocation();
 
-  const mediaRoutes = (
-    <DebridProvider>
-      <MediaDashboardRouter />
-    </DebridProvider>
-  );
+  const mediaRoutes = <MediaDashboardRouter />;
 
   if (location.pathname.startsWith('/Mediadashboard/')) {
     return mediaRoutes;

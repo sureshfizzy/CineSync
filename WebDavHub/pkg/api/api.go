@@ -84,13 +84,7 @@ func APIKeyMiddleware(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			// Allow JWT-authenticated requests to pass without API key
-			authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-			if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+			if auth.HasValidJWT(r) {
 				next.ServeHTTP(w, r)
 				return
 			}

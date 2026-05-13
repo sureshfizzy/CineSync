@@ -1022,6 +1022,15 @@ func HandleRealDebridStatus(w http.ResponseWriter, r *http.Request) {
 
 // HandleRcloneMount handles rclone mount requests
 func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
+	handleRcloneMount(w, r, "")
+}
+
+// HandleTorBoxRcloneMount handles TorBox rclone mount requests.
+func HandleTorBoxRcloneMount(w http.ResponseWriter, r *http.Request) {
+	handleRcloneMount(w, r, "torbox")
+}
+
+func handleRcloneMount(w http.ResponseWriter, r *http.Request, forcedMountProvider string) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -1107,7 +1116,9 @@ func HandleRcloneMount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mountProvider := "realdebrid"
-	if mp, ok := rcloneConfigMap["mountProvider"].(string); ok && strings.TrimSpace(mp) != "" {
+	if forcedMountProvider != "" {
+		mountProvider = strings.ToLower(strings.TrimSpace(forcedMountProvider))
+	} else if mp, ok := rcloneConfigMap["mountProvider"].(string); ok && strings.TrimSpace(mp) != "" {
 		mountProvider = strings.ToLower(strings.TrimSpace(mp))
 	}
 	delete(rcloneConfigMap, "mountProvider")

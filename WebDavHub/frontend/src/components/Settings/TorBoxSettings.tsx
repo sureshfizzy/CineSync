@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, FormControlLabel, Snackbar, Stack, Switch, TextField, Typography, alpha, useMediaQuery, useTheme } from '@mui/material';
 import { CloudDownload, Science } from '@mui/icons-material';
 import axios from 'axios';
+import { useDebridProvider } from '../../contexts/DebridProviderContext';
 
 type TorBoxConfig = {
   enabled: boolean;
@@ -22,6 +23,7 @@ type TorBoxStatus = {
 export default function TorBoxSettings() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [, setProvider] = useDebridProvider();
   const [config, setConfig] = useState<TorBoxConfig>({
     enabled: false,
     apiKey: '',
@@ -59,6 +61,9 @@ export default function TorBoxSettings() {
       const res = await axios.put('/api/torbox/config', config);
       setConfig(res.data?.config || config);
       setStatus(res.data?.status || null);
+      if (res.data?.config?.enabled && (res.data?.config?.apiKey || res.data?.status?.apiKeySet)) {
+        setProvider('torbox');
+      }
       showMessage('TorBox configuration saved', 'success');
     } catch (e: any) {
       showMessage(e?.response?.data || 'Failed to save TorBox configuration', 'error');
@@ -199,4 +204,3 @@ export default function TorBoxSettings() {
     </Box>
   );
 }
-
