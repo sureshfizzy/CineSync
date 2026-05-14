@@ -247,7 +247,8 @@ func initializeMediaHubTables(db *sql.DB) error {
 			overview TEXT, runtime INTEGER, original_title TEXT, status TEXT, release_date TEXT,
 				in_cinemas_release_date TEXT, digital_release_date TEXT, physical_release_date TEXT,
 			first_air_date TEXT, last_air_date TEXT, genres TEXT, certification TEXT,
-			episode_title TEXT, total_episodes INTEGER)`,
+			episode_title TEXT, total_episodes INTEGER, show_id INTEGER, season_id INTEGER,
+			episode_id INTEGER, movie_id INTEGER)`,
 		`CREATE TABLE IF NOT EXISTS processed_files_archive (
 			file_path TEXT PRIMARY KEY, destination_path TEXT, archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE TABLE IF NOT EXISTS deleted_files (
@@ -257,7 +258,40 @@ func initializeMediaHubTables(db *sql.DB) error {
 			language TEXT, quality TEXT, tvdb_id TEXT, league_id TEXT, sportsdb_event_id TEXT,
 			sport_name TEXT, sport_round INTEGER, sport_location TEXT, sport_session TEXT,
 			sport_venue TEXT, sport_date TEXT, file_size INTEGER, processed_at TEXT,
-			deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deletion_reason TEXT, trash_file_name TEXT)`,
+			deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deletion_reason TEXT, trash_file_name TEXT,
+			show_id INTEGER, season_id INTEGER, episode_id INTEGER)`,
+		`CREATE TABLE IF NOT EXISTS movies (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, tmdb_id TEXT UNIQUE, imdb_id TEXT,
+			proper_name TEXT, year TEXT, status TEXT, overview TEXT, genres TEXT,
+			release_date TEXT, certification TEXT, original_language TEXT, original_title TEXT,
+			is_anime_genre INTEGER DEFAULT 0, runtime INTEGER, base_path TEXT, root_folder TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS tv_shows (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, tmdb_id TEXT UNIQUE, tvdb_id TEXT,
+			imdb_id TEXT, proper_name TEXT, year TEXT, status TEXT, overview TEXT, genres TEXT,
+			first_air_date TEXT, last_air_date TEXT, certification TEXT, original_language TEXT,
+			original_title TEXT, is_anime_genre INTEGER DEFAULT 0, runtime INTEGER,
+			base_path TEXT, root_folder TEXT, total_episodes INTEGER DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at INTEGER
+		)`,
+		`CREATE TABLE IF NOT EXISTS tv_seasons (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, show_id INTEGER NOT NULL,
+			season_number INTEGER NOT NULL, total_episodes INTEGER DEFAULT 0,
+			episode_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(show_id, season_number),
+			FOREIGN KEY(show_id) REFERENCES tv_shows(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS episodes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, show_id INTEGER NOT NULL,
+			season_id INTEGER NOT NULL, season_number INTEGER NOT NULL,
+			episode_number INTEGER NOT NULL, absolute_episode_number INTEGER,
+			title TEXT, overview TEXT, air_date TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at INTEGER,
+			UNIQUE(show_id, season_number, episode_number),
+			FOREIGN KEY(show_id) REFERENCES tv_shows(id),
+			FOREIGN KEY(season_id) REFERENCES tv_seasons(id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS indexers (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
@@ -346,6 +380,14 @@ func initializeMediaHubTables(db *sql.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_download_queue_tmdb_id ON download_queue(tmdb_id)",
 		"CREATE INDEX IF NOT EXISTS idx_download_queue_media_type ON download_queue(media_type)",
 		"CREATE INDEX IF NOT EXISTS idx_download_queue_added_at ON download_queue(added_at DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id)",
+		"CREATE INDEX IF NOT EXISTS idx_movies_proper_name ON movies(proper_name)",
+		"CREATE INDEX IF NOT EXISTS idx_tv_shows_tmdb_id ON tv_shows(tmdb_id)",
+		"CREATE INDEX IF NOT EXISTS idx_tv_shows_proper_name ON tv_shows(proper_name)",
+		"CREATE INDEX IF NOT EXISTS idx_tv_seasons_show_id ON tv_seasons(show_id)",
+		"CREATE INDEX IF NOT EXISTS idx_episodes_show_id ON episodes(show_id)",
+		"CREATE INDEX IF NOT EXISTS idx_episodes_season_id ON episodes(season_id)",
+		"CREATE INDEX IF NOT EXISTS idx_episodes_show_season ON episodes(show_id, season_number)",
 	}
 
 	for _, table := range tables {
@@ -379,6 +421,9 @@ func initializeMediaHubTables(db *sql.DB) error {
 		{"file_size", "INTEGER"},
 		{"processed_at", "TEXT"},
 		{"deletion_reason", "TEXT"},
+		{"show_id", "INTEGER"},
+		{"season_id", "INTEGER"},
+		{"episode_id", "INTEGER"},
 	})
 
 	for _, index := range indexes {
