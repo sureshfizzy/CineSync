@@ -137,6 +137,9 @@ func handleTorBoxPropfind(w http.ResponseWriter, r *http.Request, reqPath string
 			if name == "" {
 				name = strings.TrimSpace(f.ShortName)
 			}
+			if !realdebrid.IsVideoFile(name) {
+				continue
+			}
 			base := path.Base(name)
 			if base == "" || base == "." || base == "/" {
 				continue
@@ -190,6 +193,9 @@ func handleTorBoxGet(w http.ResponseWriter, r *http.Request, apiKey string, reqP
 		name := strings.TrimSpace(files[i].Name)
 		if name == "" {
 			name = strings.TrimSpace(files[i].ShortName)
+		}
+		if !realdebrid.IsVideoFile(name) {
+			continue
 		}
 		if path.Base(name) == baseName {
 			target = &files[i]

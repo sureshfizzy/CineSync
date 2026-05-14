@@ -173,12 +173,13 @@ func (tm *TorrentManager) saveAllTorrents(list []TorrentItem) {
 	}(list)
 }
 
-// IsVideoFile checks if a file is a video file based on its extension
+// IsVideoFile checks if a file is a video file or subtitle file based on its extension
 func IsVideoFile(filename string) bool {
 	videoExtensions := map[string]bool{
 		".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".wmv": true,
 		".flv": true, ".webm": true, ".m4v": true, ".mpg": true, ".mpeg": true,
 		".3gp": true, ".ogv": true, ".ts": true, ".m2ts": true, ".mts": true,
+		".srt": true,
 	}
 
 	ext := ""
