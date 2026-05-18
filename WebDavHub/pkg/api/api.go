@@ -3102,6 +3102,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 
 	tmdbId := strings.TrimSpace(r.URL.Query().Get("tmdbId"))
 	mediaType := strings.TrimSpace(r.URL.Query().Get("mediaType"))
+	fileType := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("fileType")))
 	if tmdbId == "" {
 		http.Error(w, "tmdbId is required", http.StatusBadRequest)
 		return
@@ -3140,6 +3141,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 		SeasonNumber         *int   `json:"seasonNumber,omitempty"`
 		EpisodeNumber        *int   `json:"episodeNumber,omitempty"`
 		Quality              string `json:"quality,omitempty"`
+		FileType             string `json:"fileType,omitempty"`
 		InCinemasReleaseDate string `json:"inCinemasReleaseDate,omitempty"`
 		DigitalReleaseDate   string `json:"digitalReleaseDate,omitempty"`
 		PhysicalReleaseDate  string `json:"physicalReleaseDate,omitempty"`
@@ -3167,13 +3169,18 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		name := filepath.Base(destPath.String)
+		responseFileType, includeFile := mediaFileType(name, fileType)
+		if !includeFile {
+			continue
+		}
+
 		if quality == "" {
-			if matches := bracketRe.FindAllStringSubmatch(filepath.Base(destPath.String), -1); len(matches) > 0 {
+			if matches := bracketRe.FindAllStringSubmatch(name, -1); len(matches) > 0 {
 				quality = matches[len(matches)-1][1]
 			}
 		}
 
-		name := filepath.Base(destPath.String)
 		apiPath := destPath.String
 		if filepath.IsAbs(destPath.String) {
 			rel, relErr := filepath.Rel(rootDir, destPath.String)
@@ -3217,6 +3224,7 @@ func HandleMediaFiles(w http.ResponseWriter, r *http.Request) {
 			SeasonNumber:         seasonPtr,
 			EpisodeNumber:        episodePtr,
 			Quality:              quality,
+			FileType:             responseFileType,
 			InCinemasReleaseDate: inCinemasReleaseDate,
 			DigitalReleaseDate:   digitalReleaseDate,
 			PhysicalReleaseDate:  physicalReleaseDate,

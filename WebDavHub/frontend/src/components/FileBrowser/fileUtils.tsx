@@ -2,12 +2,36 @@
 import { FolderOpen as FolderOpenIcon, InsertDriveFile as FileIcon, Image as ImageIcon, Movie as MovieIcon, Description as DescriptionIcon } from '@mui/icons-material';
 import { FileItem, SortOption } from './types';
 
+const videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpg', 'mpeg', '3gp', 'ogv', 'ts', 'm2ts', 'mts', 'strm'];
+const subtitleExtensions = ['srt', 'ass', 'ssa', 'vtt', 'sub', 'idx'];
+
+function getFileExtension(name?: string): string {
+  if (!name) return '';
+  const baseName = name.split(/[\\/]/).pop() || name;
+  const dotIndex = baseName.lastIndexOf('.');
+  if (dotIndex < 0 || dotIndex === baseName.length - 1) return '';
+  return baseName.slice(dotIndex + 1).toLowerCase();
+}
+
+function hasFileExtension(name: string | undefined, extensions: string[]): boolean {
+  const ext = getFileExtension(name);
+  return !!ext && extensions.includes(ext);
+}
+
+export function isVideoFileName(name?: string): boolean {
+  return hasFileExtension(name, videoExtensions);
+}
+
+export function isSubtitleFileName(name?: string): boolean {
+  return hasFileExtension(name, subtitleExtensions);
+}
+
 export function getFileIcon(name: string, type: string) {
   if (type === 'directory') return <FolderOpenIcon color="primary" />;
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext || "")) return <ImageIcon color="secondary" />;
-  if (["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"].includes(ext || "")) return <MovieIcon color="action" />;
-  if (["pdf", "doc", "docx", "txt", "md", "rtf"].includes(ext || "")) return <DescriptionIcon color="success" />;
+  const ext = getFileExtension(name);
+  if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext)) return <ImageIcon color="secondary" />;
+  if (isVideoFileName(name)) return <MovieIcon color="action" />;
+  if (["pdf", "doc", "docx", "txt", "md", "rtf"].includes(ext)) return <DescriptionIcon color="success" />;
   return <FileIcon color="disabled" />;
 }
 

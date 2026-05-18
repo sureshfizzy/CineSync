@@ -2,6 +2,7 @@ import { Box, Typography, Tooltip, Paper, CircularProgress, Accordion, Accordion
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { isSubtitleFileName, isVideoFileName } from './fileUtils';
 
 interface MediaPathInfoProps {
   folderName: string;
@@ -27,6 +28,7 @@ interface FileItem {
   size?: string;
   modified?: string;
   isSeasonFolder?: boolean;
+  fileType?: 'video' | 'subtitle';
   sourcePath?: string;
   destinationPath?: string;
   path?: string;
@@ -46,15 +48,23 @@ interface EpisodeInfo {
   path: string;
 }
 
+interface SubtitleInfo {
+  name: string;
+  size: string;
+  modified: string;
+  path: string;
+}
+
 export default function MediaPathInfo({ folderName, currentPath, mediaType, selectedFile, isParentLoading, tmdbId }: MediaPathInfoProps) {
   const [pathInfo, setPathInfo] = useState<PathInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [seasons, setSeasons] = useState<SeasonInfo[]>([]);
+  const [subtitleFiles, setSubtitleFiles] = useState<SubtitleInfo[]>([]);
   const lastRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (selectedFile && (selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path)) {
+    if (selectedFile && isVideoFileName(selectedFile.name) && (selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path)) {
       setPathInfo({
         webdavPath: selectedFile.webdavPath || `Home${selectedFile.path || ''}`,
         fullPath: selectedFile.destinationPath || selectedFile.fullPath || selectedFile.path,
@@ -65,7 +75,6 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
       });
       setLoading(false);
       setError(null);
-      return;
     }
 
     const baseKey = tmdbId ? `tmdb:${tmdbId}` : `${currentPath}|${folderName}`;
@@ -81,8 +90,16 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
         setLoading(true);
 
         if (tmdbId) {
-          const resp = await axios.get('/api/media-files', { params: { tmdbId, mediaType } });
-          const mediaFiles: FileItem[] = Array.isArray(resp.data) ? resp.data : [];
+          const resp = await axios.get('/api/media-files', { params: { tmdbId, mediaType, fileType: 'all' } });
+          const allFiles: FileItem[] = Array.isArray(resp.data) ? resp.data : [];
+          const mediaFiles = allFiles.filter(file => file.fileType === 'video' || isVideoFileName(file.name));
+          const subtitles = allFiles.filter(file => file.fileType === 'subtitle' || isSubtitleFileName(file.name));
+          setSubtitleFiles(subtitles.map(file => ({
+            name: file.name,
+            size: file.size || '--',
+            modified: file.modified || '--',
+            path: file.sourcePath || file.destinationPath || file.path || ''
+          })));
 
           if (mediaType === 'tv') {
             const seasonMap: { [seasonNum: number]: EpisodeInfo[] } = {};
@@ -161,9 +178,7 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
             const seasonResponse = await axios.get(`/api/files${seasonPath}`);
             const episodeFiles = seasonResponse.data.filter((file: FileItem) =>
               file.type === 'file' &&
-              ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'].some(ext =>
-                file.name.toLowerCase().endsWith(ext)
-              )
+              isVideoFileName(file.name)
             );
 
             const episodes: EpisodeInfo[] = [];
@@ -192,18 +207,28 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
           // Movie logic - use selectedFile if provided, otherwise find first media file
           let mediaFile = selectedFile;
 
-          if (!mediaFile && !isParentLoading) {
+          if (!isParentLoading) {
             const folderResponse = await axios.get(`/api/files${folderPath}`);
             const files: FileItem[] = folderResponse.data;
 
-            const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.ts', '.m2ts', '.mts', '.strm'];
-            mediaFile = files.find(file =>
-              file.type === 'file' &&
-              videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
-            );
+            setSubtitleFiles(files
+              .filter(file => file.type === 'file' && isSubtitleFileName(file.name))
+              .map(file => ({
+                name: file.name,
+                size: file.size || '--',
+                modified: file.modified || '--',
+                path: file.sourcePath || file.destinationPath || file.path || `${folderPath}/${file.name}`
+              })));
+
+            if (!mediaFile || !isVideoFileName(mediaFile.name)) {
+              mediaFile = files.find(file =>
+                file.type === 'file' &&
+                isVideoFileName(file.name)
+              );
+            }
           }
 
-          if (!mediaFile) {
+          if (!mediaFile || !isVideoFileName(mediaFile.name)) {
             lastRequestKeyRef.current = null;
             setLoading(false);
             return;
@@ -254,6 +279,38 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
     } catch {
       return dateStr;
     }
+  };
+
+  const renderInfoRow = (label: string, value?: string, tooltip = false) => {
+    if (!value) return null;
+
+    const content = (
+      <Typography variant="body2" sx={{
+        fontFamily: 'monospace',
+        bgcolor: 'action.hover',
+        p: 1,
+        borderRadius: 1,
+        overflow: tooltip ? 'hidden' : undefined,
+        textOverflow: tooltip ? 'ellipsis' : undefined,
+        whiteSpace: tooltip ? 'nowrap' : undefined
+      }}>
+        {value}
+      </Typography>
+    );
+
+    return (
+      <Box>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 0.5
+          }}>
+          {label}
+        </Typography>
+        {tooltip ? <Tooltip title={value} placement="top">{content}</Tooltip> : content}
+      </Box>
+    );
   };
 
   if (mediaType === 'tv') {
@@ -326,123 +383,60 @@ export default function MediaPathInfo({ folderName, currentPath, mediaType, sele
   }
 
   // Movie view (existing code)
-  if (!pathInfo) return null;
+  if (!pathInfo && subtitleFiles.length === 0) return null;
 
   return (
     <Paper elevation={1} sx={{ mt: 3, p: 2, bgcolor: 'background.paper', borderRadius: 2 }}>
-      <Typography variant="subtitle1" color="primary" sx={{ mb: 2, fontWeight: 600 }}>
-        Media File Information
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              mb: 0.5
-            }}>
-            File Name
+      {pathInfo && (
+        <>
+          <Typography variant="subtitle1" color="primary" sx={{ mb: 2, fontWeight: 600 }}>
+            Media File Information
           </Typography>
-          <Typography variant="body2" sx={{
-            fontFamily: 'monospace',
-            bgcolor: 'action.hover',
-            p: 1,
-            borderRadius: 1
-          }}>
-            {pathInfo.fileName}
-          </Typography>
-        </Box>
-
-        <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              mb: 0.5
-            }}>
-            File Size
-          </Typography>
-          <Typography variant="body2" sx={{
-            fontFamily: 'monospace',
-            bgcolor: 'action.hover',
-            p: 1,
-            borderRadius: 1
-          }}>
-            {pathInfo.fileSize}
-          </Typography>
-        </Box>
-
-        <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              mb: 0.5
-            }}>
-            Last Modified
-          </Typography>
-          <Typography variant="body2" sx={{
-            fontFamily: 'monospace',
-            bgcolor: 'action.hover',
-            p: 1,
-            borderRadius: 1
-          }}>
-            {formatDate(pathInfo.modified)}
-          </Typography>
-        </Box>
-
-        {pathInfo.sourcePath && (
-          <Box>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                mb: 0.5
-              }}>
-              Source Path (Actual Location)
-            </Typography>
-            <Tooltip title={pathInfo.sourcePath} placement="top">
-              <Typography variant="body2" sx={{
-                fontFamily: 'monospace',
-                bgcolor: 'action.hover',
-                p: 1,
-                borderRadius: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {pathInfo.sourcePath}
-              </Typography>
-            </Tooltip>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {renderInfoRow('File Name', pathInfo.fileName)}
+            {renderInfoRow('File Size', pathInfo.fileSize)}
+            {renderInfoRow('Last Modified', formatDate(pathInfo.modified))}
+            {renderInfoRow('Source Path (Actual Location)', pathInfo.sourcePath, true)}
+            {renderInfoRow('Full Path', pathInfo.fullPath, true)}
           </Box>
-        )}
+        </>
+      )}
 
-        {pathInfo.fullPath && (
-          <Box>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                mb: 0.5
-              }}>
-              Full Path
-            </Typography>
-            <Tooltip title={pathInfo.fullPath} placement="top">
-              <Typography variant="body2" sx={{
-                fontFamily: 'monospace',
-                bgcolor: 'action.hover',
-                p: 1,
-                borderRadius: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {pathInfo.fullPath}
-              </Typography>
-            </Tooltip>
+      {subtitleFiles.length > 0 && (
+        <Box sx={{ mt: pathInfo ? 3 : 0 }}>
+          <Typography variant="subtitle1" color="primary" sx={{ mb: 2, fontWeight: 600 }}>
+            Subtitle Files
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {subtitleFiles.map((subtitle) => (
+              <Box key={`${subtitle.path}-${subtitle.name}`} sx={{ bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                  {subtitle.name}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, color: 'text.secondary', mt: 0.5 }}>
+                  <Typography variant="body2">{subtitle.size}</Typography>
+                  <Typography variant="body2">-</Typography>
+                  <Typography variant="body2">{formatDate(subtitle.modified)}</Typography>
+                </Box>
+                {subtitle.path && (
+                  <Tooltip title={subtitle.path} placement="top">
+                    <Typography variant="body2" sx={{
+                      fontFamily: 'monospace',
+                      mt: 0.75,
+                      fontSize: '0.8rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {subtitle.path}
+                    </Typography>
+                  </Tooltip>
+                )}
+              </Box>
+            ))}
           </Box>
-        )}
-      </Box>
+        </Box>
+      )}
     </Paper>
   );
 }

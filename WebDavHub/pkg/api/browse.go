@@ -49,22 +49,6 @@ func getWindowsDrives() []string {
 	return drives
 }
 
-// isMediaFile checks if a file is a media file based on extension
-func isMediaFile(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	mediaExtensions := []string{
-		".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v",
-		".mpg", ".mpeg", ".3gp", ".ogv", ".ts", ".m2ts", ".mts", ".strm",
-	}
-
-	for _, mediaExt := range mediaExtensions {
-		if ext == mediaExt {
-			return true
-		}
-	}
-	return false
-}
-
 // normalizePath normalizes a file path for the current OS
 func normalizePath(path string) string {
 	if runtime.GOOS == "windows" {
