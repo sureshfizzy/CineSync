@@ -45,23 +45,10 @@ db_initialized = False
 single_file_mode = False
 
 
-def _create_link_with_junction_fallback(link_target, dest_file):
-    """Create symlink, preferring NTFS junction on Windows when target resolves
-    to a directory (or to the zurg ``file-as-dir-then-file`` pattern).
-
-    On Windows, file-level symbolic links pointing at network/WebDAV mounts
-    (e.g. an rclone mount of a Real-Debrid WebDAV) are reported by the OS as
-    zero-length to applications. Plex Media Server reads ``Length=0`` and
-    silently drops the file from its scan. NTFS junctions (``mklink /J``) do
-    not have this limitation but only target directories, so we detect when
-    the source is a directory or matches the zurg wrapper pattern
-    (``Z:\\__all__\\<name>.mkv\\<name>.mkv``) and use a junction in those
-    cases. When the target is a file inside a multi-file release directory
-    (no wrapper), we fall back to ``os.symlink`` because there is no
-    safe single-file junction equivalent on NTFS targeting a remote mount.
-
-    On non-Windows platforms this function delegates to ``os.symlink``
-    unchanged. The signature matches ``os.symlink`` for drop-in use.
+def _create_link_with_junction(link_target, dest_file):
+    """Create a symlink, but on Windows prefer an NTFS junction when the target is a
+    directory (or zurg's ``file-as-dir`` pattern): file-level symlinks on WebDAV mounts
+    read as zero-length and Plex drops them. Other cases and non-Windows use ``os.symlink``.
     """
     if os.name != 'nt':
         os.symlink(link_target, dest_file)
@@ -1379,7 +1366,7 @@ def process_file(args, force=False, batch_apply=False):
     # Create symlink
     try:
         link_target = _select_symlink_target(src_file, dest_file)
-        _create_link_with_junction_fallback(link_target, dest_file)
+        _create_link_with_junction(link_target, dest_file)
         log_message(f"Created symlink: {dest_file} -> {link_target}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
@@ -1522,7 +1509,7 @@ def process_file(args, force=False, batch_apply=False):
                 if existing_target and existing_target != normalized_src:
                     log_message(f"Detected source rename for existing symlink: {dest_file} -> {existing_target} (new: {normalized_src})", level="INFO")
                     if _safe_delete_symlink(dest_file):
-                        _create_link_with_junction_fallback(src_file, dest_file)
+                        _create_link_with_junction(src_file, dest_file)
                         update_source_path_for_destination(dest_file, src_file)
                         log_message(f"Updated symlink target and database for renamed source: {dest_file}", level="INFO")
                         return (dest_file, True, src_file)
