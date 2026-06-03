@@ -44,6 +44,45 @@ db_initialized = False
 
 single_file_mode = False
 
+
+def _create_link_with_junction(link_target, dest_file):
+    """Create a symlink, but on Windows prefer an NTFS junction when the target is a
+    directory (or zurg's ``file-as-dir`` pattern): file-level symlinks on WebDAV mounts
+    read as zero-length and Plex drops them. Other cases and non-Windows use ``os.symlink``.
+    """
+    if os.name != 'nt':
+        os.symlink(link_target, dest_file)
+        return
+
+    import subprocess
+
+    resolved = link_target if os.path.isabs(link_target) else os.path.normpath(
+        os.path.join(os.path.dirname(dest_file), link_target)
+    )
+
+    junction_target = None
+    if os.path.isdir(resolved):
+        junction_target = resolved
+    else:
+        parent = os.path.dirname(resolved)
+        if parent and os.path.isdir(parent) and os.path.basename(parent) == os.path.basename(resolved):
+            junction_target = parent
+
+    if junction_target is not None:
+        if os.path.exists(dest_file):
+            try:
+                os.remove(dest_file)
+            except OSError:
+                pass
+        proc = subprocess.run(
+            ['cmd', '/c', 'mklink', '/J', dest_file, junction_target],
+            check=False, capture_output=True, text=True,
+        )
+        if proc.returncode == 0:
+            return
+
+    os.symlink(link_target, dest_file)
+
 class ProcessingManager:
     """Streaming manager that coordinates file processing with real-time analysis and dispatch"""
 
@@ -1327,7 +1366,7 @@ def process_file(args, force=False, batch_apply=False):
     # Create symlink
     try:
         link_target = _select_symlink_target(src_file, dest_file)
-        os.symlink(link_target, dest_file)
+        _create_link_with_junction(link_target, dest_file)
         log_message(f"Created symlink: {dest_file} -> {link_target}", level="INFO")
         log_message(f"Processed file: {src_file} to {dest_file}", level="INFO")
 
@@ -1470,7 +1509,7 @@ def process_file(args, force=False, batch_apply=False):
                 if existing_target and existing_target != normalized_src:
                     log_message(f"Detected source rename for existing symlink: {dest_file} -> {existing_target} (new: {normalized_src})", level="INFO")
                     if _safe_delete_symlink(dest_file):
-                        os.symlink(src_file, dest_file)
+                        _create_link_with_junction(src_file, dest_file)
                         update_source_path_for_destination(dest_file, src_file)
                         log_message(f"Updated symlink target and database for renamed source: {dest_file}", level="INFO")
                         return (dest_file, True, src_file)
