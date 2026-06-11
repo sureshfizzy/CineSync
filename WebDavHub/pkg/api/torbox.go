@@ -462,7 +462,7 @@ func HandleTorBoxUnrestrictFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fid, err := strconv.Atoi(fidStr)
-	if err != nil || fid <= 0 {
+	if err != nil || fid < 0 {
 		http.Error(w, "Invalid fileId", http.StatusBadRequest)
 		return
 	}

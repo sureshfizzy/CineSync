@@ -214,7 +214,7 @@ func (c *Client) RequestDownloadLink(torrentID int, fileID int) (string, error) 
 	if torrentID <= 0 {
 		return "", fmt.Errorf("invalid torrent id")
 	}
-	if fileID <= 0 {
+	if fileID < 0 {
 		return "", fmt.Errorf("invalid file id")
 	}
 
