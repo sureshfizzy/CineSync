@@ -404,6 +404,33 @@ func EnsureAPIKey() error {
 	return nil
 }
 
+// GetOrCreatePlexClientIdentifier returns a stable X-Plex-Client-Identifier,
+// generating and persisting one on first use so the plex.tv keepalive ping
+// refreshes a single device entry instead of registering a new one each time.
+func GetOrCreatePlexClientIdentifier() (string, error) {
+	envVars, err := readEnvFile()
+	if err != nil {
+		return "", fmt.Errorf("failed to read configuration: %v", err)
+	}
+
+	if existing := strings.TrimSpace(envVars["PLEX_CLIENT_IDENTIFIER"]); existing != "" {
+		return existing, nil
+	}
+
+	identifier, err := generateRandomKey(16)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate Plex client identifier: %v", err)
+	}
+
+	envVars["PLEX_CLIENT_IDENTIFIER"] = identifier
+	if err := writeEnvFile(envVars); err != nil {
+		return "", fmt.Errorf("failed to persist Plex client identifier: %v", err)
+	}
+	os.Setenv("PLEX_CLIENT_IDENTIFIER", identifier)
+
+	return identifier, nil
+}
+
 func readEnvFile() (map[string]string, error) {
 	envPath := getEnvFilePath()
 

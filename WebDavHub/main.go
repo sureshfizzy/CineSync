@@ -25,6 +25,7 @@ import (
 	"cinesync/pkg/db"
 	"cinesync/pkg/env"
 	"cinesync/pkg/logger"
+	"cinesync/pkg/plexkeepalive"
 	"cinesync/pkg/realdebrid"
 	"cinesync/pkg/server"
 	"cinesync/pkg/spoofing"
@@ -263,6 +264,9 @@ func main() {
 	if err := config.EnsureAPIKey(); err != nil {
 		logger.Warn("Failed to ensure API key: %v", err)
 	}
+
+	// Keep the Plex token alive.
+	plexkeepalive.Start(context.Background())
 
 	if configMissing && *dir == "" {
 		logger.Warn("No valid DESTINATION_DIR set. Running in configuration-only mode until setup is completed.")
